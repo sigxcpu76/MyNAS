@@ -1613,6 +1613,472 @@ func local_request_NasService_RebootVirtualMachine_0(ctx context.Context, marsha
 	return msg, metadata, err
 }
 
+func request_NasService_ResetVirtualMachine_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq ResetVirtualMachineRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	val, ok := pathParams["name"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "name")
+	}
+	protoReq.Name, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "name", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	msg, err := client.ResetVirtualMachine(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_NasService_ResetVirtualMachine_0(ctx context.Context, marshaler runtime.Marshaler, server NasServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq ResetVirtualMachineRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	val, ok := pathParams["name"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "name")
+	}
+	protoReq.Name, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "name", err)
+	}
+	msg, err := server.ResetVirtualMachine(ctx, &protoReq)
+	return msg, metadata, err
+}
+
+func request_NasService_PauseVirtualMachine_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq PauseVirtualMachineRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	val, ok := pathParams["name"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "name")
+	}
+	protoReq.Name, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "name", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	msg, err := client.PauseVirtualMachine(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_NasService_PauseVirtualMachine_0(ctx context.Context, marshaler runtime.Marshaler, server NasServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq PauseVirtualMachineRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	val, ok := pathParams["name"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "name")
+	}
+	protoReq.Name, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "name", err)
+	}
+	msg, err := server.PauseVirtualMachine(ctx, &protoReq)
+	return msg, metadata, err
+}
+
+func request_NasService_ResumeVirtualMachine_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq ResumeVirtualMachineRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	val, ok := pathParams["name"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "name")
+	}
+	protoReq.Name, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "name", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	msg, err := client.ResumeVirtualMachine(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_NasService_ResumeVirtualMachine_0(ctx context.Context, marshaler runtime.Marshaler, server NasServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq ResumeVirtualMachineRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	val, ok := pathParams["name"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "name")
+	}
+	protoReq.Name, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "name", err)
+	}
+	msg, err := server.ResumeVirtualMachine(ctx, &protoReq)
+	return msg, metadata, err
+}
+
+func request_NasService_CloneVirtualMachine_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq CloneVirtualMachineRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	val, ok := pathParams["name"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "name")
+	}
+	protoReq.Name, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "name", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	msg, err := client.CloneVirtualMachine(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_NasService_CloneVirtualMachine_0(ctx context.Context, marshaler runtime.Marshaler, server NasServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq CloneVirtualMachineRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	val, ok := pathParams["name"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "name")
+	}
+	protoReq.Name, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "name", err)
+	}
+	msg, err := server.CloneVirtualMachine(ctx, &protoReq)
+	return msg, metadata, err
+}
+
+func request_NasService_AttachVirtualMachineMedia_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq AttachVirtualMachineMediaRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	val, ok := pathParams["name"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "name")
+	}
+	protoReq.Name, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "name", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	msg, err := client.AttachVirtualMachineMedia(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_NasService_AttachVirtualMachineMedia_0(ctx context.Context, marshaler runtime.Marshaler, server NasServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq AttachVirtualMachineMediaRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	val, ok := pathParams["name"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "name")
+	}
+	protoReq.Name, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "name", err)
+	}
+	msg, err := server.AttachVirtualMachineMedia(ctx, &protoReq)
+	return msg, metadata, err
+}
+
+func request_NasService_EjectVirtualMachineMedia_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq EjectVirtualMachineMediaRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	val, ok := pathParams["name"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "name")
+	}
+	protoReq.Name, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "name", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	msg, err := client.EjectVirtualMachineMedia(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_NasService_EjectVirtualMachineMedia_0(ctx context.Context, marshaler runtime.Marshaler, server NasServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq EjectVirtualMachineMediaRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	val, ok := pathParams["name"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "name")
+	}
+	protoReq.Name, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "name", err)
+	}
+	msg, err := server.EjectVirtualMachineMedia(ctx, &protoReq)
+	return msg, metadata, err
+}
+
+var filter_NasService_ListVirtualMachineSnapshots_0 = &utilities.DoubleArray{Encoding: map[string]int{"parent": 0}, Base: []int{1, 1, 0}, Check: []int{0, 1, 2}}
+
+func request_NasService_ListVirtualMachineSnapshots_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq ListVirtualMachineSnapshotsRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	val, ok := pathParams["parent"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "parent")
+	}
+	protoReq.Parent, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "parent", err)
+	}
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_NasService_ListVirtualMachineSnapshots_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	msg, err := client.ListVirtualMachineSnapshots(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_NasService_ListVirtualMachineSnapshots_0(ctx context.Context, marshaler runtime.Marshaler, server NasServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq ListVirtualMachineSnapshotsRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	val, ok := pathParams["parent"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "parent")
+	}
+	protoReq.Parent, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "parent", err)
+	}
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_NasService_ListVirtualMachineSnapshots_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	msg, err := server.ListVirtualMachineSnapshots(ctx, &protoReq)
+	return msg, metadata, err
+}
+
+var filter_NasService_CreateVirtualMachineSnapshot_0 = &utilities.DoubleArray{Encoding: map[string]int{"snapshot": 0, "parent": 1}, Base: []int{1, 1, 2, 0, 0}, Check: []int{0, 1, 1, 2, 3}}
+
+func request_NasService_CreateVirtualMachineSnapshot_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq CreateVirtualMachineSnapshotRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq.Snapshot); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	val, ok := pathParams["parent"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "parent")
+	}
+	protoReq.Parent, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "parent", err)
+	}
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_NasService_CreateVirtualMachineSnapshot_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	msg, err := client.CreateVirtualMachineSnapshot(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_NasService_CreateVirtualMachineSnapshot_0(ctx context.Context, marshaler runtime.Marshaler, server NasServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq CreateVirtualMachineSnapshotRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq.Snapshot); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	val, ok := pathParams["parent"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "parent")
+	}
+	protoReq.Parent, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "parent", err)
+	}
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_NasService_CreateVirtualMachineSnapshot_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	msg, err := server.CreateVirtualMachineSnapshot(ctx, &protoReq)
+	return msg, metadata, err
+}
+
+func request_NasService_RollbackVirtualMachineSnapshot_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq RollbackVirtualMachineSnapshotRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	val, ok := pathParams["name"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "name")
+	}
+	protoReq.Name, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "name", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	msg, err := client.RollbackVirtualMachineSnapshot(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_NasService_RollbackVirtualMachineSnapshot_0(ctx context.Context, marshaler runtime.Marshaler, server NasServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq RollbackVirtualMachineSnapshotRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	val, ok := pathParams["name"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "name")
+	}
+	protoReq.Name, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "name", err)
+	}
+	msg, err := server.RollbackVirtualMachineSnapshot(ctx, &protoReq)
+	return msg, metadata, err
+}
+
+func request_NasService_DeleteVirtualMachineSnapshot_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq DeleteVirtualMachineSnapshotRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	val, ok := pathParams["name"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "name")
+	}
+	protoReq.Name, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "name", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	msg, err := client.DeleteVirtualMachineSnapshot(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_NasService_DeleteVirtualMachineSnapshot_0(ctx context.Context, marshaler runtime.Marshaler, server NasServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq DeleteVirtualMachineSnapshotRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	val, ok := pathParams["name"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "name")
+	}
+	protoReq.Name, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "name", err)
+	}
+	msg, err := server.DeleteVirtualMachineSnapshot(ctx, &protoReq)
+	return msg, metadata, err
+}
+
 func request_NasService_OpenVirtualMachineConsole_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var (
 		protoReq OpenVirtualMachineConsoleRequest
@@ -4709,6 +5175,206 @@ func RegisterNasServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux,
 		}
 		forward_NasService_RebootVirtualMachine_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+	mux.Handle(http.MethodPost, pattern_NasService_ResetVirtualMachine_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/nas.v1.NasService/ResetVirtualMachine", runtime.WithHTTPPathPattern("/v1/{name=virtualMachines/*}:reset"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_NasService_ResetVirtualMachine_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_ResetVirtualMachine_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_NasService_PauseVirtualMachine_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/nas.v1.NasService/PauseVirtualMachine", runtime.WithHTTPPathPattern("/v1/{name=virtualMachines/*}:pause"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_NasService_PauseVirtualMachine_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_PauseVirtualMachine_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_NasService_ResumeVirtualMachine_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/nas.v1.NasService/ResumeVirtualMachine", runtime.WithHTTPPathPattern("/v1/{name=virtualMachines/*}:resume"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_NasService_ResumeVirtualMachine_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_ResumeVirtualMachine_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_NasService_CloneVirtualMachine_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/nas.v1.NasService/CloneVirtualMachine", runtime.WithHTTPPathPattern("/v1/{name=virtualMachines/*}:clone"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_NasService_CloneVirtualMachine_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_CloneVirtualMachine_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_NasService_AttachVirtualMachineMedia_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/nas.v1.NasService/AttachVirtualMachineMedia", runtime.WithHTTPPathPattern("/v1/{name=virtualMachines/*}:attachMedia"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_NasService_AttachVirtualMachineMedia_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_AttachVirtualMachineMedia_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_NasService_EjectVirtualMachineMedia_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/nas.v1.NasService/EjectVirtualMachineMedia", runtime.WithHTTPPathPattern("/v1/{name=virtualMachines/*}:ejectMedia"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_NasService_EjectVirtualMachineMedia_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_EjectVirtualMachineMedia_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodGet, pattern_NasService_ListVirtualMachineSnapshots_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/nas.v1.NasService/ListVirtualMachineSnapshots", runtime.WithHTTPPathPattern("/v1/{parent=virtualMachines/*}/snapshots"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_NasService_ListVirtualMachineSnapshots_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_ListVirtualMachineSnapshots_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_NasService_CreateVirtualMachineSnapshot_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/nas.v1.NasService/CreateVirtualMachineSnapshot", runtime.WithHTTPPathPattern("/v1/{parent=virtualMachines/*}/snapshots"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_NasService_CreateVirtualMachineSnapshot_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_CreateVirtualMachineSnapshot_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_NasService_RollbackVirtualMachineSnapshot_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/nas.v1.NasService/RollbackVirtualMachineSnapshot", runtime.WithHTTPPathPattern("/v1/{name=virtualMachines/*/snapshots/*}:rollback"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_NasService_RollbackVirtualMachineSnapshot_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_RollbackVirtualMachineSnapshot_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodDelete, pattern_NasService_DeleteVirtualMachineSnapshot_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/nas.v1.NasService/DeleteVirtualMachineSnapshot", runtime.WithHTTPPathPattern("/v1/{name=virtualMachines/*/snapshots/*}"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_NasService_DeleteVirtualMachineSnapshot_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_DeleteVirtualMachineSnapshot_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
 	mux.Handle(http.MethodPost, pattern_NasService_OpenVirtualMachineConsole_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
@@ -6367,6 +7033,176 @@ func RegisterNasServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux,
 		}
 		forward_NasService_RebootVirtualMachine_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+	mux.Handle(http.MethodPost, pattern_NasService_ResetVirtualMachine_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/nas.v1.NasService/ResetVirtualMachine", runtime.WithHTTPPathPattern("/v1/{name=virtualMachines/*}:reset"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_NasService_ResetVirtualMachine_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_ResetVirtualMachine_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_NasService_PauseVirtualMachine_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/nas.v1.NasService/PauseVirtualMachine", runtime.WithHTTPPathPattern("/v1/{name=virtualMachines/*}:pause"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_NasService_PauseVirtualMachine_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_PauseVirtualMachine_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_NasService_ResumeVirtualMachine_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/nas.v1.NasService/ResumeVirtualMachine", runtime.WithHTTPPathPattern("/v1/{name=virtualMachines/*}:resume"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_NasService_ResumeVirtualMachine_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_ResumeVirtualMachine_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_NasService_CloneVirtualMachine_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/nas.v1.NasService/CloneVirtualMachine", runtime.WithHTTPPathPattern("/v1/{name=virtualMachines/*}:clone"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_NasService_CloneVirtualMachine_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_CloneVirtualMachine_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_NasService_AttachVirtualMachineMedia_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/nas.v1.NasService/AttachVirtualMachineMedia", runtime.WithHTTPPathPattern("/v1/{name=virtualMachines/*}:attachMedia"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_NasService_AttachVirtualMachineMedia_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_AttachVirtualMachineMedia_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_NasService_EjectVirtualMachineMedia_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/nas.v1.NasService/EjectVirtualMachineMedia", runtime.WithHTTPPathPattern("/v1/{name=virtualMachines/*}:ejectMedia"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_NasService_EjectVirtualMachineMedia_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_EjectVirtualMachineMedia_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodGet, pattern_NasService_ListVirtualMachineSnapshots_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/nas.v1.NasService/ListVirtualMachineSnapshots", runtime.WithHTTPPathPattern("/v1/{parent=virtualMachines/*}/snapshots"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_NasService_ListVirtualMachineSnapshots_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_ListVirtualMachineSnapshots_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_NasService_CreateVirtualMachineSnapshot_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/nas.v1.NasService/CreateVirtualMachineSnapshot", runtime.WithHTTPPathPattern("/v1/{parent=virtualMachines/*}/snapshots"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_NasService_CreateVirtualMachineSnapshot_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_CreateVirtualMachineSnapshot_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_NasService_RollbackVirtualMachineSnapshot_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/nas.v1.NasService/RollbackVirtualMachineSnapshot", runtime.WithHTTPPathPattern("/v1/{name=virtualMachines/*/snapshots/*}:rollback"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_NasService_RollbackVirtualMachineSnapshot_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_RollbackVirtualMachineSnapshot_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodDelete, pattern_NasService_DeleteVirtualMachineSnapshot_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/nas.v1.NasService/DeleteVirtualMachineSnapshot", runtime.WithHTTPPathPattern("/v1/{name=virtualMachines/*/snapshots/*}"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_NasService_DeleteVirtualMachineSnapshot_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_DeleteVirtualMachineSnapshot_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
 	mux.Handle(http.MethodPost, pattern_NasService_OpenVirtualMachineConsole_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
@@ -7255,179 +8091,199 @@ func RegisterNasServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux,
 }
 
 var (
-	pattern_NasService_Login_0                     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "auth"}, "login"))
-	pattern_NasService_GetCurrentUser_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "auth"}, "me"))
-	pattern_NasService_ListPrerequisites_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "prerequisites"}, ""))
-	pattern_NasService_GetPrerequisite_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "prerequisites", "name"}, ""))
-	pattern_NasService_CheckPrerequisites_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "prerequisites"}, "check"))
-	pattern_NasService_ListDisks_0                 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "disks"}, ""))
-	pattern_NasService_GetDisk_0                   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "disks", "name"}, ""))
-	pattern_NasService_ListZfsPools_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "zfsPools"}, ""))
-	pattern_NasService_GetZfsPool_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "zfsPools", "name"}, ""))
-	pattern_NasService_CreateZfsPool_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "zfsPools"}, ""))
-	pattern_NasService_DeleteZfsPool_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "zfsPools", "name"}, ""))
-	pattern_NasService_ScrubZfsPool_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "zfsPools", "name"}, "scrub"))
-	pattern_NasService_UpdateZfsPool_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "zfsPools", "zfs_pool.name"}, ""))
-	pattern_NasService_AddZfsPoolVdev_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "zfsPools", "name"}, "addVdev"))
-	pattern_NasService_RemoveZfsPoolVdev_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "zfsPools", "name"}, "removeVdev"))
-	pattern_NasService_ListZfsDatasets_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2, 2, 3}, []string{"v1", "zfsPools", "parent", "datasets"}, ""))
-	pattern_NasService_GetZfsDataset_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 2, 2, 1, 0, 4, 4, 5, 3}, []string{"v1", "zfsPools", "datasets", "name"}, ""))
-	pattern_NasService_CreateZfsDataset_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2, 2, 3}, []string{"v1", "zfsPools", "parent", "datasets"}, ""))
-	pattern_NasService_UpdateZfsDataset_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 2, 2, 1, 0, 4, 4, 5, 3}, []string{"v1", "zfsPools", "datasets", "zfs_dataset.name"}, ""))
-	pattern_NasService_DeleteZfsDataset_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 2, 2, 1, 0, 4, 4, 5, 3}, []string{"v1", "zfsPools", "datasets", "name"}, ""))
-	pattern_NasService_SnapshotZfsDataset_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 2, 2, 1, 0, 4, 4, 5, 3}, []string{"v1", "zfsPools", "datasets", "name"}, "snapshot"))
-	pattern_NasService_ListZfsVolumes_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2, 2, 3}, []string{"v1", "zfsPools", "parent", "volumes"}, ""))
-	pattern_NasService_GetZfsVolume_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 2, 2, 1, 0, 4, 4, 5, 3}, []string{"v1", "zfsPools", "volumes", "name"}, ""))
-	pattern_NasService_CreateZfsVolume_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2, 2, 3}, []string{"v1", "zfsPools", "parent", "volumes"}, ""))
-	pattern_NasService_UpdateZfsVolume_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 2, 2, 1, 0, 4, 4, 5, 3}, []string{"v1", "zfsPools", "volumes", "zfs_volume.name"}, ""))
-	pattern_NasService_DeleteZfsVolume_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 2, 2, 1, 0, 4, 4, 5, 3}, []string{"v1", "zfsPools", "volumes", "name"}, ""))
-	pattern_NasService_ListVirtualMachines_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "virtualMachines"}, ""))
-	pattern_NasService_GetVirtualMachine_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "name"}, ""))
-	pattern_NasService_CreateVirtualMachine_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "virtualMachines"}, ""))
-	pattern_NasService_UpdateVirtualMachine_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "virtual_machine.name"}, ""))
-	pattern_NasService_DeleteVirtualMachine_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "name"}, ""))
-	pattern_NasService_StartVirtualMachine_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "name"}, "start"))
-	pattern_NasService_StopVirtualMachine_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "name"}, "stop"))
-	pattern_NasService_RebootVirtualMachine_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "name"}, "reboot"))
-	pattern_NasService_OpenVirtualMachineConsole_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "name"}, "openConsole"))
-	pattern_NasService_ListDockerContainers_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerContainers"}, ""))
-	pattern_NasService_GetDockerContainer_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerContainers", "name"}, ""))
-	pattern_NasService_CreateDockerContainer_0     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerContainers"}, ""))
-	pattern_NasService_UpdateDockerContainer_0     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerContainers", "docker_container.name"}, ""))
-	pattern_NasService_DeleteDockerContainer_0     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerContainers", "name"}, ""))
-	pattern_NasService_GetDockerContainerLogs_0    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerContainers", "name"}, "logs"))
-	pattern_NasService_StartDockerContainer_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerContainers", "name"}, "start"))
-	pattern_NasService_StopDockerContainer_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerContainers", "name"}, "stop"))
-	pattern_NasService_RestartDockerContainer_0    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerContainers", "name"}, "restart"))
-	pattern_NasService_ListDockerApps_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerApps"}, ""))
-	pattern_NasService_GetDockerApp_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerApps", "name"}, ""))
-	pattern_NasService_CreateDockerApp_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerApps"}, ""))
-	pattern_NasService_UpdateDockerApp_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerApps", "docker_app.name"}, ""))
-	pattern_NasService_DeleteDockerApp_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerApps", "name"}, ""))
-	pattern_NasService_StartDockerApp_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerApps", "name"}, "start"))
-	pattern_NasService_StopDockerApp_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerApps", "name"}, "stop"))
-	pattern_NasService_RestartDockerApp_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerApps", "name"}, "restart"))
-	pattern_NasService_GetDockerAppLogs_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerApps", "name"}, "logs"))
-	pattern_NasService_GetDockerConfig_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerConfig"}, ""))
-	pattern_NasService_UpdateDockerConfig_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerConfig"}, ""))
-	pattern_NasService_ListFileSystemDirectories_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "filesystem"}, "directories"))
-	pattern_NasService_ListLxcContainers_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "lxcContainers"}, ""))
-	pattern_NasService_GetLxcContainer_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "lxcContainers", "name"}, ""))
-	pattern_NasService_CreateLxcContainer_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "lxcContainers"}, ""))
-	pattern_NasService_DeleteLxcContainer_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "lxcContainers", "name"}, ""))
-	pattern_NasService_StartLxcContainer_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "lxcContainers", "name"}, "start"))
-	pattern_NasService_StopLxcContainer_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "lxcContainers", "name"}, "stop"))
-	pattern_NasService_FreezeLxcContainer_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "lxcContainers", "name"}, "freeze"))
-	pattern_NasService_ListCifsShares_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "cifsShares"}, ""))
-	pattern_NasService_GetCifsShare_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "cifsShares", "name"}, ""))
-	pattern_NasService_CreateCifsShare_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "cifsShares"}, ""))
-	pattern_NasService_UpdateCifsShare_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "cifsShares", "cifs_share.name"}, ""))
-	pattern_NasService_DeleteCifsShare_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "cifsShares", "name"}, ""))
-	pattern_NasService_ListWebdavShares_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "webdavShares"}, ""))
-	pattern_NasService_GetWebdavShare_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "webdavShares", "name"}, ""))
-	pattern_NasService_CreateWebdavShare_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "webdavShares"}, ""))
-	pattern_NasService_UpdateWebdavShare_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "webdavShares", "webdav_share.name"}, ""))
-	pattern_NasService_DeleteWebdavShare_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "webdavShares", "name"}, ""))
-	pattern_NasService_ListUsers_0                 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "users"}, ""))
-	pattern_NasService_GetUser_0                   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "users", "name"}, ""))
-	pattern_NasService_CreateUser_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "users"}, ""))
-	pattern_NasService_UpdateUser_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "users", "user.name"}, ""))
-	pattern_NasService_DeleteUser_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "users", "name"}, ""))
-	pattern_NasService_ListGroups_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "groups"}, ""))
-	pattern_NasService_GetGroup_0                  = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "groups", "name"}, ""))
-	pattern_NasService_CreateGroup_0               = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "groups"}, ""))
-	pattern_NasService_UpdateGroup_0               = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "groups", "group.name"}, ""))
-	pattern_NasService_DeleteGroup_0               = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "groups", "name"}, ""))
-	pattern_NasService_ListCatalogApps_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "catalog", "apps"}, ""))
-	pattern_NasService_GetCatalogApp_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"v1", "catalog", "apps", "app_id"}, ""))
-	pattern_NasService_SyncCatalog_0               = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "catalog"}, "sync"))
+	pattern_NasService_Login_0                          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "auth"}, "login"))
+	pattern_NasService_GetCurrentUser_0                 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "auth"}, "me"))
+	pattern_NasService_ListPrerequisites_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "prerequisites"}, ""))
+	pattern_NasService_GetPrerequisite_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "prerequisites", "name"}, ""))
+	pattern_NasService_CheckPrerequisites_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "prerequisites"}, "check"))
+	pattern_NasService_ListDisks_0                      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "disks"}, ""))
+	pattern_NasService_GetDisk_0                        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "disks", "name"}, ""))
+	pattern_NasService_ListZfsPools_0                   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "zfsPools"}, ""))
+	pattern_NasService_GetZfsPool_0                     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "zfsPools", "name"}, ""))
+	pattern_NasService_CreateZfsPool_0                  = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "zfsPools"}, ""))
+	pattern_NasService_DeleteZfsPool_0                  = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "zfsPools", "name"}, ""))
+	pattern_NasService_ScrubZfsPool_0                   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "zfsPools", "name"}, "scrub"))
+	pattern_NasService_UpdateZfsPool_0                  = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "zfsPools", "zfs_pool.name"}, ""))
+	pattern_NasService_AddZfsPoolVdev_0                 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "zfsPools", "name"}, "addVdev"))
+	pattern_NasService_RemoveZfsPoolVdev_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "zfsPools", "name"}, "removeVdev"))
+	pattern_NasService_ListZfsDatasets_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2, 2, 3}, []string{"v1", "zfsPools", "parent", "datasets"}, ""))
+	pattern_NasService_GetZfsDataset_0                  = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 2, 2, 1, 0, 4, 4, 5, 3}, []string{"v1", "zfsPools", "datasets", "name"}, ""))
+	pattern_NasService_CreateZfsDataset_0               = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2, 2, 3}, []string{"v1", "zfsPools", "parent", "datasets"}, ""))
+	pattern_NasService_UpdateZfsDataset_0               = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 2, 2, 1, 0, 4, 4, 5, 3}, []string{"v1", "zfsPools", "datasets", "zfs_dataset.name"}, ""))
+	pattern_NasService_DeleteZfsDataset_0               = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 2, 2, 1, 0, 4, 4, 5, 3}, []string{"v1", "zfsPools", "datasets", "name"}, ""))
+	pattern_NasService_SnapshotZfsDataset_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 2, 2, 1, 0, 4, 4, 5, 3}, []string{"v1", "zfsPools", "datasets", "name"}, "snapshot"))
+	pattern_NasService_ListZfsVolumes_0                 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2, 2, 3}, []string{"v1", "zfsPools", "parent", "volumes"}, ""))
+	pattern_NasService_GetZfsVolume_0                   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 2, 2, 1, 0, 4, 4, 5, 3}, []string{"v1", "zfsPools", "volumes", "name"}, ""))
+	pattern_NasService_CreateZfsVolume_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2, 2, 3}, []string{"v1", "zfsPools", "parent", "volumes"}, ""))
+	pattern_NasService_UpdateZfsVolume_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 2, 2, 1, 0, 4, 4, 5, 3}, []string{"v1", "zfsPools", "volumes", "zfs_volume.name"}, ""))
+	pattern_NasService_DeleteZfsVolume_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 2, 2, 1, 0, 4, 4, 5, 3}, []string{"v1", "zfsPools", "volumes", "name"}, ""))
+	pattern_NasService_ListVirtualMachines_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "virtualMachines"}, ""))
+	pattern_NasService_GetVirtualMachine_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "name"}, ""))
+	pattern_NasService_CreateVirtualMachine_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "virtualMachines"}, ""))
+	pattern_NasService_UpdateVirtualMachine_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "virtual_machine.name"}, ""))
+	pattern_NasService_DeleteVirtualMachine_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "name"}, ""))
+	pattern_NasService_StartVirtualMachine_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "name"}, "start"))
+	pattern_NasService_StopVirtualMachine_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "name"}, "stop"))
+	pattern_NasService_RebootVirtualMachine_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "name"}, "reboot"))
+	pattern_NasService_ResetVirtualMachine_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "name"}, "reset"))
+	pattern_NasService_PauseVirtualMachine_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "name"}, "pause"))
+	pattern_NasService_ResumeVirtualMachine_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "name"}, "resume"))
+	pattern_NasService_CloneVirtualMachine_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "name"}, "clone"))
+	pattern_NasService_AttachVirtualMachineMedia_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "name"}, "attachMedia"))
+	pattern_NasService_EjectVirtualMachineMedia_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "name"}, "ejectMedia"))
+	pattern_NasService_ListVirtualMachineSnapshots_0    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2, 2, 3}, []string{"v1", "virtualMachines", "parent", "snapshots"}, ""))
+	pattern_NasService_CreateVirtualMachineSnapshot_0   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2, 2, 3}, []string{"v1", "virtualMachines", "parent", "snapshots"}, ""))
+	pattern_NasService_RollbackVirtualMachineSnapshot_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 2, 2, 1, 0, 4, 4, 5, 3}, []string{"v1", "virtualMachines", "snapshots", "name"}, "rollback"))
+	pattern_NasService_DeleteVirtualMachineSnapshot_0   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 2, 2, 1, 0, 4, 4, 5, 3}, []string{"v1", "virtualMachines", "snapshots", "name"}, ""))
+	pattern_NasService_OpenVirtualMachineConsole_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "name"}, "openConsole"))
+	pattern_NasService_ListDockerContainers_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerContainers"}, ""))
+	pattern_NasService_GetDockerContainer_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerContainers", "name"}, ""))
+	pattern_NasService_CreateDockerContainer_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerContainers"}, ""))
+	pattern_NasService_UpdateDockerContainer_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerContainers", "docker_container.name"}, ""))
+	pattern_NasService_DeleteDockerContainer_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerContainers", "name"}, ""))
+	pattern_NasService_GetDockerContainerLogs_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerContainers", "name"}, "logs"))
+	pattern_NasService_StartDockerContainer_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerContainers", "name"}, "start"))
+	pattern_NasService_StopDockerContainer_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerContainers", "name"}, "stop"))
+	pattern_NasService_RestartDockerContainer_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerContainers", "name"}, "restart"))
+	pattern_NasService_ListDockerApps_0                 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerApps"}, ""))
+	pattern_NasService_GetDockerApp_0                   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerApps", "name"}, ""))
+	pattern_NasService_CreateDockerApp_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerApps"}, ""))
+	pattern_NasService_UpdateDockerApp_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerApps", "docker_app.name"}, ""))
+	pattern_NasService_DeleteDockerApp_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerApps", "name"}, ""))
+	pattern_NasService_StartDockerApp_0                 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerApps", "name"}, "start"))
+	pattern_NasService_StopDockerApp_0                  = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerApps", "name"}, "stop"))
+	pattern_NasService_RestartDockerApp_0               = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerApps", "name"}, "restart"))
+	pattern_NasService_GetDockerAppLogs_0               = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerApps", "name"}, "logs"))
+	pattern_NasService_GetDockerConfig_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerConfig"}, ""))
+	pattern_NasService_UpdateDockerConfig_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerConfig"}, ""))
+	pattern_NasService_ListFileSystemDirectories_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "filesystem"}, "directories"))
+	pattern_NasService_ListLxcContainers_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "lxcContainers"}, ""))
+	pattern_NasService_GetLxcContainer_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "lxcContainers", "name"}, ""))
+	pattern_NasService_CreateLxcContainer_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "lxcContainers"}, ""))
+	pattern_NasService_DeleteLxcContainer_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "lxcContainers", "name"}, ""))
+	pattern_NasService_StartLxcContainer_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "lxcContainers", "name"}, "start"))
+	pattern_NasService_StopLxcContainer_0               = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "lxcContainers", "name"}, "stop"))
+	pattern_NasService_FreezeLxcContainer_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "lxcContainers", "name"}, "freeze"))
+	pattern_NasService_ListCifsShares_0                 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "cifsShares"}, ""))
+	pattern_NasService_GetCifsShare_0                   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "cifsShares", "name"}, ""))
+	pattern_NasService_CreateCifsShare_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "cifsShares"}, ""))
+	pattern_NasService_UpdateCifsShare_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "cifsShares", "cifs_share.name"}, ""))
+	pattern_NasService_DeleteCifsShare_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "cifsShares", "name"}, ""))
+	pattern_NasService_ListWebdavShares_0               = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "webdavShares"}, ""))
+	pattern_NasService_GetWebdavShare_0                 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "webdavShares", "name"}, ""))
+	pattern_NasService_CreateWebdavShare_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "webdavShares"}, ""))
+	pattern_NasService_UpdateWebdavShare_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "webdavShares", "webdav_share.name"}, ""))
+	pattern_NasService_DeleteWebdavShare_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "webdavShares", "name"}, ""))
+	pattern_NasService_ListUsers_0                      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "users"}, ""))
+	pattern_NasService_GetUser_0                        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "users", "name"}, ""))
+	pattern_NasService_CreateUser_0                     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "users"}, ""))
+	pattern_NasService_UpdateUser_0                     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "users", "user.name"}, ""))
+	pattern_NasService_DeleteUser_0                     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "users", "name"}, ""))
+	pattern_NasService_ListGroups_0                     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "groups"}, ""))
+	pattern_NasService_GetGroup_0                       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "groups", "name"}, ""))
+	pattern_NasService_CreateGroup_0                    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "groups"}, ""))
+	pattern_NasService_UpdateGroup_0                    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "groups", "group.name"}, ""))
+	pattern_NasService_DeleteGroup_0                    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "groups", "name"}, ""))
+	pattern_NasService_ListCatalogApps_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "catalog", "apps"}, ""))
+	pattern_NasService_GetCatalogApp_0                  = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"v1", "catalog", "apps", "app_id"}, ""))
+	pattern_NasService_SyncCatalog_0                    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "catalog"}, "sync"))
 )
 
 var (
-	forward_NasService_Login_0                     = runtime.ForwardResponseMessage
-	forward_NasService_GetCurrentUser_0            = runtime.ForwardResponseMessage
-	forward_NasService_ListPrerequisites_0         = runtime.ForwardResponseMessage
-	forward_NasService_GetPrerequisite_0           = runtime.ForwardResponseMessage
-	forward_NasService_CheckPrerequisites_0        = runtime.ForwardResponseMessage
-	forward_NasService_ListDisks_0                 = runtime.ForwardResponseMessage
-	forward_NasService_GetDisk_0                   = runtime.ForwardResponseMessage
-	forward_NasService_ListZfsPools_0              = runtime.ForwardResponseMessage
-	forward_NasService_GetZfsPool_0                = runtime.ForwardResponseMessage
-	forward_NasService_CreateZfsPool_0             = runtime.ForwardResponseMessage
-	forward_NasService_DeleteZfsPool_0             = runtime.ForwardResponseMessage
-	forward_NasService_ScrubZfsPool_0              = runtime.ForwardResponseMessage
-	forward_NasService_UpdateZfsPool_0             = runtime.ForwardResponseMessage
-	forward_NasService_AddZfsPoolVdev_0            = runtime.ForwardResponseMessage
-	forward_NasService_RemoveZfsPoolVdev_0         = runtime.ForwardResponseMessage
-	forward_NasService_ListZfsDatasets_0           = runtime.ForwardResponseMessage
-	forward_NasService_GetZfsDataset_0             = runtime.ForwardResponseMessage
-	forward_NasService_CreateZfsDataset_0          = runtime.ForwardResponseMessage
-	forward_NasService_UpdateZfsDataset_0          = runtime.ForwardResponseMessage
-	forward_NasService_DeleteZfsDataset_0          = runtime.ForwardResponseMessage
-	forward_NasService_SnapshotZfsDataset_0        = runtime.ForwardResponseMessage
-	forward_NasService_ListZfsVolumes_0            = runtime.ForwardResponseMessage
-	forward_NasService_GetZfsVolume_0              = runtime.ForwardResponseMessage
-	forward_NasService_CreateZfsVolume_0           = runtime.ForwardResponseMessage
-	forward_NasService_UpdateZfsVolume_0           = runtime.ForwardResponseMessage
-	forward_NasService_DeleteZfsVolume_0           = runtime.ForwardResponseMessage
-	forward_NasService_ListVirtualMachines_0       = runtime.ForwardResponseMessage
-	forward_NasService_GetVirtualMachine_0         = runtime.ForwardResponseMessage
-	forward_NasService_CreateVirtualMachine_0      = runtime.ForwardResponseMessage
-	forward_NasService_UpdateVirtualMachine_0      = runtime.ForwardResponseMessage
-	forward_NasService_DeleteVirtualMachine_0      = runtime.ForwardResponseMessage
-	forward_NasService_StartVirtualMachine_0       = runtime.ForwardResponseMessage
-	forward_NasService_StopVirtualMachine_0        = runtime.ForwardResponseMessage
-	forward_NasService_RebootVirtualMachine_0      = runtime.ForwardResponseMessage
-	forward_NasService_OpenVirtualMachineConsole_0 = runtime.ForwardResponseMessage
-	forward_NasService_ListDockerContainers_0      = runtime.ForwardResponseMessage
-	forward_NasService_GetDockerContainer_0        = runtime.ForwardResponseMessage
-	forward_NasService_CreateDockerContainer_0     = runtime.ForwardResponseMessage
-	forward_NasService_UpdateDockerContainer_0     = runtime.ForwardResponseMessage
-	forward_NasService_DeleteDockerContainer_0     = runtime.ForwardResponseMessage
-	forward_NasService_GetDockerContainerLogs_0    = runtime.ForwardResponseMessage
-	forward_NasService_StartDockerContainer_0      = runtime.ForwardResponseMessage
-	forward_NasService_StopDockerContainer_0       = runtime.ForwardResponseMessage
-	forward_NasService_RestartDockerContainer_0    = runtime.ForwardResponseMessage
-	forward_NasService_ListDockerApps_0            = runtime.ForwardResponseMessage
-	forward_NasService_GetDockerApp_0              = runtime.ForwardResponseMessage
-	forward_NasService_CreateDockerApp_0           = runtime.ForwardResponseMessage
-	forward_NasService_UpdateDockerApp_0           = runtime.ForwardResponseMessage
-	forward_NasService_DeleteDockerApp_0           = runtime.ForwardResponseMessage
-	forward_NasService_StartDockerApp_0            = runtime.ForwardResponseMessage
-	forward_NasService_StopDockerApp_0             = runtime.ForwardResponseMessage
-	forward_NasService_RestartDockerApp_0          = runtime.ForwardResponseMessage
-	forward_NasService_GetDockerAppLogs_0          = runtime.ForwardResponseMessage
-	forward_NasService_GetDockerConfig_0           = runtime.ForwardResponseMessage
-	forward_NasService_UpdateDockerConfig_0        = runtime.ForwardResponseMessage
-	forward_NasService_ListFileSystemDirectories_0 = runtime.ForwardResponseMessage
-	forward_NasService_ListLxcContainers_0         = runtime.ForwardResponseMessage
-	forward_NasService_GetLxcContainer_0           = runtime.ForwardResponseMessage
-	forward_NasService_CreateLxcContainer_0        = runtime.ForwardResponseMessage
-	forward_NasService_DeleteLxcContainer_0        = runtime.ForwardResponseMessage
-	forward_NasService_StartLxcContainer_0         = runtime.ForwardResponseMessage
-	forward_NasService_StopLxcContainer_0          = runtime.ForwardResponseMessage
-	forward_NasService_FreezeLxcContainer_0        = runtime.ForwardResponseMessage
-	forward_NasService_ListCifsShares_0            = runtime.ForwardResponseMessage
-	forward_NasService_GetCifsShare_0              = runtime.ForwardResponseMessage
-	forward_NasService_CreateCifsShare_0           = runtime.ForwardResponseMessage
-	forward_NasService_UpdateCifsShare_0           = runtime.ForwardResponseMessage
-	forward_NasService_DeleteCifsShare_0           = runtime.ForwardResponseMessage
-	forward_NasService_ListWebdavShares_0          = runtime.ForwardResponseMessage
-	forward_NasService_GetWebdavShare_0            = runtime.ForwardResponseMessage
-	forward_NasService_CreateWebdavShare_0         = runtime.ForwardResponseMessage
-	forward_NasService_UpdateWebdavShare_0         = runtime.ForwardResponseMessage
-	forward_NasService_DeleteWebdavShare_0         = runtime.ForwardResponseMessage
-	forward_NasService_ListUsers_0                 = runtime.ForwardResponseMessage
-	forward_NasService_GetUser_0                   = runtime.ForwardResponseMessage
-	forward_NasService_CreateUser_0                = runtime.ForwardResponseMessage
-	forward_NasService_UpdateUser_0                = runtime.ForwardResponseMessage
-	forward_NasService_DeleteUser_0                = runtime.ForwardResponseMessage
-	forward_NasService_ListGroups_0                = runtime.ForwardResponseMessage
-	forward_NasService_GetGroup_0                  = runtime.ForwardResponseMessage
-	forward_NasService_CreateGroup_0               = runtime.ForwardResponseMessage
-	forward_NasService_UpdateGroup_0               = runtime.ForwardResponseMessage
-	forward_NasService_DeleteGroup_0               = runtime.ForwardResponseMessage
-	forward_NasService_ListCatalogApps_0           = runtime.ForwardResponseMessage
-	forward_NasService_GetCatalogApp_0             = runtime.ForwardResponseMessage
-	forward_NasService_SyncCatalog_0               = runtime.ForwardResponseMessage
+	forward_NasService_Login_0                          = runtime.ForwardResponseMessage
+	forward_NasService_GetCurrentUser_0                 = runtime.ForwardResponseMessage
+	forward_NasService_ListPrerequisites_0              = runtime.ForwardResponseMessage
+	forward_NasService_GetPrerequisite_0                = runtime.ForwardResponseMessage
+	forward_NasService_CheckPrerequisites_0             = runtime.ForwardResponseMessage
+	forward_NasService_ListDisks_0                      = runtime.ForwardResponseMessage
+	forward_NasService_GetDisk_0                        = runtime.ForwardResponseMessage
+	forward_NasService_ListZfsPools_0                   = runtime.ForwardResponseMessage
+	forward_NasService_GetZfsPool_0                     = runtime.ForwardResponseMessage
+	forward_NasService_CreateZfsPool_0                  = runtime.ForwardResponseMessage
+	forward_NasService_DeleteZfsPool_0                  = runtime.ForwardResponseMessage
+	forward_NasService_ScrubZfsPool_0                   = runtime.ForwardResponseMessage
+	forward_NasService_UpdateZfsPool_0                  = runtime.ForwardResponseMessage
+	forward_NasService_AddZfsPoolVdev_0                 = runtime.ForwardResponseMessage
+	forward_NasService_RemoveZfsPoolVdev_0              = runtime.ForwardResponseMessage
+	forward_NasService_ListZfsDatasets_0                = runtime.ForwardResponseMessage
+	forward_NasService_GetZfsDataset_0                  = runtime.ForwardResponseMessage
+	forward_NasService_CreateZfsDataset_0               = runtime.ForwardResponseMessage
+	forward_NasService_UpdateZfsDataset_0               = runtime.ForwardResponseMessage
+	forward_NasService_DeleteZfsDataset_0               = runtime.ForwardResponseMessage
+	forward_NasService_SnapshotZfsDataset_0             = runtime.ForwardResponseMessage
+	forward_NasService_ListZfsVolumes_0                 = runtime.ForwardResponseMessage
+	forward_NasService_GetZfsVolume_0                   = runtime.ForwardResponseMessage
+	forward_NasService_CreateZfsVolume_0                = runtime.ForwardResponseMessage
+	forward_NasService_UpdateZfsVolume_0                = runtime.ForwardResponseMessage
+	forward_NasService_DeleteZfsVolume_0                = runtime.ForwardResponseMessage
+	forward_NasService_ListVirtualMachines_0            = runtime.ForwardResponseMessage
+	forward_NasService_GetVirtualMachine_0              = runtime.ForwardResponseMessage
+	forward_NasService_CreateVirtualMachine_0           = runtime.ForwardResponseMessage
+	forward_NasService_UpdateVirtualMachine_0           = runtime.ForwardResponseMessage
+	forward_NasService_DeleteVirtualMachine_0           = runtime.ForwardResponseMessage
+	forward_NasService_StartVirtualMachine_0            = runtime.ForwardResponseMessage
+	forward_NasService_StopVirtualMachine_0             = runtime.ForwardResponseMessage
+	forward_NasService_RebootVirtualMachine_0           = runtime.ForwardResponseMessage
+	forward_NasService_ResetVirtualMachine_0            = runtime.ForwardResponseMessage
+	forward_NasService_PauseVirtualMachine_0            = runtime.ForwardResponseMessage
+	forward_NasService_ResumeVirtualMachine_0           = runtime.ForwardResponseMessage
+	forward_NasService_CloneVirtualMachine_0            = runtime.ForwardResponseMessage
+	forward_NasService_AttachVirtualMachineMedia_0      = runtime.ForwardResponseMessage
+	forward_NasService_EjectVirtualMachineMedia_0       = runtime.ForwardResponseMessage
+	forward_NasService_ListVirtualMachineSnapshots_0    = runtime.ForwardResponseMessage
+	forward_NasService_CreateVirtualMachineSnapshot_0   = runtime.ForwardResponseMessage
+	forward_NasService_RollbackVirtualMachineSnapshot_0 = runtime.ForwardResponseMessage
+	forward_NasService_DeleteVirtualMachineSnapshot_0   = runtime.ForwardResponseMessage
+	forward_NasService_OpenVirtualMachineConsole_0      = runtime.ForwardResponseMessage
+	forward_NasService_ListDockerContainers_0           = runtime.ForwardResponseMessage
+	forward_NasService_GetDockerContainer_0             = runtime.ForwardResponseMessage
+	forward_NasService_CreateDockerContainer_0          = runtime.ForwardResponseMessage
+	forward_NasService_UpdateDockerContainer_0          = runtime.ForwardResponseMessage
+	forward_NasService_DeleteDockerContainer_0          = runtime.ForwardResponseMessage
+	forward_NasService_GetDockerContainerLogs_0         = runtime.ForwardResponseMessage
+	forward_NasService_StartDockerContainer_0           = runtime.ForwardResponseMessage
+	forward_NasService_StopDockerContainer_0            = runtime.ForwardResponseMessage
+	forward_NasService_RestartDockerContainer_0         = runtime.ForwardResponseMessage
+	forward_NasService_ListDockerApps_0                 = runtime.ForwardResponseMessage
+	forward_NasService_GetDockerApp_0                   = runtime.ForwardResponseMessage
+	forward_NasService_CreateDockerApp_0                = runtime.ForwardResponseMessage
+	forward_NasService_UpdateDockerApp_0                = runtime.ForwardResponseMessage
+	forward_NasService_DeleteDockerApp_0                = runtime.ForwardResponseMessage
+	forward_NasService_StartDockerApp_0                 = runtime.ForwardResponseMessage
+	forward_NasService_StopDockerApp_0                  = runtime.ForwardResponseMessage
+	forward_NasService_RestartDockerApp_0               = runtime.ForwardResponseMessage
+	forward_NasService_GetDockerAppLogs_0               = runtime.ForwardResponseMessage
+	forward_NasService_GetDockerConfig_0                = runtime.ForwardResponseMessage
+	forward_NasService_UpdateDockerConfig_0             = runtime.ForwardResponseMessage
+	forward_NasService_ListFileSystemDirectories_0      = runtime.ForwardResponseMessage
+	forward_NasService_ListLxcContainers_0              = runtime.ForwardResponseMessage
+	forward_NasService_GetLxcContainer_0                = runtime.ForwardResponseMessage
+	forward_NasService_CreateLxcContainer_0             = runtime.ForwardResponseMessage
+	forward_NasService_DeleteLxcContainer_0             = runtime.ForwardResponseMessage
+	forward_NasService_StartLxcContainer_0              = runtime.ForwardResponseMessage
+	forward_NasService_StopLxcContainer_0               = runtime.ForwardResponseMessage
+	forward_NasService_FreezeLxcContainer_0             = runtime.ForwardResponseMessage
+	forward_NasService_ListCifsShares_0                 = runtime.ForwardResponseMessage
+	forward_NasService_GetCifsShare_0                   = runtime.ForwardResponseMessage
+	forward_NasService_CreateCifsShare_0                = runtime.ForwardResponseMessage
+	forward_NasService_UpdateCifsShare_0                = runtime.ForwardResponseMessage
+	forward_NasService_DeleteCifsShare_0                = runtime.ForwardResponseMessage
+	forward_NasService_ListWebdavShares_0               = runtime.ForwardResponseMessage
+	forward_NasService_GetWebdavShare_0                 = runtime.ForwardResponseMessage
+	forward_NasService_CreateWebdavShare_0              = runtime.ForwardResponseMessage
+	forward_NasService_UpdateWebdavShare_0              = runtime.ForwardResponseMessage
+	forward_NasService_DeleteWebdavShare_0              = runtime.ForwardResponseMessage
+	forward_NasService_ListUsers_0                      = runtime.ForwardResponseMessage
+	forward_NasService_GetUser_0                        = runtime.ForwardResponseMessage
+	forward_NasService_CreateUser_0                     = runtime.ForwardResponseMessage
+	forward_NasService_UpdateUser_0                     = runtime.ForwardResponseMessage
+	forward_NasService_DeleteUser_0                     = runtime.ForwardResponseMessage
+	forward_NasService_ListGroups_0                     = runtime.ForwardResponseMessage
+	forward_NasService_GetGroup_0                       = runtime.ForwardResponseMessage
+	forward_NasService_CreateGroup_0                    = runtime.ForwardResponseMessage
+	forward_NasService_UpdateGroup_0                    = runtime.ForwardResponseMessage
+	forward_NasService_DeleteGroup_0                    = runtime.ForwardResponseMessage
+	forward_NasService_ListCatalogApps_0                = runtime.ForwardResponseMessage
+	forward_NasService_GetCatalogApp_0                  = runtime.ForwardResponseMessage
+	forward_NasService_SyncCatalog_0                    = runtime.ForwardResponseMessage
 )

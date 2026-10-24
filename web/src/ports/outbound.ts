@@ -19,6 +19,7 @@ import type {
   User,
   VirtualMachine,
   VirtualMachineConsoleSession,
+  VirtualMachineSnapshot,
   WebdavShare,
   ZfsDataset,
   ZfsPool,
@@ -80,6 +81,16 @@ export interface KvmPort {
   startVirtualMachine(name: string): Promise<VirtualMachine>;
   stopVirtualMachine(name: string, force?: boolean): Promise<VirtualMachine>;
   rebootVirtualMachine(name: string): Promise<VirtualMachine>;
+  resetVirtualMachine(name: string): Promise<VirtualMachine>;
+  pauseVirtualMachine(name: string): Promise<VirtualMachine>;
+  resumeVirtualMachine(name: string): Promise<VirtualMachine>;
+  cloneVirtualMachine(name: string, newId: string, newName?: string, targetPool?: string, linkedClone?: boolean): Promise<VirtualMachine>;
+  attachMedia(name: string, isoPath: string, deviceId?: string): Promise<VirtualMachine>;
+  ejectMedia(name: string, deviceId?: string): Promise<VirtualMachine>;
+  listSnapshots(vmName: string): Promise<VirtualMachineSnapshot[]>;
+  createSnapshot(vmName: string, snapshotId: string, description?: string, includeRam?: boolean): Promise<VirtualMachineSnapshot>;
+  rollbackSnapshot(snapName: string): Promise<VirtualMachine>;
+  deleteSnapshot(snapName: string): Promise<void>;
   openVirtualMachineConsole(name: string): Promise<VirtualMachineConsoleSession>;
 }
 

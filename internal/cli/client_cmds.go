@@ -212,14 +212,328 @@ func newVMCmd(rootOpts *RootOptions) *cobra.Command {
 				return rootOpts.printJSON(resp.GetVirtualMachines())
 			}
 			tw := tabwriter.NewWriter(rootOpts.Out, 0, 4, 2, ' ', 0)
-			fmt.Fprintln(tw, "NAME\tSTATE\tVCPUS\tMEMORY(MiB)\tDISK\tVNC PORT")
+			fmt.Fprintln(tw, "NAME\tSTATE\tCPU\tRAM(MiB)\tDISKS\tIP ADDRESSES\tFIRMWARE")
 			for _, vm := range resp.GetVirtualMachines() {
-				fmt.Fprintf(tw, "%s\t%s\t%d\t%d\t%s\t%d\n",
-					vm.GetName(), vm.GetState(), vm.GetVcpus(), vm.GetMemoryMib(), vm.GetDiskPath(), vm.GetVncPort())
+				ips := "-"
+				if len(vm.GetGuestIpAddresses()) > 0 {
+					ips = strings.Join(vm.GetGuestIpAddresses(), ", ")
+				}
+				disksInfo := fmt.Sprintf("%d disk(s)", len(vm.GetDisks()))
+				if len(vm.GetDisks()) == 0 && vm.GetDiskPath() != "" {
+					disksInfo = vm.GetDiskPath()
+				}
+				cpuInfo := fmt.Sprintf("%dvCPU", vm.GetVcpus())
+				if vm.GetSockets() > 0 && vm.GetCores() > 0 {
+					cpuInfo = fmt.Sprintf("%dvCPU (%ds/%dc)", vm.GetVcpus(), vm.GetSockets(), vm.GetCores())
+				}
+				firmware := vm.GetBiosType()
+				if firmware == "" {
+					firmware = "seabios"
+				}
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
+					vm.GetName(), vm.GetState(), cpuInfo, vm.GetMemoryMib(), disksInfo, ips, firmware)
 			}
 			return tw.Flush()
 		},
 	}
+
+	getCmd := &cobra.Command{
+		Use:   "get <vm-id>",
+		Short: "Get detailed Proxmox-grade hardware and telemetry configuration of a VM",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			vm, err := client.GetVirtualMachine(cmd.Context(), &nasv1.GetVirtualMachineRequest{
+				Name: ensurePrefix(args[0], "virtualMachines/"),
+			})
+			if err != nil {
+				return err
+			}
+			if rootOpts.JSONOutput {
+				return rootOpts.printJSON(vm)
+			}
+			fmt.Fprintf(rootOpts.Out, "Virtual Machine: %s (%s)\n", vm.GetVmName(), vm.GetUuid())
+			fmt.Fprintf(rootOpts.Out, "State:           %s\n", vm.GetState())
+			fmt.Fprintf(rootOpts.Out, "CPU:             %d vCPUs (%d sockets, %d cores) [Type: %s]\n",
+				vm.GetVcpus(), vm.GetSockets(), vm.GetCores(), vm.GetCpuType())
+			fmt.Fprintf(rootOpts.Out, "Memory:          %d MiB (Balloon min: %d MiB, Hugepages: %s)\n",
+				vm.GetMemoryMib(), vm.GetBalloonMinMib(), vm.GetHugepages())
+			fmt.Fprintf(rootOpts.Out, "Firmware:        BIOS=%s, Machine=%s, TPM=%s, SecureBoot=%t\n",
+				vm.GetBiosType(), vm.GetMachineType(), vm.GetTpmVersion(), vm.GetSecureBoot())
+			fmt.Fprintf(rootOpts.Out, "Display / VNC:   %s | Port %d (%s)\n",
+				vm.GetDisplayType(), vm.GetVncPort(), vm.GetVncDisplay())
+			fmt.Fprintf(rootOpts.Out, "Autostart:       %t (Startup delay: %ds)\n", vm.GetAutostart(), vm.GetStartupDelaySeconds())
+			fmt.Fprintf(rootOpts.Out, "Boot Order:      %s\n", vm.GetBootOrder())
+			if vm.GetAgentRunning() {
+				fmt.Fprintf(rootOpts.Out, "Guest Agent:     RUNNING (OS: %s, IPs: %s)\n",
+					vm.GetGuestOsName(), strings.Join(vm.GetGuestIpAddresses(), ", "))
+			}
+
+			if len(vm.GetDisks()) > 0 {
+				fmt.Fprintln(rootOpts.Out, "\nDisks:")
+				tw := tabwriter.NewWriter(rootOpts.Out, 0, 4, 2, ' ', 0)
+				fmt.Fprintln(tw, "  ID\tBUS\tPATH\tSIZE\tCACHE\tDISCARD\tIOTHREAD")
+				for _, d := range vm.GetDisks() {
+					fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\t%s\t%t\t%t\n",
+						d.GetId(), d.GetBus(), d.GetDiskPath(), domain.FormatBytes(d.GetSizeBytes()),
+						d.GetCacheMode(), d.GetDiscard(), d.GetIothread())
+				}
+				_ = tw.Flush()
+			}
+
+			if len(vm.GetNetworkInterfaces()) > 0 {
+				fmt.Fprintln(rootOpts.Out, "\nNetwork Interfaces:")
+				tw := tabwriter.NewWriter(rootOpts.Out, 0, 4, 2, ' ', 0)
+				fmt.Fprintln(tw, "  ID\tMODEL\tBRIDGE\tVLAN\tMAC\tRATE LIMIT")
+				for _, iface := range vm.GetNetworkInterfaces() {
+					fmt.Fprintf(tw, "  %s\t%s\t%s\t%d\t%s\t%d Mbps\n",
+						iface.GetId(), iface.GetModel(), iface.GetBridge(), iface.GetVlanTag(),
+						iface.GetMacAddress(), iface.GetRateLimitMbps())
+				}
+				_ = tw.Flush()
+			}
+
+			if vm.GetCloudInit() != nil && vm.GetCloudInit().GetUser() != "" {
+				fmt.Fprintf(rootOpts.Out, "\nCloud-Init:\n  User: %s | IP: %s\n",
+					vm.GetCloudInit().GetUser(), vm.GetCloudInit().GetIpConfig())
+			}
+			return nil
+		},
+	}
+
+	rebootCmd := &cobra.Command{
+		Use:   "reboot <vm-id>",
+		Short: "Reboot a KVM virtual machine gracefully via ACPI (:reboot)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			vm, err := client.RebootVirtualMachine(cmd.Context(), &nasv1.RebootVirtualMachineRequest{
+				Name: ensurePrefix(args[0], "virtualMachines/"),
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(rootOpts.Out, "%s is rebooting (%s)\n", vm.GetName(), vm.GetState())
+			return nil
+		},
+	}
+
+	resetCmd := &cobra.Command{
+		Use:   "reset <vm-id>",
+		Short: "Hard reset a KVM virtual machine (:reset)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			vm, err := client.ResetVirtualMachine(cmd.Context(), &nasv1.ResetVirtualMachineRequest{
+				Name: ensurePrefix(args[0], "virtualMachines/"),
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(rootOpts.Out, "%s reset successfully (%s)\n", vm.GetName(), vm.GetState())
+			return nil
+		},
+	}
+
+	pauseCmd := &cobra.Command{
+		Use:   "pause <vm-id>",
+		Short: "Pause/suspend a running KVM virtual machine (:pause)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			vm, err := client.PauseVirtualMachine(cmd.Context(), &nasv1.PauseVirtualMachineRequest{
+				Name: ensurePrefix(args[0], "virtualMachines/"),
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(rootOpts.Out, "%s paused (%s)\n", vm.GetName(), vm.GetState())
+			return nil
+		},
+	}
+
+	resumeCmd := &cobra.Command{
+		Use:   "resume <vm-id>",
+		Short: "Resume a paused KVM virtual machine (:resume)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			vm, err := client.ResumeVirtualMachine(cmd.Context(), &nasv1.ResumeVirtualMachineRequest{
+				Name: ensurePrefix(args[0], "virtualMachines/"),
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(rootOpts.Out, "%s resumed (%s)\n", vm.GetName(), vm.GetState())
+			return nil
+		},
+	}
+
+	var (
+		cloneName   string
+		clonePool   string
+		linkedClone bool
+	)
+	cloneCmd := &cobra.Command{
+		Use:   "clone <source-vm-id> <new-vm-id>",
+		Short: "Clone a virtual machine with optional linked/full ZFS backing (:clone)",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			vm, err := client.CloneVirtualMachine(cmd.Context(), &nasv1.CloneVirtualMachineRequest{
+				Name:                ensurePrefix(args[0], "virtualMachines/"),
+				NewVirtualMachineId: args[1],
+				NewName:             cloneName,
+				TargetPool:          clonePool,
+				LinkedClone:         linkedClone,
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(rootOpts.Out, "Successfully cloned %s to %s (%s)\n", args[0], vm.GetName(), vm.GetState())
+			return nil
+		},
+	}
+	cloneCmd.Flags().StringVar(&cloneName, "name", "", "Display name for the new cloned VM")
+	cloneCmd.Flags().StringVar(&clonePool, "pool", "tank", "Target ZFS pool for cloned disks")
+	cloneCmd.Flags().BoolVar(&linkedClone, "linked", true, "Create a linked clone based on ZFS snapshot")
+
+	// Snapshot subcommands
+	snapCmd := &cobra.Command{
+		Use:   "snapshot",
+		Short: "Manage virtual machine live and offline snapshots",
+	}
+
+	snapListCmd := &cobra.Command{
+		Use:   "list <vm-id>",
+		Short: "List snapshots of a virtual machine",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			resp, err := client.ListVirtualMachineSnapshots(cmd.Context(), &nasv1.ListVirtualMachineSnapshotsRequest{
+				Parent: ensurePrefix(args[0], "virtualMachines/"),
+			})
+			if err != nil {
+				return err
+			}
+			if rootOpts.JSONOutput {
+				return rootOpts.printJSON(resp.GetSnapshots())
+			}
+			tw := tabwriter.NewWriter(rootOpts.Out, 0, 4, 2, ' ', 0)
+			fmt.Fprintln(tw, "SNAPSHOT ID\tVM STATE\tRAM INCLUDED\tCREATED\tDESCRIPTION")
+			for _, s := range resp.GetSnapshots() {
+				createdStr := s.GetCreateTime().AsTime().Format("2006-01-02 15:04:05")
+				fmt.Fprintf(tw, "%s\t%s\t%t\t%s\t%s\n",
+					s.GetSnapshotId(), s.GetVmState(), s.GetIncludeRam(), createdStr, s.GetDescription())
+			}
+			return tw.Flush()
+		},
+	}
+
+	var (
+		snapDesc       string
+		snapIncludeRAM bool
+	)
+	snapCreateCmd := &cobra.Command{
+		Use:   "create <vm-id> <snapshot-id>",
+		Short: "Create a new snapshot of a virtual machine",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			snap, err := client.CreateVirtualMachineSnapshot(cmd.Context(), &nasv1.CreateVirtualMachineSnapshotRequest{
+				Parent:     ensurePrefix(args[0], "virtualMachines/"),
+				SnapshotId: args[1],
+				Snapshot: &nasv1.VirtualMachineSnapshot{
+					Description: snapDesc,
+					IncludeRam:  snapIncludeRAM,
+				},
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(rootOpts.Out, "Created snapshot %s for %s\n", snap.GetSnapshotId(), args[0])
+			return nil
+		},
+	}
+	snapCreateCmd.Flags().StringVarP(&snapDesc, "description", "d", "", "Snapshot description")
+	snapCreateCmd.Flags().BoolVar(&snapIncludeRAM, "ram", false, "Include running VM RAM memory in snapshot")
+
+	snapRollbackCmd := &cobra.Command{
+		Use:   "rollback <vm-id> <snapshot-id>",
+		Short: "Rollback a virtual machine to a snapshot state",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			snapName := fmt.Sprintf("%s/snapshots/%s", ensurePrefix(args[0], "virtualMachines/"), args[1])
+			vm, err := client.RollbackVirtualMachineSnapshot(cmd.Context(), &nasv1.RollbackVirtualMachineSnapshotRequest{
+				Name: snapName,
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(rootOpts.Out, "Successfully rolled back %s to %s (current state: %s)\n", args[0], args[1], vm.GetState())
+			return nil
+		},
+	}
+
+	snapDeleteCmd := &cobra.Command{
+		Use:   "delete <vm-id> <snapshot-id>",
+		Short: "Delete a virtual machine snapshot",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			snapName := fmt.Sprintf("%s/snapshots/%s", ensurePrefix(args[0], "virtualMachines/"), args[1])
+			if _, err := client.DeleteVirtualMachineSnapshot(cmd.Context(), &nasv1.DeleteVirtualMachineSnapshotRequest{
+				Name: snapName,
+			}); err != nil {
+				return err
+			}
+			fmt.Fprintf(rootOpts.Out, "Deleted snapshot %s from %s\n", args[1], args[0])
+			return nil
+		},
+	}
+
+	snapCmd.AddCommand(snapListCmd, snapCreateCmd, snapRollbackCmd, snapDeleteCmd)
 
 
 	startCmd := &cobra.Command{
@@ -289,7 +603,7 @@ func newVMCmd(rootOpts *RootOptions) *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(listCmd, startCmd, stopCmd, consoleCmd)
+	cmd.AddCommand(listCmd, getCmd, startCmd, stopCmd, rebootCmd, resetCmd, pauseCmd, resumeCmd, cloneCmd, snapCmd, consoleCmd)
 	return cmd
 }
 

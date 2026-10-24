@@ -23,6 +23,7 @@ import {
   validateSshPublicKey,
   type VirtualMachine,
   type VirtualMachineConsoleSession,
+  type VirtualMachineSnapshot,
   type WebdavShare,
   type ZfsDataset,
   type ZfsPool,
@@ -347,6 +348,74 @@ export class KvmService {
 
   async rebootVirtualMachine(vmIdOrName: string): Promise<VirtualMachine> {
     return this.kvmPort.rebootVirtualMachine(ResourceNames.virtualMachine(vmIdOrName));
+  }
+
+  async resetVirtualMachine(vmIdOrName: string): Promise<VirtualMachine> {
+    return this.kvmPort.resetVirtualMachine(ResourceNames.virtualMachine(vmIdOrName));
+  }
+
+  async pauseVirtualMachine(vmIdOrName: string): Promise<VirtualMachine> {
+    return this.kvmPort.pauseVirtualMachine(ResourceNames.virtualMachine(vmIdOrName));
+  }
+
+  async resumeVirtualMachine(vmIdOrName: string): Promise<VirtualMachine> {
+    return this.kvmPort.resumeVirtualMachine(ResourceNames.virtualMachine(vmIdOrName));
+  }
+
+  async cloneVirtualMachine(
+    vmIdOrName: string,
+    newId: string,
+    newName?: string,
+    targetPool?: string,
+    linkedClone = true
+  ): Promise<VirtualMachine> {
+    if (!isValidResourceId(newId)) {
+      throw new Error(`Invalid new VM ID: "${newId}"`);
+    }
+    return this.kvmPort.cloneVirtualMachine(
+      ResourceNames.virtualMachine(vmIdOrName),
+      newId.trim(),
+      newName,
+      targetPool,
+      linkedClone
+    );
+  }
+
+  async attachMedia(vmIdOrName: string, isoPath: string, deviceId = 'hdc'): Promise<VirtualMachine> {
+    return this.kvmPort.attachMedia(ResourceNames.virtualMachine(vmIdOrName), isoPath, deviceId);
+  }
+
+  async ejectMedia(vmIdOrName: string, deviceId = 'hdc'): Promise<VirtualMachine> {
+    return this.kvmPort.ejectMedia(ResourceNames.virtualMachine(vmIdOrName), deviceId);
+  }
+
+  async listSnapshots(vmIdOrName: string): Promise<VirtualMachineSnapshot[]> {
+    return this.kvmPort.listSnapshots(ResourceNames.virtualMachine(vmIdOrName));
+  }
+
+  async createSnapshot(
+    vmIdOrName: string,
+    snapshotId: string,
+    description = '',
+    includeRam = false
+  ): Promise<VirtualMachineSnapshot> {
+    if (!isValidResourceId(snapshotId)) {
+      throw new Error(`Invalid snapshot ID: "${snapshotId}"`);
+    }
+    return this.kvmPort.createSnapshot(
+      ResourceNames.virtualMachine(vmIdOrName),
+      snapshotId.trim(),
+      description,
+      includeRam
+    );
+  }
+
+  async rollbackSnapshot(snapName: string): Promise<VirtualMachine> {
+    return this.kvmPort.rollbackSnapshot(snapName);
+  }
+
+  async deleteSnapshot(snapName: string): Promise<void> {
+    return this.kvmPort.deleteSnapshot(snapName);
   }
 
   async openConsole(vmIdOrName: string): Promise<VirtualMachineConsoleSession> {

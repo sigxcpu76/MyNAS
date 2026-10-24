@@ -20,92 +20,102 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	NasService_Login_FullMethodName                     = "/nas.v1.NasService/Login"
-	NasService_GetCurrentUser_FullMethodName            = "/nas.v1.NasService/GetCurrentUser"
-	NasService_ListPrerequisites_FullMethodName         = "/nas.v1.NasService/ListPrerequisites"
-	NasService_GetPrerequisite_FullMethodName           = "/nas.v1.NasService/GetPrerequisite"
-	NasService_CheckPrerequisites_FullMethodName        = "/nas.v1.NasService/CheckPrerequisites"
-	NasService_ListDisks_FullMethodName                 = "/nas.v1.NasService/ListDisks"
-	NasService_GetDisk_FullMethodName                   = "/nas.v1.NasService/GetDisk"
-	NasService_ListZfsPools_FullMethodName              = "/nas.v1.NasService/ListZfsPools"
-	NasService_GetZfsPool_FullMethodName                = "/nas.v1.NasService/GetZfsPool"
-	NasService_CreateZfsPool_FullMethodName             = "/nas.v1.NasService/CreateZfsPool"
-	NasService_DeleteZfsPool_FullMethodName             = "/nas.v1.NasService/DeleteZfsPool"
-	NasService_ScrubZfsPool_FullMethodName              = "/nas.v1.NasService/ScrubZfsPool"
-	NasService_UpdateZfsPool_FullMethodName             = "/nas.v1.NasService/UpdateZfsPool"
-	NasService_AddZfsPoolVdev_FullMethodName            = "/nas.v1.NasService/AddZfsPoolVdev"
-	NasService_RemoveZfsPoolVdev_FullMethodName         = "/nas.v1.NasService/RemoveZfsPoolVdev"
-	NasService_ListZfsDatasets_FullMethodName           = "/nas.v1.NasService/ListZfsDatasets"
-	NasService_GetZfsDataset_FullMethodName             = "/nas.v1.NasService/GetZfsDataset"
-	NasService_CreateZfsDataset_FullMethodName          = "/nas.v1.NasService/CreateZfsDataset"
-	NasService_UpdateZfsDataset_FullMethodName          = "/nas.v1.NasService/UpdateZfsDataset"
-	NasService_DeleteZfsDataset_FullMethodName          = "/nas.v1.NasService/DeleteZfsDataset"
-	NasService_SnapshotZfsDataset_FullMethodName        = "/nas.v1.NasService/SnapshotZfsDataset"
-	NasService_ListZfsVolumes_FullMethodName            = "/nas.v1.NasService/ListZfsVolumes"
-	NasService_GetZfsVolume_FullMethodName              = "/nas.v1.NasService/GetZfsVolume"
-	NasService_CreateZfsVolume_FullMethodName           = "/nas.v1.NasService/CreateZfsVolume"
-	NasService_UpdateZfsVolume_FullMethodName           = "/nas.v1.NasService/UpdateZfsVolume"
-	NasService_DeleteZfsVolume_FullMethodName           = "/nas.v1.NasService/DeleteZfsVolume"
-	NasService_ListVirtualMachines_FullMethodName       = "/nas.v1.NasService/ListVirtualMachines"
-	NasService_GetVirtualMachine_FullMethodName         = "/nas.v1.NasService/GetVirtualMachine"
-	NasService_CreateVirtualMachine_FullMethodName      = "/nas.v1.NasService/CreateVirtualMachine"
-	NasService_UpdateVirtualMachine_FullMethodName      = "/nas.v1.NasService/UpdateVirtualMachine"
-	NasService_DeleteVirtualMachine_FullMethodName      = "/nas.v1.NasService/DeleteVirtualMachine"
-	NasService_StartVirtualMachine_FullMethodName       = "/nas.v1.NasService/StartVirtualMachine"
-	NasService_StopVirtualMachine_FullMethodName        = "/nas.v1.NasService/StopVirtualMachine"
-	NasService_RebootVirtualMachine_FullMethodName      = "/nas.v1.NasService/RebootVirtualMachine"
-	NasService_OpenVirtualMachineConsole_FullMethodName = "/nas.v1.NasService/OpenVirtualMachineConsole"
-	NasService_ListDockerContainers_FullMethodName      = "/nas.v1.NasService/ListDockerContainers"
-	NasService_GetDockerContainer_FullMethodName        = "/nas.v1.NasService/GetDockerContainer"
-	NasService_CreateDockerContainer_FullMethodName     = "/nas.v1.NasService/CreateDockerContainer"
-	NasService_UpdateDockerContainer_FullMethodName     = "/nas.v1.NasService/UpdateDockerContainer"
-	NasService_DeleteDockerContainer_FullMethodName     = "/nas.v1.NasService/DeleteDockerContainer"
-	NasService_GetDockerContainerLogs_FullMethodName    = "/nas.v1.NasService/GetDockerContainerLogs"
-	NasService_StartDockerContainer_FullMethodName      = "/nas.v1.NasService/StartDockerContainer"
-	NasService_StopDockerContainer_FullMethodName       = "/nas.v1.NasService/StopDockerContainer"
-	NasService_RestartDockerContainer_FullMethodName    = "/nas.v1.NasService/RestartDockerContainer"
-	NasService_ListDockerApps_FullMethodName            = "/nas.v1.NasService/ListDockerApps"
-	NasService_GetDockerApp_FullMethodName              = "/nas.v1.NasService/GetDockerApp"
-	NasService_CreateDockerApp_FullMethodName           = "/nas.v1.NasService/CreateDockerApp"
-	NasService_UpdateDockerApp_FullMethodName           = "/nas.v1.NasService/UpdateDockerApp"
-	NasService_DeleteDockerApp_FullMethodName           = "/nas.v1.NasService/DeleteDockerApp"
-	NasService_StartDockerApp_FullMethodName            = "/nas.v1.NasService/StartDockerApp"
-	NasService_StopDockerApp_FullMethodName             = "/nas.v1.NasService/StopDockerApp"
-	NasService_RestartDockerApp_FullMethodName          = "/nas.v1.NasService/RestartDockerApp"
-	NasService_GetDockerAppLogs_FullMethodName          = "/nas.v1.NasService/GetDockerAppLogs"
-	NasService_GetDockerConfig_FullMethodName           = "/nas.v1.NasService/GetDockerConfig"
-	NasService_UpdateDockerConfig_FullMethodName        = "/nas.v1.NasService/UpdateDockerConfig"
-	NasService_ListFileSystemDirectories_FullMethodName = "/nas.v1.NasService/ListFileSystemDirectories"
-	NasService_ListLxcContainers_FullMethodName         = "/nas.v1.NasService/ListLxcContainers"
-	NasService_GetLxcContainer_FullMethodName           = "/nas.v1.NasService/GetLxcContainer"
-	NasService_CreateLxcContainer_FullMethodName        = "/nas.v1.NasService/CreateLxcContainer"
-	NasService_DeleteLxcContainer_FullMethodName        = "/nas.v1.NasService/DeleteLxcContainer"
-	NasService_StartLxcContainer_FullMethodName         = "/nas.v1.NasService/StartLxcContainer"
-	NasService_StopLxcContainer_FullMethodName          = "/nas.v1.NasService/StopLxcContainer"
-	NasService_FreezeLxcContainer_FullMethodName        = "/nas.v1.NasService/FreezeLxcContainer"
-	NasService_ListCifsShares_FullMethodName            = "/nas.v1.NasService/ListCifsShares"
-	NasService_GetCifsShare_FullMethodName              = "/nas.v1.NasService/GetCifsShare"
-	NasService_CreateCifsShare_FullMethodName           = "/nas.v1.NasService/CreateCifsShare"
-	NasService_UpdateCifsShare_FullMethodName           = "/nas.v1.NasService/UpdateCifsShare"
-	NasService_DeleteCifsShare_FullMethodName           = "/nas.v1.NasService/DeleteCifsShare"
-	NasService_ListWebdavShares_FullMethodName          = "/nas.v1.NasService/ListWebdavShares"
-	NasService_GetWebdavShare_FullMethodName            = "/nas.v1.NasService/GetWebdavShare"
-	NasService_CreateWebdavShare_FullMethodName         = "/nas.v1.NasService/CreateWebdavShare"
-	NasService_UpdateWebdavShare_FullMethodName         = "/nas.v1.NasService/UpdateWebdavShare"
-	NasService_DeleteWebdavShare_FullMethodName         = "/nas.v1.NasService/DeleteWebdavShare"
-	NasService_ListUsers_FullMethodName                 = "/nas.v1.NasService/ListUsers"
-	NasService_GetUser_FullMethodName                   = "/nas.v1.NasService/GetUser"
-	NasService_CreateUser_FullMethodName                = "/nas.v1.NasService/CreateUser"
-	NasService_UpdateUser_FullMethodName                = "/nas.v1.NasService/UpdateUser"
-	NasService_DeleteUser_FullMethodName                = "/nas.v1.NasService/DeleteUser"
-	NasService_ListGroups_FullMethodName                = "/nas.v1.NasService/ListGroups"
-	NasService_GetGroup_FullMethodName                  = "/nas.v1.NasService/GetGroup"
-	NasService_CreateGroup_FullMethodName               = "/nas.v1.NasService/CreateGroup"
-	NasService_UpdateGroup_FullMethodName               = "/nas.v1.NasService/UpdateGroup"
-	NasService_DeleteGroup_FullMethodName               = "/nas.v1.NasService/DeleteGroup"
-	NasService_ListCatalogApps_FullMethodName           = "/nas.v1.NasService/ListCatalogApps"
-	NasService_GetCatalogApp_FullMethodName             = "/nas.v1.NasService/GetCatalogApp"
-	NasService_SyncCatalog_FullMethodName               = "/nas.v1.NasService/SyncCatalog"
+	NasService_Login_FullMethodName                          = "/nas.v1.NasService/Login"
+	NasService_GetCurrentUser_FullMethodName                 = "/nas.v1.NasService/GetCurrentUser"
+	NasService_ListPrerequisites_FullMethodName              = "/nas.v1.NasService/ListPrerequisites"
+	NasService_GetPrerequisite_FullMethodName                = "/nas.v1.NasService/GetPrerequisite"
+	NasService_CheckPrerequisites_FullMethodName             = "/nas.v1.NasService/CheckPrerequisites"
+	NasService_ListDisks_FullMethodName                      = "/nas.v1.NasService/ListDisks"
+	NasService_GetDisk_FullMethodName                        = "/nas.v1.NasService/GetDisk"
+	NasService_ListZfsPools_FullMethodName                   = "/nas.v1.NasService/ListZfsPools"
+	NasService_GetZfsPool_FullMethodName                     = "/nas.v1.NasService/GetZfsPool"
+	NasService_CreateZfsPool_FullMethodName                  = "/nas.v1.NasService/CreateZfsPool"
+	NasService_DeleteZfsPool_FullMethodName                  = "/nas.v1.NasService/DeleteZfsPool"
+	NasService_ScrubZfsPool_FullMethodName                   = "/nas.v1.NasService/ScrubZfsPool"
+	NasService_UpdateZfsPool_FullMethodName                  = "/nas.v1.NasService/UpdateZfsPool"
+	NasService_AddZfsPoolVdev_FullMethodName                 = "/nas.v1.NasService/AddZfsPoolVdev"
+	NasService_RemoveZfsPoolVdev_FullMethodName              = "/nas.v1.NasService/RemoveZfsPoolVdev"
+	NasService_ListZfsDatasets_FullMethodName                = "/nas.v1.NasService/ListZfsDatasets"
+	NasService_GetZfsDataset_FullMethodName                  = "/nas.v1.NasService/GetZfsDataset"
+	NasService_CreateZfsDataset_FullMethodName               = "/nas.v1.NasService/CreateZfsDataset"
+	NasService_UpdateZfsDataset_FullMethodName               = "/nas.v1.NasService/UpdateZfsDataset"
+	NasService_DeleteZfsDataset_FullMethodName               = "/nas.v1.NasService/DeleteZfsDataset"
+	NasService_SnapshotZfsDataset_FullMethodName             = "/nas.v1.NasService/SnapshotZfsDataset"
+	NasService_ListZfsVolumes_FullMethodName                 = "/nas.v1.NasService/ListZfsVolumes"
+	NasService_GetZfsVolume_FullMethodName                   = "/nas.v1.NasService/GetZfsVolume"
+	NasService_CreateZfsVolume_FullMethodName                = "/nas.v1.NasService/CreateZfsVolume"
+	NasService_UpdateZfsVolume_FullMethodName                = "/nas.v1.NasService/UpdateZfsVolume"
+	NasService_DeleteZfsVolume_FullMethodName                = "/nas.v1.NasService/DeleteZfsVolume"
+	NasService_ListVirtualMachines_FullMethodName            = "/nas.v1.NasService/ListVirtualMachines"
+	NasService_GetVirtualMachine_FullMethodName              = "/nas.v1.NasService/GetVirtualMachine"
+	NasService_CreateVirtualMachine_FullMethodName           = "/nas.v1.NasService/CreateVirtualMachine"
+	NasService_UpdateVirtualMachine_FullMethodName           = "/nas.v1.NasService/UpdateVirtualMachine"
+	NasService_DeleteVirtualMachine_FullMethodName           = "/nas.v1.NasService/DeleteVirtualMachine"
+	NasService_StartVirtualMachine_FullMethodName            = "/nas.v1.NasService/StartVirtualMachine"
+	NasService_StopVirtualMachine_FullMethodName             = "/nas.v1.NasService/StopVirtualMachine"
+	NasService_RebootVirtualMachine_FullMethodName           = "/nas.v1.NasService/RebootVirtualMachine"
+	NasService_ResetVirtualMachine_FullMethodName            = "/nas.v1.NasService/ResetVirtualMachine"
+	NasService_PauseVirtualMachine_FullMethodName            = "/nas.v1.NasService/PauseVirtualMachine"
+	NasService_ResumeVirtualMachine_FullMethodName           = "/nas.v1.NasService/ResumeVirtualMachine"
+	NasService_CloneVirtualMachine_FullMethodName            = "/nas.v1.NasService/CloneVirtualMachine"
+	NasService_AttachVirtualMachineMedia_FullMethodName      = "/nas.v1.NasService/AttachVirtualMachineMedia"
+	NasService_EjectVirtualMachineMedia_FullMethodName       = "/nas.v1.NasService/EjectVirtualMachineMedia"
+	NasService_ListVirtualMachineSnapshots_FullMethodName    = "/nas.v1.NasService/ListVirtualMachineSnapshots"
+	NasService_CreateVirtualMachineSnapshot_FullMethodName   = "/nas.v1.NasService/CreateVirtualMachineSnapshot"
+	NasService_RollbackVirtualMachineSnapshot_FullMethodName = "/nas.v1.NasService/RollbackVirtualMachineSnapshot"
+	NasService_DeleteVirtualMachineSnapshot_FullMethodName   = "/nas.v1.NasService/DeleteVirtualMachineSnapshot"
+	NasService_OpenVirtualMachineConsole_FullMethodName      = "/nas.v1.NasService/OpenVirtualMachineConsole"
+	NasService_ListDockerContainers_FullMethodName           = "/nas.v1.NasService/ListDockerContainers"
+	NasService_GetDockerContainer_FullMethodName             = "/nas.v1.NasService/GetDockerContainer"
+	NasService_CreateDockerContainer_FullMethodName          = "/nas.v1.NasService/CreateDockerContainer"
+	NasService_UpdateDockerContainer_FullMethodName          = "/nas.v1.NasService/UpdateDockerContainer"
+	NasService_DeleteDockerContainer_FullMethodName          = "/nas.v1.NasService/DeleteDockerContainer"
+	NasService_GetDockerContainerLogs_FullMethodName         = "/nas.v1.NasService/GetDockerContainerLogs"
+	NasService_StartDockerContainer_FullMethodName           = "/nas.v1.NasService/StartDockerContainer"
+	NasService_StopDockerContainer_FullMethodName            = "/nas.v1.NasService/StopDockerContainer"
+	NasService_RestartDockerContainer_FullMethodName         = "/nas.v1.NasService/RestartDockerContainer"
+	NasService_ListDockerApps_FullMethodName                 = "/nas.v1.NasService/ListDockerApps"
+	NasService_GetDockerApp_FullMethodName                   = "/nas.v1.NasService/GetDockerApp"
+	NasService_CreateDockerApp_FullMethodName                = "/nas.v1.NasService/CreateDockerApp"
+	NasService_UpdateDockerApp_FullMethodName                = "/nas.v1.NasService/UpdateDockerApp"
+	NasService_DeleteDockerApp_FullMethodName                = "/nas.v1.NasService/DeleteDockerApp"
+	NasService_StartDockerApp_FullMethodName                 = "/nas.v1.NasService/StartDockerApp"
+	NasService_StopDockerApp_FullMethodName                  = "/nas.v1.NasService/StopDockerApp"
+	NasService_RestartDockerApp_FullMethodName               = "/nas.v1.NasService/RestartDockerApp"
+	NasService_GetDockerAppLogs_FullMethodName               = "/nas.v1.NasService/GetDockerAppLogs"
+	NasService_GetDockerConfig_FullMethodName                = "/nas.v1.NasService/GetDockerConfig"
+	NasService_UpdateDockerConfig_FullMethodName             = "/nas.v1.NasService/UpdateDockerConfig"
+	NasService_ListFileSystemDirectories_FullMethodName      = "/nas.v1.NasService/ListFileSystemDirectories"
+	NasService_ListLxcContainers_FullMethodName              = "/nas.v1.NasService/ListLxcContainers"
+	NasService_GetLxcContainer_FullMethodName                = "/nas.v1.NasService/GetLxcContainer"
+	NasService_CreateLxcContainer_FullMethodName             = "/nas.v1.NasService/CreateLxcContainer"
+	NasService_DeleteLxcContainer_FullMethodName             = "/nas.v1.NasService/DeleteLxcContainer"
+	NasService_StartLxcContainer_FullMethodName              = "/nas.v1.NasService/StartLxcContainer"
+	NasService_StopLxcContainer_FullMethodName               = "/nas.v1.NasService/StopLxcContainer"
+	NasService_FreezeLxcContainer_FullMethodName             = "/nas.v1.NasService/FreezeLxcContainer"
+	NasService_ListCifsShares_FullMethodName                 = "/nas.v1.NasService/ListCifsShares"
+	NasService_GetCifsShare_FullMethodName                   = "/nas.v1.NasService/GetCifsShare"
+	NasService_CreateCifsShare_FullMethodName                = "/nas.v1.NasService/CreateCifsShare"
+	NasService_UpdateCifsShare_FullMethodName                = "/nas.v1.NasService/UpdateCifsShare"
+	NasService_DeleteCifsShare_FullMethodName                = "/nas.v1.NasService/DeleteCifsShare"
+	NasService_ListWebdavShares_FullMethodName               = "/nas.v1.NasService/ListWebdavShares"
+	NasService_GetWebdavShare_FullMethodName                 = "/nas.v1.NasService/GetWebdavShare"
+	NasService_CreateWebdavShare_FullMethodName              = "/nas.v1.NasService/CreateWebdavShare"
+	NasService_UpdateWebdavShare_FullMethodName              = "/nas.v1.NasService/UpdateWebdavShare"
+	NasService_DeleteWebdavShare_FullMethodName              = "/nas.v1.NasService/DeleteWebdavShare"
+	NasService_ListUsers_FullMethodName                      = "/nas.v1.NasService/ListUsers"
+	NasService_GetUser_FullMethodName                        = "/nas.v1.NasService/GetUser"
+	NasService_CreateUser_FullMethodName                     = "/nas.v1.NasService/CreateUser"
+	NasService_UpdateUser_FullMethodName                     = "/nas.v1.NasService/UpdateUser"
+	NasService_DeleteUser_FullMethodName                     = "/nas.v1.NasService/DeleteUser"
+	NasService_ListGroups_FullMethodName                     = "/nas.v1.NasService/ListGroups"
+	NasService_GetGroup_FullMethodName                       = "/nas.v1.NasService/GetGroup"
+	NasService_CreateGroup_FullMethodName                    = "/nas.v1.NasService/CreateGroup"
+	NasService_UpdateGroup_FullMethodName                    = "/nas.v1.NasService/UpdateGroup"
+	NasService_DeleteGroup_FullMethodName                    = "/nas.v1.NasService/DeleteGroup"
+	NasService_ListCatalogApps_FullMethodName                = "/nas.v1.NasService/ListCatalogApps"
+	NasService_GetCatalogApp_FullMethodName                  = "/nas.v1.NasService/GetCatalogApp"
+	NasService_SyncCatalog_FullMethodName                    = "/nas.v1.NasService/SyncCatalog"
 )
 
 // NasServiceClient is the client API for NasService service.
@@ -152,6 +162,16 @@ type NasServiceClient interface {
 	StartVirtualMachine(ctx context.Context, in *StartVirtualMachineRequest, opts ...grpc.CallOption) (*VirtualMachine, error)
 	StopVirtualMachine(ctx context.Context, in *StopVirtualMachineRequest, opts ...grpc.CallOption) (*VirtualMachine, error)
 	RebootVirtualMachine(ctx context.Context, in *RebootVirtualMachineRequest, opts ...grpc.CallOption) (*VirtualMachine, error)
+	ResetVirtualMachine(ctx context.Context, in *ResetVirtualMachineRequest, opts ...grpc.CallOption) (*VirtualMachine, error)
+	PauseVirtualMachine(ctx context.Context, in *PauseVirtualMachineRequest, opts ...grpc.CallOption) (*VirtualMachine, error)
+	ResumeVirtualMachine(ctx context.Context, in *ResumeVirtualMachineRequest, opts ...grpc.CallOption) (*VirtualMachine, error)
+	CloneVirtualMachine(ctx context.Context, in *CloneVirtualMachineRequest, opts ...grpc.CallOption) (*VirtualMachine, error)
+	AttachVirtualMachineMedia(ctx context.Context, in *AttachVirtualMachineMediaRequest, opts ...grpc.CallOption) (*VirtualMachine, error)
+	EjectVirtualMachineMedia(ctx context.Context, in *EjectVirtualMachineMediaRequest, opts ...grpc.CallOption) (*VirtualMachine, error)
+	ListVirtualMachineSnapshots(ctx context.Context, in *ListVirtualMachineSnapshotsRequest, opts ...grpc.CallOption) (*ListVirtualMachineSnapshotsResponse, error)
+	CreateVirtualMachineSnapshot(ctx context.Context, in *CreateVirtualMachineSnapshotRequest, opts ...grpc.CallOption) (*VirtualMachineSnapshot, error)
+	RollbackVirtualMachineSnapshot(ctx context.Context, in *RollbackVirtualMachineSnapshotRequest, opts ...grpc.CallOption) (*VirtualMachine, error)
+	DeleteVirtualMachineSnapshot(ctx context.Context, in *DeleteVirtualMachineSnapshotRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	OpenVirtualMachineConsole(ctx context.Context, in *OpenVirtualMachineConsoleRequest, opts ...grpc.CallOption) (*VirtualMachineConsoleSession, error)
 	ListDockerContainers(ctx context.Context, in *ListDockerContainersRequest, opts ...grpc.CallOption) (*ListDockerContainersResponse, error)
 	GetDockerContainer(ctx context.Context, in *GetDockerContainerRequest, opts ...grpc.CallOption) (*DockerContainer, error)
@@ -548,6 +568,106 @@ func (c *nasServiceClient) RebootVirtualMachine(ctx context.Context, in *RebootV
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(VirtualMachine)
 	err := c.cc.Invoke(ctx, NasService_RebootVirtualMachine_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) ResetVirtualMachine(ctx context.Context, in *ResetVirtualMachineRequest, opts ...grpc.CallOption) (*VirtualMachine, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(VirtualMachine)
+	err := c.cc.Invoke(ctx, NasService_ResetVirtualMachine_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) PauseVirtualMachine(ctx context.Context, in *PauseVirtualMachineRequest, opts ...grpc.CallOption) (*VirtualMachine, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(VirtualMachine)
+	err := c.cc.Invoke(ctx, NasService_PauseVirtualMachine_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) ResumeVirtualMachine(ctx context.Context, in *ResumeVirtualMachineRequest, opts ...grpc.CallOption) (*VirtualMachine, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(VirtualMachine)
+	err := c.cc.Invoke(ctx, NasService_ResumeVirtualMachine_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) CloneVirtualMachine(ctx context.Context, in *CloneVirtualMachineRequest, opts ...grpc.CallOption) (*VirtualMachine, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(VirtualMachine)
+	err := c.cc.Invoke(ctx, NasService_CloneVirtualMachine_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) AttachVirtualMachineMedia(ctx context.Context, in *AttachVirtualMachineMediaRequest, opts ...grpc.CallOption) (*VirtualMachine, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(VirtualMachine)
+	err := c.cc.Invoke(ctx, NasService_AttachVirtualMachineMedia_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) EjectVirtualMachineMedia(ctx context.Context, in *EjectVirtualMachineMediaRequest, opts ...grpc.CallOption) (*VirtualMachine, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(VirtualMachine)
+	err := c.cc.Invoke(ctx, NasService_EjectVirtualMachineMedia_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) ListVirtualMachineSnapshots(ctx context.Context, in *ListVirtualMachineSnapshotsRequest, opts ...grpc.CallOption) (*ListVirtualMachineSnapshotsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListVirtualMachineSnapshotsResponse)
+	err := c.cc.Invoke(ctx, NasService_ListVirtualMachineSnapshots_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) CreateVirtualMachineSnapshot(ctx context.Context, in *CreateVirtualMachineSnapshotRequest, opts ...grpc.CallOption) (*VirtualMachineSnapshot, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(VirtualMachineSnapshot)
+	err := c.cc.Invoke(ctx, NasService_CreateVirtualMachineSnapshot_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) RollbackVirtualMachineSnapshot(ctx context.Context, in *RollbackVirtualMachineSnapshotRequest, opts ...grpc.CallOption) (*VirtualMachine, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(VirtualMachine)
+	err := c.cc.Invoke(ctx, NasService_RollbackVirtualMachineSnapshot_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) DeleteVirtualMachineSnapshot(ctx context.Context, in *DeleteVirtualMachineSnapshotRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, NasService_DeleteVirtualMachineSnapshot_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1118,6 +1238,16 @@ type NasServiceServer interface {
 	StartVirtualMachine(context.Context, *StartVirtualMachineRequest) (*VirtualMachine, error)
 	StopVirtualMachine(context.Context, *StopVirtualMachineRequest) (*VirtualMachine, error)
 	RebootVirtualMachine(context.Context, *RebootVirtualMachineRequest) (*VirtualMachine, error)
+	ResetVirtualMachine(context.Context, *ResetVirtualMachineRequest) (*VirtualMachine, error)
+	PauseVirtualMachine(context.Context, *PauseVirtualMachineRequest) (*VirtualMachine, error)
+	ResumeVirtualMachine(context.Context, *ResumeVirtualMachineRequest) (*VirtualMachine, error)
+	CloneVirtualMachine(context.Context, *CloneVirtualMachineRequest) (*VirtualMachine, error)
+	AttachVirtualMachineMedia(context.Context, *AttachVirtualMachineMediaRequest) (*VirtualMachine, error)
+	EjectVirtualMachineMedia(context.Context, *EjectVirtualMachineMediaRequest) (*VirtualMachine, error)
+	ListVirtualMachineSnapshots(context.Context, *ListVirtualMachineSnapshotsRequest) (*ListVirtualMachineSnapshotsResponse, error)
+	CreateVirtualMachineSnapshot(context.Context, *CreateVirtualMachineSnapshotRequest) (*VirtualMachineSnapshot, error)
+	RollbackVirtualMachineSnapshot(context.Context, *RollbackVirtualMachineSnapshotRequest) (*VirtualMachine, error)
+	DeleteVirtualMachineSnapshot(context.Context, *DeleteVirtualMachineSnapshotRequest) (*emptypb.Empty, error)
 	OpenVirtualMachineConsole(context.Context, *OpenVirtualMachineConsoleRequest) (*VirtualMachineConsoleSession, error)
 	ListDockerContainers(context.Context, *ListDockerContainersRequest) (*ListDockerContainersResponse, error)
 	GetDockerContainer(context.Context, *GetDockerContainerRequest) (*DockerContainer, error)
@@ -1281,6 +1411,36 @@ func (UnimplementedNasServiceServer) StopVirtualMachine(context.Context, *StopVi
 }
 func (UnimplementedNasServiceServer) RebootVirtualMachine(context.Context, *RebootVirtualMachineRequest) (*VirtualMachine, error) {
 	return nil, status.Error(codes.Unimplemented, "method RebootVirtualMachine not implemented")
+}
+func (UnimplementedNasServiceServer) ResetVirtualMachine(context.Context, *ResetVirtualMachineRequest) (*VirtualMachine, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResetVirtualMachine not implemented")
+}
+func (UnimplementedNasServiceServer) PauseVirtualMachine(context.Context, *PauseVirtualMachineRequest) (*VirtualMachine, error) {
+	return nil, status.Error(codes.Unimplemented, "method PauseVirtualMachine not implemented")
+}
+func (UnimplementedNasServiceServer) ResumeVirtualMachine(context.Context, *ResumeVirtualMachineRequest) (*VirtualMachine, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResumeVirtualMachine not implemented")
+}
+func (UnimplementedNasServiceServer) CloneVirtualMachine(context.Context, *CloneVirtualMachineRequest) (*VirtualMachine, error) {
+	return nil, status.Error(codes.Unimplemented, "method CloneVirtualMachine not implemented")
+}
+func (UnimplementedNasServiceServer) AttachVirtualMachineMedia(context.Context, *AttachVirtualMachineMediaRequest) (*VirtualMachine, error) {
+	return nil, status.Error(codes.Unimplemented, "method AttachVirtualMachineMedia not implemented")
+}
+func (UnimplementedNasServiceServer) EjectVirtualMachineMedia(context.Context, *EjectVirtualMachineMediaRequest) (*VirtualMachine, error) {
+	return nil, status.Error(codes.Unimplemented, "method EjectVirtualMachineMedia not implemented")
+}
+func (UnimplementedNasServiceServer) ListVirtualMachineSnapshots(context.Context, *ListVirtualMachineSnapshotsRequest) (*ListVirtualMachineSnapshotsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListVirtualMachineSnapshots not implemented")
+}
+func (UnimplementedNasServiceServer) CreateVirtualMachineSnapshot(context.Context, *CreateVirtualMachineSnapshotRequest) (*VirtualMachineSnapshot, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateVirtualMachineSnapshot not implemented")
+}
+func (UnimplementedNasServiceServer) RollbackVirtualMachineSnapshot(context.Context, *RollbackVirtualMachineSnapshotRequest) (*VirtualMachine, error) {
+	return nil, status.Error(codes.Unimplemented, "method RollbackVirtualMachineSnapshot not implemented")
+}
+func (UnimplementedNasServiceServer) DeleteVirtualMachineSnapshot(context.Context, *DeleteVirtualMachineSnapshotRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteVirtualMachineSnapshot not implemented")
 }
 func (UnimplementedNasServiceServer) OpenVirtualMachineConsole(context.Context, *OpenVirtualMachineConsoleRequest) (*VirtualMachineConsoleSession, error) {
 	return nil, status.Error(codes.Unimplemented, "method OpenVirtualMachineConsole not implemented")
@@ -2067,6 +2227,186 @@ func _NasService_RebootVirtualMachine_Handler(srv interface{}, ctx context.Conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NasServiceServer).RebootVirtualMachine(ctx, req.(*RebootVirtualMachineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_ResetVirtualMachine_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResetVirtualMachineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).ResetVirtualMachine(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_ResetVirtualMachine_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).ResetVirtualMachine(ctx, req.(*ResetVirtualMachineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_PauseVirtualMachine_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PauseVirtualMachineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).PauseVirtualMachine(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_PauseVirtualMachine_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).PauseVirtualMachine(ctx, req.(*PauseVirtualMachineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_ResumeVirtualMachine_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResumeVirtualMachineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).ResumeVirtualMachine(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_ResumeVirtualMachine_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).ResumeVirtualMachine(ctx, req.(*ResumeVirtualMachineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_CloneVirtualMachine_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloneVirtualMachineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).CloneVirtualMachine(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_CloneVirtualMachine_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).CloneVirtualMachine(ctx, req.(*CloneVirtualMachineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_AttachVirtualMachineMedia_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AttachVirtualMachineMediaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).AttachVirtualMachineMedia(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_AttachVirtualMachineMedia_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).AttachVirtualMachineMedia(ctx, req.(*AttachVirtualMachineMediaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_EjectVirtualMachineMedia_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EjectVirtualMachineMediaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).EjectVirtualMachineMedia(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_EjectVirtualMachineMedia_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).EjectVirtualMachineMedia(ctx, req.(*EjectVirtualMachineMediaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_ListVirtualMachineSnapshots_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListVirtualMachineSnapshotsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).ListVirtualMachineSnapshots(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_ListVirtualMachineSnapshots_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).ListVirtualMachineSnapshots(ctx, req.(*ListVirtualMachineSnapshotsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_CreateVirtualMachineSnapshot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateVirtualMachineSnapshotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).CreateVirtualMachineSnapshot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_CreateVirtualMachineSnapshot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).CreateVirtualMachineSnapshot(ctx, req.(*CreateVirtualMachineSnapshotRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_RollbackVirtualMachineSnapshot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RollbackVirtualMachineSnapshotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).RollbackVirtualMachineSnapshot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_RollbackVirtualMachineSnapshot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).RollbackVirtualMachineSnapshot(ctx, req.(*RollbackVirtualMachineSnapshotRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_DeleteVirtualMachineSnapshot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteVirtualMachineSnapshotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).DeleteVirtualMachineSnapshot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_DeleteVirtualMachineSnapshot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).DeleteVirtualMachineSnapshot(ctx, req.(*DeleteVirtualMachineSnapshotRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -3149,6 +3489,46 @@ var NasService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RebootVirtualMachine",
 			Handler:    _NasService_RebootVirtualMachine_Handler,
+		},
+		{
+			MethodName: "ResetVirtualMachine",
+			Handler:    _NasService_ResetVirtualMachine_Handler,
+		},
+		{
+			MethodName: "PauseVirtualMachine",
+			Handler:    _NasService_PauseVirtualMachine_Handler,
+		},
+		{
+			MethodName: "ResumeVirtualMachine",
+			Handler:    _NasService_ResumeVirtualMachine_Handler,
+		},
+		{
+			MethodName: "CloneVirtualMachine",
+			Handler:    _NasService_CloneVirtualMachine_Handler,
+		},
+		{
+			MethodName: "AttachVirtualMachineMedia",
+			Handler:    _NasService_AttachVirtualMachineMedia_Handler,
+		},
+		{
+			MethodName: "EjectVirtualMachineMedia",
+			Handler:    _NasService_EjectVirtualMachineMedia_Handler,
+		},
+		{
+			MethodName: "ListVirtualMachineSnapshots",
+			Handler:    _NasService_ListVirtualMachineSnapshots_Handler,
+		},
+		{
+			MethodName: "CreateVirtualMachineSnapshot",
+			Handler:    _NasService_CreateVirtualMachineSnapshot_Handler,
+		},
+		{
+			MethodName: "RollbackVirtualMachineSnapshot",
+			Handler:    _NasService_RollbackVirtualMachineSnapshot_Handler,
+		},
+		{
+			MethodName: "DeleteVirtualMachineSnapshot",
+			Handler:    _NasService_DeleteVirtualMachineSnapshot_Handler,
 		},
 		{
 			MethodName: "OpenVirtualMachineConsole",

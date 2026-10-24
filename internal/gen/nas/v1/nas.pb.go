@@ -2997,6 +2997,550 @@ func (x *DeleteZfsVolumeRequest) GetName() string {
 	return ""
 }
 
+type VirtualMachineDisk struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                             // "scsi0", "virtio0", "sata1"
+	Bus            string                 `protobuf:"bytes,2,opt,name=bus,proto3" json:"bus,omitempty"`                           // "scsi", "virtio", "sata", "ide", "nvme"
+	DiskPath       string                 `protobuf:"bytes,3,opt,name=disk_path,json=diskPath,proto3" json:"disk_path,omitempty"` // ZFS zvol "/dev/zvol/tank/vm-100-disk0" or qcow2 file
+	SizeBytes      int64                  `protobuf:"varint,4,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	CacheMode      string                 `protobuf:"bytes,5,opt,name=cache_mode,json=cacheMode,proto3" json:"cache_mode,omitempty"` // "none", "writeback", "writethrough", "unsafe"
+	Discard        bool                   `protobuf:"varint,6,opt,name=discard,proto3" json:"discard,omitempty"`                     // TRIM passthrough
+	Iothread       bool                   `protobuf:"varint,7,opt,name=iothread,proto3" json:"iothread,omitempty"`                   // Dedicated IOThread
+	ReadOnly       bool                   `protobuf:"varint,8,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
+	SsdEmulation   bool                   `protobuf:"varint,9,opt,name=ssd_emulation,json=ssdEmulation,proto3" json:"ssd_emulation,omitempty"`
+	Backup         bool                   `protobuf:"varint,10,opt,name=backup,proto3" json:"backup,omitempty"`
+	IopsLimitRead  int64                  `protobuf:"varint,11,opt,name=iops_limit_read,json=iopsLimitRead,proto3" json:"iops_limit_read,omitempty"`
+	IopsLimitWrite int64                  `protobuf:"varint,12,opt,name=iops_limit_write,json=iopsLimitWrite,proto3" json:"iops_limit_write,omitempty"`
+	MbpsLimitRead  int64                  `protobuf:"varint,13,opt,name=mbps_limit_read,json=mbpsLimitRead,proto3" json:"mbps_limit_read,omitempty"`
+	MbpsLimitWrite int64                  `protobuf:"varint,14,opt,name=mbps_limit_write,json=mbpsLimitWrite,proto3" json:"mbps_limit_write,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *VirtualMachineDisk) Reset() {
+	*x = VirtualMachineDisk{}
+	mi := &file_nas_v1_nas_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VirtualMachineDisk) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VirtualMachineDisk) ProtoMessage() {}
+
+func (x *VirtualMachineDisk) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_nas_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VirtualMachineDisk.ProtoReflect.Descriptor instead.
+func (*VirtualMachineDisk) Descriptor() ([]byte, []int) {
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *VirtualMachineDisk) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *VirtualMachineDisk) GetBus() string {
+	if x != nil {
+		return x.Bus
+	}
+	return ""
+}
+
+func (x *VirtualMachineDisk) GetDiskPath() string {
+	if x != nil {
+		return x.DiskPath
+	}
+	return ""
+}
+
+func (x *VirtualMachineDisk) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *VirtualMachineDisk) GetCacheMode() string {
+	if x != nil {
+		return x.CacheMode
+	}
+	return ""
+}
+
+func (x *VirtualMachineDisk) GetDiscard() bool {
+	if x != nil {
+		return x.Discard
+	}
+	return false
+}
+
+func (x *VirtualMachineDisk) GetIothread() bool {
+	if x != nil {
+		return x.Iothread
+	}
+	return false
+}
+
+func (x *VirtualMachineDisk) GetReadOnly() bool {
+	if x != nil {
+		return x.ReadOnly
+	}
+	return false
+}
+
+func (x *VirtualMachineDisk) GetSsdEmulation() bool {
+	if x != nil {
+		return x.SsdEmulation
+	}
+	return false
+}
+
+func (x *VirtualMachineDisk) GetBackup() bool {
+	if x != nil {
+		return x.Backup
+	}
+	return false
+}
+
+func (x *VirtualMachineDisk) GetIopsLimitRead() int64 {
+	if x != nil {
+		return x.IopsLimitRead
+	}
+	return 0
+}
+
+func (x *VirtualMachineDisk) GetIopsLimitWrite() int64 {
+	if x != nil {
+		return x.IopsLimitWrite
+	}
+	return 0
+}
+
+func (x *VirtualMachineDisk) GetMbpsLimitRead() int64 {
+	if x != nil {
+		return x.MbpsLimitRead
+	}
+	return 0
+}
+
+func (x *VirtualMachineDisk) GetMbpsLimitWrite() int64 {
+	if x != nil {
+		return x.MbpsLimitWrite
+	}
+	return 0
+}
+
+type VirtualMachineNetworkInterface struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                           // "net0", "net1"
+	Model         string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`                     // "virtio", "e1000", "rtl8139", "vmxnet3"
+	Bridge        string                 `protobuf:"bytes,3,opt,name=bridge,proto3" json:"bridge,omitempty"`                   // "virbr0", "vmbr0", "br0"
+	VlanTag       int32                  `protobuf:"varint,4,opt,name=vlan_tag,json=vlanTag,proto3" json:"vlan_tag,omitempty"` // 0 = untagged, 1..4094
+	MacAddress    string                 `protobuf:"bytes,5,opt,name=mac_address,json=macAddress,proto3" json:"mac_address,omitempty"`
+	RateLimitMbps int64                  `protobuf:"varint,6,opt,name=rate_limit_mbps,json=rateLimitMbps,proto3" json:"rate_limit_mbps,omitempty"`
+	Disconnected  bool                   `protobuf:"varint,7,opt,name=disconnected,proto3" json:"disconnected,omitempty"`
+	Firewall      bool                   `protobuf:"varint,8,opt,name=firewall,proto3" json:"firewall,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VirtualMachineNetworkInterface) Reset() {
+	*x = VirtualMachineNetworkInterface{}
+	mi := &file_nas_v1_nas_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VirtualMachineNetworkInterface) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VirtualMachineNetworkInterface) ProtoMessage() {}
+
+func (x *VirtualMachineNetworkInterface) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_nas_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VirtualMachineNetworkInterface.ProtoReflect.Descriptor instead.
+func (*VirtualMachineNetworkInterface) Descriptor() ([]byte, []int) {
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *VirtualMachineNetworkInterface) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *VirtualMachineNetworkInterface) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *VirtualMachineNetworkInterface) GetBridge() string {
+	if x != nil {
+		return x.Bridge
+	}
+	return ""
+}
+
+func (x *VirtualMachineNetworkInterface) GetVlanTag() int32 {
+	if x != nil {
+		return x.VlanTag
+	}
+	return 0
+}
+
+func (x *VirtualMachineNetworkInterface) GetMacAddress() string {
+	if x != nil {
+		return x.MacAddress
+	}
+	return ""
+}
+
+func (x *VirtualMachineNetworkInterface) GetRateLimitMbps() int64 {
+	if x != nil {
+		return x.RateLimitMbps
+	}
+	return 0
+}
+
+func (x *VirtualMachineNetworkInterface) GetDisconnected() bool {
+	if x != nil {
+		return x.Disconnected
+	}
+	return false
+}
+
+func (x *VirtualMachineNetworkInterface) GetFirewall() bool {
+	if x != nil {
+		return x.Firewall
+	}
+	return false
+}
+
+type VirtualMachineCloudInit struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	User           string                 `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
+	Password       string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	SshPublicKeys  []string               `protobuf:"bytes,3,rep,name=ssh_public_keys,json=sshPublicKeys,proto3" json:"ssh_public_keys,omitempty"`
+	IpConfig       string                 `protobuf:"bytes,4,opt,name=ip_config,json=ipConfig,proto3" json:"ip_config,omitempty"` // "dhcp" or "ip=192.168.1.50/24,gw=192.168.1.1"
+	DnsNameservers string                 `protobuf:"bytes,5,opt,name=dns_nameservers,json=dnsNameservers,proto3" json:"dns_nameservers,omitempty"`
+	DnsSearch      string                 `protobuf:"bytes,6,opt,name=dns_search,json=dnsSearch,proto3" json:"dns_search,omitempty"`
+	CustomUserData string                 `protobuf:"bytes,7,opt,name=custom_user_data,json=customUserData,proto3" json:"custom_user_data,omitempty"` // Custom cloud-config YAML
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *VirtualMachineCloudInit) Reset() {
+	*x = VirtualMachineCloudInit{}
+	mi := &file_nas_v1_nas_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VirtualMachineCloudInit) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VirtualMachineCloudInit) ProtoMessage() {}
+
+func (x *VirtualMachineCloudInit) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_nas_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VirtualMachineCloudInit.ProtoReflect.Descriptor instead.
+func (*VirtualMachineCloudInit) Descriptor() ([]byte, []int) {
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *VirtualMachineCloudInit) GetUser() string {
+	if x != nil {
+		return x.User
+	}
+	return ""
+}
+
+func (x *VirtualMachineCloudInit) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+func (x *VirtualMachineCloudInit) GetSshPublicKeys() []string {
+	if x != nil {
+		return x.SshPublicKeys
+	}
+	return nil
+}
+
+func (x *VirtualMachineCloudInit) GetIpConfig() string {
+	if x != nil {
+		return x.IpConfig
+	}
+	return ""
+}
+
+func (x *VirtualMachineCloudInit) GetDnsNameservers() string {
+	if x != nil {
+		return x.DnsNameservers
+	}
+	return ""
+}
+
+func (x *VirtualMachineCloudInit) GetDnsSearch() string {
+	if x != nil {
+		return x.DnsSearch
+	}
+	return ""
+}
+
+func (x *VirtualMachineCloudInit) GetCustomUserData() string {
+	if x != nil {
+		return x.CustomUserData
+	}
+	return ""
+}
+
+type VirtualMachinePciDevice struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	HostAddress   string                 `protobuf:"bytes,1,opt,name=host_address,json=hostAddress,proto3" json:"host_address,omitempty"` // "0000:01:00.0"
+	Pcie          bool                   `protobuf:"varint,2,opt,name=pcie,proto3" json:"pcie,omitempty"`
+	PrimaryGpu    bool                   `protobuf:"varint,3,opt,name=primary_gpu,json=primaryGpu,proto3" json:"primary_gpu,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VirtualMachinePciDevice) Reset() {
+	*x = VirtualMachinePciDevice{}
+	mi := &file_nas_v1_nas_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VirtualMachinePciDevice) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VirtualMachinePciDevice) ProtoMessage() {}
+
+func (x *VirtualMachinePciDevice) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_nas_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VirtualMachinePciDevice.ProtoReflect.Descriptor instead.
+func (*VirtualMachinePciDevice) Descriptor() ([]byte, []int) {
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *VirtualMachinePciDevice) GetHostAddress() string {
+	if x != nil {
+		return x.HostAddress
+	}
+	return ""
+}
+
+func (x *VirtualMachinePciDevice) GetPcie() bool {
+	if x != nil {
+		return x.Pcie
+	}
+	return false
+}
+
+func (x *VirtualMachinePciDevice) GetPrimaryGpu() bool {
+	if x != nil {
+		return x.PrimaryGpu
+	}
+	return false
+}
+
+type VirtualMachineUsbDevice struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	HostBusPort     string                 `protobuf:"bytes,1,opt,name=host_bus_port,json=hostBusPort,proto3" json:"host_bus_port,omitempty"`             // "1-1.2"
+	VendorProductId string                 `protobuf:"bytes,2,opt,name=vendor_product_id,json=vendorProductId,proto3" json:"vendor_product_id,omitempty"` // "046d:c52b"
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *VirtualMachineUsbDevice) Reset() {
+	*x = VirtualMachineUsbDevice{}
+	mi := &file_nas_v1_nas_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VirtualMachineUsbDevice) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VirtualMachineUsbDevice) ProtoMessage() {}
+
+func (x *VirtualMachineUsbDevice) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_nas_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VirtualMachineUsbDevice.ProtoReflect.Descriptor instead.
+func (*VirtualMachineUsbDevice) Descriptor() ([]byte, []int) {
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *VirtualMachineUsbDevice) GetHostBusPort() string {
+	if x != nil {
+		return x.HostBusPort
+	}
+	return ""
+}
+
+func (x *VirtualMachineUsbDevice) GetVendorProductId() string {
+	if x != nil {
+		return x.VendorProductId
+	}
+	return ""
+}
+
+type VirtualMachineSnapshot struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	SnapshotId     string                 `protobuf:"bytes,2,opt,name=snapshot_id,json=snapshotId,proto3" json:"snapshot_id,omitempty"`
+	Description    string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	CreateTime     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	IncludeRam     bool                   `protobuf:"varint,5,opt,name=include_ram,json=includeRam,proto3" json:"include_ram,omitempty"`
+	ParentSnapshot string                 `protobuf:"bytes,6,opt,name=parent_snapshot,json=parentSnapshot,proto3" json:"parent_snapshot,omitempty"`
+	VmState        string                 `protobuf:"bytes,7,opt,name=vm_state,json=vmState,proto3" json:"vm_state,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *VirtualMachineSnapshot) Reset() {
+	*x = VirtualMachineSnapshot{}
+	mi := &file_nas_v1_nas_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VirtualMachineSnapshot) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VirtualMachineSnapshot) ProtoMessage() {}
+
+func (x *VirtualMachineSnapshot) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_nas_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VirtualMachineSnapshot.ProtoReflect.Descriptor instead.
+func (*VirtualMachineSnapshot) Descriptor() ([]byte, []int) {
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *VirtualMachineSnapshot) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *VirtualMachineSnapshot) GetSnapshotId() string {
+	if x != nil {
+		return x.SnapshotId
+	}
+	return ""
+}
+
+func (x *VirtualMachineSnapshot) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *VirtualMachineSnapshot) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *VirtualMachineSnapshot) GetIncludeRam() bool {
+	if x != nil {
+		return x.IncludeRam
+	}
+	return false
+}
+
+func (x *VirtualMachineSnapshot) GetParentSnapshot() string {
+	if x != nil {
+		return x.ParentSnapshot
+	}
+	return ""
+}
+
+func (x *VirtualMachineSnapshot) GetVmState() string {
+	if x != nil {
+		return x.VmState
+	}
+	return ""
+}
+
 type VirtualMachine struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -3014,13 +3558,51 @@ type VirtualMachine struct {
 	Autostart     bool                   `protobuf:"varint,13,opt,name=autostart,proto3" json:"autostart,omitempty"`
 	OsVariant     string                 `protobuf:"bytes,14,opt,name=os_variant,json=osVariant,proto3" json:"os_variant,omitempty"`
 	Description   string                 `protobuf:"bytes,15,opt,name=description,proto3" json:"description,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Proxmox VE Hardware Topology
+	Sockets       int32  `protobuf:"varint,16,opt,name=sockets,proto3" json:"sockets,omitempty"`
+	Cores         int32  `protobuf:"varint,17,opt,name=cores,proto3" json:"cores,omitempty"`
+	CpuType       string `protobuf:"bytes,18,opt,name=cpu_type,json=cpuType,proto3" json:"cpu_type,omitempty"` // "host", "kvm64", "x86-64-v2-AES", "EPYC"
+	CpuUnits      int32  `protobuf:"varint,19,opt,name=cpu_units,json=cpuUnits,proto3" json:"cpu_units,omitempty"`
+	CpuLimit      int32  `protobuf:"varint,20,opt,name=cpu_limit,json=cpuLimit,proto3" json:"cpu_limit,omitempty"`
+	Numa          bool   `protobuf:"varint,21,opt,name=numa,proto3" json:"numa,omitempty"`
+	BalloonMinMib int64  `protobuf:"varint,22,opt,name=balloon_min_mib,json=balloonMinMib,proto3" json:"balloon_min_mib,omitempty"`
+	Hugepages     string `protobuf:"bytes,23,opt,name=hugepages,proto3" json:"hugepages,omitempty"`                        // "off", "2MB", "1GB"
+	MachineType   string `protobuf:"bytes,24,opt,name=machine_type,json=machineType,proto3" json:"machine_type,omitempty"` // "q35", "i440fx"
+	BiosType      string `protobuf:"bytes,25,opt,name=bios_type,json=biosType,proto3" json:"bios_type,omitempty"`          // "seabios", "ovmf" (UEFI)
+	TpmVersion    string `protobuf:"bytes,26,opt,name=tpm_version,json=tpmVersion,proto3" json:"tpm_version,omitempty"`    // "none", "v2.0"
+	SecureBoot    bool   `protobuf:"varint,27,opt,name=secure_boot,json=secureBoot,proto3" json:"secure_boot,omitempty"`
+	// Multi-Disk & Media
+	Disks         []*VirtualMachineDisk `protobuf:"bytes,28,rep,name=disks,proto3" json:"disks,omitempty"`
+	CdromIsoImage string                `protobuf:"bytes,29,opt,name=cdrom_iso_image,json=cdromIsoImage,proto3" json:"cdrom_iso_image,omitempty"`
+	// Networking & Cloud-Init
+	NetworkInterfaces []*VirtualMachineNetworkInterface `protobuf:"bytes,30,rep,name=network_interfaces,json=networkInterfaces,proto3" json:"network_interfaces,omitempty"`
+	CloudInit         *VirtualMachineCloudInit          `protobuf:"bytes,31,opt,name=cloud_init,json=cloudInit,proto3" json:"cloud_init,omitempty"`
+	// Hardware Passthrough
+	PciDevices []*VirtualMachinePciDevice `protobuf:"bytes,32,rep,name=pci_devices,json=pciDevices,proto3" json:"pci_devices,omitempty"`
+	UsbDevices []*VirtualMachineUsbDevice `protobuf:"bytes,33,rep,name=usb_devices,json=usbDevices,proto3" json:"usb_devices,omitempty"`
+	// QEMU Guest Agent & Runtime Telemetry
+	AgentEnabled       bool     `protobuf:"varint,34,opt,name=agent_enabled,json=agentEnabled,proto3" json:"agent_enabled,omitempty"`
+	AgentRunning       bool     `protobuf:"varint,35,opt,name=agent_running,json=agentRunning,proto3" json:"agent_running,omitempty"`
+	GuestIpAddresses   []string `protobuf:"bytes,36,rep,name=guest_ip_addresses,json=guestIpAddresses,proto3" json:"guest_ip_addresses,omitempty"`
+	GuestOsName        string   `protobuf:"bytes,37,opt,name=guest_os_name,json=guestOsName,proto3" json:"guest_os_name,omitempty"`
+	GuestCpuPercent    float64  `protobuf:"fixed64,38,opt,name=guest_cpu_percent,json=guestCpuPercent,proto3" json:"guest_cpu_percent,omitempty"`
+	GuestMemoryUsedMib int64    `protobuf:"varint,39,opt,name=guest_memory_used_mib,json=guestMemoryUsedMib,proto3" json:"guest_memory_used_mib,omitempty"`
+	// Lifecycle, Boot Order, Watchdog & Consoles
+	StartupDelaySeconds int32    `protobuf:"varint,40,opt,name=startup_delay_seconds,json=startupDelaySeconds,proto3" json:"startup_delay_seconds,omitempty"`
+	BootOrder           string   `protobuf:"bytes,41,opt,name=boot_order,json=bootOrder,proto3" json:"boot_order,omitempty"`                // "order=scsi0;ide2;net0"
+	WatchdogModel       string   `protobuf:"bytes,42,opt,name=watchdog_model,json=watchdogModel,proto3" json:"watchdog_model,omitempty"`    // "none", "i6300esb"
+	WatchdogAction      string   `protobuf:"bytes,43,opt,name=watchdog_action,json=watchdogAction,proto3" json:"watchdog_action,omitempty"` // "reset", "poweroff", "pause"
+	DisplayType         string   `protobuf:"bytes,44,opt,name=display_type,json=displayType,proto3" json:"display_type,omitempty"`          // "virtio-gpu", "qxl", "vga", "serial", "none"
+	IsTemplate          bool     `protobuf:"varint,45,opt,name=is_template,json=isTemplate,proto3" json:"is_template,omitempty"`
+	QemuCommandlineArgs []string `protobuf:"bytes,46,rep,name=qemu_commandline_args,json=qemuCommandlineArgs,proto3" json:"qemu_commandline_args,omitempty"`
+	SerialConsoleUrl    string   `protobuf:"bytes,47,opt,name=serial_console_url,json=serialConsoleUrl,proto3" json:"serial_console_url,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *VirtualMachine) Reset() {
 	*x = VirtualMachine{}
-	mi := &file_nas_v1_nas_proto_msgTypes[41]
+	mi := &file_nas_v1_nas_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3032,7 +3614,7 @@ func (x *VirtualMachine) String() string {
 func (*VirtualMachine) ProtoMessage() {}
 
 func (x *VirtualMachine) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[41]
+	mi := &file_nas_v1_nas_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3045,7 +3627,7 @@ func (x *VirtualMachine) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VirtualMachine.ProtoReflect.Descriptor instead.
 func (*VirtualMachine) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{41}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *VirtualMachine) GetName() string {
@@ -3153,6 +3735,230 @@ func (x *VirtualMachine) GetDescription() string {
 	return ""
 }
 
+func (x *VirtualMachine) GetSockets() int32 {
+	if x != nil {
+		return x.Sockets
+	}
+	return 0
+}
+
+func (x *VirtualMachine) GetCores() int32 {
+	if x != nil {
+		return x.Cores
+	}
+	return 0
+}
+
+func (x *VirtualMachine) GetCpuType() string {
+	if x != nil {
+		return x.CpuType
+	}
+	return ""
+}
+
+func (x *VirtualMachine) GetCpuUnits() int32 {
+	if x != nil {
+		return x.CpuUnits
+	}
+	return 0
+}
+
+func (x *VirtualMachine) GetCpuLimit() int32 {
+	if x != nil {
+		return x.CpuLimit
+	}
+	return 0
+}
+
+func (x *VirtualMachine) GetNuma() bool {
+	if x != nil {
+		return x.Numa
+	}
+	return false
+}
+
+func (x *VirtualMachine) GetBalloonMinMib() int64 {
+	if x != nil {
+		return x.BalloonMinMib
+	}
+	return 0
+}
+
+func (x *VirtualMachine) GetHugepages() string {
+	if x != nil {
+		return x.Hugepages
+	}
+	return ""
+}
+
+func (x *VirtualMachine) GetMachineType() string {
+	if x != nil {
+		return x.MachineType
+	}
+	return ""
+}
+
+func (x *VirtualMachine) GetBiosType() string {
+	if x != nil {
+		return x.BiosType
+	}
+	return ""
+}
+
+func (x *VirtualMachine) GetTpmVersion() string {
+	if x != nil {
+		return x.TpmVersion
+	}
+	return ""
+}
+
+func (x *VirtualMachine) GetSecureBoot() bool {
+	if x != nil {
+		return x.SecureBoot
+	}
+	return false
+}
+
+func (x *VirtualMachine) GetDisks() []*VirtualMachineDisk {
+	if x != nil {
+		return x.Disks
+	}
+	return nil
+}
+
+func (x *VirtualMachine) GetCdromIsoImage() string {
+	if x != nil {
+		return x.CdromIsoImage
+	}
+	return ""
+}
+
+func (x *VirtualMachine) GetNetworkInterfaces() []*VirtualMachineNetworkInterface {
+	if x != nil {
+		return x.NetworkInterfaces
+	}
+	return nil
+}
+
+func (x *VirtualMachine) GetCloudInit() *VirtualMachineCloudInit {
+	if x != nil {
+		return x.CloudInit
+	}
+	return nil
+}
+
+func (x *VirtualMachine) GetPciDevices() []*VirtualMachinePciDevice {
+	if x != nil {
+		return x.PciDevices
+	}
+	return nil
+}
+
+func (x *VirtualMachine) GetUsbDevices() []*VirtualMachineUsbDevice {
+	if x != nil {
+		return x.UsbDevices
+	}
+	return nil
+}
+
+func (x *VirtualMachine) GetAgentEnabled() bool {
+	if x != nil {
+		return x.AgentEnabled
+	}
+	return false
+}
+
+func (x *VirtualMachine) GetAgentRunning() bool {
+	if x != nil {
+		return x.AgentRunning
+	}
+	return false
+}
+
+func (x *VirtualMachine) GetGuestIpAddresses() []string {
+	if x != nil {
+		return x.GuestIpAddresses
+	}
+	return nil
+}
+
+func (x *VirtualMachine) GetGuestOsName() string {
+	if x != nil {
+		return x.GuestOsName
+	}
+	return ""
+}
+
+func (x *VirtualMachine) GetGuestCpuPercent() float64 {
+	if x != nil {
+		return x.GuestCpuPercent
+	}
+	return 0
+}
+
+func (x *VirtualMachine) GetGuestMemoryUsedMib() int64 {
+	if x != nil {
+		return x.GuestMemoryUsedMib
+	}
+	return 0
+}
+
+func (x *VirtualMachine) GetStartupDelaySeconds() int32 {
+	if x != nil {
+		return x.StartupDelaySeconds
+	}
+	return 0
+}
+
+func (x *VirtualMachine) GetBootOrder() string {
+	if x != nil {
+		return x.BootOrder
+	}
+	return ""
+}
+
+func (x *VirtualMachine) GetWatchdogModel() string {
+	if x != nil {
+		return x.WatchdogModel
+	}
+	return ""
+}
+
+func (x *VirtualMachine) GetWatchdogAction() string {
+	if x != nil {
+		return x.WatchdogAction
+	}
+	return ""
+}
+
+func (x *VirtualMachine) GetDisplayType() string {
+	if x != nil {
+		return x.DisplayType
+	}
+	return ""
+}
+
+func (x *VirtualMachine) GetIsTemplate() bool {
+	if x != nil {
+		return x.IsTemplate
+	}
+	return false
+}
+
+func (x *VirtualMachine) GetQemuCommandlineArgs() []string {
+	if x != nil {
+		return x.QemuCommandlineArgs
+	}
+	return nil
+}
+
+func (x *VirtualMachine) GetSerialConsoleUrl() string {
+	if x != nil {
+		return x.SerialConsoleUrl
+	}
+	return ""
+}
+
 type ListVirtualMachinesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PageSize      int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
@@ -3164,7 +3970,7 @@ type ListVirtualMachinesRequest struct {
 
 func (x *ListVirtualMachinesRequest) Reset() {
 	*x = ListVirtualMachinesRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[42]
+	mi := &file_nas_v1_nas_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3176,7 +3982,7 @@ func (x *ListVirtualMachinesRequest) String() string {
 func (*ListVirtualMachinesRequest) ProtoMessage() {}
 
 func (x *ListVirtualMachinesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[42]
+	mi := &file_nas_v1_nas_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3189,7 +3995,7 @@ func (x *ListVirtualMachinesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListVirtualMachinesRequest.ProtoReflect.Descriptor instead.
 func (*ListVirtualMachinesRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{42}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ListVirtualMachinesRequest) GetPageSize() int32 {
@@ -3224,7 +4030,7 @@ type ListVirtualMachinesResponse struct {
 
 func (x *ListVirtualMachinesResponse) Reset() {
 	*x = ListVirtualMachinesResponse{}
-	mi := &file_nas_v1_nas_proto_msgTypes[43]
+	mi := &file_nas_v1_nas_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3236,7 +4042,7 @@ func (x *ListVirtualMachinesResponse) String() string {
 func (*ListVirtualMachinesResponse) ProtoMessage() {}
 
 func (x *ListVirtualMachinesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[43]
+	mi := &file_nas_v1_nas_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3249,7 +4055,7 @@ func (x *ListVirtualMachinesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListVirtualMachinesResponse.ProtoReflect.Descriptor instead.
 func (*ListVirtualMachinesResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{43}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ListVirtualMachinesResponse) GetVirtualMachines() []*VirtualMachine {
@@ -3282,7 +4088,7 @@ type GetVirtualMachineRequest struct {
 
 func (x *GetVirtualMachineRequest) Reset() {
 	*x = GetVirtualMachineRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[44]
+	mi := &file_nas_v1_nas_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3294,7 +4100,7 @@ func (x *GetVirtualMachineRequest) String() string {
 func (*GetVirtualMachineRequest) ProtoMessage() {}
 
 func (x *GetVirtualMachineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[44]
+	mi := &file_nas_v1_nas_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3307,7 +4113,7 @@ func (x *GetVirtualMachineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetVirtualMachineRequest.ProtoReflect.Descriptor instead.
 func (*GetVirtualMachineRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{44}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *GetVirtualMachineRequest) GetName() string {
@@ -3327,7 +4133,7 @@ type CreateVirtualMachineRequest struct {
 
 func (x *CreateVirtualMachineRequest) Reset() {
 	*x = CreateVirtualMachineRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[45]
+	mi := &file_nas_v1_nas_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3339,7 +4145,7 @@ func (x *CreateVirtualMachineRequest) String() string {
 func (*CreateVirtualMachineRequest) ProtoMessage() {}
 
 func (x *CreateVirtualMachineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[45]
+	mi := &file_nas_v1_nas_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3352,7 +4158,7 @@ func (x *CreateVirtualMachineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateVirtualMachineRequest.ProtoReflect.Descriptor instead.
 func (*CreateVirtualMachineRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{45}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *CreateVirtualMachineRequest) GetVirtualMachineId() string {
@@ -3379,7 +4185,7 @@ type UpdateVirtualMachineRequest struct {
 
 func (x *UpdateVirtualMachineRequest) Reset() {
 	*x = UpdateVirtualMachineRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[46]
+	mi := &file_nas_v1_nas_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3391,7 +4197,7 @@ func (x *UpdateVirtualMachineRequest) String() string {
 func (*UpdateVirtualMachineRequest) ProtoMessage() {}
 
 func (x *UpdateVirtualMachineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[46]
+	mi := &file_nas_v1_nas_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3404,7 +4210,7 @@ func (x *UpdateVirtualMachineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateVirtualMachineRequest.ProtoReflect.Descriptor instead.
 func (*UpdateVirtualMachineRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{46}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *UpdateVirtualMachineRequest) GetVirtualMachine() *VirtualMachine {
@@ -3430,7 +4236,7 @@ type DeleteVirtualMachineRequest struct {
 
 func (x *DeleteVirtualMachineRequest) Reset() {
 	*x = DeleteVirtualMachineRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[47]
+	mi := &file_nas_v1_nas_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3442,7 +4248,7 @@ func (x *DeleteVirtualMachineRequest) String() string {
 func (*DeleteVirtualMachineRequest) ProtoMessage() {}
 
 func (x *DeleteVirtualMachineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[47]
+	mi := &file_nas_v1_nas_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3455,7 +4261,7 @@ func (x *DeleteVirtualMachineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteVirtualMachineRequest.ProtoReflect.Descriptor instead.
 func (*DeleteVirtualMachineRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{47}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *DeleteVirtualMachineRequest) GetName() string {
@@ -3474,7 +4280,7 @@ type StartVirtualMachineRequest struct {
 
 func (x *StartVirtualMachineRequest) Reset() {
 	*x = StartVirtualMachineRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[48]
+	mi := &file_nas_v1_nas_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3486,7 +4292,7 @@ func (x *StartVirtualMachineRequest) String() string {
 func (*StartVirtualMachineRequest) ProtoMessage() {}
 
 func (x *StartVirtualMachineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[48]
+	mi := &file_nas_v1_nas_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3499,7 +4305,7 @@ func (x *StartVirtualMachineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartVirtualMachineRequest.ProtoReflect.Descriptor instead.
 func (*StartVirtualMachineRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{48}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *StartVirtualMachineRequest) GetName() string {
@@ -3519,7 +4325,7 @@ type StopVirtualMachineRequest struct {
 
 func (x *StopVirtualMachineRequest) Reset() {
 	*x = StopVirtualMachineRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[49]
+	mi := &file_nas_v1_nas_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3531,7 +4337,7 @@ func (x *StopVirtualMachineRequest) String() string {
 func (*StopVirtualMachineRequest) ProtoMessage() {}
 
 func (x *StopVirtualMachineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[49]
+	mi := &file_nas_v1_nas_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3544,7 +4350,7 @@ func (x *StopVirtualMachineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopVirtualMachineRequest.ProtoReflect.Descriptor instead.
 func (*StopVirtualMachineRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{49}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *StopVirtualMachineRequest) GetName() string {
@@ -3570,7 +4376,7 @@ type RebootVirtualMachineRequest struct {
 
 func (x *RebootVirtualMachineRequest) Reset() {
 	*x = RebootVirtualMachineRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[50]
+	mi := &file_nas_v1_nas_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3582,7 +4388,7 @@ func (x *RebootVirtualMachineRequest) String() string {
 func (*RebootVirtualMachineRequest) ProtoMessage() {}
 
 func (x *RebootVirtualMachineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[50]
+	mi := &file_nas_v1_nas_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3595,7 +4401,7 @@ func (x *RebootVirtualMachineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RebootVirtualMachineRequest.ProtoReflect.Descriptor instead.
 func (*RebootVirtualMachineRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{50}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *RebootVirtualMachineRequest) GetName() string {
@@ -3614,7 +4420,7 @@ type OpenVirtualMachineConsoleRequest struct {
 
 func (x *OpenVirtualMachineConsoleRequest) Reset() {
 	*x = OpenVirtualMachineConsoleRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[51]
+	mi := &file_nas_v1_nas_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3626,7 +4432,7 @@ func (x *OpenVirtualMachineConsoleRequest) String() string {
 func (*OpenVirtualMachineConsoleRequest) ProtoMessage() {}
 
 func (x *OpenVirtualMachineConsoleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[51]
+	mi := &file_nas_v1_nas_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3639,7 +4445,7 @@ func (x *OpenVirtualMachineConsoleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenVirtualMachineConsoleRequest.ProtoReflect.Descriptor instead.
 func (*OpenVirtualMachineConsoleRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{51}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *OpenVirtualMachineConsoleRequest) GetName() string {
@@ -3663,7 +4469,7 @@ type VirtualMachineConsoleSession struct {
 
 func (x *VirtualMachineConsoleSession) Reset() {
 	*x = VirtualMachineConsoleSession{}
-	mi := &file_nas_v1_nas_proto_msgTypes[52]
+	mi := &file_nas_v1_nas_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3675,7 +4481,7 @@ func (x *VirtualMachineConsoleSession) String() string {
 func (*VirtualMachineConsoleSession) ProtoMessage() {}
 
 func (x *VirtualMachineConsoleSession) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[52]
+	mi := &file_nas_v1_nas_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3688,7 +4494,7 @@ func (x *VirtualMachineConsoleSession) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VirtualMachineConsoleSession.ProtoReflect.Descriptor instead.
 func (*VirtualMachineConsoleSession) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{52}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *VirtualMachineConsoleSession) GetVmName() string {
@@ -3733,6 +4539,594 @@ func (x *VirtualMachineConsoleSession) GetExpiresAt() string {
 	return ""
 }
 
+type ResetVirtualMachineRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResetVirtualMachineRequest) Reset() {
+	*x = ResetVirtualMachineRequest{}
+	mi := &file_nas_v1_nas_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResetVirtualMachineRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResetVirtualMachineRequest) ProtoMessage() {}
+
+func (x *ResetVirtualMachineRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_nas_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResetVirtualMachineRequest.ProtoReflect.Descriptor instead.
+func (*ResetVirtualMachineRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *ResetVirtualMachineRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type PauseVirtualMachineRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PauseVirtualMachineRequest) Reset() {
+	*x = PauseVirtualMachineRequest{}
+	mi := &file_nas_v1_nas_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PauseVirtualMachineRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PauseVirtualMachineRequest) ProtoMessage() {}
+
+func (x *PauseVirtualMachineRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_nas_proto_msgTypes[60]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PauseVirtualMachineRequest.ProtoReflect.Descriptor instead.
+func (*PauseVirtualMachineRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{60}
+}
+
+func (x *PauseVirtualMachineRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type ResumeVirtualMachineRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResumeVirtualMachineRequest) Reset() {
+	*x = ResumeVirtualMachineRequest{}
+	mi := &file_nas_v1_nas_proto_msgTypes[61]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResumeVirtualMachineRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResumeVirtualMachineRequest) ProtoMessage() {}
+
+func (x *ResumeVirtualMachineRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_nas_proto_msgTypes[61]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResumeVirtualMachineRequest.ProtoReflect.Descriptor instead.
+func (*ResumeVirtualMachineRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{61}
+}
+
+func (x *ResumeVirtualMachineRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type CloneVirtualMachineRequest struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Name                string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	NewVirtualMachineId string                 `protobuf:"bytes,2,opt,name=new_virtual_machine_id,json=newVirtualMachineId,proto3" json:"new_virtual_machine_id,omitempty"`
+	NewName             string                 `protobuf:"bytes,3,opt,name=new_name,json=newName,proto3" json:"new_name,omitempty"`
+	TargetPool          string                 `protobuf:"bytes,4,opt,name=target_pool,json=targetPool,proto3" json:"target_pool,omitempty"`
+	LinkedClone         bool                   `protobuf:"varint,5,opt,name=linked_clone,json=linkedClone,proto3" json:"linked_clone,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *CloneVirtualMachineRequest) Reset() {
+	*x = CloneVirtualMachineRequest{}
+	mi := &file_nas_v1_nas_proto_msgTypes[62]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CloneVirtualMachineRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CloneVirtualMachineRequest) ProtoMessage() {}
+
+func (x *CloneVirtualMachineRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_nas_proto_msgTypes[62]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CloneVirtualMachineRequest.ProtoReflect.Descriptor instead.
+func (*CloneVirtualMachineRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{62}
+}
+
+func (x *CloneVirtualMachineRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CloneVirtualMachineRequest) GetNewVirtualMachineId() string {
+	if x != nil {
+		return x.NewVirtualMachineId
+	}
+	return ""
+}
+
+func (x *CloneVirtualMachineRequest) GetNewName() string {
+	if x != nil {
+		return x.NewName
+	}
+	return ""
+}
+
+func (x *CloneVirtualMachineRequest) GetTargetPool() string {
+	if x != nil {
+		return x.TargetPool
+	}
+	return ""
+}
+
+func (x *CloneVirtualMachineRequest) GetLinkedClone() bool {
+	if x != nil {
+		return x.LinkedClone
+	}
+	return false
+}
+
+type AttachVirtualMachineMediaRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	DeviceId      string                 `protobuf:"bytes,2,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"` // e.g. "ide2", or empty for default CD-ROM
+	IsoPath       string                 `protobuf:"bytes,3,opt,name=iso_path,json=isoPath,proto3" json:"iso_path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AttachVirtualMachineMediaRequest) Reset() {
+	*x = AttachVirtualMachineMediaRequest{}
+	mi := &file_nas_v1_nas_proto_msgTypes[63]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AttachVirtualMachineMediaRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AttachVirtualMachineMediaRequest) ProtoMessage() {}
+
+func (x *AttachVirtualMachineMediaRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_nas_proto_msgTypes[63]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AttachVirtualMachineMediaRequest.ProtoReflect.Descriptor instead.
+func (*AttachVirtualMachineMediaRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{63}
+}
+
+func (x *AttachVirtualMachineMediaRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *AttachVirtualMachineMediaRequest) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+func (x *AttachVirtualMachineMediaRequest) GetIsoPath() string {
+	if x != nil {
+		return x.IsoPath
+	}
+	return ""
+}
+
+type EjectVirtualMachineMediaRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	DeviceId      string                 `protobuf:"bytes,2,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EjectVirtualMachineMediaRequest) Reset() {
+	*x = EjectVirtualMachineMediaRequest{}
+	mi := &file_nas_v1_nas_proto_msgTypes[64]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EjectVirtualMachineMediaRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EjectVirtualMachineMediaRequest) ProtoMessage() {}
+
+func (x *EjectVirtualMachineMediaRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_nas_proto_msgTypes[64]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EjectVirtualMachineMediaRequest.ProtoReflect.Descriptor instead.
+func (*EjectVirtualMachineMediaRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{64}
+}
+
+func (x *EjectVirtualMachineMediaRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *EjectVirtualMachineMediaRequest) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+type ListVirtualMachineSnapshotsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Parent        string                 `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListVirtualMachineSnapshotsRequest) Reset() {
+	*x = ListVirtualMachineSnapshotsRequest{}
+	mi := &file_nas_v1_nas_proto_msgTypes[65]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListVirtualMachineSnapshotsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListVirtualMachineSnapshotsRequest) ProtoMessage() {}
+
+func (x *ListVirtualMachineSnapshotsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_nas_proto_msgTypes[65]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListVirtualMachineSnapshotsRequest.ProtoReflect.Descriptor instead.
+func (*ListVirtualMachineSnapshotsRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{65}
+}
+
+func (x *ListVirtualMachineSnapshotsRequest) GetParent() string {
+	if x != nil {
+		return x.Parent
+	}
+	return ""
+}
+
+func (x *ListVirtualMachineSnapshotsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListVirtualMachineSnapshotsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type ListVirtualMachineSnapshotsResponse struct {
+	state         protoimpl.MessageState    `protogen:"open.v1"`
+	Snapshots     []*VirtualMachineSnapshot `protobuf:"bytes,1,rep,name=snapshots,proto3" json:"snapshots,omitempty"`
+	NextPageToken string                    `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	TotalSize     int32                     `protobuf:"varint,3,opt,name=total_size,json=totalSize,proto3" json:"total_size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListVirtualMachineSnapshotsResponse) Reset() {
+	*x = ListVirtualMachineSnapshotsResponse{}
+	mi := &file_nas_v1_nas_proto_msgTypes[66]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListVirtualMachineSnapshotsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListVirtualMachineSnapshotsResponse) ProtoMessage() {}
+
+func (x *ListVirtualMachineSnapshotsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_nas_proto_msgTypes[66]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListVirtualMachineSnapshotsResponse.ProtoReflect.Descriptor instead.
+func (*ListVirtualMachineSnapshotsResponse) Descriptor() ([]byte, []int) {
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{66}
+}
+
+func (x *ListVirtualMachineSnapshotsResponse) GetSnapshots() []*VirtualMachineSnapshot {
+	if x != nil {
+		return x.Snapshots
+	}
+	return nil
+}
+
+func (x *ListVirtualMachineSnapshotsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+func (x *ListVirtualMachineSnapshotsResponse) GetTotalSize() int32 {
+	if x != nil {
+		return x.TotalSize
+	}
+	return 0
+}
+
+type CreateVirtualMachineSnapshotRequest struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Parent        string                  `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	SnapshotId    string                  `protobuf:"bytes,2,opt,name=snapshot_id,json=snapshotId,proto3" json:"snapshot_id,omitempty"`
+	Snapshot      *VirtualMachineSnapshot `protobuf:"bytes,3,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateVirtualMachineSnapshotRequest) Reset() {
+	*x = CreateVirtualMachineSnapshotRequest{}
+	mi := &file_nas_v1_nas_proto_msgTypes[67]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateVirtualMachineSnapshotRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateVirtualMachineSnapshotRequest) ProtoMessage() {}
+
+func (x *CreateVirtualMachineSnapshotRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_nas_proto_msgTypes[67]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateVirtualMachineSnapshotRequest.ProtoReflect.Descriptor instead.
+func (*CreateVirtualMachineSnapshotRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{67}
+}
+
+func (x *CreateVirtualMachineSnapshotRequest) GetParent() string {
+	if x != nil {
+		return x.Parent
+	}
+	return ""
+}
+
+func (x *CreateVirtualMachineSnapshotRequest) GetSnapshotId() string {
+	if x != nil {
+		return x.SnapshotId
+	}
+	return ""
+}
+
+func (x *CreateVirtualMachineSnapshotRequest) GetSnapshot() *VirtualMachineSnapshot {
+	if x != nil {
+		return x.Snapshot
+	}
+	return nil
+}
+
+type RollbackVirtualMachineSnapshotRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RollbackVirtualMachineSnapshotRequest) Reset() {
+	*x = RollbackVirtualMachineSnapshotRequest{}
+	mi := &file_nas_v1_nas_proto_msgTypes[68]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RollbackVirtualMachineSnapshotRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RollbackVirtualMachineSnapshotRequest) ProtoMessage() {}
+
+func (x *RollbackVirtualMachineSnapshotRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_nas_proto_msgTypes[68]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RollbackVirtualMachineSnapshotRequest.ProtoReflect.Descriptor instead.
+func (*RollbackVirtualMachineSnapshotRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{68}
+}
+
+func (x *RollbackVirtualMachineSnapshotRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type DeleteVirtualMachineSnapshotRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteVirtualMachineSnapshotRequest) Reset() {
+	*x = DeleteVirtualMachineSnapshotRequest{}
+	mi := &file_nas_v1_nas_proto_msgTypes[69]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteVirtualMachineSnapshotRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteVirtualMachineSnapshotRequest) ProtoMessage() {}
+
+func (x *DeleteVirtualMachineSnapshotRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_nas_proto_msgTypes[69]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteVirtualMachineSnapshotRequest.ProtoReflect.Descriptor instead.
+func (*DeleteVirtualMachineSnapshotRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{69}
+}
+
+func (x *DeleteVirtualMachineSnapshotRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
 type DockerContainer struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -3759,7 +5153,7 @@ type DockerContainer struct {
 
 func (x *DockerContainer) Reset() {
 	*x = DockerContainer{}
-	mi := &file_nas_v1_nas_proto_msgTypes[53]
+	mi := &file_nas_v1_nas_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3771,7 +5165,7 @@ func (x *DockerContainer) String() string {
 func (*DockerContainer) ProtoMessage() {}
 
 func (x *DockerContainer) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[53]
+	mi := &file_nas_v1_nas_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3784,7 +5178,7 @@ func (x *DockerContainer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DockerContainer.ProtoReflect.Descriptor instead.
 func (*DockerContainer) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{53}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *DockerContainer) GetName() string {
@@ -3924,7 +5318,7 @@ type ListDockerContainersRequest struct {
 
 func (x *ListDockerContainersRequest) Reset() {
 	*x = ListDockerContainersRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[54]
+	mi := &file_nas_v1_nas_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3936,7 +5330,7 @@ func (x *ListDockerContainersRequest) String() string {
 func (*ListDockerContainersRequest) ProtoMessage() {}
 
 func (x *ListDockerContainersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[54]
+	mi := &file_nas_v1_nas_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3949,7 +5343,7 @@ func (x *ListDockerContainersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDockerContainersRequest.ProtoReflect.Descriptor instead.
 func (*ListDockerContainersRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{54}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *ListDockerContainersRequest) GetPageSize() int32 {
@@ -3984,7 +5378,7 @@ type ListDockerContainersResponse struct {
 
 func (x *ListDockerContainersResponse) Reset() {
 	*x = ListDockerContainersResponse{}
-	mi := &file_nas_v1_nas_proto_msgTypes[55]
+	mi := &file_nas_v1_nas_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3996,7 +5390,7 @@ func (x *ListDockerContainersResponse) String() string {
 func (*ListDockerContainersResponse) ProtoMessage() {}
 
 func (x *ListDockerContainersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[55]
+	mi := &file_nas_v1_nas_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4009,7 +5403,7 @@ func (x *ListDockerContainersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDockerContainersResponse.ProtoReflect.Descriptor instead.
 func (*ListDockerContainersResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{55}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *ListDockerContainersResponse) GetDockerContainers() []*DockerContainer {
@@ -4042,7 +5436,7 @@ type GetDockerContainerRequest struct {
 
 func (x *GetDockerContainerRequest) Reset() {
 	*x = GetDockerContainerRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[56]
+	mi := &file_nas_v1_nas_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4054,7 +5448,7 @@ func (x *GetDockerContainerRequest) String() string {
 func (*GetDockerContainerRequest) ProtoMessage() {}
 
 func (x *GetDockerContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[56]
+	mi := &file_nas_v1_nas_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4067,7 +5461,7 @@ func (x *GetDockerContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDockerContainerRequest.ProtoReflect.Descriptor instead.
 func (*GetDockerContainerRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{56}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *GetDockerContainerRequest) GetName() string {
@@ -4087,7 +5481,7 @@ type CreateDockerContainerRequest struct {
 
 func (x *CreateDockerContainerRequest) Reset() {
 	*x = CreateDockerContainerRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[57]
+	mi := &file_nas_v1_nas_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4099,7 +5493,7 @@ func (x *CreateDockerContainerRequest) String() string {
 func (*CreateDockerContainerRequest) ProtoMessage() {}
 
 func (x *CreateDockerContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[57]
+	mi := &file_nas_v1_nas_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4112,7 +5506,7 @@ func (x *CreateDockerContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDockerContainerRequest.ProtoReflect.Descriptor instead.
 func (*CreateDockerContainerRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{57}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *CreateDockerContainerRequest) GetDockerContainerId() string {
@@ -4139,7 +5533,7 @@ type UpdateDockerContainerRequest struct {
 
 func (x *UpdateDockerContainerRequest) Reset() {
 	*x = UpdateDockerContainerRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[58]
+	mi := &file_nas_v1_nas_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4151,7 +5545,7 @@ func (x *UpdateDockerContainerRequest) String() string {
 func (*UpdateDockerContainerRequest) ProtoMessage() {}
 
 func (x *UpdateDockerContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[58]
+	mi := &file_nas_v1_nas_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4164,7 +5558,7 @@ func (x *UpdateDockerContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateDockerContainerRequest.ProtoReflect.Descriptor instead.
 func (*UpdateDockerContainerRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{58}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *UpdateDockerContainerRequest) GetDockerContainer() *DockerContainer {
@@ -4191,7 +5585,7 @@ type GetDockerContainerLogsRequest struct {
 
 func (x *GetDockerContainerLogsRequest) Reset() {
 	*x = GetDockerContainerLogsRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[59]
+	mi := &file_nas_v1_nas_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4203,7 +5597,7 @@ func (x *GetDockerContainerLogsRequest) String() string {
 func (*GetDockerContainerLogsRequest) ProtoMessage() {}
 
 func (x *GetDockerContainerLogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[59]
+	mi := &file_nas_v1_nas_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4216,7 +5610,7 @@ func (x *GetDockerContainerLogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDockerContainerLogsRequest.ProtoReflect.Descriptor instead.
 func (*GetDockerContainerLogsRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{59}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *GetDockerContainerLogsRequest) GetName() string {
@@ -4242,7 +5636,7 @@ type GetDockerContainerLogsResponse struct {
 
 func (x *GetDockerContainerLogsResponse) Reset() {
 	*x = GetDockerContainerLogsResponse{}
-	mi := &file_nas_v1_nas_proto_msgTypes[60]
+	mi := &file_nas_v1_nas_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4254,7 +5648,7 @@ func (x *GetDockerContainerLogsResponse) String() string {
 func (*GetDockerContainerLogsResponse) ProtoMessage() {}
 
 func (x *GetDockerContainerLogsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[60]
+	mi := &file_nas_v1_nas_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4267,7 +5661,7 @@ func (x *GetDockerContainerLogsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDockerContainerLogsResponse.ProtoReflect.Descriptor instead.
 func (*GetDockerContainerLogsResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{60}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *GetDockerContainerLogsResponse) GetLogs() string {
@@ -4287,7 +5681,7 @@ type DeleteDockerContainerRequest struct {
 
 func (x *DeleteDockerContainerRequest) Reset() {
 	*x = DeleteDockerContainerRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[61]
+	mi := &file_nas_v1_nas_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4299,7 +5693,7 @@ func (x *DeleteDockerContainerRequest) String() string {
 func (*DeleteDockerContainerRequest) ProtoMessage() {}
 
 func (x *DeleteDockerContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[61]
+	mi := &file_nas_v1_nas_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4312,7 +5706,7 @@ func (x *DeleteDockerContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDockerContainerRequest.ProtoReflect.Descriptor instead.
 func (*DeleteDockerContainerRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{61}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *DeleteDockerContainerRequest) GetName() string {
@@ -4338,7 +5732,7 @@ type StartDockerContainerRequest struct {
 
 func (x *StartDockerContainerRequest) Reset() {
 	*x = StartDockerContainerRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[62]
+	mi := &file_nas_v1_nas_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4350,7 +5744,7 @@ func (x *StartDockerContainerRequest) String() string {
 func (*StartDockerContainerRequest) ProtoMessage() {}
 
 func (x *StartDockerContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[62]
+	mi := &file_nas_v1_nas_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4363,7 +5757,7 @@ func (x *StartDockerContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartDockerContainerRequest.ProtoReflect.Descriptor instead.
 func (*StartDockerContainerRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{62}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *StartDockerContainerRequest) GetName() string {
@@ -4382,7 +5776,7 @@ type StopDockerContainerRequest struct {
 
 func (x *StopDockerContainerRequest) Reset() {
 	*x = StopDockerContainerRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[63]
+	mi := &file_nas_v1_nas_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4394,7 +5788,7 @@ func (x *StopDockerContainerRequest) String() string {
 func (*StopDockerContainerRequest) ProtoMessage() {}
 
 func (x *StopDockerContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[63]
+	mi := &file_nas_v1_nas_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4407,7 +5801,7 @@ func (x *StopDockerContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopDockerContainerRequest.ProtoReflect.Descriptor instead.
 func (*StopDockerContainerRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{63}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *StopDockerContainerRequest) GetName() string {
@@ -4426,7 +5820,7 @@ type RestartDockerContainerRequest struct {
 
 func (x *RestartDockerContainerRequest) Reset() {
 	*x = RestartDockerContainerRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[64]
+	mi := &file_nas_v1_nas_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4438,7 +5832,7 @@ func (x *RestartDockerContainerRequest) String() string {
 func (*RestartDockerContainerRequest) ProtoMessage() {}
 
 func (x *RestartDockerContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[64]
+	mi := &file_nas_v1_nas_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4451,7 +5845,7 @@ func (x *RestartDockerContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestartDockerContainerRequest.ProtoReflect.Descriptor instead.
 func (*RestartDockerContainerRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{64}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *RestartDockerContainerRequest) GetName() string {
@@ -4489,7 +5883,7 @@ type DockerApp struct {
 
 func (x *DockerApp) Reset() {
 	*x = DockerApp{}
-	mi := &file_nas_v1_nas_proto_msgTypes[65]
+	mi := &file_nas_v1_nas_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4501,7 +5895,7 @@ func (x *DockerApp) String() string {
 func (*DockerApp) ProtoMessage() {}
 
 func (x *DockerApp) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[65]
+	mi := &file_nas_v1_nas_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4514,7 +5908,7 @@ func (x *DockerApp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DockerApp.ProtoReflect.Descriptor instead.
 func (*DockerApp) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{65}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *DockerApp) GetName() string {
@@ -4679,7 +6073,7 @@ type DockerAppContainer struct {
 
 func (x *DockerAppContainer) Reset() {
 	*x = DockerAppContainer{}
-	mi := &file_nas_v1_nas_proto_msgTypes[66]
+	mi := &file_nas_v1_nas_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4691,7 +6085,7 @@ func (x *DockerAppContainer) String() string {
 func (*DockerAppContainer) ProtoMessage() {}
 
 func (x *DockerAppContainer) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[66]
+	mi := &file_nas_v1_nas_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4704,7 +6098,7 @@ func (x *DockerAppContainer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DockerAppContainer.ProtoReflect.Descriptor instead.
 func (*DockerAppContainer) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{66}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *DockerAppContainer) GetContainerId() string {
@@ -4816,7 +6210,7 @@ type ListDockerAppsRequest struct {
 
 func (x *ListDockerAppsRequest) Reset() {
 	*x = ListDockerAppsRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[67]
+	mi := &file_nas_v1_nas_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4828,7 +6222,7 @@ func (x *ListDockerAppsRequest) String() string {
 func (*ListDockerAppsRequest) ProtoMessage() {}
 
 func (x *ListDockerAppsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[67]
+	mi := &file_nas_v1_nas_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4841,7 +6235,7 @@ func (x *ListDockerAppsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDockerAppsRequest.ProtoReflect.Descriptor instead.
 func (*ListDockerAppsRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{67}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *ListDockerAppsRequest) GetPageSize() int32 {
@@ -4876,7 +6270,7 @@ type ListDockerAppsResponse struct {
 
 func (x *ListDockerAppsResponse) Reset() {
 	*x = ListDockerAppsResponse{}
-	mi := &file_nas_v1_nas_proto_msgTypes[68]
+	mi := &file_nas_v1_nas_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4888,7 +6282,7 @@ func (x *ListDockerAppsResponse) String() string {
 func (*ListDockerAppsResponse) ProtoMessage() {}
 
 func (x *ListDockerAppsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[68]
+	mi := &file_nas_v1_nas_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4901,7 +6295,7 @@ func (x *ListDockerAppsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDockerAppsResponse.ProtoReflect.Descriptor instead.
 func (*ListDockerAppsResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{68}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *ListDockerAppsResponse) GetDockerApps() []*DockerApp {
@@ -4934,7 +6328,7 @@ type GetDockerAppRequest struct {
 
 func (x *GetDockerAppRequest) Reset() {
 	*x = GetDockerAppRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[69]
+	mi := &file_nas_v1_nas_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4946,7 +6340,7 @@ func (x *GetDockerAppRequest) String() string {
 func (*GetDockerAppRequest) ProtoMessage() {}
 
 func (x *GetDockerAppRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[69]
+	mi := &file_nas_v1_nas_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4959,7 +6353,7 @@ func (x *GetDockerAppRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDockerAppRequest.ProtoReflect.Descriptor instead.
 func (*GetDockerAppRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{69}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *GetDockerAppRequest) GetName() string {
@@ -4979,7 +6373,7 @@ type CreateDockerAppRequest struct {
 
 func (x *CreateDockerAppRequest) Reset() {
 	*x = CreateDockerAppRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[70]
+	mi := &file_nas_v1_nas_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4991,7 +6385,7 @@ func (x *CreateDockerAppRequest) String() string {
 func (*CreateDockerAppRequest) ProtoMessage() {}
 
 func (x *CreateDockerAppRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[70]
+	mi := &file_nas_v1_nas_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5004,7 +6398,7 @@ func (x *CreateDockerAppRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDockerAppRequest.ProtoReflect.Descriptor instead.
 func (*CreateDockerAppRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{70}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *CreateDockerAppRequest) GetDockerAppId() string {
@@ -5031,7 +6425,7 @@ type UpdateDockerAppRequest struct {
 
 func (x *UpdateDockerAppRequest) Reset() {
 	*x = UpdateDockerAppRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[71]
+	mi := &file_nas_v1_nas_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5043,7 +6437,7 @@ func (x *UpdateDockerAppRequest) String() string {
 func (*UpdateDockerAppRequest) ProtoMessage() {}
 
 func (x *UpdateDockerAppRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[71]
+	mi := &file_nas_v1_nas_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5056,7 +6450,7 @@ func (x *UpdateDockerAppRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateDockerAppRequest.ProtoReflect.Descriptor instead.
 func (*UpdateDockerAppRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{71}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *UpdateDockerAppRequest) GetDockerApp() *DockerApp {
@@ -5083,7 +6477,7 @@ type DeleteDockerAppRequest struct {
 
 func (x *DeleteDockerAppRequest) Reset() {
 	*x = DeleteDockerAppRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[72]
+	mi := &file_nas_v1_nas_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5095,7 +6489,7 @@ func (x *DeleteDockerAppRequest) String() string {
 func (*DeleteDockerAppRequest) ProtoMessage() {}
 
 func (x *DeleteDockerAppRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[72]
+	mi := &file_nas_v1_nas_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5108,7 +6502,7 @@ func (x *DeleteDockerAppRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDockerAppRequest.ProtoReflect.Descriptor instead.
 func (*DeleteDockerAppRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{72}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *DeleteDockerAppRequest) GetName() string {
@@ -5134,7 +6528,7 @@ type StartDockerAppRequest struct {
 
 func (x *StartDockerAppRequest) Reset() {
 	*x = StartDockerAppRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[73]
+	mi := &file_nas_v1_nas_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5146,7 +6540,7 @@ func (x *StartDockerAppRequest) String() string {
 func (*StartDockerAppRequest) ProtoMessage() {}
 
 func (x *StartDockerAppRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[73]
+	mi := &file_nas_v1_nas_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5159,7 +6553,7 @@ func (x *StartDockerAppRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartDockerAppRequest.ProtoReflect.Descriptor instead.
 func (*StartDockerAppRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{73}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *StartDockerAppRequest) GetName() string {
@@ -5178,7 +6572,7 @@ type StopDockerAppRequest struct {
 
 func (x *StopDockerAppRequest) Reset() {
 	*x = StopDockerAppRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[74]
+	mi := &file_nas_v1_nas_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5190,7 +6584,7 @@ func (x *StopDockerAppRequest) String() string {
 func (*StopDockerAppRequest) ProtoMessage() {}
 
 func (x *StopDockerAppRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[74]
+	mi := &file_nas_v1_nas_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5203,7 +6597,7 @@ func (x *StopDockerAppRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopDockerAppRequest.ProtoReflect.Descriptor instead.
 func (*StopDockerAppRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{74}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *StopDockerAppRequest) GetName() string {
@@ -5222,7 +6616,7 @@ type RestartDockerAppRequest struct {
 
 func (x *RestartDockerAppRequest) Reset() {
 	*x = RestartDockerAppRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[75]
+	mi := &file_nas_v1_nas_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5234,7 +6628,7 @@ func (x *RestartDockerAppRequest) String() string {
 func (*RestartDockerAppRequest) ProtoMessage() {}
 
 func (x *RestartDockerAppRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[75]
+	mi := &file_nas_v1_nas_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5247,7 +6641,7 @@ func (x *RestartDockerAppRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestartDockerAppRequest.ProtoReflect.Descriptor instead.
 func (*RestartDockerAppRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{75}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{92}
 }
 
 func (x *RestartDockerAppRequest) GetName() string {
@@ -5268,7 +6662,7 @@ type GetDockerAppLogsRequest struct {
 
 func (x *GetDockerAppLogsRequest) Reset() {
 	*x = GetDockerAppLogsRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[76]
+	mi := &file_nas_v1_nas_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5280,7 +6674,7 @@ func (x *GetDockerAppLogsRequest) String() string {
 func (*GetDockerAppLogsRequest) ProtoMessage() {}
 
 func (x *GetDockerAppLogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[76]
+	mi := &file_nas_v1_nas_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5293,7 +6687,7 @@ func (x *GetDockerAppLogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDockerAppLogsRequest.ProtoReflect.Descriptor instead.
 func (*GetDockerAppLogsRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{76}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *GetDockerAppLogsRequest) GetName() string {
@@ -5327,7 +6721,7 @@ type GetDockerAppLogsResponse struct {
 
 func (x *GetDockerAppLogsResponse) Reset() {
 	*x = GetDockerAppLogsResponse{}
-	mi := &file_nas_v1_nas_proto_msgTypes[77]
+	mi := &file_nas_v1_nas_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5339,7 +6733,7 @@ func (x *GetDockerAppLogsResponse) String() string {
 func (*GetDockerAppLogsResponse) ProtoMessage() {}
 
 func (x *GetDockerAppLogsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[77]
+	mi := &file_nas_v1_nas_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5352,7 +6746,7 @@ func (x *GetDockerAppLogsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDockerAppLogsResponse.ProtoReflect.Descriptor instead.
 func (*GetDockerAppLogsResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{77}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{94}
 }
 
 func (x *GetDockerAppLogsResponse) GetLogs() string {
@@ -5387,7 +6781,7 @@ type DockerConfig struct {
 
 func (x *DockerConfig) Reset() {
 	*x = DockerConfig{}
-	mi := &file_nas_v1_nas_proto_msgTypes[78]
+	mi := &file_nas_v1_nas_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5399,7 +6793,7 @@ func (x *DockerConfig) String() string {
 func (*DockerConfig) ProtoMessage() {}
 
 func (x *DockerConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[78]
+	mi := &file_nas_v1_nas_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5412,7 +6806,7 @@ func (x *DockerConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DockerConfig.ProtoReflect.Descriptor instead.
 func (*DockerConfig) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{78}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{95}
 }
 
 func (x *DockerConfig) GetDataset() string {
@@ -5493,7 +6887,7 @@ type GetDockerConfigRequest struct {
 
 func (x *GetDockerConfigRequest) Reset() {
 	*x = GetDockerConfigRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[79]
+	mi := &file_nas_v1_nas_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5505,7 +6899,7 @@ func (x *GetDockerConfigRequest) String() string {
 func (*GetDockerConfigRequest) ProtoMessage() {}
 
 func (x *GetDockerConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[79]
+	mi := &file_nas_v1_nas_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5518,7 +6912,7 @@ func (x *GetDockerConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDockerConfigRequest.ProtoReflect.Descriptor instead.
 func (*GetDockerConfigRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{79}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{96}
 }
 
 type UpdateDockerConfigRequest struct {
@@ -5531,7 +6925,7 @@ type UpdateDockerConfigRequest struct {
 
 func (x *UpdateDockerConfigRequest) Reset() {
 	*x = UpdateDockerConfigRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[80]
+	mi := &file_nas_v1_nas_proto_msgTypes[97]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5543,7 +6937,7 @@ func (x *UpdateDockerConfigRequest) String() string {
 func (*UpdateDockerConfigRequest) ProtoMessage() {}
 
 func (x *UpdateDockerConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[80]
+	mi := &file_nas_v1_nas_proto_msgTypes[97]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5556,7 +6950,7 @@ func (x *UpdateDockerConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateDockerConfigRequest.ProtoReflect.Descriptor instead.
 func (*UpdateDockerConfigRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{80}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *UpdateDockerConfigRequest) GetDockerConfig() *DockerConfig {
@@ -5584,7 +6978,7 @@ type DirectoryEntry struct {
 
 func (x *DirectoryEntry) Reset() {
 	*x = DirectoryEntry{}
-	mi := &file_nas_v1_nas_proto_msgTypes[81]
+	mi := &file_nas_v1_nas_proto_msgTypes[98]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5596,7 +6990,7 @@ func (x *DirectoryEntry) String() string {
 func (*DirectoryEntry) ProtoMessage() {}
 
 func (x *DirectoryEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[81]
+	mi := &file_nas_v1_nas_proto_msgTypes[98]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5609,7 +7003,7 @@ func (x *DirectoryEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DirectoryEntry.ProtoReflect.Descriptor instead.
 func (*DirectoryEntry) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{81}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{98}
 }
 
 func (x *DirectoryEntry) GetName() string {
@@ -5642,7 +7036,7 @@ type ListFileSystemDirectoriesRequest struct {
 
 func (x *ListFileSystemDirectoriesRequest) Reset() {
 	*x = ListFileSystemDirectoriesRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[82]
+	mi := &file_nas_v1_nas_proto_msgTypes[99]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5654,7 +7048,7 @@ func (x *ListFileSystemDirectoriesRequest) String() string {
 func (*ListFileSystemDirectoriesRequest) ProtoMessage() {}
 
 func (x *ListFileSystemDirectoriesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[82]
+	mi := &file_nas_v1_nas_proto_msgTypes[99]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5667,7 +7061,7 @@ func (x *ListFileSystemDirectoriesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFileSystemDirectoriesRequest.ProtoReflect.Descriptor instead.
 func (*ListFileSystemDirectoriesRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{82}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{99}
 }
 
 func (x *ListFileSystemDirectoriesRequest) GetPath() string {
@@ -5688,7 +7082,7 @@ type ListFileSystemDirectoriesResponse struct {
 
 func (x *ListFileSystemDirectoriesResponse) Reset() {
 	*x = ListFileSystemDirectoriesResponse{}
-	mi := &file_nas_v1_nas_proto_msgTypes[83]
+	mi := &file_nas_v1_nas_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5700,7 +7094,7 @@ func (x *ListFileSystemDirectoriesResponse) String() string {
 func (*ListFileSystemDirectoriesResponse) ProtoMessage() {}
 
 func (x *ListFileSystemDirectoriesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[83]
+	mi := &file_nas_v1_nas_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5713,7 +7107,7 @@ func (x *ListFileSystemDirectoriesResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use ListFileSystemDirectoriesResponse.ProtoReflect.Descriptor instead.
 func (*ListFileSystemDirectoriesResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{83}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{100}
 }
 
 func (x *ListFileSystemDirectoriesResponse) GetCurrentPath() string {
@@ -5757,7 +7151,7 @@ type LxcContainer struct {
 
 func (x *LxcContainer) Reset() {
 	*x = LxcContainer{}
-	mi := &file_nas_v1_nas_proto_msgTypes[84]
+	mi := &file_nas_v1_nas_proto_msgTypes[101]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5769,7 +7163,7 @@ func (x *LxcContainer) String() string {
 func (*LxcContainer) ProtoMessage() {}
 
 func (x *LxcContainer) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[84]
+	mi := &file_nas_v1_nas_proto_msgTypes[101]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5782,7 +7176,7 @@ func (x *LxcContainer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LxcContainer.ProtoReflect.Descriptor instead.
 func (*LxcContainer) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{84}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{101}
 }
 
 func (x *LxcContainer) GetName() string {
@@ -5880,7 +7274,7 @@ type ListLxcContainersRequest struct {
 
 func (x *ListLxcContainersRequest) Reset() {
 	*x = ListLxcContainersRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[85]
+	mi := &file_nas_v1_nas_proto_msgTypes[102]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5892,7 +7286,7 @@ func (x *ListLxcContainersRequest) String() string {
 func (*ListLxcContainersRequest) ProtoMessage() {}
 
 func (x *ListLxcContainersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[85]
+	mi := &file_nas_v1_nas_proto_msgTypes[102]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5905,7 +7299,7 @@ func (x *ListLxcContainersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListLxcContainersRequest.ProtoReflect.Descriptor instead.
 func (*ListLxcContainersRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{85}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{102}
 }
 
 func (x *ListLxcContainersRequest) GetPageSize() int32 {
@@ -5940,7 +7334,7 @@ type ListLxcContainersResponse struct {
 
 func (x *ListLxcContainersResponse) Reset() {
 	*x = ListLxcContainersResponse{}
-	mi := &file_nas_v1_nas_proto_msgTypes[86]
+	mi := &file_nas_v1_nas_proto_msgTypes[103]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5952,7 +7346,7 @@ func (x *ListLxcContainersResponse) String() string {
 func (*ListLxcContainersResponse) ProtoMessage() {}
 
 func (x *ListLxcContainersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[86]
+	mi := &file_nas_v1_nas_proto_msgTypes[103]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5965,7 +7359,7 @@ func (x *ListLxcContainersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListLxcContainersResponse.ProtoReflect.Descriptor instead.
 func (*ListLxcContainersResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{86}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{103}
 }
 
 func (x *ListLxcContainersResponse) GetLxcContainers() []*LxcContainer {
@@ -5998,7 +7392,7 @@ type GetLxcContainerRequest struct {
 
 func (x *GetLxcContainerRequest) Reset() {
 	*x = GetLxcContainerRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[87]
+	mi := &file_nas_v1_nas_proto_msgTypes[104]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6010,7 +7404,7 @@ func (x *GetLxcContainerRequest) String() string {
 func (*GetLxcContainerRequest) ProtoMessage() {}
 
 func (x *GetLxcContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[87]
+	mi := &file_nas_v1_nas_proto_msgTypes[104]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6023,7 +7417,7 @@ func (x *GetLxcContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLxcContainerRequest.ProtoReflect.Descriptor instead.
 func (*GetLxcContainerRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{87}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{104}
 }
 
 func (x *GetLxcContainerRequest) GetName() string {
@@ -6043,7 +7437,7 @@ type CreateLxcContainerRequest struct {
 
 func (x *CreateLxcContainerRequest) Reset() {
 	*x = CreateLxcContainerRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[88]
+	mi := &file_nas_v1_nas_proto_msgTypes[105]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6055,7 +7449,7 @@ func (x *CreateLxcContainerRequest) String() string {
 func (*CreateLxcContainerRequest) ProtoMessage() {}
 
 func (x *CreateLxcContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[88]
+	mi := &file_nas_v1_nas_proto_msgTypes[105]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6068,7 +7462,7 @@ func (x *CreateLxcContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateLxcContainerRequest.ProtoReflect.Descriptor instead.
 func (*CreateLxcContainerRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{88}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{105}
 }
 
 func (x *CreateLxcContainerRequest) GetLxcContainerId() string {
@@ -6095,7 +7489,7 @@ type DeleteLxcContainerRequest struct {
 
 func (x *DeleteLxcContainerRequest) Reset() {
 	*x = DeleteLxcContainerRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[89]
+	mi := &file_nas_v1_nas_proto_msgTypes[106]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6107,7 +7501,7 @@ func (x *DeleteLxcContainerRequest) String() string {
 func (*DeleteLxcContainerRequest) ProtoMessage() {}
 
 func (x *DeleteLxcContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[89]
+	mi := &file_nas_v1_nas_proto_msgTypes[106]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6120,7 +7514,7 @@ func (x *DeleteLxcContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteLxcContainerRequest.ProtoReflect.Descriptor instead.
 func (*DeleteLxcContainerRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{89}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{106}
 }
 
 func (x *DeleteLxcContainerRequest) GetName() string {
@@ -6146,7 +7540,7 @@ type StartLxcContainerRequest struct {
 
 func (x *StartLxcContainerRequest) Reset() {
 	*x = StartLxcContainerRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[90]
+	mi := &file_nas_v1_nas_proto_msgTypes[107]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6158,7 +7552,7 @@ func (x *StartLxcContainerRequest) String() string {
 func (*StartLxcContainerRequest) ProtoMessage() {}
 
 func (x *StartLxcContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[90]
+	mi := &file_nas_v1_nas_proto_msgTypes[107]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6171,7 +7565,7 @@ func (x *StartLxcContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartLxcContainerRequest.ProtoReflect.Descriptor instead.
 func (*StartLxcContainerRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{90}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{107}
 }
 
 func (x *StartLxcContainerRequest) GetName() string {
@@ -6190,7 +7584,7 @@ type StopLxcContainerRequest struct {
 
 func (x *StopLxcContainerRequest) Reset() {
 	*x = StopLxcContainerRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[91]
+	mi := &file_nas_v1_nas_proto_msgTypes[108]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6202,7 +7596,7 @@ func (x *StopLxcContainerRequest) String() string {
 func (*StopLxcContainerRequest) ProtoMessage() {}
 
 func (x *StopLxcContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[91]
+	mi := &file_nas_v1_nas_proto_msgTypes[108]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6215,7 +7609,7 @@ func (x *StopLxcContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopLxcContainerRequest.ProtoReflect.Descriptor instead.
 func (*StopLxcContainerRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{91}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{108}
 }
 
 func (x *StopLxcContainerRequest) GetName() string {
@@ -6234,7 +7628,7 @@ type FreezeLxcContainerRequest struct {
 
 func (x *FreezeLxcContainerRequest) Reset() {
 	*x = FreezeLxcContainerRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[92]
+	mi := &file_nas_v1_nas_proto_msgTypes[109]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6246,7 +7640,7 @@ func (x *FreezeLxcContainerRequest) String() string {
 func (*FreezeLxcContainerRequest) ProtoMessage() {}
 
 func (x *FreezeLxcContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[92]
+	mi := &file_nas_v1_nas_proto_msgTypes[109]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6259,7 +7653,7 @@ func (x *FreezeLxcContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FreezeLxcContainerRequest.ProtoReflect.Descriptor instead.
 func (*FreezeLxcContainerRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{92}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{109}
 }
 
 func (x *FreezeLxcContainerRequest) GetName() string {
@@ -6289,7 +7683,7 @@ type CifsShare struct {
 
 func (x *CifsShare) Reset() {
 	*x = CifsShare{}
-	mi := &file_nas_v1_nas_proto_msgTypes[93]
+	mi := &file_nas_v1_nas_proto_msgTypes[110]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6301,7 +7695,7 @@ func (x *CifsShare) String() string {
 func (*CifsShare) ProtoMessage() {}
 
 func (x *CifsShare) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[93]
+	mi := &file_nas_v1_nas_proto_msgTypes[110]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6314,7 +7708,7 @@ func (x *CifsShare) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CifsShare.ProtoReflect.Descriptor instead.
 func (*CifsShare) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{93}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{110}
 }
 
 func (x *CifsShare) GetName() string {
@@ -6411,7 +7805,7 @@ type ListCifsSharesRequest struct {
 
 func (x *ListCifsSharesRequest) Reset() {
 	*x = ListCifsSharesRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[94]
+	mi := &file_nas_v1_nas_proto_msgTypes[111]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6423,7 +7817,7 @@ func (x *ListCifsSharesRequest) String() string {
 func (*ListCifsSharesRequest) ProtoMessage() {}
 
 func (x *ListCifsSharesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[94]
+	mi := &file_nas_v1_nas_proto_msgTypes[111]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6436,7 +7830,7 @@ func (x *ListCifsSharesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCifsSharesRequest.ProtoReflect.Descriptor instead.
 func (*ListCifsSharesRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{94}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{111}
 }
 
 func (x *ListCifsSharesRequest) GetPageSize() int32 {
@@ -6464,7 +7858,7 @@ type ListCifsSharesResponse struct {
 
 func (x *ListCifsSharesResponse) Reset() {
 	*x = ListCifsSharesResponse{}
-	mi := &file_nas_v1_nas_proto_msgTypes[95]
+	mi := &file_nas_v1_nas_proto_msgTypes[112]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6476,7 +7870,7 @@ func (x *ListCifsSharesResponse) String() string {
 func (*ListCifsSharesResponse) ProtoMessage() {}
 
 func (x *ListCifsSharesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[95]
+	mi := &file_nas_v1_nas_proto_msgTypes[112]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6489,7 +7883,7 @@ func (x *ListCifsSharesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCifsSharesResponse.ProtoReflect.Descriptor instead.
 func (*ListCifsSharesResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{95}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{112}
 }
 
 func (x *ListCifsSharesResponse) GetCifsShares() []*CifsShare {
@@ -6522,7 +7916,7 @@ type GetCifsShareRequest struct {
 
 func (x *GetCifsShareRequest) Reset() {
 	*x = GetCifsShareRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[96]
+	mi := &file_nas_v1_nas_proto_msgTypes[113]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6534,7 +7928,7 @@ func (x *GetCifsShareRequest) String() string {
 func (*GetCifsShareRequest) ProtoMessage() {}
 
 func (x *GetCifsShareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[96]
+	mi := &file_nas_v1_nas_proto_msgTypes[113]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6547,7 +7941,7 @@ func (x *GetCifsShareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCifsShareRequest.ProtoReflect.Descriptor instead.
 func (*GetCifsShareRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{96}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{113}
 }
 
 func (x *GetCifsShareRequest) GetName() string {
@@ -6567,7 +7961,7 @@ type CreateCifsShareRequest struct {
 
 func (x *CreateCifsShareRequest) Reset() {
 	*x = CreateCifsShareRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[97]
+	mi := &file_nas_v1_nas_proto_msgTypes[114]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6579,7 +7973,7 @@ func (x *CreateCifsShareRequest) String() string {
 func (*CreateCifsShareRequest) ProtoMessage() {}
 
 func (x *CreateCifsShareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[97]
+	mi := &file_nas_v1_nas_proto_msgTypes[114]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6592,7 +7986,7 @@ func (x *CreateCifsShareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCifsShareRequest.ProtoReflect.Descriptor instead.
 func (*CreateCifsShareRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{97}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{114}
 }
 
 func (x *CreateCifsShareRequest) GetCifsShareId() string {
@@ -6619,7 +8013,7 @@ type UpdateCifsShareRequest struct {
 
 func (x *UpdateCifsShareRequest) Reset() {
 	*x = UpdateCifsShareRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[98]
+	mi := &file_nas_v1_nas_proto_msgTypes[115]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6631,7 +8025,7 @@ func (x *UpdateCifsShareRequest) String() string {
 func (*UpdateCifsShareRequest) ProtoMessage() {}
 
 func (x *UpdateCifsShareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[98]
+	mi := &file_nas_v1_nas_proto_msgTypes[115]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6644,7 +8038,7 @@ func (x *UpdateCifsShareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateCifsShareRequest.ProtoReflect.Descriptor instead.
 func (*UpdateCifsShareRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{98}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{115}
 }
 
 func (x *UpdateCifsShareRequest) GetCifsShare() *CifsShare {
@@ -6670,7 +8064,7 @@ type DeleteCifsShareRequest struct {
 
 func (x *DeleteCifsShareRequest) Reset() {
 	*x = DeleteCifsShareRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[99]
+	mi := &file_nas_v1_nas_proto_msgTypes[116]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6682,7 +8076,7 @@ func (x *DeleteCifsShareRequest) String() string {
 func (*DeleteCifsShareRequest) ProtoMessage() {}
 
 func (x *DeleteCifsShareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[99]
+	mi := &file_nas_v1_nas_proto_msgTypes[116]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6695,7 +8089,7 @@ func (x *DeleteCifsShareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteCifsShareRequest.ProtoReflect.Descriptor instead.
 func (*DeleteCifsShareRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{99}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{116}
 }
 
 func (x *DeleteCifsShareRequest) GetName() string {
@@ -6722,7 +8116,7 @@ type WebdavShare struct {
 
 func (x *WebdavShare) Reset() {
 	*x = WebdavShare{}
-	mi := &file_nas_v1_nas_proto_msgTypes[100]
+	mi := &file_nas_v1_nas_proto_msgTypes[117]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6734,7 +8128,7 @@ func (x *WebdavShare) String() string {
 func (*WebdavShare) ProtoMessage() {}
 
 func (x *WebdavShare) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[100]
+	mi := &file_nas_v1_nas_proto_msgTypes[117]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6747,7 +8141,7 @@ func (x *WebdavShare) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebdavShare.ProtoReflect.Descriptor instead.
 func (*WebdavShare) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{100}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{117}
 }
 
 func (x *WebdavShare) GetName() string {
@@ -6823,7 +8217,7 @@ type ListWebdavSharesRequest struct {
 
 func (x *ListWebdavSharesRequest) Reset() {
 	*x = ListWebdavSharesRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[101]
+	mi := &file_nas_v1_nas_proto_msgTypes[118]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6835,7 +8229,7 @@ func (x *ListWebdavSharesRequest) String() string {
 func (*ListWebdavSharesRequest) ProtoMessage() {}
 
 func (x *ListWebdavSharesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[101]
+	mi := &file_nas_v1_nas_proto_msgTypes[118]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6848,7 +8242,7 @@ func (x *ListWebdavSharesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWebdavSharesRequest.ProtoReflect.Descriptor instead.
 func (*ListWebdavSharesRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{101}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{118}
 }
 
 func (x *ListWebdavSharesRequest) GetPageSize() int32 {
@@ -6876,7 +8270,7 @@ type ListWebdavSharesResponse struct {
 
 func (x *ListWebdavSharesResponse) Reset() {
 	*x = ListWebdavSharesResponse{}
-	mi := &file_nas_v1_nas_proto_msgTypes[102]
+	mi := &file_nas_v1_nas_proto_msgTypes[119]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6888,7 +8282,7 @@ func (x *ListWebdavSharesResponse) String() string {
 func (*ListWebdavSharesResponse) ProtoMessage() {}
 
 func (x *ListWebdavSharesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[102]
+	mi := &file_nas_v1_nas_proto_msgTypes[119]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6901,7 +8295,7 @@ func (x *ListWebdavSharesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWebdavSharesResponse.ProtoReflect.Descriptor instead.
 func (*ListWebdavSharesResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{102}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{119}
 }
 
 func (x *ListWebdavSharesResponse) GetWebdavShares() []*WebdavShare {
@@ -6934,7 +8328,7 @@ type GetWebdavShareRequest struct {
 
 func (x *GetWebdavShareRequest) Reset() {
 	*x = GetWebdavShareRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[103]
+	mi := &file_nas_v1_nas_proto_msgTypes[120]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6946,7 +8340,7 @@ func (x *GetWebdavShareRequest) String() string {
 func (*GetWebdavShareRequest) ProtoMessage() {}
 
 func (x *GetWebdavShareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[103]
+	mi := &file_nas_v1_nas_proto_msgTypes[120]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6959,7 +8353,7 @@ func (x *GetWebdavShareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWebdavShareRequest.ProtoReflect.Descriptor instead.
 func (*GetWebdavShareRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{103}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{120}
 }
 
 func (x *GetWebdavShareRequest) GetName() string {
@@ -6979,7 +8373,7 @@ type CreateWebdavShareRequest struct {
 
 func (x *CreateWebdavShareRequest) Reset() {
 	*x = CreateWebdavShareRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[104]
+	mi := &file_nas_v1_nas_proto_msgTypes[121]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6991,7 +8385,7 @@ func (x *CreateWebdavShareRequest) String() string {
 func (*CreateWebdavShareRequest) ProtoMessage() {}
 
 func (x *CreateWebdavShareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[104]
+	mi := &file_nas_v1_nas_proto_msgTypes[121]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7004,7 +8398,7 @@ func (x *CreateWebdavShareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateWebdavShareRequest.ProtoReflect.Descriptor instead.
 func (*CreateWebdavShareRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{104}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{121}
 }
 
 func (x *CreateWebdavShareRequest) GetWebdavShareId() string {
@@ -7031,7 +8425,7 @@ type UpdateWebdavShareRequest struct {
 
 func (x *UpdateWebdavShareRequest) Reset() {
 	*x = UpdateWebdavShareRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[105]
+	mi := &file_nas_v1_nas_proto_msgTypes[122]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7043,7 +8437,7 @@ func (x *UpdateWebdavShareRequest) String() string {
 func (*UpdateWebdavShareRequest) ProtoMessage() {}
 
 func (x *UpdateWebdavShareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[105]
+	mi := &file_nas_v1_nas_proto_msgTypes[122]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7056,7 +8450,7 @@ func (x *UpdateWebdavShareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateWebdavShareRequest.ProtoReflect.Descriptor instead.
 func (*UpdateWebdavShareRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{105}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{122}
 }
 
 func (x *UpdateWebdavShareRequest) GetWebdavShare() *WebdavShare {
@@ -7082,7 +8476,7 @@ type DeleteWebdavShareRequest struct {
 
 func (x *DeleteWebdavShareRequest) Reset() {
 	*x = DeleteWebdavShareRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[106]
+	mi := &file_nas_v1_nas_proto_msgTypes[123]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7094,7 +8488,7 @@ func (x *DeleteWebdavShareRequest) String() string {
 func (*DeleteWebdavShareRequest) ProtoMessage() {}
 
 func (x *DeleteWebdavShareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[106]
+	mi := &file_nas_v1_nas_proto_msgTypes[123]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7107,7 +8501,7 @@ func (x *DeleteWebdavShareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteWebdavShareRequest.ProtoReflect.Descriptor instead.
 func (*DeleteWebdavShareRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{106}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{123}
 }
 
 func (x *DeleteWebdavShareRequest) GetName() string {
@@ -7141,7 +8535,7 @@ type User struct {
 
 func (x *User) Reset() {
 	*x = User{}
-	mi := &file_nas_v1_nas_proto_msgTypes[107]
+	mi := &file_nas_v1_nas_proto_msgTypes[124]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7153,7 +8547,7 @@ func (x *User) String() string {
 func (*User) ProtoMessage() {}
 
 func (x *User) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[107]
+	mi := &file_nas_v1_nas_proto_msgTypes[124]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7166,7 +8560,7 @@ func (x *User) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use User.ProtoReflect.Descriptor instead.
 func (*User) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{107}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{124}
 }
 
 func (x *User) GetName() string {
@@ -7292,7 +8686,7 @@ type ListUsersRequest struct {
 
 func (x *ListUsersRequest) Reset() {
 	*x = ListUsersRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[108]
+	mi := &file_nas_v1_nas_proto_msgTypes[125]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7304,7 +8698,7 @@ func (x *ListUsersRequest) String() string {
 func (*ListUsersRequest) ProtoMessage() {}
 
 func (x *ListUsersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[108]
+	mi := &file_nas_v1_nas_proto_msgTypes[125]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7317,7 +8711,7 @@ func (x *ListUsersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListUsersRequest.ProtoReflect.Descriptor instead.
 func (*ListUsersRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{108}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{125}
 }
 
 func (x *ListUsersRequest) GetPageSize() int32 {
@@ -7352,7 +8746,7 @@ type ListUsersResponse struct {
 
 func (x *ListUsersResponse) Reset() {
 	*x = ListUsersResponse{}
-	mi := &file_nas_v1_nas_proto_msgTypes[109]
+	mi := &file_nas_v1_nas_proto_msgTypes[126]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7364,7 +8758,7 @@ func (x *ListUsersResponse) String() string {
 func (*ListUsersResponse) ProtoMessage() {}
 
 func (x *ListUsersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[109]
+	mi := &file_nas_v1_nas_proto_msgTypes[126]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7377,7 +8771,7 @@ func (x *ListUsersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListUsersResponse.ProtoReflect.Descriptor instead.
 func (*ListUsersResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{109}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{126}
 }
 
 func (x *ListUsersResponse) GetUsers() []*User {
@@ -7410,7 +8804,7 @@ type GetUserRequest struct {
 
 func (x *GetUserRequest) Reset() {
 	*x = GetUserRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[110]
+	mi := &file_nas_v1_nas_proto_msgTypes[127]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7422,7 +8816,7 @@ func (x *GetUserRequest) String() string {
 func (*GetUserRequest) ProtoMessage() {}
 
 func (x *GetUserRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[110]
+	mi := &file_nas_v1_nas_proto_msgTypes[127]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7435,7 +8829,7 @@ func (x *GetUserRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUserRequest.ProtoReflect.Descriptor instead.
 func (*GetUserRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{110}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{127}
 }
 
 func (x *GetUserRequest) GetName() string {
@@ -7455,7 +8849,7 @@ type CreateUserRequest struct {
 
 func (x *CreateUserRequest) Reset() {
 	*x = CreateUserRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[111]
+	mi := &file_nas_v1_nas_proto_msgTypes[128]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7467,7 +8861,7 @@ func (x *CreateUserRequest) String() string {
 func (*CreateUserRequest) ProtoMessage() {}
 
 func (x *CreateUserRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[111]
+	mi := &file_nas_v1_nas_proto_msgTypes[128]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7480,7 +8874,7 @@ func (x *CreateUserRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateUserRequest.ProtoReflect.Descriptor instead.
 func (*CreateUserRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{111}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{128}
 }
 
 func (x *CreateUserRequest) GetUserId() string {
@@ -7507,7 +8901,7 @@ type UpdateUserRequest struct {
 
 func (x *UpdateUserRequest) Reset() {
 	*x = UpdateUserRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[112]
+	mi := &file_nas_v1_nas_proto_msgTypes[129]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7519,7 +8913,7 @@ func (x *UpdateUserRequest) String() string {
 func (*UpdateUserRequest) ProtoMessage() {}
 
 func (x *UpdateUserRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[112]
+	mi := &file_nas_v1_nas_proto_msgTypes[129]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7532,7 +8926,7 @@ func (x *UpdateUserRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateUserRequest.ProtoReflect.Descriptor instead.
 func (*UpdateUserRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{112}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{129}
 }
 
 func (x *UpdateUserRequest) GetUser() *User {
@@ -7559,7 +8953,7 @@ type DeleteUserRequest struct {
 
 func (x *DeleteUserRequest) Reset() {
 	*x = DeleteUserRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[113]
+	mi := &file_nas_v1_nas_proto_msgTypes[130]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7571,7 +8965,7 @@ func (x *DeleteUserRequest) String() string {
 func (*DeleteUserRequest) ProtoMessage() {}
 
 func (x *DeleteUserRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[113]
+	mi := &file_nas_v1_nas_proto_msgTypes[130]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7584,7 +8978,7 @@ func (x *DeleteUserRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteUserRequest.ProtoReflect.Descriptor instead.
 func (*DeleteUserRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{113}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{130}
 }
 
 func (x *DeleteUserRequest) GetName() string {
@@ -7614,7 +9008,7 @@ type Group struct {
 
 func (x *Group) Reset() {
 	*x = Group{}
-	mi := &file_nas_v1_nas_proto_msgTypes[114]
+	mi := &file_nas_v1_nas_proto_msgTypes[131]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7626,7 +9020,7 @@ func (x *Group) String() string {
 func (*Group) ProtoMessage() {}
 
 func (x *Group) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[114]
+	mi := &file_nas_v1_nas_proto_msgTypes[131]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7639,7 +9033,7 @@ func (x *Group) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Group.ProtoReflect.Descriptor instead.
 func (*Group) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{114}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{131}
 }
 
 func (x *Group) GetName() string {
@@ -7688,7 +9082,7 @@ type ListGroupsRequest struct {
 
 func (x *ListGroupsRequest) Reset() {
 	*x = ListGroupsRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[115]
+	mi := &file_nas_v1_nas_proto_msgTypes[132]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7700,7 +9094,7 @@ func (x *ListGroupsRequest) String() string {
 func (*ListGroupsRequest) ProtoMessage() {}
 
 func (x *ListGroupsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[115]
+	mi := &file_nas_v1_nas_proto_msgTypes[132]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7713,7 +9107,7 @@ func (x *ListGroupsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGroupsRequest.ProtoReflect.Descriptor instead.
 func (*ListGroupsRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{115}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{132}
 }
 
 func (x *ListGroupsRequest) GetPageSize() int32 {
@@ -7748,7 +9142,7 @@ type ListGroupsResponse struct {
 
 func (x *ListGroupsResponse) Reset() {
 	*x = ListGroupsResponse{}
-	mi := &file_nas_v1_nas_proto_msgTypes[116]
+	mi := &file_nas_v1_nas_proto_msgTypes[133]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7760,7 +9154,7 @@ func (x *ListGroupsResponse) String() string {
 func (*ListGroupsResponse) ProtoMessage() {}
 
 func (x *ListGroupsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[116]
+	mi := &file_nas_v1_nas_proto_msgTypes[133]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7773,7 +9167,7 @@ func (x *ListGroupsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGroupsResponse.ProtoReflect.Descriptor instead.
 func (*ListGroupsResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{116}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{133}
 }
 
 func (x *ListGroupsResponse) GetGroups() []*Group {
@@ -7806,7 +9200,7 @@ type GetGroupRequest struct {
 
 func (x *GetGroupRequest) Reset() {
 	*x = GetGroupRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[117]
+	mi := &file_nas_v1_nas_proto_msgTypes[134]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7818,7 +9212,7 @@ func (x *GetGroupRequest) String() string {
 func (*GetGroupRequest) ProtoMessage() {}
 
 func (x *GetGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[117]
+	mi := &file_nas_v1_nas_proto_msgTypes[134]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7831,7 +9225,7 @@ func (x *GetGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGroupRequest.ProtoReflect.Descriptor instead.
 func (*GetGroupRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{117}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{134}
 }
 
 func (x *GetGroupRequest) GetName() string {
@@ -7851,7 +9245,7 @@ type CreateGroupRequest struct {
 
 func (x *CreateGroupRequest) Reset() {
 	*x = CreateGroupRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[118]
+	mi := &file_nas_v1_nas_proto_msgTypes[135]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7863,7 +9257,7 @@ func (x *CreateGroupRequest) String() string {
 func (*CreateGroupRequest) ProtoMessage() {}
 
 func (x *CreateGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[118]
+	mi := &file_nas_v1_nas_proto_msgTypes[135]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7876,7 +9270,7 @@ func (x *CreateGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateGroupRequest.ProtoReflect.Descriptor instead.
 func (*CreateGroupRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{118}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{135}
 }
 
 func (x *CreateGroupRequest) GetGroupId() string {
@@ -7903,7 +9297,7 @@ type UpdateGroupRequest struct {
 
 func (x *UpdateGroupRequest) Reset() {
 	*x = UpdateGroupRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[119]
+	mi := &file_nas_v1_nas_proto_msgTypes[136]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7915,7 +9309,7 @@ func (x *UpdateGroupRequest) String() string {
 func (*UpdateGroupRequest) ProtoMessage() {}
 
 func (x *UpdateGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[119]
+	mi := &file_nas_v1_nas_proto_msgTypes[136]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7928,7 +9322,7 @@ func (x *UpdateGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateGroupRequest.ProtoReflect.Descriptor instead.
 func (*UpdateGroupRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{119}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{136}
 }
 
 func (x *UpdateGroupRequest) GetGroup() *Group {
@@ -7954,7 +9348,7 @@ type DeleteGroupRequest struct {
 
 func (x *DeleteGroupRequest) Reset() {
 	*x = DeleteGroupRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[120]
+	mi := &file_nas_v1_nas_proto_msgTypes[137]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7966,7 +9360,7 @@ func (x *DeleteGroupRequest) String() string {
 func (*DeleteGroupRequest) ProtoMessage() {}
 
 func (x *DeleteGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[120]
+	mi := &file_nas_v1_nas_proto_msgTypes[137]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7979,7 +9373,7 @@ func (x *DeleteGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteGroupRequest.ProtoReflect.Descriptor instead.
 func (*DeleteGroupRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{120}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{137}
 }
 
 func (x *DeleteGroupRequest) GetName() string {
@@ -8011,7 +9405,7 @@ type CatalogApp struct {
 
 func (x *CatalogApp) Reset() {
 	*x = CatalogApp{}
-	mi := &file_nas_v1_nas_proto_msgTypes[121]
+	mi := &file_nas_v1_nas_proto_msgTypes[138]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8023,7 +9417,7 @@ func (x *CatalogApp) String() string {
 func (*CatalogApp) ProtoMessage() {}
 
 func (x *CatalogApp) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[121]
+	mi := &file_nas_v1_nas_proto_msgTypes[138]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8036,7 +9430,7 @@ func (x *CatalogApp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CatalogApp.ProtoReflect.Descriptor instead.
 func (*CatalogApp) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{121}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{138}
 }
 
 func (x *CatalogApp) GetAppId() string {
@@ -8150,7 +9544,7 @@ type ListCatalogAppsRequest struct {
 
 func (x *ListCatalogAppsRequest) Reset() {
 	*x = ListCatalogAppsRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[122]
+	mi := &file_nas_v1_nas_proto_msgTypes[139]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8162,7 +9556,7 @@ func (x *ListCatalogAppsRequest) String() string {
 func (*ListCatalogAppsRequest) ProtoMessage() {}
 
 func (x *ListCatalogAppsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[122]
+	mi := &file_nas_v1_nas_proto_msgTypes[139]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8175,7 +9569,7 @@ func (x *ListCatalogAppsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCatalogAppsRequest.ProtoReflect.Descriptor instead.
 func (*ListCatalogAppsRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{122}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{139}
 }
 
 func (x *ListCatalogAppsRequest) GetTrain() string {
@@ -8224,7 +9618,7 @@ type ListCatalogAppsResponse struct {
 
 func (x *ListCatalogAppsResponse) Reset() {
 	*x = ListCatalogAppsResponse{}
-	mi := &file_nas_v1_nas_proto_msgTypes[123]
+	mi := &file_nas_v1_nas_proto_msgTypes[140]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8236,7 +9630,7 @@ func (x *ListCatalogAppsResponse) String() string {
 func (*ListCatalogAppsResponse) ProtoMessage() {}
 
 func (x *ListCatalogAppsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[123]
+	mi := &file_nas_v1_nas_proto_msgTypes[140]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8249,7 +9643,7 @@ func (x *ListCatalogAppsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCatalogAppsResponse.ProtoReflect.Descriptor instead.
 func (*ListCatalogAppsResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{123}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{140}
 }
 
 func (x *ListCatalogAppsResponse) GetApps() []*CatalogApp {
@@ -8283,7 +9677,7 @@ type GetCatalogAppRequest struct {
 
 func (x *GetCatalogAppRequest) Reset() {
 	*x = GetCatalogAppRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[124]
+	mi := &file_nas_v1_nas_proto_msgTypes[141]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8295,7 +9689,7 @@ func (x *GetCatalogAppRequest) String() string {
 func (*GetCatalogAppRequest) ProtoMessage() {}
 
 func (x *GetCatalogAppRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[124]
+	mi := &file_nas_v1_nas_proto_msgTypes[141]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8308,7 +9702,7 @@ func (x *GetCatalogAppRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCatalogAppRequest.ProtoReflect.Descriptor instead.
 func (*GetCatalogAppRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{124}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{141}
 }
 
 func (x *GetCatalogAppRequest) GetAppId() string {
@@ -8334,7 +9728,7 @@ type SyncCatalogRequest struct {
 
 func (x *SyncCatalogRequest) Reset() {
 	*x = SyncCatalogRequest{}
-	mi := &file_nas_v1_nas_proto_msgTypes[125]
+	mi := &file_nas_v1_nas_proto_msgTypes[142]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8346,7 +9740,7 @@ func (x *SyncCatalogRequest) String() string {
 func (*SyncCatalogRequest) ProtoMessage() {}
 
 func (x *SyncCatalogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[125]
+	mi := &file_nas_v1_nas_proto_msgTypes[142]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8359,7 +9753,7 @@ func (x *SyncCatalogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncCatalogRequest.ProtoReflect.Descriptor instead.
 func (*SyncCatalogRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{125}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{142}
 }
 
 func (x *SyncCatalogRequest) GetForce() bool {
@@ -8381,7 +9775,7 @@ type SyncCatalogResponse struct {
 
 func (x *SyncCatalogResponse) Reset() {
 	*x = SyncCatalogResponse{}
-	mi := &file_nas_v1_nas_proto_msgTypes[126]
+	mi := &file_nas_v1_nas_proto_msgTypes[143]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8393,7 +9787,7 @@ func (x *SyncCatalogResponse) String() string {
 func (*SyncCatalogResponse) ProtoMessage() {}
 
 func (x *SyncCatalogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_nas_proto_msgTypes[126]
+	mi := &file_nas_v1_nas_proto_msgTypes[143]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8406,7 +9800,7 @@ func (x *SyncCatalogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncCatalogResponse.ProtoReflect.Descriptor instead.
 func (*SyncCatalogResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_nas_proto_rawDescGZIP(), []int{126}
+	return file_nas_v1_nas_proto_rawDescGZIP(), []int{143}
 }
 
 func (x *SyncCatalogResponse) GetSuccess() bool {
@@ -8746,7 +10140,64 @@ const file_nas_v1_nas_proto_rawDesc = "" +
 	"updateMask\"O\n" +
 	"\x16DeleteZfsVolumeRequest\x125\n" +
 	"\x04name\x18\x01 \x01(\tB!\xe2A\x01\x02\xfaA\x1a\n" +
-	"\x18nas.sigxcpu.io/ZfsVolumeR\x04name\"\xc8\x04\n" +
+	"\x18nas.sigxcpu.io/ZfsVolumeR\x04name\"\xc5\x03\n" +
+	"\x12VirtualMachineDisk\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x10\n" +
+	"\x03bus\x18\x02 \x01(\tR\x03bus\x12\x1b\n" +
+	"\tdisk_path\x18\x03 \x01(\tR\bdiskPath\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\x12\x1d\n" +
+	"\n" +
+	"cache_mode\x18\x05 \x01(\tR\tcacheMode\x12\x18\n" +
+	"\adiscard\x18\x06 \x01(\bR\adiscard\x12\x1a\n" +
+	"\biothread\x18\a \x01(\bR\biothread\x12\x1b\n" +
+	"\tread_only\x18\b \x01(\bR\breadOnly\x12#\n" +
+	"\rssd_emulation\x18\t \x01(\bR\fssdEmulation\x12\x16\n" +
+	"\x06backup\x18\n" +
+	" \x01(\bR\x06backup\x12&\n" +
+	"\x0fiops_limit_read\x18\v \x01(\x03R\riopsLimitRead\x12(\n" +
+	"\x10iops_limit_write\x18\f \x01(\x03R\x0eiopsLimitWrite\x12&\n" +
+	"\x0fmbps_limit_read\x18\r \x01(\x03R\rmbpsLimitRead\x12(\n" +
+	"\x10mbps_limit_write\x18\x0e \x01(\x03R\x0embpsLimitWrite\"\x82\x02\n" +
+	"\x1eVirtualMachineNetworkInterface\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05model\x18\x02 \x01(\tR\x05model\x12\x16\n" +
+	"\x06bridge\x18\x03 \x01(\tR\x06bridge\x12\x19\n" +
+	"\bvlan_tag\x18\x04 \x01(\x05R\avlanTag\x12\x1f\n" +
+	"\vmac_address\x18\x05 \x01(\tR\n" +
+	"macAddress\x12&\n" +
+	"\x0frate_limit_mbps\x18\x06 \x01(\x03R\rrateLimitMbps\x12\"\n" +
+	"\fdisconnected\x18\a \x01(\bR\fdisconnected\x12\x1a\n" +
+	"\bfirewall\x18\b \x01(\bR\bfirewall\"\x80\x02\n" +
+	"\x17VirtualMachineCloudInit\x12\x12\n" +
+	"\x04user\x18\x01 \x01(\tR\x04user\x12\x1a\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\x12&\n" +
+	"\x0fssh_public_keys\x18\x03 \x03(\tR\rsshPublicKeys\x12\x1b\n" +
+	"\tip_config\x18\x04 \x01(\tR\bipConfig\x12'\n" +
+	"\x0fdns_nameservers\x18\x05 \x01(\tR\x0ednsNameservers\x12\x1d\n" +
+	"\n" +
+	"dns_search\x18\x06 \x01(\tR\tdnsSearch\x12(\n" +
+	"\x10custom_user_data\x18\a \x01(\tR\x0ecustomUserData\"q\n" +
+	"\x17VirtualMachinePciDevice\x12!\n" +
+	"\fhost_address\x18\x01 \x01(\tR\vhostAddress\x12\x12\n" +
+	"\x04pcie\x18\x02 \x01(\bR\x04pcie\x12\x1f\n" +
+	"\vprimary_gpu\x18\x03 \x01(\bR\n" +
+	"primaryGpu\"i\n" +
+	"\x17VirtualMachineUsbDevice\x12\"\n" +
+	"\rhost_bus_port\x18\x01 \x01(\tR\vhostBusPort\x12*\n" +
+	"\x11vendor_product_id\x18\x02 \x01(\tR\x0fvendorProductId\"\x96\x03\n" +
+	"\x16VirtualMachineSnapshot\x12\x18\n" +
+	"\x04name\x18\x01 \x01(\tB\x04\xe2A\x01\bR\x04name\x12\x1f\n" +
+	"\vsnapshot_id\x18\x02 \x01(\tR\n" +
+	"snapshotId\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12A\n" +
+	"\vcreate_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\x04\xe2A\x01\x03R\n" +
+	"createTime\x12\x1f\n" +
+	"\vinclude_ram\x18\x05 \x01(\bR\n" +
+	"includeRam\x12'\n" +
+	"\x0fparent_snapshot\x18\x06 \x01(\tR\x0eparentSnapshot\x12\x19\n" +
+	"\bvm_state\x18\a \x01(\tR\avmState:w\xeaAt\n" +
+	"%nas.sigxcpu.io/VirtualMachineSnapshot\x126virtualMachines/{virtual_machine}/snapshots/{snapshot}*\tsnapshots2\bsnapshot\"\xe2\x0e\n" +
 	"\x0eVirtualMachine\x12\x18\n" +
 	"\x04name\x18\x01 \x01(\tB\x04\xe2A\x01\bR\x04name\x12\x1d\n" +
 	"\avm_name\x18\x02 \x01(\tB\x04\xe2A\x01\x03R\x06vmName\x12\x18\n" +
@@ -8766,7 +10217,46 @@ const file_nas_v1_nas_proto_rawDesc = "" +
 	"\tautostart\x18\r \x01(\bR\tautostart\x12\x1d\n" +
 	"\n" +
 	"os_variant\x18\x0e \x01(\tR\tosVariant\x12 \n" +
-	"\vdescription\x18\x0f \x01(\tR\vdescription:f\xeaAc\n" +
+	"\vdescription\x18\x0f \x01(\tR\vdescription\x12\x18\n" +
+	"\asockets\x18\x10 \x01(\x05R\asockets\x12\x14\n" +
+	"\x05cores\x18\x11 \x01(\x05R\x05cores\x12\x19\n" +
+	"\bcpu_type\x18\x12 \x01(\tR\acpuType\x12\x1b\n" +
+	"\tcpu_units\x18\x13 \x01(\x05R\bcpuUnits\x12\x1b\n" +
+	"\tcpu_limit\x18\x14 \x01(\x05R\bcpuLimit\x12\x12\n" +
+	"\x04numa\x18\x15 \x01(\bR\x04numa\x12&\n" +
+	"\x0fballoon_min_mib\x18\x16 \x01(\x03R\rballoonMinMib\x12\x1c\n" +
+	"\thugepages\x18\x17 \x01(\tR\thugepages\x12!\n" +
+	"\fmachine_type\x18\x18 \x01(\tR\vmachineType\x12\x1b\n" +
+	"\tbios_type\x18\x19 \x01(\tR\bbiosType\x12\x1f\n" +
+	"\vtpm_version\x18\x1a \x01(\tR\n" +
+	"tpmVersion\x12\x1f\n" +
+	"\vsecure_boot\x18\x1b \x01(\bR\n" +
+	"secureBoot\x120\n" +
+	"\x05disks\x18\x1c \x03(\v2\x1a.nas.v1.VirtualMachineDiskR\x05disks\x12&\n" +
+	"\x0fcdrom_iso_image\x18\x1d \x01(\tR\rcdromIsoImage\x12U\n" +
+	"\x12network_interfaces\x18\x1e \x03(\v2&.nas.v1.VirtualMachineNetworkInterfaceR\x11networkInterfaces\x12>\n" +
+	"\n" +
+	"cloud_init\x18\x1f \x01(\v2\x1f.nas.v1.VirtualMachineCloudInitR\tcloudInit\x12@\n" +
+	"\vpci_devices\x18  \x03(\v2\x1f.nas.v1.VirtualMachinePciDeviceR\n" +
+	"pciDevices\x12@\n" +
+	"\vusb_devices\x18! \x03(\v2\x1f.nas.v1.VirtualMachineUsbDeviceR\n" +
+	"usbDevices\x12#\n" +
+	"\ragent_enabled\x18\" \x01(\bR\fagentEnabled\x12#\n" +
+	"\ragent_running\x18# \x01(\bR\fagentRunning\x12,\n" +
+	"\x12guest_ip_addresses\x18$ \x03(\tR\x10guestIpAddresses\x12\"\n" +
+	"\rguest_os_name\x18% \x01(\tR\vguestOsName\x12*\n" +
+	"\x11guest_cpu_percent\x18& \x01(\x01R\x0fguestCpuPercent\x121\n" +
+	"\x15guest_memory_used_mib\x18' \x01(\x03R\x12guestMemoryUsedMib\x122\n" +
+	"\x15startup_delay_seconds\x18( \x01(\x05R\x13startupDelaySeconds\x12\x1d\n" +
+	"\n" +
+	"boot_order\x18) \x01(\tR\tbootOrder\x12%\n" +
+	"\x0ewatchdog_model\x18* \x01(\tR\rwatchdogModel\x12'\n" +
+	"\x0fwatchdog_action\x18+ \x01(\tR\x0ewatchdogAction\x12!\n" +
+	"\fdisplay_type\x18, \x01(\tR\vdisplayType\x12\x1f\n" +
+	"\vis_template\x18- \x01(\bR\n" +
+	"isTemplate\x122\n" +
+	"\x15qemu_commandline_args\x18. \x03(\tR\x13qemuCommandlineArgs\x12,\n" +
+	"\x12serial_console_url\x18/ \x01(\tR\x10serialConsoleUrl:f\xeaAc\n" +
 	"\x1dnas.sigxcpu.io/VirtualMachine\x12!virtualMachines/{virtual_machine}*\x0fvirtualMachines2\x0evirtualMachine\"p\n" +
 	"\x1aListVirtualMachinesRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
@@ -8813,7 +10303,56 @@ const file_nas_v1_nas_proto_rawDesc = "" +
 	"resolution\x18\x05 \x01(\tR\n" +
 	"resolution\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\x06 \x01(\tR\texpiresAt\"\xe6\x05\n" +
+	"expires_at\x18\x06 \x01(\tR\texpiresAt\"X\n" +
+	"\x1aResetVirtualMachineRequest\x12:\n" +
+	"\x04name\x18\x01 \x01(\tB&\xe2A\x01\x02\xfaA\x1f\n" +
+	"\x1dnas.sigxcpu.io/VirtualMachineR\x04name\"X\n" +
+	"\x1aPauseVirtualMachineRequest\x12:\n" +
+	"\x04name\x18\x01 \x01(\tB&\xe2A\x01\x02\xfaA\x1f\n" +
+	"\x1dnas.sigxcpu.io/VirtualMachineR\x04name\"Y\n" +
+	"\x1bResumeVirtualMachineRequest\x12:\n" +
+	"\x04name\x18\x01 \x01(\tB&\xe2A\x01\x02\xfaA\x1f\n" +
+	"\x1dnas.sigxcpu.io/VirtualMachineR\x04name\"\xf2\x01\n" +
+	"\x1aCloneVirtualMachineRequest\x12:\n" +
+	"\x04name\x18\x01 \x01(\tB&\xe2A\x01\x02\xfaA\x1f\n" +
+	"\x1dnas.sigxcpu.io/VirtualMachineR\x04name\x129\n" +
+	"\x16new_virtual_machine_id\x18\x02 \x01(\tB\x04\xe2A\x01\x02R\x13newVirtualMachineId\x12\x19\n" +
+	"\bnew_name\x18\x03 \x01(\tR\anewName\x12\x1f\n" +
+	"\vtarget_pool\x18\x04 \x01(\tR\n" +
+	"targetPool\x12!\n" +
+	"\flinked_clone\x18\x05 \x01(\bR\vlinkedClone\"\x9c\x01\n" +
+	" AttachVirtualMachineMediaRequest\x12:\n" +
+	"\x04name\x18\x01 \x01(\tB&\xe2A\x01\x02\xfaA\x1f\n" +
+	"\x1dnas.sigxcpu.io/VirtualMachineR\x04name\x12\x1b\n" +
+	"\tdevice_id\x18\x02 \x01(\tR\bdeviceId\x12\x1f\n" +
+	"\biso_path\x18\x03 \x01(\tB\x04\xe2A\x01\x02R\aisoPath\"z\n" +
+	"\x1fEjectVirtualMachineMediaRequest\x12:\n" +
+	"\x04name\x18\x01 \x01(\tB&\xe2A\x01\x02\xfaA\x1f\n" +
+	"\x1dnas.sigxcpu.io/VirtualMachineR\x04name\x12\x1b\n" +
+	"\tdevice_id\x18\x02 \x01(\tR\bdeviceId\"\xa0\x01\n" +
+	"\"ListVirtualMachineSnapshotsRequest\x12>\n" +
+	"\x06parent\x18\x01 \x01(\tB&\xe2A\x01\x02\xfaA\x1f\n" +
+	"\x1dnas.sigxcpu.io/VirtualMachineR\x06parent\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"\xaa\x01\n" +
+	"#ListVirtualMachineSnapshotsResponse\x12<\n" +
+	"\tsnapshots\x18\x01 \x03(\v2\x1e.nas.v1.VirtualMachineSnapshotR\tsnapshots\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12\x1d\n" +
+	"\n" +
+	"total_size\x18\x03 \x01(\x05R\ttotalSize\"\xce\x01\n" +
+	"#CreateVirtualMachineSnapshotRequest\x12>\n" +
+	"\x06parent\x18\x01 \x01(\tB&\xe2A\x01\x02\xfaA\x1f\n" +
+	"\x1dnas.sigxcpu.io/VirtualMachineR\x06parent\x12%\n" +
+	"\vsnapshot_id\x18\x02 \x01(\tB\x04\xe2A\x01\x02R\n" +
+	"snapshotId\x12@\n" +
+	"\bsnapshot\x18\x03 \x01(\v2\x1e.nas.v1.VirtualMachineSnapshotB\x04\xe2A\x01\x02R\bsnapshot\"k\n" +
+	"%RollbackVirtualMachineSnapshotRequest\x12B\n" +
+	"\x04name\x18\x01 \x01(\tB.\xe2A\x01\x02\xfaA'\n" +
+	"%nas.sigxcpu.io/VirtualMachineSnapshotR\x04name\"i\n" +
+	"#DeleteVirtualMachineSnapshotRequest\x12B\n" +
+	"\x04name\x18\x01 \x01(\tB.\xe2A\x01\x02\xfaA'\n" +
+	"%nas.sigxcpu.io/VirtualMachineSnapshotR\x04name\"\xe6\x05\n" +
 	"\x0fDockerContainer\x12\x18\n" +
 	"\x04name\x18\x01 \x01(\tB\x04\xe2A\x01\bR\x04name\x12'\n" +
 	"\fcontainer_id\x18\x02 \x01(\tB\x04\xe2A\x01\x03R\vcontainerId\x12+\n" +
@@ -9250,7 +10789,7 @@ const file_nas_v1_nas_proto_rawDesc = "" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1d\n" +
 	"\n" +
 	"total_apps\x18\x03 \x01(\x05R\ttotalApps\x12$\n" +
-	"\x0elast_sync_time\x18\x04 \x01(\tR\flastSyncTime2\xf1R\n" +
+	"\x0elast_sync_time\x18\x04 \x01(\tR\flastSyncTime2\xe1^\n" +
 	"\n" +
 	"NasService\x12O\n" +
 	"\x05Login\x12\x14.nas.v1.LoginRequest\x1a\x15.nas.v1.LoginResponse\"\x19\x82\xd3\xe4\x93\x02\x13:\x01*\"\x0e/v1/auth:login\x12R\n" +
@@ -9289,7 +10828,17 @@ const file_nas_v1_nas_proto_rawDesc = "" +
 	"\x14DeleteVirtualMachine\x12#.nas.v1.DeleteVirtualMachineRequest\x1a\x16.google.protobuf.Empty\"+\xdaA\x04name\x82\xd3\xe4\x93\x02\x1e*\x1c/v1/{name=virtualMachines/*}\x12\x80\x01\n" +
 	"\x13StartVirtualMachine\x12\".nas.v1.StartVirtualMachineRequest\x1a\x16.nas.v1.VirtualMachine\"-\x82\xd3\xe4\x93\x02':\x01*\"\"/v1/{name=virtualMachines/*}:start\x12}\n" +
 	"\x12StopVirtualMachine\x12!.nas.v1.StopVirtualMachineRequest\x1a\x16.nas.v1.VirtualMachine\",\x82\xd3\xe4\x93\x02&:\x01*\"!/v1/{name=virtualMachines/*}:stop\x12\x83\x01\n" +
-	"\x14RebootVirtualMachine\x12#.nas.v1.RebootVirtualMachineRequest\x1a\x16.nas.v1.VirtualMachine\".\x82\xd3\xe4\x93\x02(:\x01*\"#/v1/{name=virtualMachines/*}:reboot\x12\xa0\x01\n" +
+	"\x14RebootVirtualMachine\x12#.nas.v1.RebootVirtualMachineRequest\x1a\x16.nas.v1.VirtualMachine\".\x82\xd3\xe4\x93\x02(:\x01*\"#/v1/{name=virtualMachines/*}:reboot\x12\x80\x01\n" +
+	"\x13ResetVirtualMachine\x12\".nas.v1.ResetVirtualMachineRequest\x1a\x16.nas.v1.VirtualMachine\"-\x82\xd3\xe4\x93\x02':\x01*\"\"/v1/{name=virtualMachines/*}:reset\x12\x80\x01\n" +
+	"\x13PauseVirtualMachine\x12\".nas.v1.PauseVirtualMachineRequest\x1a\x16.nas.v1.VirtualMachine\"-\x82\xd3\xe4\x93\x02':\x01*\"\"/v1/{name=virtualMachines/*}:pause\x12\x83\x01\n" +
+	"\x14ResumeVirtualMachine\x12#.nas.v1.ResumeVirtualMachineRequest\x1a\x16.nas.v1.VirtualMachine\".\x82\xd3\xe4\x93\x02(:\x01*\"#/v1/{name=virtualMachines/*}:resume\x12\x80\x01\n" +
+	"\x13CloneVirtualMachine\x12\".nas.v1.CloneVirtualMachineRequest\x1a\x16.nas.v1.VirtualMachine\"-\x82\xd3\xe4\x93\x02':\x01*\"\"/v1/{name=virtualMachines/*}:clone\x12\x92\x01\n" +
+	"\x19AttachVirtualMachineMedia\x12(.nas.v1.AttachVirtualMachineMediaRequest\x1a\x16.nas.v1.VirtualMachine\"3\x82\xd3\xe4\x93\x02-:\x01*\"(/v1/{name=virtualMachines/*}:attachMedia\x12\x8f\x01\n" +
+	"\x18EjectVirtualMachineMedia\x12'.nas.v1.EjectVirtualMachineMediaRequest\x1a\x16.nas.v1.VirtualMachine\"2\x82\xd3\xe4\x93\x02,:\x01*\"'/v1/{name=virtualMachines/*}:ejectMedia\x12\xa8\x01\n" +
+	"\x1bListVirtualMachineSnapshots\x12*.nas.v1.ListVirtualMachineSnapshotsRequest\x1a+.nas.v1.ListVirtualMachineSnapshotsResponse\"0\x82\xd3\xe4\x93\x02*\x12(/v1/{parent=virtualMachines/*}/snapshots\x12\xc5\x01\n" +
+	"\x1cCreateVirtualMachineSnapshot\x12+.nas.v1.CreateVirtualMachineSnapshotRequest\x1a\x1e.nas.v1.VirtualMachineSnapshot\"X\xdaA\x1bparent,snapshot,snapshot_id\x82\xd3\xe4\x93\x024:\bsnapshot\"(/v1/{parent=virtualMachines/*}/snapshots\x12\xa5\x01\n" +
+	"\x1eRollbackVirtualMachineSnapshot\x12-.nas.v1.RollbackVirtualMachineSnapshotRequest\x1a\x16.nas.v1.VirtualMachine\"<\x82\xd3\xe4\x93\x026:\x01*\"1/v1/{name=virtualMachines/*/snapshots/*}:rollback\x12\x9c\x01\n" +
+	"\x1cDeleteVirtualMachineSnapshot\x12+.nas.v1.DeleteVirtualMachineSnapshotRequest\x1a\x16.google.protobuf.Empty\"7\xdaA\x04name\x82\xd3\xe4\x93\x02**(/v1/{name=virtualMachines/*/snapshots/*}\x12\xa0\x01\n" +
 	"\x19OpenVirtualMachineConsole\x12(.nas.v1.OpenVirtualMachineConsoleRequest\x1a$.nas.v1.VirtualMachineConsoleSession\"3\x82\xd3\xe4\x93\x02-:\x01*\"(/v1/{name=virtualMachines/*}:openConsole\x12\x7f\n" +
 	"\x14ListDockerContainers\x12#.nas.v1.ListDockerContainersRequest\x1a$.nas.v1.ListDockerContainersResponse\"\x1c\x82\xd3\xe4\x93\x02\x16\x12\x14/v1/dockerContainers\x12~\n" +
 	"\x12GetDockerContainer\x12!.nas.v1.GetDockerContainerRequest\x1a\x17.nas.v1.DockerContainer\",\xdaA\x04name\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/{name=dockerContainers/*}\x12\xad\x01\n" +
@@ -9365,142 +10914,159 @@ func file_nas_v1_nas_proto_rawDescGZIP() []byte {
 	return file_nas_v1_nas_proto_rawDescData
 }
 
-var file_nas_v1_nas_proto_msgTypes = make([]protoimpl.MessageInfo, 127)
+var file_nas_v1_nas_proto_msgTypes = make([]protoimpl.MessageInfo, 144)
 var file_nas_v1_nas_proto_goTypes = []any{
-	(*LoginRequest)(nil),                      // 0: nas.v1.LoginRequest
-	(*LoginResponse)(nil),                     // 1: nas.v1.LoginResponse
-	(*GetCurrentUserRequest)(nil),             // 2: nas.v1.GetCurrentUserRequest
-	(*Prerequisite)(nil),                      // 3: nas.v1.Prerequisite
-	(*ListPrerequisitesRequest)(nil),          // 4: nas.v1.ListPrerequisitesRequest
-	(*ListPrerequisitesResponse)(nil),         // 5: nas.v1.ListPrerequisitesResponse
-	(*GetPrerequisiteRequest)(nil),            // 6: nas.v1.GetPrerequisiteRequest
-	(*CheckPrerequisitesRequest)(nil),         // 7: nas.v1.CheckPrerequisitesRequest
-	(*CheckPrerequisitesResponse)(nil),        // 8: nas.v1.CheckPrerequisitesResponse
-	(*DiskPartition)(nil),                     // 9: nas.v1.DiskPartition
-	(*SmartParameter)(nil),                    // 10: nas.v1.SmartParameter
-	(*Disk)(nil),                              // 11: nas.v1.Disk
-	(*ListDisksRequest)(nil),                  // 12: nas.v1.ListDisksRequest
-	(*ListDisksResponse)(nil),                 // 13: nas.v1.ListDisksResponse
-	(*GetDiskRequest)(nil),                    // 14: nas.v1.GetDiskRequest
-	(*ZfsPool)(nil),                           // 15: nas.v1.ZfsPool
-	(*ZfsVdev)(nil),                           // 16: nas.v1.ZfsVdev
-	(*ListZfsPoolsRequest)(nil),               // 17: nas.v1.ListZfsPoolsRequest
-	(*ListZfsPoolsResponse)(nil),              // 18: nas.v1.ListZfsPoolsResponse
-	(*GetZfsPoolRequest)(nil),                 // 19: nas.v1.GetZfsPoolRequest
-	(*CreateZfsPoolRequest)(nil),              // 20: nas.v1.CreateZfsPoolRequest
-	(*DeleteZfsPoolRequest)(nil),              // 21: nas.v1.DeleteZfsPoolRequest
-	(*ScrubZfsPoolRequest)(nil),               // 22: nas.v1.ScrubZfsPoolRequest
-	(*UpdateZfsPoolRequest)(nil),              // 23: nas.v1.UpdateZfsPoolRequest
-	(*AddZfsPoolVdevRequest)(nil),             // 24: nas.v1.AddZfsPoolVdevRequest
-	(*RemoveZfsPoolVdevRequest)(nil),          // 25: nas.v1.RemoveZfsPoolVdevRequest
-	(*ZfsDataset)(nil),                        // 26: nas.v1.ZfsDataset
-	(*ListZfsDatasetsRequest)(nil),            // 27: nas.v1.ListZfsDatasetsRequest
-	(*ListZfsDatasetsResponse)(nil),           // 28: nas.v1.ListZfsDatasetsResponse
-	(*GetZfsDatasetRequest)(nil),              // 29: nas.v1.GetZfsDatasetRequest
-	(*CreateZfsDatasetRequest)(nil),           // 30: nas.v1.CreateZfsDatasetRequest
-	(*UpdateZfsDatasetRequest)(nil),           // 31: nas.v1.UpdateZfsDatasetRequest
-	(*DeleteZfsDatasetRequest)(nil),           // 32: nas.v1.DeleteZfsDatasetRequest
-	(*SnapshotZfsDatasetRequest)(nil),         // 33: nas.v1.SnapshotZfsDatasetRequest
-	(*ZfsVolume)(nil),                         // 34: nas.v1.ZfsVolume
-	(*ListZfsVolumesRequest)(nil),             // 35: nas.v1.ListZfsVolumesRequest
-	(*ListZfsVolumesResponse)(nil),            // 36: nas.v1.ListZfsVolumesResponse
-	(*GetZfsVolumeRequest)(nil),               // 37: nas.v1.GetZfsVolumeRequest
-	(*CreateZfsVolumeRequest)(nil),            // 38: nas.v1.CreateZfsVolumeRequest
-	(*UpdateZfsVolumeRequest)(nil),            // 39: nas.v1.UpdateZfsVolumeRequest
-	(*DeleteZfsVolumeRequest)(nil),            // 40: nas.v1.DeleteZfsVolumeRequest
-	(*VirtualMachine)(nil),                    // 41: nas.v1.VirtualMachine
-	(*ListVirtualMachinesRequest)(nil),        // 42: nas.v1.ListVirtualMachinesRequest
-	(*ListVirtualMachinesResponse)(nil),       // 43: nas.v1.ListVirtualMachinesResponse
-	(*GetVirtualMachineRequest)(nil),          // 44: nas.v1.GetVirtualMachineRequest
-	(*CreateVirtualMachineRequest)(nil),       // 45: nas.v1.CreateVirtualMachineRequest
-	(*UpdateVirtualMachineRequest)(nil),       // 46: nas.v1.UpdateVirtualMachineRequest
-	(*DeleteVirtualMachineRequest)(nil),       // 47: nas.v1.DeleteVirtualMachineRequest
-	(*StartVirtualMachineRequest)(nil),        // 48: nas.v1.StartVirtualMachineRequest
-	(*StopVirtualMachineRequest)(nil),         // 49: nas.v1.StopVirtualMachineRequest
-	(*RebootVirtualMachineRequest)(nil),       // 50: nas.v1.RebootVirtualMachineRequest
-	(*OpenVirtualMachineConsoleRequest)(nil),  // 51: nas.v1.OpenVirtualMachineConsoleRequest
-	(*VirtualMachineConsoleSession)(nil),      // 52: nas.v1.VirtualMachineConsoleSession
-	(*DockerContainer)(nil),                   // 53: nas.v1.DockerContainer
-	(*ListDockerContainersRequest)(nil),       // 54: nas.v1.ListDockerContainersRequest
-	(*ListDockerContainersResponse)(nil),      // 55: nas.v1.ListDockerContainersResponse
-	(*GetDockerContainerRequest)(nil),         // 56: nas.v1.GetDockerContainerRequest
-	(*CreateDockerContainerRequest)(nil),      // 57: nas.v1.CreateDockerContainerRequest
-	(*UpdateDockerContainerRequest)(nil),      // 58: nas.v1.UpdateDockerContainerRequest
-	(*GetDockerContainerLogsRequest)(nil),     // 59: nas.v1.GetDockerContainerLogsRequest
-	(*GetDockerContainerLogsResponse)(nil),    // 60: nas.v1.GetDockerContainerLogsResponse
-	(*DeleteDockerContainerRequest)(nil),      // 61: nas.v1.DeleteDockerContainerRequest
-	(*StartDockerContainerRequest)(nil),       // 62: nas.v1.StartDockerContainerRequest
-	(*StopDockerContainerRequest)(nil),        // 63: nas.v1.StopDockerContainerRequest
-	(*RestartDockerContainerRequest)(nil),     // 64: nas.v1.RestartDockerContainerRequest
-	(*DockerApp)(nil),                         // 65: nas.v1.DockerApp
-	(*DockerAppContainer)(nil),                // 66: nas.v1.DockerAppContainer
-	(*ListDockerAppsRequest)(nil),             // 67: nas.v1.ListDockerAppsRequest
-	(*ListDockerAppsResponse)(nil),            // 68: nas.v1.ListDockerAppsResponse
-	(*GetDockerAppRequest)(nil),               // 69: nas.v1.GetDockerAppRequest
-	(*CreateDockerAppRequest)(nil),            // 70: nas.v1.CreateDockerAppRequest
-	(*UpdateDockerAppRequest)(nil),            // 71: nas.v1.UpdateDockerAppRequest
-	(*DeleteDockerAppRequest)(nil),            // 72: nas.v1.DeleteDockerAppRequest
-	(*StartDockerAppRequest)(nil),             // 73: nas.v1.StartDockerAppRequest
-	(*StopDockerAppRequest)(nil),              // 74: nas.v1.StopDockerAppRequest
-	(*RestartDockerAppRequest)(nil),           // 75: nas.v1.RestartDockerAppRequest
-	(*GetDockerAppLogsRequest)(nil),           // 76: nas.v1.GetDockerAppLogsRequest
-	(*GetDockerAppLogsResponse)(nil),          // 77: nas.v1.GetDockerAppLogsResponse
-	(*DockerConfig)(nil),                      // 78: nas.v1.DockerConfig
-	(*GetDockerConfigRequest)(nil),            // 79: nas.v1.GetDockerConfigRequest
-	(*UpdateDockerConfigRequest)(nil),         // 80: nas.v1.UpdateDockerConfigRequest
-	(*DirectoryEntry)(nil),                    // 81: nas.v1.DirectoryEntry
-	(*ListFileSystemDirectoriesRequest)(nil),  // 82: nas.v1.ListFileSystemDirectoriesRequest
-	(*ListFileSystemDirectoriesResponse)(nil), // 83: nas.v1.ListFileSystemDirectoriesResponse
-	(*LxcContainer)(nil),                      // 84: nas.v1.LxcContainer
-	(*ListLxcContainersRequest)(nil),          // 85: nas.v1.ListLxcContainersRequest
-	(*ListLxcContainersResponse)(nil),         // 86: nas.v1.ListLxcContainersResponse
-	(*GetLxcContainerRequest)(nil),            // 87: nas.v1.GetLxcContainerRequest
-	(*CreateLxcContainerRequest)(nil),         // 88: nas.v1.CreateLxcContainerRequest
-	(*DeleteLxcContainerRequest)(nil),         // 89: nas.v1.DeleteLxcContainerRequest
-	(*StartLxcContainerRequest)(nil),          // 90: nas.v1.StartLxcContainerRequest
-	(*StopLxcContainerRequest)(nil),           // 91: nas.v1.StopLxcContainerRequest
-	(*FreezeLxcContainerRequest)(nil),         // 92: nas.v1.FreezeLxcContainerRequest
-	(*CifsShare)(nil),                         // 93: nas.v1.CifsShare
-	(*ListCifsSharesRequest)(nil),             // 94: nas.v1.ListCifsSharesRequest
-	(*ListCifsSharesResponse)(nil),            // 95: nas.v1.ListCifsSharesResponse
-	(*GetCifsShareRequest)(nil),               // 96: nas.v1.GetCifsShareRequest
-	(*CreateCifsShareRequest)(nil),            // 97: nas.v1.CreateCifsShareRequest
-	(*UpdateCifsShareRequest)(nil),            // 98: nas.v1.UpdateCifsShareRequest
-	(*DeleteCifsShareRequest)(nil),            // 99: nas.v1.DeleteCifsShareRequest
-	(*WebdavShare)(nil),                       // 100: nas.v1.WebdavShare
-	(*ListWebdavSharesRequest)(nil),           // 101: nas.v1.ListWebdavSharesRequest
-	(*ListWebdavSharesResponse)(nil),          // 102: nas.v1.ListWebdavSharesResponse
-	(*GetWebdavShareRequest)(nil),             // 103: nas.v1.GetWebdavShareRequest
-	(*CreateWebdavShareRequest)(nil),          // 104: nas.v1.CreateWebdavShareRequest
-	(*UpdateWebdavShareRequest)(nil),          // 105: nas.v1.UpdateWebdavShareRequest
-	(*DeleteWebdavShareRequest)(nil),          // 106: nas.v1.DeleteWebdavShareRequest
-	(*User)(nil),                              // 107: nas.v1.User
-	(*ListUsersRequest)(nil),                  // 108: nas.v1.ListUsersRequest
-	(*ListUsersResponse)(nil),                 // 109: nas.v1.ListUsersResponse
-	(*GetUserRequest)(nil),                    // 110: nas.v1.GetUserRequest
-	(*CreateUserRequest)(nil),                 // 111: nas.v1.CreateUserRequest
-	(*UpdateUserRequest)(nil),                 // 112: nas.v1.UpdateUserRequest
-	(*DeleteUserRequest)(nil),                 // 113: nas.v1.DeleteUserRequest
-	(*Group)(nil),                             // 114: nas.v1.Group
-	(*ListGroupsRequest)(nil),                 // 115: nas.v1.ListGroupsRequest
-	(*ListGroupsResponse)(nil),                // 116: nas.v1.ListGroupsResponse
-	(*GetGroupRequest)(nil),                   // 117: nas.v1.GetGroupRequest
-	(*CreateGroupRequest)(nil),                // 118: nas.v1.CreateGroupRequest
-	(*UpdateGroupRequest)(nil),                // 119: nas.v1.UpdateGroupRequest
-	(*DeleteGroupRequest)(nil),                // 120: nas.v1.DeleteGroupRequest
-	(*CatalogApp)(nil),                        // 121: nas.v1.CatalogApp
-	(*ListCatalogAppsRequest)(nil),            // 122: nas.v1.ListCatalogAppsRequest
-	(*ListCatalogAppsResponse)(nil),           // 123: nas.v1.ListCatalogAppsResponse
-	(*GetCatalogAppRequest)(nil),              // 124: nas.v1.GetCatalogAppRequest
-	(*SyncCatalogRequest)(nil),                // 125: nas.v1.SyncCatalogRequest
-	(*SyncCatalogResponse)(nil),               // 126: nas.v1.SyncCatalogResponse
-	(*timestamppb.Timestamp)(nil),             // 127: google.protobuf.Timestamp
-	(*fieldmaskpb.FieldMask)(nil),             // 128: google.protobuf.FieldMask
-	(*emptypb.Empty)(nil),                     // 129: google.protobuf.Empty
+	(*LoginRequest)(nil),                          // 0: nas.v1.LoginRequest
+	(*LoginResponse)(nil),                         // 1: nas.v1.LoginResponse
+	(*GetCurrentUserRequest)(nil),                 // 2: nas.v1.GetCurrentUserRequest
+	(*Prerequisite)(nil),                          // 3: nas.v1.Prerequisite
+	(*ListPrerequisitesRequest)(nil),              // 4: nas.v1.ListPrerequisitesRequest
+	(*ListPrerequisitesResponse)(nil),             // 5: nas.v1.ListPrerequisitesResponse
+	(*GetPrerequisiteRequest)(nil),                // 6: nas.v1.GetPrerequisiteRequest
+	(*CheckPrerequisitesRequest)(nil),             // 7: nas.v1.CheckPrerequisitesRequest
+	(*CheckPrerequisitesResponse)(nil),            // 8: nas.v1.CheckPrerequisitesResponse
+	(*DiskPartition)(nil),                         // 9: nas.v1.DiskPartition
+	(*SmartParameter)(nil),                        // 10: nas.v1.SmartParameter
+	(*Disk)(nil),                                  // 11: nas.v1.Disk
+	(*ListDisksRequest)(nil),                      // 12: nas.v1.ListDisksRequest
+	(*ListDisksResponse)(nil),                     // 13: nas.v1.ListDisksResponse
+	(*GetDiskRequest)(nil),                        // 14: nas.v1.GetDiskRequest
+	(*ZfsPool)(nil),                               // 15: nas.v1.ZfsPool
+	(*ZfsVdev)(nil),                               // 16: nas.v1.ZfsVdev
+	(*ListZfsPoolsRequest)(nil),                   // 17: nas.v1.ListZfsPoolsRequest
+	(*ListZfsPoolsResponse)(nil),                  // 18: nas.v1.ListZfsPoolsResponse
+	(*GetZfsPoolRequest)(nil),                     // 19: nas.v1.GetZfsPoolRequest
+	(*CreateZfsPoolRequest)(nil),                  // 20: nas.v1.CreateZfsPoolRequest
+	(*DeleteZfsPoolRequest)(nil),                  // 21: nas.v1.DeleteZfsPoolRequest
+	(*ScrubZfsPoolRequest)(nil),                   // 22: nas.v1.ScrubZfsPoolRequest
+	(*UpdateZfsPoolRequest)(nil),                  // 23: nas.v1.UpdateZfsPoolRequest
+	(*AddZfsPoolVdevRequest)(nil),                 // 24: nas.v1.AddZfsPoolVdevRequest
+	(*RemoveZfsPoolVdevRequest)(nil),              // 25: nas.v1.RemoveZfsPoolVdevRequest
+	(*ZfsDataset)(nil),                            // 26: nas.v1.ZfsDataset
+	(*ListZfsDatasetsRequest)(nil),                // 27: nas.v1.ListZfsDatasetsRequest
+	(*ListZfsDatasetsResponse)(nil),               // 28: nas.v1.ListZfsDatasetsResponse
+	(*GetZfsDatasetRequest)(nil),                  // 29: nas.v1.GetZfsDatasetRequest
+	(*CreateZfsDatasetRequest)(nil),               // 30: nas.v1.CreateZfsDatasetRequest
+	(*UpdateZfsDatasetRequest)(nil),               // 31: nas.v1.UpdateZfsDatasetRequest
+	(*DeleteZfsDatasetRequest)(nil),               // 32: nas.v1.DeleteZfsDatasetRequest
+	(*SnapshotZfsDatasetRequest)(nil),             // 33: nas.v1.SnapshotZfsDatasetRequest
+	(*ZfsVolume)(nil),                             // 34: nas.v1.ZfsVolume
+	(*ListZfsVolumesRequest)(nil),                 // 35: nas.v1.ListZfsVolumesRequest
+	(*ListZfsVolumesResponse)(nil),                // 36: nas.v1.ListZfsVolumesResponse
+	(*GetZfsVolumeRequest)(nil),                   // 37: nas.v1.GetZfsVolumeRequest
+	(*CreateZfsVolumeRequest)(nil),                // 38: nas.v1.CreateZfsVolumeRequest
+	(*UpdateZfsVolumeRequest)(nil),                // 39: nas.v1.UpdateZfsVolumeRequest
+	(*DeleteZfsVolumeRequest)(nil),                // 40: nas.v1.DeleteZfsVolumeRequest
+	(*VirtualMachineDisk)(nil),                    // 41: nas.v1.VirtualMachineDisk
+	(*VirtualMachineNetworkInterface)(nil),        // 42: nas.v1.VirtualMachineNetworkInterface
+	(*VirtualMachineCloudInit)(nil),               // 43: nas.v1.VirtualMachineCloudInit
+	(*VirtualMachinePciDevice)(nil),               // 44: nas.v1.VirtualMachinePciDevice
+	(*VirtualMachineUsbDevice)(nil),               // 45: nas.v1.VirtualMachineUsbDevice
+	(*VirtualMachineSnapshot)(nil),                // 46: nas.v1.VirtualMachineSnapshot
+	(*VirtualMachine)(nil),                        // 47: nas.v1.VirtualMachine
+	(*ListVirtualMachinesRequest)(nil),            // 48: nas.v1.ListVirtualMachinesRequest
+	(*ListVirtualMachinesResponse)(nil),           // 49: nas.v1.ListVirtualMachinesResponse
+	(*GetVirtualMachineRequest)(nil),              // 50: nas.v1.GetVirtualMachineRequest
+	(*CreateVirtualMachineRequest)(nil),           // 51: nas.v1.CreateVirtualMachineRequest
+	(*UpdateVirtualMachineRequest)(nil),           // 52: nas.v1.UpdateVirtualMachineRequest
+	(*DeleteVirtualMachineRequest)(nil),           // 53: nas.v1.DeleteVirtualMachineRequest
+	(*StartVirtualMachineRequest)(nil),            // 54: nas.v1.StartVirtualMachineRequest
+	(*StopVirtualMachineRequest)(nil),             // 55: nas.v1.StopVirtualMachineRequest
+	(*RebootVirtualMachineRequest)(nil),           // 56: nas.v1.RebootVirtualMachineRequest
+	(*OpenVirtualMachineConsoleRequest)(nil),      // 57: nas.v1.OpenVirtualMachineConsoleRequest
+	(*VirtualMachineConsoleSession)(nil),          // 58: nas.v1.VirtualMachineConsoleSession
+	(*ResetVirtualMachineRequest)(nil),            // 59: nas.v1.ResetVirtualMachineRequest
+	(*PauseVirtualMachineRequest)(nil),            // 60: nas.v1.PauseVirtualMachineRequest
+	(*ResumeVirtualMachineRequest)(nil),           // 61: nas.v1.ResumeVirtualMachineRequest
+	(*CloneVirtualMachineRequest)(nil),            // 62: nas.v1.CloneVirtualMachineRequest
+	(*AttachVirtualMachineMediaRequest)(nil),      // 63: nas.v1.AttachVirtualMachineMediaRequest
+	(*EjectVirtualMachineMediaRequest)(nil),       // 64: nas.v1.EjectVirtualMachineMediaRequest
+	(*ListVirtualMachineSnapshotsRequest)(nil),    // 65: nas.v1.ListVirtualMachineSnapshotsRequest
+	(*ListVirtualMachineSnapshotsResponse)(nil),   // 66: nas.v1.ListVirtualMachineSnapshotsResponse
+	(*CreateVirtualMachineSnapshotRequest)(nil),   // 67: nas.v1.CreateVirtualMachineSnapshotRequest
+	(*RollbackVirtualMachineSnapshotRequest)(nil), // 68: nas.v1.RollbackVirtualMachineSnapshotRequest
+	(*DeleteVirtualMachineSnapshotRequest)(nil),   // 69: nas.v1.DeleteVirtualMachineSnapshotRequest
+	(*DockerContainer)(nil),                       // 70: nas.v1.DockerContainer
+	(*ListDockerContainersRequest)(nil),           // 71: nas.v1.ListDockerContainersRequest
+	(*ListDockerContainersResponse)(nil),          // 72: nas.v1.ListDockerContainersResponse
+	(*GetDockerContainerRequest)(nil),             // 73: nas.v1.GetDockerContainerRequest
+	(*CreateDockerContainerRequest)(nil),          // 74: nas.v1.CreateDockerContainerRequest
+	(*UpdateDockerContainerRequest)(nil),          // 75: nas.v1.UpdateDockerContainerRequest
+	(*GetDockerContainerLogsRequest)(nil),         // 76: nas.v1.GetDockerContainerLogsRequest
+	(*GetDockerContainerLogsResponse)(nil),        // 77: nas.v1.GetDockerContainerLogsResponse
+	(*DeleteDockerContainerRequest)(nil),          // 78: nas.v1.DeleteDockerContainerRequest
+	(*StartDockerContainerRequest)(nil),           // 79: nas.v1.StartDockerContainerRequest
+	(*StopDockerContainerRequest)(nil),            // 80: nas.v1.StopDockerContainerRequest
+	(*RestartDockerContainerRequest)(nil),         // 81: nas.v1.RestartDockerContainerRequest
+	(*DockerApp)(nil),                             // 82: nas.v1.DockerApp
+	(*DockerAppContainer)(nil),                    // 83: nas.v1.DockerAppContainer
+	(*ListDockerAppsRequest)(nil),                 // 84: nas.v1.ListDockerAppsRequest
+	(*ListDockerAppsResponse)(nil),                // 85: nas.v1.ListDockerAppsResponse
+	(*GetDockerAppRequest)(nil),                   // 86: nas.v1.GetDockerAppRequest
+	(*CreateDockerAppRequest)(nil),                // 87: nas.v1.CreateDockerAppRequest
+	(*UpdateDockerAppRequest)(nil),                // 88: nas.v1.UpdateDockerAppRequest
+	(*DeleteDockerAppRequest)(nil),                // 89: nas.v1.DeleteDockerAppRequest
+	(*StartDockerAppRequest)(nil),                 // 90: nas.v1.StartDockerAppRequest
+	(*StopDockerAppRequest)(nil),                  // 91: nas.v1.StopDockerAppRequest
+	(*RestartDockerAppRequest)(nil),               // 92: nas.v1.RestartDockerAppRequest
+	(*GetDockerAppLogsRequest)(nil),               // 93: nas.v1.GetDockerAppLogsRequest
+	(*GetDockerAppLogsResponse)(nil),              // 94: nas.v1.GetDockerAppLogsResponse
+	(*DockerConfig)(nil),                          // 95: nas.v1.DockerConfig
+	(*GetDockerConfigRequest)(nil),                // 96: nas.v1.GetDockerConfigRequest
+	(*UpdateDockerConfigRequest)(nil),             // 97: nas.v1.UpdateDockerConfigRequest
+	(*DirectoryEntry)(nil),                        // 98: nas.v1.DirectoryEntry
+	(*ListFileSystemDirectoriesRequest)(nil),      // 99: nas.v1.ListFileSystemDirectoriesRequest
+	(*ListFileSystemDirectoriesResponse)(nil),     // 100: nas.v1.ListFileSystemDirectoriesResponse
+	(*LxcContainer)(nil),                          // 101: nas.v1.LxcContainer
+	(*ListLxcContainersRequest)(nil),              // 102: nas.v1.ListLxcContainersRequest
+	(*ListLxcContainersResponse)(nil),             // 103: nas.v1.ListLxcContainersResponse
+	(*GetLxcContainerRequest)(nil),                // 104: nas.v1.GetLxcContainerRequest
+	(*CreateLxcContainerRequest)(nil),             // 105: nas.v1.CreateLxcContainerRequest
+	(*DeleteLxcContainerRequest)(nil),             // 106: nas.v1.DeleteLxcContainerRequest
+	(*StartLxcContainerRequest)(nil),              // 107: nas.v1.StartLxcContainerRequest
+	(*StopLxcContainerRequest)(nil),               // 108: nas.v1.StopLxcContainerRequest
+	(*FreezeLxcContainerRequest)(nil),             // 109: nas.v1.FreezeLxcContainerRequest
+	(*CifsShare)(nil),                             // 110: nas.v1.CifsShare
+	(*ListCifsSharesRequest)(nil),                 // 111: nas.v1.ListCifsSharesRequest
+	(*ListCifsSharesResponse)(nil),                // 112: nas.v1.ListCifsSharesResponse
+	(*GetCifsShareRequest)(nil),                   // 113: nas.v1.GetCifsShareRequest
+	(*CreateCifsShareRequest)(nil),                // 114: nas.v1.CreateCifsShareRequest
+	(*UpdateCifsShareRequest)(nil),                // 115: nas.v1.UpdateCifsShareRequest
+	(*DeleteCifsShareRequest)(nil),                // 116: nas.v1.DeleteCifsShareRequest
+	(*WebdavShare)(nil),                           // 117: nas.v1.WebdavShare
+	(*ListWebdavSharesRequest)(nil),               // 118: nas.v1.ListWebdavSharesRequest
+	(*ListWebdavSharesResponse)(nil),              // 119: nas.v1.ListWebdavSharesResponse
+	(*GetWebdavShareRequest)(nil),                 // 120: nas.v1.GetWebdavShareRequest
+	(*CreateWebdavShareRequest)(nil),              // 121: nas.v1.CreateWebdavShareRequest
+	(*UpdateWebdavShareRequest)(nil),              // 122: nas.v1.UpdateWebdavShareRequest
+	(*DeleteWebdavShareRequest)(nil),              // 123: nas.v1.DeleteWebdavShareRequest
+	(*User)(nil),                                  // 124: nas.v1.User
+	(*ListUsersRequest)(nil),                      // 125: nas.v1.ListUsersRequest
+	(*ListUsersResponse)(nil),                     // 126: nas.v1.ListUsersResponse
+	(*GetUserRequest)(nil),                        // 127: nas.v1.GetUserRequest
+	(*CreateUserRequest)(nil),                     // 128: nas.v1.CreateUserRequest
+	(*UpdateUserRequest)(nil),                     // 129: nas.v1.UpdateUserRequest
+	(*DeleteUserRequest)(nil),                     // 130: nas.v1.DeleteUserRequest
+	(*Group)(nil),                                 // 131: nas.v1.Group
+	(*ListGroupsRequest)(nil),                     // 132: nas.v1.ListGroupsRequest
+	(*ListGroupsResponse)(nil),                    // 133: nas.v1.ListGroupsResponse
+	(*GetGroupRequest)(nil),                       // 134: nas.v1.GetGroupRequest
+	(*CreateGroupRequest)(nil),                    // 135: nas.v1.CreateGroupRequest
+	(*UpdateGroupRequest)(nil),                    // 136: nas.v1.UpdateGroupRequest
+	(*DeleteGroupRequest)(nil),                    // 137: nas.v1.DeleteGroupRequest
+	(*CatalogApp)(nil),                            // 138: nas.v1.CatalogApp
+	(*ListCatalogAppsRequest)(nil),                // 139: nas.v1.ListCatalogAppsRequest
+	(*ListCatalogAppsResponse)(nil),               // 140: nas.v1.ListCatalogAppsResponse
+	(*GetCatalogAppRequest)(nil),                  // 141: nas.v1.GetCatalogAppRequest
+	(*SyncCatalogRequest)(nil),                    // 142: nas.v1.SyncCatalogRequest
+	(*SyncCatalogResponse)(nil),                   // 143: nas.v1.SyncCatalogResponse
+	(*timestamppb.Timestamp)(nil),                 // 144: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil),                 // 145: google.protobuf.FieldMask
+	(*emptypb.Empty)(nil),                         // 146: google.protobuf.Empty
 }
 var file_nas_v1_nas_proto_depIdxs = []int32{
-	107, // 0: nas.v1.LoginResponse.user:type_name -> nas.v1.User
-	127, // 1: nas.v1.Prerequisite.checked_time:type_name -> google.protobuf.Timestamp
+	124, // 0: nas.v1.LoginResponse.user:type_name -> nas.v1.User
+	144, // 1: nas.v1.Prerequisite.checked_time:type_name -> google.protobuf.Timestamp
 	3,   // 2: nas.v1.ListPrerequisitesResponse.prerequisites:type_name -> nas.v1.Prerequisite
 	3,   // 3: nas.v1.CheckPrerequisitesResponse.prerequisites:type_name -> nas.v1.Prerequisite
 	9,   // 4: nas.v1.Disk.partitions:type_name -> nas.v1.DiskPartition
@@ -9511,227 +11077,255 @@ var file_nas_v1_nas_proto_depIdxs = []int32{
 	15,  // 9: nas.v1.ListZfsPoolsResponse.zfs_pools:type_name -> nas.v1.ZfsPool
 	15,  // 10: nas.v1.CreateZfsPoolRequest.zfs_pool:type_name -> nas.v1.ZfsPool
 	15,  // 11: nas.v1.UpdateZfsPoolRequest.zfs_pool:type_name -> nas.v1.ZfsPool
-	128, // 12: nas.v1.UpdateZfsPoolRequest.update_mask:type_name -> google.protobuf.FieldMask
+	145, // 12: nas.v1.UpdateZfsPoolRequest.update_mask:type_name -> google.protobuf.FieldMask
 	26,  // 13: nas.v1.ListZfsDatasetsResponse.zfs_datasets:type_name -> nas.v1.ZfsDataset
 	26,  // 14: nas.v1.CreateZfsDatasetRequest.zfs_dataset:type_name -> nas.v1.ZfsDataset
 	26,  // 15: nas.v1.UpdateZfsDatasetRequest.zfs_dataset:type_name -> nas.v1.ZfsDataset
-	128, // 16: nas.v1.UpdateZfsDatasetRequest.update_mask:type_name -> google.protobuf.FieldMask
+	145, // 16: nas.v1.UpdateZfsDatasetRequest.update_mask:type_name -> google.protobuf.FieldMask
 	34,  // 17: nas.v1.ListZfsVolumesResponse.zfs_volumes:type_name -> nas.v1.ZfsVolume
 	34,  // 18: nas.v1.CreateZfsVolumeRequest.zfs_volume:type_name -> nas.v1.ZfsVolume
 	34,  // 19: nas.v1.UpdateZfsVolumeRequest.zfs_volume:type_name -> nas.v1.ZfsVolume
-	128, // 20: nas.v1.UpdateZfsVolumeRequest.update_mask:type_name -> google.protobuf.FieldMask
-	41,  // 21: nas.v1.ListVirtualMachinesResponse.virtual_machines:type_name -> nas.v1.VirtualMachine
-	41,  // 22: nas.v1.CreateVirtualMachineRequest.virtual_machine:type_name -> nas.v1.VirtualMachine
-	41,  // 23: nas.v1.UpdateVirtualMachineRequest.virtual_machine:type_name -> nas.v1.VirtualMachine
-	128, // 24: nas.v1.UpdateVirtualMachineRequest.update_mask:type_name -> google.protobuf.FieldMask
-	53,  // 25: nas.v1.ListDockerContainersResponse.docker_containers:type_name -> nas.v1.DockerContainer
-	53,  // 26: nas.v1.CreateDockerContainerRequest.docker_container:type_name -> nas.v1.DockerContainer
-	53,  // 27: nas.v1.UpdateDockerContainerRequest.docker_container:type_name -> nas.v1.DockerContainer
-	128, // 28: nas.v1.UpdateDockerContainerRequest.update_mask:type_name -> google.protobuf.FieldMask
-	66,  // 29: nas.v1.DockerApp.containers:type_name -> nas.v1.DockerAppContainer
-	65,  // 30: nas.v1.ListDockerAppsResponse.docker_apps:type_name -> nas.v1.DockerApp
-	65,  // 31: nas.v1.CreateDockerAppRequest.docker_app:type_name -> nas.v1.DockerApp
-	65,  // 32: nas.v1.UpdateDockerAppRequest.docker_app:type_name -> nas.v1.DockerApp
-	128, // 33: nas.v1.UpdateDockerAppRequest.update_mask:type_name -> google.protobuf.FieldMask
-	78,  // 34: nas.v1.UpdateDockerConfigRequest.docker_config:type_name -> nas.v1.DockerConfig
-	128, // 35: nas.v1.UpdateDockerConfigRequest.update_mask:type_name -> google.protobuf.FieldMask
-	81,  // 36: nas.v1.ListFileSystemDirectoriesResponse.entries:type_name -> nas.v1.DirectoryEntry
-	84,  // 37: nas.v1.ListLxcContainersResponse.lxc_containers:type_name -> nas.v1.LxcContainer
-	84,  // 38: nas.v1.CreateLxcContainerRequest.lxc_container:type_name -> nas.v1.LxcContainer
-	93,  // 39: nas.v1.ListCifsSharesResponse.cifs_shares:type_name -> nas.v1.CifsShare
-	93,  // 40: nas.v1.CreateCifsShareRequest.cifs_share:type_name -> nas.v1.CifsShare
-	93,  // 41: nas.v1.UpdateCifsShareRequest.cifs_share:type_name -> nas.v1.CifsShare
-	128, // 42: nas.v1.UpdateCifsShareRequest.update_mask:type_name -> google.protobuf.FieldMask
-	100, // 43: nas.v1.ListWebdavSharesResponse.webdav_shares:type_name -> nas.v1.WebdavShare
-	100, // 44: nas.v1.CreateWebdavShareRequest.webdav_share:type_name -> nas.v1.WebdavShare
-	100, // 45: nas.v1.UpdateWebdavShareRequest.webdav_share:type_name -> nas.v1.WebdavShare
-	128, // 46: nas.v1.UpdateWebdavShareRequest.update_mask:type_name -> google.protobuf.FieldMask
-	107, // 47: nas.v1.ListUsersResponse.users:type_name -> nas.v1.User
-	107, // 48: nas.v1.CreateUserRequest.user:type_name -> nas.v1.User
-	107, // 49: nas.v1.UpdateUserRequest.user:type_name -> nas.v1.User
-	128, // 50: nas.v1.UpdateUserRequest.update_mask:type_name -> google.protobuf.FieldMask
-	114, // 51: nas.v1.ListGroupsResponse.groups:type_name -> nas.v1.Group
-	114, // 52: nas.v1.CreateGroupRequest.group:type_name -> nas.v1.Group
-	114, // 53: nas.v1.UpdateGroupRequest.group:type_name -> nas.v1.Group
-	128, // 54: nas.v1.UpdateGroupRequest.update_mask:type_name -> google.protobuf.FieldMask
-	121, // 55: nas.v1.ListCatalogAppsResponse.apps:type_name -> nas.v1.CatalogApp
-	0,   // 56: nas.v1.NasService.Login:input_type -> nas.v1.LoginRequest
-	2,   // 57: nas.v1.NasService.GetCurrentUser:input_type -> nas.v1.GetCurrentUserRequest
-	4,   // 58: nas.v1.NasService.ListPrerequisites:input_type -> nas.v1.ListPrerequisitesRequest
-	6,   // 59: nas.v1.NasService.GetPrerequisite:input_type -> nas.v1.GetPrerequisiteRequest
-	7,   // 60: nas.v1.NasService.CheckPrerequisites:input_type -> nas.v1.CheckPrerequisitesRequest
-	12,  // 61: nas.v1.NasService.ListDisks:input_type -> nas.v1.ListDisksRequest
-	14,  // 62: nas.v1.NasService.GetDisk:input_type -> nas.v1.GetDiskRequest
-	17,  // 63: nas.v1.NasService.ListZfsPools:input_type -> nas.v1.ListZfsPoolsRequest
-	19,  // 64: nas.v1.NasService.GetZfsPool:input_type -> nas.v1.GetZfsPoolRequest
-	20,  // 65: nas.v1.NasService.CreateZfsPool:input_type -> nas.v1.CreateZfsPoolRequest
-	21,  // 66: nas.v1.NasService.DeleteZfsPool:input_type -> nas.v1.DeleteZfsPoolRequest
-	22,  // 67: nas.v1.NasService.ScrubZfsPool:input_type -> nas.v1.ScrubZfsPoolRequest
-	23,  // 68: nas.v1.NasService.UpdateZfsPool:input_type -> nas.v1.UpdateZfsPoolRequest
-	24,  // 69: nas.v1.NasService.AddZfsPoolVdev:input_type -> nas.v1.AddZfsPoolVdevRequest
-	25,  // 70: nas.v1.NasService.RemoveZfsPoolVdev:input_type -> nas.v1.RemoveZfsPoolVdevRequest
-	27,  // 71: nas.v1.NasService.ListZfsDatasets:input_type -> nas.v1.ListZfsDatasetsRequest
-	29,  // 72: nas.v1.NasService.GetZfsDataset:input_type -> nas.v1.GetZfsDatasetRequest
-	30,  // 73: nas.v1.NasService.CreateZfsDataset:input_type -> nas.v1.CreateZfsDatasetRequest
-	31,  // 74: nas.v1.NasService.UpdateZfsDataset:input_type -> nas.v1.UpdateZfsDatasetRequest
-	32,  // 75: nas.v1.NasService.DeleteZfsDataset:input_type -> nas.v1.DeleteZfsDatasetRequest
-	33,  // 76: nas.v1.NasService.SnapshotZfsDataset:input_type -> nas.v1.SnapshotZfsDatasetRequest
-	35,  // 77: nas.v1.NasService.ListZfsVolumes:input_type -> nas.v1.ListZfsVolumesRequest
-	37,  // 78: nas.v1.NasService.GetZfsVolume:input_type -> nas.v1.GetZfsVolumeRequest
-	38,  // 79: nas.v1.NasService.CreateZfsVolume:input_type -> nas.v1.CreateZfsVolumeRequest
-	39,  // 80: nas.v1.NasService.UpdateZfsVolume:input_type -> nas.v1.UpdateZfsVolumeRequest
-	40,  // 81: nas.v1.NasService.DeleteZfsVolume:input_type -> nas.v1.DeleteZfsVolumeRequest
-	42,  // 82: nas.v1.NasService.ListVirtualMachines:input_type -> nas.v1.ListVirtualMachinesRequest
-	44,  // 83: nas.v1.NasService.GetVirtualMachine:input_type -> nas.v1.GetVirtualMachineRequest
-	45,  // 84: nas.v1.NasService.CreateVirtualMachine:input_type -> nas.v1.CreateVirtualMachineRequest
-	46,  // 85: nas.v1.NasService.UpdateVirtualMachine:input_type -> nas.v1.UpdateVirtualMachineRequest
-	47,  // 86: nas.v1.NasService.DeleteVirtualMachine:input_type -> nas.v1.DeleteVirtualMachineRequest
-	48,  // 87: nas.v1.NasService.StartVirtualMachine:input_type -> nas.v1.StartVirtualMachineRequest
-	49,  // 88: nas.v1.NasService.StopVirtualMachine:input_type -> nas.v1.StopVirtualMachineRequest
-	50,  // 89: nas.v1.NasService.RebootVirtualMachine:input_type -> nas.v1.RebootVirtualMachineRequest
-	51,  // 90: nas.v1.NasService.OpenVirtualMachineConsole:input_type -> nas.v1.OpenVirtualMachineConsoleRequest
-	54,  // 91: nas.v1.NasService.ListDockerContainers:input_type -> nas.v1.ListDockerContainersRequest
-	56,  // 92: nas.v1.NasService.GetDockerContainer:input_type -> nas.v1.GetDockerContainerRequest
-	57,  // 93: nas.v1.NasService.CreateDockerContainer:input_type -> nas.v1.CreateDockerContainerRequest
-	58,  // 94: nas.v1.NasService.UpdateDockerContainer:input_type -> nas.v1.UpdateDockerContainerRequest
-	61,  // 95: nas.v1.NasService.DeleteDockerContainer:input_type -> nas.v1.DeleteDockerContainerRequest
-	59,  // 96: nas.v1.NasService.GetDockerContainerLogs:input_type -> nas.v1.GetDockerContainerLogsRequest
-	62,  // 97: nas.v1.NasService.StartDockerContainer:input_type -> nas.v1.StartDockerContainerRequest
-	63,  // 98: nas.v1.NasService.StopDockerContainer:input_type -> nas.v1.StopDockerContainerRequest
-	64,  // 99: nas.v1.NasService.RestartDockerContainer:input_type -> nas.v1.RestartDockerContainerRequest
-	67,  // 100: nas.v1.NasService.ListDockerApps:input_type -> nas.v1.ListDockerAppsRequest
-	69,  // 101: nas.v1.NasService.GetDockerApp:input_type -> nas.v1.GetDockerAppRequest
-	70,  // 102: nas.v1.NasService.CreateDockerApp:input_type -> nas.v1.CreateDockerAppRequest
-	71,  // 103: nas.v1.NasService.UpdateDockerApp:input_type -> nas.v1.UpdateDockerAppRequest
-	72,  // 104: nas.v1.NasService.DeleteDockerApp:input_type -> nas.v1.DeleteDockerAppRequest
-	73,  // 105: nas.v1.NasService.StartDockerApp:input_type -> nas.v1.StartDockerAppRequest
-	74,  // 106: nas.v1.NasService.StopDockerApp:input_type -> nas.v1.StopDockerAppRequest
-	75,  // 107: nas.v1.NasService.RestartDockerApp:input_type -> nas.v1.RestartDockerAppRequest
-	76,  // 108: nas.v1.NasService.GetDockerAppLogs:input_type -> nas.v1.GetDockerAppLogsRequest
-	79,  // 109: nas.v1.NasService.GetDockerConfig:input_type -> nas.v1.GetDockerConfigRequest
-	80,  // 110: nas.v1.NasService.UpdateDockerConfig:input_type -> nas.v1.UpdateDockerConfigRequest
-	82,  // 111: nas.v1.NasService.ListFileSystemDirectories:input_type -> nas.v1.ListFileSystemDirectoriesRequest
-	85,  // 112: nas.v1.NasService.ListLxcContainers:input_type -> nas.v1.ListLxcContainersRequest
-	87,  // 113: nas.v1.NasService.GetLxcContainer:input_type -> nas.v1.GetLxcContainerRequest
-	88,  // 114: nas.v1.NasService.CreateLxcContainer:input_type -> nas.v1.CreateLxcContainerRequest
-	89,  // 115: nas.v1.NasService.DeleteLxcContainer:input_type -> nas.v1.DeleteLxcContainerRequest
-	90,  // 116: nas.v1.NasService.StartLxcContainer:input_type -> nas.v1.StartLxcContainerRequest
-	91,  // 117: nas.v1.NasService.StopLxcContainer:input_type -> nas.v1.StopLxcContainerRequest
-	92,  // 118: nas.v1.NasService.FreezeLxcContainer:input_type -> nas.v1.FreezeLxcContainerRequest
-	94,  // 119: nas.v1.NasService.ListCifsShares:input_type -> nas.v1.ListCifsSharesRequest
-	96,  // 120: nas.v1.NasService.GetCifsShare:input_type -> nas.v1.GetCifsShareRequest
-	97,  // 121: nas.v1.NasService.CreateCifsShare:input_type -> nas.v1.CreateCifsShareRequest
-	98,  // 122: nas.v1.NasService.UpdateCifsShare:input_type -> nas.v1.UpdateCifsShareRequest
-	99,  // 123: nas.v1.NasService.DeleteCifsShare:input_type -> nas.v1.DeleteCifsShareRequest
-	101, // 124: nas.v1.NasService.ListWebdavShares:input_type -> nas.v1.ListWebdavSharesRequest
-	103, // 125: nas.v1.NasService.GetWebdavShare:input_type -> nas.v1.GetWebdavShareRequest
-	104, // 126: nas.v1.NasService.CreateWebdavShare:input_type -> nas.v1.CreateWebdavShareRequest
-	105, // 127: nas.v1.NasService.UpdateWebdavShare:input_type -> nas.v1.UpdateWebdavShareRequest
-	106, // 128: nas.v1.NasService.DeleteWebdavShare:input_type -> nas.v1.DeleteWebdavShareRequest
-	108, // 129: nas.v1.NasService.ListUsers:input_type -> nas.v1.ListUsersRequest
-	110, // 130: nas.v1.NasService.GetUser:input_type -> nas.v1.GetUserRequest
-	111, // 131: nas.v1.NasService.CreateUser:input_type -> nas.v1.CreateUserRequest
-	112, // 132: nas.v1.NasService.UpdateUser:input_type -> nas.v1.UpdateUserRequest
-	113, // 133: nas.v1.NasService.DeleteUser:input_type -> nas.v1.DeleteUserRequest
-	115, // 134: nas.v1.NasService.ListGroups:input_type -> nas.v1.ListGroupsRequest
-	117, // 135: nas.v1.NasService.GetGroup:input_type -> nas.v1.GetGroupRequest
-	118, // 136: nas.v1.NasService.CreateGroup:input_type -> nas.v1.CreateGroupRequest
-	119, // 137: nas.v1.NasService.UpdateGroup:input_type -> nas.v1.UpdateGroupRequest
-	120, // 138: nas.v1.NasService.DeleteGroup:input_type -> nas.v1.DeleteGroupRequest
-	122, // 139: nas.v1.NasService.ListCatalogApps:input_type -> nas.v1.ListCatalogAppsRequest
-	124, // 140: nas.v1.NasService.GetCatalogApp:input_type -> nas.v1.GetCatalogAppRequest
-	125, // 141: nas.v1.NasService.SyncCatalog:input_type -> nas.v1.SyncCatalogRequest
-	1,   // 142: nas.v1.NasService.Login:output_type -> nas.v1.LoginResponse
-	107, // 143: nas.v1.NasService.GetCurrentUser:output_type -> nas.v1.User
-	5,   // 144: nas.v1.NasService.ListPrerequisites:output_type -> nas.v1.ListPrerequisitesResponse
-	3,   // 145: nas.v1.NasService.GetPrerequisite:output_type -> nas.v1.Prerequisite
-	8,   // 146: nas.v1.NasService.CheckPrerequisites:output_type -> nas.v1.CheckPrerequisitesResponse
-	13,  // 147: nas.v1.NasService.ListDisks:output_type -> nas.v1.ListDisksResponse
-	11,  // 148: nas.v1.NasService.GetDisk:output_type -> nas.v1.Disk
-	18,  // 149: nas.v1.NasService.ListZfsPools:output_type -> nas.v1.ListZfsPoolsResponse
-	15,  // 150: nas.v1.NasService.GetZfsPool:output_type -> nas.v1.ZfsPool
-	15,  // 151: nas.v1.NasService.CreateZfsPool:output_type -> nas.v1.ZfsPool
-	129, // 152: nas.v1.NasService.DeleteZfsPool:output_type -> google.protobuf.Empty
-	15,  // 153: nas.v1.NasService.ScrubZfsPool:output_type -> nas.v1.ZfsPool
-	15,  // 154: nas.v1.NasService.UpdateZfsPool:output_type -> nas.v1.ZfsPool
-	15,  // 155: nas.v1.NasService.AddZfsPoolVdev:output_type -> nas.v1.ZfsPool
-	15,  // 156: nas.v1.NasService.RemoveZfsPoolVdev:output_type -> nas.v1.ZfsPool
-	28,  // 157: nas.v1.NasService.ListZfsDatasets:output_type -> nas.v1.ListZfsDatasetsResponse
-	26,  // 158: nas.v1.NasService.GetZfsDataset:output_type -> nas.v1.ZfsDataset
-	26,  // 159: nas.v1.NasService.CreateZfsDataset:output_type -> nas.v1.ZfsDataset
-	26,  // 160: nas.v1.NasService.UpdateZfsDataset:output_type -> nas.v1.ZfsDataset
-	129, // 161: nas.v1.NasService.DeleteZfsDataset:output_type -> google.protobuf.Empty
-	26,  // 162: nas.v1.NasService.SnapshotZfsDataset:output_type -> nas.v1.ZfsDataset
-	36,  // 163: nas.v1.NasService.ListZfsVolumes:output_type -> nas.v1.ListZfsVolumesResponse
-	34,  // 164: nas.v1.NasService.GetZfsVolume:output_type -> nas.v1.ZfsVolume
-	34,  // 165: nas.v1.NasService.CreateZfsVolume:output_type -> nas.v1.ZfsVolume
-	34,  // 166: nas.v1.NasService.UpdateZfsVolume:output_type -> nas.v1.ZfsVolume
-	129, // 167: nas.v1.NasService.DeleteZfsVolume:output_type -> google.protobuf.Empty
-	43,  // 168: nas.v1.NasService.ListVirtualMachines:output_type -> nas.v1.ListVirtualMachinesResponse
-	41,  // 169: nas.v1.NasService.GetVirtualMachine:output_type -> nas.v1.VirtualMachine
-	41,  // 170: nas.v1.NasService.CreateVirtualMachine:output_type -> nas.v1.VirtualMachine
-	41,  // 171: nas.v1.NasService.UpdateVirtualMachine:output_type -> nas.v1.VirtualMachine
-	129, // 172: nas.v1.NasService.DeleteVirtualMachine:output_type -> google.protobuf.Empty
-	41,  // 173: nas.v1.NasService.StartVirtualMachine:output_type -> nas.v1.VirtualMachine
-	41,  // 174: nas.v1.NasService.StopVirtualMachine:output_type -> nas.v1.VirtualMachine
-	41,  // 175: nas.v1.NasService.RebootVirtualMachine:output_type -> nas.v1.VirtualMachine
-	52,  // 176: nas.v1.NasService.OpenVirtualMachineConsole:output_type -> nas.v1.VirtualMachineConsoleSession
-	55,  // 177: nas.v1.NasService.ListDockerContainers:output_type -> nas.v1.ListDockerContainersResponse
-	53,  // 178: nas.v1.NasService.GetDockerContainer:output_type -> nas.v1.DockerContainer
-	53,  // 179: nas.v1.NasService.CreateDockerContainer:output_type -> nas.v1.DockerContainer
-	53,  // 180: nas.v1.NasService.UpdateDockerContainer:output_type -> nas.v1.DockerContainer
-	129, // 181: nas.v1.NasService.DeleteDockerContainer:output_type -> google.protobuf.Empty
-	60,  // 182: nas.v1.NasService.GetDockerContainerLogs:output_type -> nas.v1.GetDockerContainerLogsResponse
-	53,  // 183: nas.v1.NasService.StartDockerContainer:output_type -> nas.v1.DockerContainer
-	53,  // 184: nas.v1.NasService.StopDockerContainer:output_type -> nas.v1.DockerContainer
-	53,  // 185: nas.v1.NasService.RestartDockerContainer:output_type -> nas.v1.DockerContainer
-	68,  // 186: nas.v1.NasService.ListDockerApps:output_type -> nas.v1.ListDockerAppsResponse
-	65,  // 187: nas.v1.NasService.GetDockerApp:output_type -> nas.v1.DockerApp
-	65,  // 188: nas.v1.NasService.CreateDockerApp:output_type -> nas.v1.DockerApp
-	65,  // 189: nas.v1.NasService.UpdateDockerApp:output_type -> nas.v1.DockerApp
-	129, // 190: nas.v1.NasService.DeleteDockerApp:output_type -> google.protobuf.Empty
-	65,  // 191: nas.v1.NasService.StartDockerApp:output_type -> nas.v1.DockerApp
-	65,  // 192: nas.v1.NasService.StopDockerApp:output_type -> nas.v1.DockerApp
-	65,  // 193: nas.v1.NasService.RestartDockerApp:output_type -> nas.v1.DockerApp
-	77,  // 194: nas.v1.NasService.GetDockerAppLogs:output_type -> nas.v1.GetDockerAppLogsResponse
-	78,  // 195: nas.v1.NasService.GetDockerConfig:output_type -> nas.v1.DockerConfig
-	78,  // 196: nas.v1.NasService.UpdateDockerConfig:output_type -> nas.v1.DockerConfig
-	83,  // 197: nas.v1.NasService.ListFileSystemDirectories:output_type -> nas.v1.ListFileSystemDirectoriesResponse
-	86,  // 198: nas.v1.NasService.ListLxcContainers:output_type -> nas.v1.ListLxcContainersResponse
-	84,  // 199: nas.v1.NasService.GetLxcContainer:output_type -> nas.v1.LxcContainer
-	84,  // 200: nas.v1.NasService.CreateLxcContainer:output_type -> nas.v1.LxcContainer
-	129, // 201: nas.v1.NasService.DeleteLxcContainer:output_type -> google.protobuf.Empty
-	84,  // 202: nas.v1.NasService.StartLxcContainer:output_type -> nas.v1.LxcContainer
-	84,  // 203: nas.v1.NasService.StopLxcContainer:output_type -> nas.v1.LxcContainer
-	84,  // 204: nas.v1.NasService.FreezeLxcContainer:output_type -> nas.v1.LxcContainer
-	95,  // 205: nas.v1.NasService.ListCifsShares:output_type -> nas.v1.ListCifsSharesResponse
-	93,  // 206: nas.v1.NasService.GetCifsShare:output_type -> nas.v1.CifsShare
-	93,  // 207: nas.v1.NasService.CreateCifsShare:output_type -> nas.v1.CifsShare
-	93,  // 208: nas.v1.NasService.UpdateCifsShare:output_type -> nas.v1.CifsShare
-	129, // 209: nas.v1.NasService.DeleteCifsShare:output_type -> google.protobuf.Empty
-	102, // 210: nas.v1.NasService.ListWebdavShares:output_type -> nas.v1.ListWebdavSharesResponse
-	100, // 211: nas.v1.NasService.GetWebdavShare:output_type -> nas.v1.WebdavShare
-	100, // 212: nas.v1.NasService.CreateWebdavShare:output_type -> nas.v1.WebdavShare
-	100, // 213: nas.v1.NasService.UpdateWebdavShare:output_type -> nas.v1.WebdavShare
-	129, // 214: nas.v1.NasService.DeleteWebdavShare:output_type -> google.protobuf.Empty
-	109, // 215: nas.v1.NasService.ListUsers:output_type -> nas.v1.ListUsersResponse
-	107, // 216: nas.v1.NasService.GetUser:output_type -> nas.v1.User
-	107, // 217: nas.v1.NasService.CreateUser:output_type -> nas.v1.User
-	107, // 218: nas.v1.NasService.UpdateUser:output_type -> nas.v1.User
-	129, // 219: nas.v1.NasService.DeleteUser:output_type -> google.protobuf.Empty
-	116, // 220: nas.v1.NasService.ListGroups:output_type -> nas.v1.ListGroupsResponse
-	114, // 221: nas.v1.NasService.GetGroup:output_type -> nas.v1.Group
-	114, // 222: nas.v1.NasService.CreateGroup:output_type -> nas.v1.Group
-	114, // 223: nas.v1.NasService.UpdateGroup:output_type -> nas.v1.Group
-	129, // 224: nas.v1.NasService.DeleteGroup:output_type -> google.protobuf.Empty
-	123, // 225: nas.v1.NasService.ListCatalogApps:output_type -> nas.v1.ListCatalogAppsResponse
-	121, // 226: nas.v1.NasService.GetCatalogApp:output_type -> nas.v1.CatalogApp
-	126, // 227: nas.v1.NasService.SyncCatalog:output_type -> nas.v1.SyncCatalogResponse
-	142, // [142:228] is the sub-list for method output_type
-	56,  // [56:142] is the sub-list for method input_type
-	56,  // [56:56] is the sub-list for extension type_name
-	56,  // [56:56] is the sub-list for extension extendee
-	0,   // [0:56] is the sub-list for field type_name
+	145, // 20: nas.v1.UpdateZfsVolumeRequest.update_mask:type_name -> google.protobuf.FieldMask
+	144, // 21: nas.v1.VirtualMachineSnapshot.create_time:type_name -> google.protobuf.Timestamp
+	41,  // 22: nas.v1.VirtualMachine.disks:type_name -> nas.v1.VirtualMachineDisk
+	42,  // 23: nas.v1.VirtualMachine.network_interfaces:type_name -> nas.v1.VirtualMachineNetworkInterface
+	43,  // 24: nas.v1.VirtualMachine.cloud_init:type_name -> nas.v1.VirtualMachineCloudInit
+	44,  // 25: nas.v1.VirtualMachine.pci_devices:type_name -> nas.v1.VirtualMachinePciDevice
+	45,  // 26: nas.v1.VirtualMachine.usb_devices:type_name -> nas.v1.VirtualMachineUsbDevice
+	47,  // 27: nas.v1.ListVirtualMachinesResponse.virtual_machines:type_name -> nas.v1.VirtualMachine
+	47,  // 28: nas.v1.CreateVirtualMachineRequest.virtual_machine:type_name -> nas.v1.VirtualMachine
+	47,  // 29: nas.v1.UpdateVirtualMachineRequest.virtual_machine:type_name -> nas.v1.VirtualMachine
+	145, // 30: nas.v1.UpdateVirtualMachineRequest.update_mask:type_name -> google.protobuf.FieldMask
+	46,  // 31: nas.v1.ListVirtualMachineSnapshotsResponse.snapshots:type_name -> nas.v1.VirtualMachineSnapshot
+	46,  // 32: nas.v1.CreateVirtualMachineSnapshotRequest.snapshot:type_name -> nas.v1.VirtualMachineSnapshot
+	70,  // 33: nas.v1.ListDockerContainersResponse.docker_containers:type_name -> nas.v1.DockerContainer
+	70,  // 34: nas.v1.CreateDockerContainerRequest.docker_container:type_name -> nas.v1.DockerContainer
+	70,  // 35: nas.v1.UpdateDockerContainerRequest.docker_container:type_name -> nas.v1.DockerContainer
+	145, // 36: nas.v1.UpdateDockerContainerRequest.update_mask:type_name -> google.protobuf.FieldMask
+	83,  // 37: nas.v1.DockerApp.containers:type_name -> nas.v1.DockerAppContainer
+	82,  // 38: nas.v1.ListDockerAppsResponse.docker_apps:type_name -> nas.v1.DockerApp
+	82,  // 39: nas.v1.CreateDockerAppRequest.docker_app:type_name -> nas.v1.DockerApp
+	82,  // 40: nas.v1.UpdateDockerAppRequest.docker_app:type_name -> nas.v1.DockerApp
+	145, // 41: nas.v1.UpdateDockerAppRequest.update_mask:type_name -> google.protobuf.FieldMask
+	95,  // 42: nas.v1.UpdateDockerConfigRequest.docker_config:type_name -> nas.v1.DockerConfig
+	145, // 43: nas.v1.UpdateDockerConfigRequest.update_mask:type_name -> google.protobuf.FieldMask
+	98,  // 44: nas.v1.ListFileSystemDirectoriesResponse.entries:type_name -> nas.v1.DirectoryEntry
+	101, // 45: nas.v1.ListLxcContainersResponse.lxc_containers:type_name -> nas.v1.LxcContainer
+	101, // 46: nas.v1.CreateLxcContainerRequest.lxc_container:type_name -> nas.v1.LxcContainer
+	110, // 47: nas.v1.ListCifsSharesResponse.cifs_shares:type_name -> nas.v1.CifsShare
+	110, // 48: nas.v1.CreateCifsShareRequest.cifs_share:type_name -> nas.v1.CifsShare
+	110, // 49: nas.v1.UpdateCifsShareRequest.cifs_share:type_name -> nas.v1.CifsShare
+	145, // 50: nas.v1.UpdateCifsShareRequest.update_mask:type_name -> google.protobuf.FieldMask
+	117, // 51: nas.v1.ListWebdavSharesResponse.webdav_shares:type_name -> nas.v1.WebdavShare
+	117, // 52: nas.v1.CreateWebdavShareRequest.webdav_share:type_name -> nas.v1.WebdavShare
+	117, // 53: nas.v1.UpdateWebdavShareRequest.webdav_share:type_name -> nas.v1.WebdavShare
+	145, // 54: nas.v1.UpdateWebdavShareRequest.update_mask:type_name -> google.protobuf.FieldMask
+	124, // 55: nas.v1.ListUsersResponse.users:type_name -> nas.v1.User
+	124, // 56: nas.v1.CreateUserRequest.user:type_name -> nas.v1.User
+	124, // 57: nas.v1.UpdateUserRequest.user:type_name -> nas.v1.User
+	145, // 58: nas.v1.UpdateUserRequest.update_mask:type_name -> google.protobuf.FieldMask
+	131, // 59: nas.v1.ListGroupsResponse.groups:type_name -> nas.v1.Group
+	131, // 60: nas.v1.CreateGroupRequest.group:type_name -> nas.v1.Group
+	131, // 61: nas.v1.UpdateGroupRequest.group:type_name -> nas.v1.Group
+	145, // 62: nas.v1.UpdateGroupRequest.update_mask:type_name -> google.protobuf.FieldMask
+	138, // 63: nas.v1.ListCatalogAppsResponse.apps:type_name -> nas.v1.CatalogApp
+	0,   // 64: nas.v1.NasService.Login:input_type -> nas.v1.LoginRequest
+	2,   // 65: nas.v1.NasService.GetCurrentUser:input_type -> nas.v1.GetCurrentUserRequest
+	4,   // 66: nas.v1.NasService.ListPrerequisites:input_type -> nas.v1.ListPrerequisitesRequest
+	6,   // 67: nas.v1.NasService.GetPrerequisite:input_type -> nas.v1.GetPrerequisiteRequest
+	7,   // 68: nas.v1.NasService.CheckPrerequisites:input_type -> nas.v1.CheckPrerequisitesRequest
+	12,  // 69: nas.v1.NasService.ListDisks:input_type -> nas.v1.ListDisksRequest
+	14,  // 70: nas.v1.NasService.GetDisk:input_type -> nas.v1.GetDiskRequest
+	17,  // 71: nas.v1.NasService.ListZfsPools:input_type -> nas.v1.ListZfsPoolsRequest
+	19,  // 72: nas.v1.NasService.GetZfsPool:input_type -> nas.v1.GetZfsPoolRequest
+	20,  // 73: nas.v1.NasService.CreateZfsPool:input_type -> nas.v1.CreateZfsPoolRequest
+	21,  // 74: nas.v1.NasService.DeleteZfsPool:input_type -> nas.v1.DeleteZfsPoolRequest
+	22,  // 75: nas.v1.NasService.ScrubZfsPool:input_type -> nas.v1.ScrubZfsPoolRequest
+	23,  // 76: nas.v1.NasService.UpdateZfsPool:input_type -> nas.v1.UpdateZfsPoolRequest
+	24,  // 77: nas.v1.NasService.AddZfsPoolVdev:input_type -> nas.v1.AddZfsPoolVdevRequest
+	25,  // 78: nas.v1.NasService.RemoveZfsPoolVdev:input_type -> nas.v1.RemoveZfsPoolVdevRequest
+	27,  // 79: nas.v1.NasService.ListZfsDatasets:input_type -> nas.v1.ListZfsDatasetsRequest
+	29,  // 80: nas.v1.NasService.GetZfsDataset:input_type -> nas.v1.GetZfsDatasetRequest
+	30,  // 81: nas.v1.NasService.CreateZfsDataset:input_type -> nas.v1.CreateZfsDatasetRequest
+	31,  // 82: nas.v1.NasService.UpdateZfsDataset:input_type -> nas.v1.UpdateZfsDatasetRequest
+	32,  // 83: nas.v1.NasService.DeleteZfsDataset:input_type -> nas.v1.DeleteZfsDatasetRequest
+	33,  // 84: nas.v1.NasService.SnapshotZfsDataset:input_type -> nas.v1.SnapshotZfsDatasetRequest
+	35,  // 85: nas.v1.NasService.ListZfsVolumes:input_type -> nas.v1.ListZfsVolumesRequest
+	37,  // 86: nas.v1.NasService.GetZfsVolume:input_type -> nas.v1.GetZfsVolumeRequest
+	38,  // 87: nas.v1.NasService.CreateZfsVolume:input_type -> nas.v1.CreateZfsVolumeRequest
+	39,  // 88: nas.v1.NasService.UpdateZfsVolume:input_type -> nas.v1.UpdateZfsVolumeRequest
+	40,  // 89: nas.v1.NasService.DeleteZfsVolume:input_type -> nas.v1.DeleteZfsVolumeRequest
+	48,  // 90: nas.v1.NasService.ListVirtualMachines:input_type -> nas.v1.ListVirtualMachinesRequest
+	50,  // 91: nas.v1.NasService.GetVirtualMachine:input_type -> nas.v1.GetVirtualMachineRequest
+	51,  // 92: nas.v1.NasService.CreateVirtualMachine:input_type -> nas.v1.CreateVirtualMachineRequest
+	52,  // 93: nas.v1.NasService.UpdateVirtualMachine:input_type -> nas.v1.UpdateVirtualMachineRequest
+	53,  // 94: nas.v1.NasService.DeleteVirtualMachine:input_type -> nas.v1.DeleteVirtualMachineRequest
+	54,  // 95: nas.v1.NasService.StartVirtualMachine:input_type -> nas.v1.StartVirtualMachineRequest
+	55,  // 96: nas.v1.NasService.StopVirtualMachine:input_type -> nas.v1.StopVirtualMachineRequest
+	56,  // 97: nas.v1.NasService.RebootVirtualMachine:input_type -> nas.v1.RebootVirtualMachineRequest
+	59,  // 98: nas.v1.NasService.ResetVirtualMachine:input_type -> nas.v1.ResetVirtualMachineRequest
+	60,  // 99: nas.v1.NasService.PauseVirtualMachine:input_type -> nas.v1.PauseVirtualMachineRequest
+	61,  // 100: nas.v1.NasService.ResumeVirtualMachine:input_type -> nas.v1.ResumeVirtualMachineRequest
+	62,  // 101: nas.v1.NasService.CloneVirtualMachine:input_type -> nas.v1.CloneVirtualMachineRequest
+	63,  // 102: nas.v1.NasService.AttachVirtualMachineMedia:input_type -> nas.v1.AttachVirtualMachineMediaRequest
+	64,  // 103: nas.v1.NasService.EjectVirtualMachineMedia:input_type -> nas.v1.EjectVirtualMachineMediaRequest
+	65,  // 104: nas.v1.NasService.ListVirtualMachineSnapshots:input_type -> nas.v1.ListVirtualMachineSnapshotsRequest
+	67,  // 105: nas.v1.NasService.CreateVirtualMachineSnapshot:input_type -> nas.v1.CreateVirtualMachineSnapshotRequest
+	68,  // 106: nas.v1.NasService.RollbackVirtualMachineSnapshot:input_type -> nas.v1.RollbackVirtualMachineSnapshotRequest
+	69,  // 107: nas.v1.NasService.DeleteVirtualMachineSnapshot:input_type -> nas.v1.DeleteVirtualMachineSnapshotRequest
+	57,  // 108: nas.v1.NasService.OpenVirtualMachineConsole:input_type -> nas.v1.OpenVirtualMachineConsoleRequest
+	71,  // 109: nas.v1.NasService.ListDockerContainers:input_type -> nas.v1.ListDockerContainersRequest
+	73,  // 110: nas.v1.NasService.GetDockerContainer:input_type -> nas.v1.GetDockerContainerRequest
+	74,  // 111: nas.v1.NasService.CreateDockerContainer:input_type -> nas.v1.CreateDockerContainerRequest
+	75,  // 112: nas.v1.NasService.UpdateDockerContainer:input_type -> nas.v1.UpdateDockerContainerRequest
+	78,  // 113: nas.v1.NasService.DeleteDockerContainer:input_type -> nas.v1.DeleteDockerContainerRequest
+	76,  // 114: nas.v1.NasService.GetDockerContainerLogs:input_type -> nas.v1.GetDockerContainerLogsRequest
+	79,  // 115: nas.v1.NasService.StartDockerContainer:input_type -> nas.v1.StartDockerContainerRequest
+	80,  // 116: nas.v1.NasService.StopDockerContainer:input_type -> nas.v1.StopDockerContainerRequest
+	81,  // 117: nas.v1.NasService.RestartDockerContainer:input_type -> nas.v1.RestartDockerContainerRequest
+	84,  // 118: nas.v1.NasService.ListDockerApps:input_type -> nas.v1.ListDockerAppsRequest
+	86,  // 119: nas.v1.NasService.GetDockerApp:input_type -> nas.v1.GetDockerAppRequest
+	87,  // 120: nas.v1.NasService.CreateDockerApp:input_type -> nas.v1.CreateDockerAppRequest
+	88,  // 121: nas.v1.NasService.UpdateDockerApp:input_type -> nas.v1.UpdateDockerAppRequest
+	89,  // 122: nas.v1.NasService.DeleteDockerApp:input_type -> nas.v1.DeleteDockerAppRequest
+	90,  // 123: nas.v1.NasService.StartDockerApp:input_type -> nas.v1.StartDockerAppRequest
+	91,  // 124: nas.v1.NasService.StopDockerApp:input_type -> nas.v1.StopDockerAppRequest
+	92,  // 125: nas.v1.NasService.RestartDockerApp:input_type -> nas.v1.RestartDockerAppRequest
+	93,  // 126: nas.v1.NasService.GetDockerAppLogs:input_type -> nas.v1.GetDockerAppLogsRequest
+	96,  // 127: nas.v1.NasService.GetDockerConfig:input_type -> nas.v1.GetDockerConfigRequest
+	97,  // 128: nas.v1.NasService.UpdateDockerConfig:input_type -> nas.v1.UpdateDockerConfigRequest
+	99,  // 129: nas.v1.NasService.ListFileSystemDirectories:input_type -> nas.v1.ListFileSystemDirectoriesRequest
+	102, // 130: nas.v1.NasService.ListLxcContainers:input_type -> nas.v1.ListLxcContainersRequest
+	104, // 131: nas.v1.NasService.GetLxcContainer:input_type -> nas.v1.GetLxcContainerRequest
+	105, // 132: nas.v1.NasService.CreateLxcContainer:input_type -> nas.v1.CreateLxcContainerRequest
+	106, // 133: nas.v1.NasService.DeleteLxcContainer:input_type -> nas.v1.DeleteLxcContainerRequest
+	107, // 134: nas.v1.NasService.StartLxcContainer:input_type -> nas.v1.StartLxcContainerRequest
+	108, // 135: nas.v1.NasService.StopLxcContainer:input_type -> nas.v1.StopLxcContainerRequest
+	109, // 136: nas.v1.NasService.FreezeLxcContainer:input_type -> nas.v1.FreezeLxcContainerRequest
+	111, // 137: nas.v1.NasService.ListCifsShares:input_type -> nas.v1.ListCifsSharesRequest
+	113, // 138: nas.v1.NasService.GetCifsShare:input_type -> nas.v1.GetCifsShareRequest
+	114, // 139: nas.v1.NasService.CreateCifsShare:input_type -> nas.v1.CreateCifsShareRequest
+	115, // 140: nas.v1.NasService.UpdateCifsShare:input_type -> nas.v1.UpdateCifsShareRequest
+	116, // 141: nas.v1.NasService.DeleteCifsShare:input_type -> nas.v1.DeleteCifsShareRequest
+	118, // 142: nas.v1.NasService.ListWebdavShares:input_type -> nas.v1.ListWebdavSharesRequest
+	120, // 143: nas.v1.NasService.GetWebdavShare:input_type -> nas.v1.GetWebdavShareRequest
+	121, // 144: nas.v1.NasService.CreateWebdavShare:input_type -> nas.v1.CreateWebdavShareRequest
+	122, // 145: nas.v1.NasService.UpdateWebdavShare:input_type -> nas.v1.UpdateWebdavShareRequest
+	123, // 146: nas.v1.NasService.DeleteWebdavShare:input_type -> nas.v1.DeleteWebdavShareRequest
+	125, // 147: nas.v1.NasService.ListUsers:input_type -> nas.v1.ListUsersRequest
+	127, // 148: nas.v1.NasService.GetUser:input_type -> nas.v1.GetUserRequest
+	128, // 149: nas.v1.NasService.CreateUser:input_type -> nas.v1.CreateUserRequest
+	129, // 150: nas.v1.NasService.UpdateUser:input_type -> nas.v1.UpdateUserRequest
+	130, // 151: nas.v1.NasService.DeleteUser:input_type -> nas.v1.DeleteUserRequest
+	132, // 152: nas.v1.NasService.ListGroups:input_type -> nas.v1.ListGroupsRequest
+	134, // 153: nas.v1.NasService.GetGroup:input_type -> nas.v1.GetGroupRequest
+	135, // 154: nas.v1.NasService.CreateGroup:input_type -> nas.v1.CreateGroupRequest
+	136, // 155: nas.v1.NasService.UpdateGroup:input_type -> nas.v1.UpdateGroupRequest
+	137, // 156: nas.v1.NasService.DeleteGroup:input_type -> nas.v1.DeleteGroupRequest
+	139, // 157: nas.v1.NasService.ListCatalogApps:input_type -> nas.v1.ListCatalogAppsRequest
+	141, // 158: nas.v1.NasService.GetCatalogApp:input_type -> nas.v1.GetCatalogAppRequest
+	142, // 159: nas.v1.NasService.SyncCatalog:input_type -> nas.v1.SyncCatalogRequest
+	1,   // 160: nas.v1.NasService.Login:output_type -> nas.v1.LoginResponse
+	124, // 161: nas.v1.NasService.GetCurrentUser:output_type -> nas.v1.User
+	5,   // 162: nas.v1.NasService.ListPrerequisites:output_type -> nas.v1.ListPrerequisitesResponse
+	3,   // 163: nas.v1.NasService.GetPrerequisite:output_type -> nas.v1.Prerequisite
+	8,   // 164: nas.v1.NasService.CheckPrerequisites:output_type -> nas.v1.CheckPrerequisitesResponse
+	13,  // 165: nas.v1.NasService.ListDisks:output_type -> nas.v1.ListDisksResponse
+	11,  // 166: nas.v1.NasService.GetDisk:output_type -> nas.v1.Disk
+	18,  // 167: nas.v1.NasService.ListZfsPools:output_type -> nas.v1.ListZfsPoolsResponse
+	15,  // 168: nas.v1.NasService.GetZfsPool:output_type -> nas.v1.ZfsPool
+	15,  // 169: nas.v1.NasService.CreateZfsPool:output_type -> nas.v1.ZfsPool
+	146, // 170: nas.v1.NasService.DeleteZfsPool:output_type -> google.protobuf.Empty
+	15,  // 171: nas.v1.NasService.ScrubZfsPool:output_type -> nas.v1.ZfsPool
+	15,  // 172: nas.v1.NasService.UpdateZfsPool:output_type -> nas.v1.ZfsPool
+	15,  // 173: nas.v1.NasService.AddZfsPoolVdev:output_type -> nas.v1.ZfsPool
+	15,  // 174: nas.v1.NasService.RemoveZfsPoolVdev:output_type -> nas.v1.ZfsPool
+	28,  // 175: nas.v1.NasService.ListZfsDatasets:output_type -> nas.v1.ListZfsDatasetsResponse
+	26,  // 176: nas.v1.NasService.GetZfsDataset:output_type -> nas.v1.ZfsDataset
+	26,  // 177: nas.v1.NasService.CreateZfsDataset:output_type -> nas.v1.ZfsDataset
+	26,  // 178: nas.v1.NasService.UpdateZfsDataset:output_type -> nas.v1.ZfsDataset
+	146, // 179: nas.v1.NasService.DeleteZfsDataset:output_type -> google.protobuf.Empty
+	26,  // 180: nas.v1.NasService.SnapshotZfsDataset:output_type -> nas.v1.ZfsDataset
+	36,  // 181: nas.v1.NasService.ListZfsVolumes:output_type -> nas.v1.ListZfsVolumesResponse
+	34,  // 182: nas.v1.NasService.GetZfsVolume:output_type -> nas.v1.ZfsVolume
+	34,  // 183: nas.v1.NasService.CreateZfsVolume:output_type -> nas.v1.ZfsVolume
+	34,  // 184: nas.v1.NasService.UpdateZfsVolume:output_type -> nas.v1.ZfsVolume
+	146, // 185: nas.v1.NasService.DeleteZfsVolume:output_type -> google.protobuf.Empty
+	49,  // 186: nas.v1.NasService.ListVirtualMachines:output_type -> nas.v1.ListVirtualMachinesResponse
+	47,  // 187: nas.v1.NasService.GetVirtualMachine:output_type -> nas.v1.VirtualMachine
+	47,  // 188: nas.v1.NasService.CreateVirtualMachine:output_type -> nas.v1.VirtualMachine
+	47,  // 189: nas.v1.NasService.UpdateVirtualMachine:output_type -> nas.v1.VirtualMachine
+	146, // 190: nas.v1.NasService.DeleteVirtualMachine:output_type -> google.protobuf.Empty
+	47,  // 191: nas.v1.NasService.StartVirtualMachine:output_type -> nas.v1.VirtualMachine
+	47,  // 192: nas.v1.NasService.StopVirtualMachine:output_type -> nas.v1.VirtualMachine
+	47,  // 193: nas.v1.NasService.RebootVirtualMachine:output_type -> nas.v1.VirtualMachine
+	47,  // 194: nas.v1.NasService.ResetVirtualMachine:output_type -> nas.v1.VirtualMachine
+	47,  // 195: nas.v1.NasService.PauseVirtualMachine:output_type -> nas.v1.VirtualMachine
+	47,  // 196: nas.v1.NasService.ResumeVirtualMachine:output_type -> nas.v1.VirtualMachine
+	47,  // 197: nas.v1.NasService.CloneVirtualMachine:output_type -> nas.v1.VirtualMachine
+	47,  // 198: nas.v1.NasService.AttachVirtualMachineMedia:output_type -> nas.v1.VirtualMachine
+	47,  // 199: nas.v1.NasService.EjectVirtualMachineMedia:output_type -> nas.v1.VirtualMachine
+	66,  // 200: nas.v1.NasService.ListVirtualMachineSnapshots:output_type -> nas.v1.ListVirtualMachineSnapshotsResponse
+	46,  // 201: nas.v1.NasService.CreateVirtualMachineSnapshot:output_type -> nas.v1.VirtualMachineSnapshot
+	47,  // 202: nas.v1.NasService.RollbackVirtualMachineSnapshot:output_type -> nas.v1.VirtualMachine
+	146, // 203: nas.v1.NasService.DeleteVirtualMachineSnapshot:output_type -> google.protobuf.Empty
+	58,  // 204: nas.v1.NasService.OpenVirtualMachineConsole:output_type -> nas.v1.VirtualMachineConsoleSession
+	72,  // 205: nas.v1.NasService.ListDockerContainers:output_type -> nas.v1.ListDockerContainersResponse
+	70,  // 206: nas.v1.NasService.GetDockerContainer:output_type -> nas.v1.DockerContainer
+	70,  // 207: nas.v1.NasService.CreateDockerContainer:output_type -> nas.v1.DockerContainer
+	70,  // 208: nas.v1.NasService.UpdateDockerContainer:output_type -> nas.v1.DockerContainer
+	146, // 209: nas.v1.NasService.DeleteDockerContainer:output_type -> google.protobuf.Empty
+	77,  // 210: nas.v1.NasService.GetDockerContainerLogs:output_type -> nas.v1.GetDockerContainerLogsResponse
+	70,  // 211: nas.v1.NasService.StartDockerContainer:output_type -> nas.v1.DockerContainer
+	70,  // 212: nas.v1.NasService.StopDockerContainer:output_type -> nas.v1.DockerContainer
+	70,  // 213: nas.v1.NasService.RestartDockerContainer:output_type -> nas.v1.DockerContainer
+	85,  // 214: nas.v1.NasService.ListDockerApps:output_type -> nas.v1.ListDockerAppsResponse
+	82,  // 215: nas.v1.NasService.GetDockerApp:output_type -> nas.v1.DockerApp
+	82,  // 216: nas.v1.NasService.CreateDockerApp:output_type -> nas.v1.DockerApp
+	82,  // 217: nas.v1.NasService.UpdateDockerApp:output_type -> nas.v1.DockerApp
+	146, // 218: nas.v1.NasService.DeleteDockerApp:output_type -> google.protobuf.Empty
+	82,  // 219: nas.v1.NasService.StartDockerApp:output_type -> nas.v1.DockerApp
+	82,  // 220: nas.v1.NasService.StopDockerApp:output_type -> nas.v1.DockerApp
+	82,  // 221: nas.v1.NasService.RestartDockerApp:output_type -> nas.v1.DockerApp
+	94,  // 222: nas.v1.NasService.GetDockerAppLogs:output_type -> nas.v1.GetDockerAppLogsResponse
+	95,  // 223: nas.v1.NasService.GetDockerConfig:output_type -> nas.v1.DockerConfig
+	95,  // 224: nas.v1.NasService.UpdateDockerConfig:output_type -> nas.v1.DockerConfig
+	100, // 225: nas.v1.NasService.ListFileSystemDirectories:output_type -> nas.v1.ListFileSystemDirectoriesResponse
+	103, // 226: nas.v1.NasService.ListLxcContainers:output_type -> nas.v1.ListLxcContainersResponse
+	101, // 227: nas.v1.NasService.GetLxcContainer:output_type -> nas.v1.LxcContainer
+	101, // 228: nas.v1.NasService.CreateLxcContainer:output_type -> nas.v1.LxcContainer
+	146, // 229: nas.v1.NasService.DeleteLxcContainer:output_type -> google.protobuf.Empty
+	101, // 230: nas.v1.NasService.StartLxcContainer:output_type -> nas.v1.LxcContainer
+	101, // 231: nas.v1.NasService.StopLxcContainer:output_type -> nas.v1.LxcContainer
+	101, // 232: nas.v1.NasService.FreezeLxcContainer:output_type -> nas.v1.LxcContainer
+	112, // 233: nas.v1.NasService.ListCifsShares:output_type -> nas.v1.ListCifsSharesResponse
+	110, // 234: nas.v1.NasService.GetCifsShare:output_type -> nas.v1.CifsShare
+	110, // 235: nas.v1.NasService.CreateCifsShare:output_type -> nas.v1.CifsShare
+	110, // 236: nas.v1.NasService.UpdateCifsShare:output_type -> nas.v1.CifsShare
+	146, // 237: nas.v1.NasService.DeleteCifsShare:output_type -> google.protobuf.Empty
+	119, // 238: nas.v1.NasService.ListWebdavShares:output_type -> nas.v1.ListWebdavSharesResponse
+	117, // 239: nas.v1.NasService.GetWebdavShare:output_type -> nas.v1.WebdavShare
+	117, // 240: nas.v1.NasService.CreateWebdavShare:output_type -> nas.v1.WebdavShare
+	117, // 241: nas.v1.NasService.UpdateWebdavShare:output_type -> nas.v1.WebdavShare
+	146, // 242: nas.v1.NasService.DeleteWebdavShare:output_type -> google.protobuf.Empty
+	126, // 243: nas.v1.NasService.ListUsers:output_type -> nas.v1.ListUsersResponse
+	124, // 244: nas.v1.NasService.GetUser:output_type -> nas.v1.User
+	124, // 245: nas.v1.NasService.CreateUser:output_type -> nas.v1.User
+	124, // 246: nas.v1.NasService.UpdateUser:output_type -> nas.v1.User
+	146, // 247: nas.v1.NasService.DeleteUser:output_type -> google.protobuf.Empty
+	133, // 248: nas.v1.NasService.ListGroups:output_type -> nas.v1.ListGroupsResponse
+	131, // 249: nas.v1.NasService.GetGroup:output_type -> nas.v1.Group
+	131, // 250: nas.v1.NasService.CreateGroup:output_type -> nas.v1.Group
+	131, // 251: nas.v1.NasService.UpdateGroup:output_type -> nas.v1.Group
+	146, // 252: nas.v1.NasService.DeleteGroup:output_type -> google.protobuf.Empty
+	140, // 253: nas.v1.NasService.ListCatalogApps:output_type -> nas.v1.ListCatalogAppsResponse
+	138, // 254: nas.v1.NasService.GetCatalogApp:output_type -> nas.v1.CatalogApp
+	143, // 255: nas.v1.NasService.SyncCatalog:output_type -> nas.v1.SyncCatalogResponse
+	160, // [160:256] is the sub-list for method output_type
+	64,  // [64:160] is the sub-list for method input_type
+	64,  // [64:64] is the sub-list for extension type_name
+	64,  // [64:64] is the sub-list for extension extendee
+	0,   // [0:64] is the sub-list for field type_name
 }
 
 func init() { file_nas_v1_nas_proto_init() }
@@ -9745,7 +11339,7 @@ func file_nas_v1_nas_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nas_v1_nas_proto_rawDesc), len(file_nas_v1_nas_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   127,
+			NumMessages:   144,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

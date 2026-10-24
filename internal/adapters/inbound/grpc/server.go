@@ -25,7 +25,8 @@ const (
 	patternZfsPool         = "zfsPools/{zfs_pool}"
 	patternZfsDataset      = "zfsPools/{zfs_pool}/datasets/{dataset}"
 	patternZfsVolume       = "zfsPools/{zfs_pool}/volumes/{volume}"
-	patternVirtualMachine  = "virtualMachines/{virtual_machine}"
+	patternVirtualMachine         = "virtualMachines/{virtual_machine}"
+	patternVirtualMachineSnapshot = "virtualMachines/{virtual_machine}/snapshots/{snapshot}"
 	patternDockerContainer = "dockerContainers/{docker_container}"
 	patternDockerApp       = "dockerApps/{docker_app}"
 	patternLxcContainer    = "lxcContainers/{lxc_container}"
@@ -715,17 +716,67 @@ func (s *Server) CreateVirtualMachine(ctx context.Context, req *nasv1.CreateVirt
 	if id == "" && in != nil {
 		id = strings.TrimPrefix(in.GetName(), "virtualMachines/")
 	}
+
+	var disks []domain.VirtualMachineDisk
+	for _, d := range in.GetDisks() {
+		disks = append(disks, fromProtoVMDisk(d))
+	}
+	var ifaces []domain.VirtualMachineNetworkInterface
+	for _, iface := range in.GetNetworkInterfaces() {
+		ifaces = append(ifaces, fromProtoVMNetworkInterface(iface))
+	}
+	var pcis []domain.VirtualMachinePciDevice
+	for _, p := range in.GetPciDevices() {
+		pcis = append(pcis, domain.VirtualMachinePciDevice{
+			HostAddress: p.GetHostAddress(),
+			PCIE:        p.GetPcie(),
+			PrimaryGPU:  p.GetPrimaryGpu(),
+		})
+	}
+	var usbs []domain.VirtualMachineUsbDevice
+	for _, u := range in.GetUsbDevices() {
+		usbs = append(usbs, domain.VirtualMachineUsbDevice{
+			HostBusPort:     u.GetHostBusPort(),
+			VendorProductID: u.GetVendorProductId(),
+		})
+	}
+
 	created, err := s.kvm.CreateVM(ctx, domain.VirtualMachine{
-		ID:            id,
-		VCPUs:         in.GetVcpus(),
-		MemoryMiB:     in.GetMemoryMib(),
-		DiskPath:      in.GetDiskPath(),
-		DiskSizeGiB:   in.GetDiskSizeGib(),
-		ISOImage:      in.GetIsoImage(),
-		NetworkBridge: in.GetNetworkBridge(),
-		Autostart:     in.GetAutostart(),
-		OSVariant:     in.GetOsVariant(),
-		Description:   in.GetDescription(),
+		ID:                  id,
+		VCPUs:               in.GetVcpus(),
+		MemoryMiB:           in.GetMemoryMib(),
+		DiskPath:            in.GetDiskPath(),
+		DiskSizeGiB:         in.GetDiskSizeGib(),
+		ISOImage:            in.GetIsoImage(),
+		CdromIsoImage:       in.GetCdromIsoImage(),
+		NetworkBridge:       in.GetNetworkBridge(),
+		Autostart:           in.GetAutostart(),
+		OSVariant:           in.GetOsVariant(),
+		Description:         in.GetDescription(),
+		Sockets:             in.GetSockets(),
+		Cores:               in.GetCores(),
+		CPUType:             in.GetCpuType(),
+		CPUUnits:            in.GetCpuUnits(),
+		CPULimit:            in.GetCpuLimit(),
+		NUMA:                in.GetNuma(),
+		BalloonMinMiB:       in.GetBalloonMinMib(),
+		Hugepages:           in.GetHugepages(),
+		MachineType:         in.GetMachineType(),
+		BiosType:            in.GetBiosType(),
+		TPMVersion:          in.GetTpmVersion(),
+		SecureBoot:          in.GetSecureBoot(),
+		Disks:               disks,
+		NetworkIfaces:       ifaces,
+		CloudInit:           fromProtoVMCloudInit(in.GetCloudInit()),
+		PciDevices:          pcis,
+		UsbDevices:          usbs,
+		StartupDelaySeconds: in.GetStartupDelaySeconds(),
+		BootOrder:           in.GetBootOrder(),
+		WatchdogModel:       in.GetWatchdogModel(),
+		WatchdogAction:      in.GetWatchdogAction(),
+		DisplayType:         in.GetDisplayType(),
+		IsTemplate:          in.GetIsTemplate(),
+		QemuCommandlineArgs: in.GetQemuCommandlineArgs(),
 	})
 	if err != nil {
 		return nil, ToGRPCError(err)
@@ -742,13 +793,40 @@ func (s *Server) UpdateVirtualMachine(ctx context.Context, req *nasv1.UpdateVirt
 	if err != nil {
 		return nil, err
 	}
+
+	var disks []domain.VirtualMachineDisk
+	for _, d := range in.GetDisks() {
+		disks = append(disks, fromProtoVMDisk(d))
+	}
+	var ifaces []domain.VirtualMachineNetworkInterface
+	for _, iface := range in.GetNetworkInterfaces() {
+		ifaces = append(ifaces, fromProtoVMNetworkInterface(iface))
+	}
+
 	updated, err := s.kvm.UpdateVM(ctx, domain.VirtualMachine{
-		ID:            id,
-		VCPUs:         in.GetVcpus(),
-		MemoryMiB:     in.GetMemoryMib(),
-		NetworkBridge: in.GetNetworkBridge(),
-		Autostart:     in.GetAutostart(),
-		Description:   in.GetDescription(),
+		ID:                  id,
+		VCPUs:               in.GetVcpus(),
+		MemoryMiB:           in.GetMemoryMib(),
+		NetworkBridge:       in.GetNetworkBridge(),
+		Autostart:           in.GetAutostart(),
+		Description:         in.GetDescription(),
+		Sockets:             in.GetSockets(),
+		Cores:               in.GetCores(),
+		CPUType:             in.GetCpuType(),
+		BalloonMinMiB:       in.GetBalloonMinMib(),
+		MachineType:         in.GetMachineType(),
+		BiosType:            in.GetBiosType(),
+		TPMVersion:          in.GetTpmVersion(),
+		SecureBoot:          in.GetSecureBoot(),
+		Disks:               disks,
+		CdromIsoImage:       in.GetCdromIsoImage(),
+		NetworkIfaces:       ifaces,
+		CloudInit:           fromProtoVMCloudInit(in.GetCloudInit()),
+		BootOrder:           in.GetBootOrder(),
+		WatchdogModel:       in.GetWatchdogModel(),
+		WatchdogAction:      in.GetWatchdogAction(),
+		DisplayType:         in.GetDisplayType(),
+		QemuCommandlineArgs: in.GetQemuCommandlineArgs(),
 	}, req.GetUpdateMask().GetPaths())
 	if err != nil {
 		return nil, ToGRPCError(err)
@@ -835,6 +913,172 @@ func (s *Server) OpenVirtualMachineConsole(ctx context.Context, req *nasv1.OpenV
 		Resolution:   sess.Resolution,
 		ExpiresAt:    sess.ExpiresAt,
 	}, nil
+}
+
+func (s *Server) ResetVirtualMachine(ctx context.Context, req *nasv1.ResetVirtualMachineRequest) (*nasv1.VirtualMachine, error) {
+	if err := s.prereq.RequireModule("kvm"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	id, err := ParseSingleResourceID(patternVirtualMachine, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	vm, err := s.kvm.ResetVM(ctx, id)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoVM(*vm), nil
+}
+
+func (s *Server) PauseVirtualMachine(ctx context.Context, req *nasv1.PauseVirtualMachineRequest) (*nasv1.VirtualMachine, error) {
+	if err := s.prereq.RequireModule("kvm"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	id, err := ParseSingleResourceID(patternVirtualMachine, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	vm, err := s.kvm.PauseVM(ctx, id)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoVM(*vm), nil
+}
+
+func (s *Server) ResumeVirtualMachine(ctx context.Context, req *nasv1.ResumeVirtualMachineRequest) (*nasv1.VirtualMachine, error) {
+	if err := s.prereq.RequireModule("kvm"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	id, err := ParseSingleResourceID(patternVirtualMachine, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	vm, err := s.kvm.ResumeVM(ctx, id)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoVM(*vm), nil
+}
+
+func (s *Server) CloneVirtualMachine(ctx context.Context, req *nasv1.CloneVirtualMachineRequest) (*nasv1.VirtualMachine, error) {
+	if err := s.prereq.RequireModule("kvm"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	id, err := ParseSingleResourceID(patternVirtualMachine, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	vm, err := s.kvm.CloneVM(ctx, id, req.GetNewVirtualMachineId(), req.GetNewName(), req.GetTargetPool(), req.GetLinkedClone())
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoVM(*vm), nil
+}
+
+func (s *Server) AttachVirtualMachineMedia(ctx context.Context, req *nasv1.AttachVirtualMachineMediaRequest) (*nasv1.VirtualMachine, error) {
+	if err := s.prereq.RequireModule("kvm"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	id, err := ParseSingleResourceID(patternVirtualMachine, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	vm, err := s.kvm.AttachMedia(ctx, id, req.GetDeviceId(), req.GetIsoPath())
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoVM(*vm), nil
+}
+
+func (s *Server) EjectVirtualMachineMedia(ctx context.Context, req *nasv1.EjectVirtualMachineMediaRequest) (*nasv1.VirtualMachine, error) {
+	if err := s.prereq.RequireModule("kvm"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	id, err := ParseSingleResourceID(patternVirtualMachine, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	vm, err := s.kvm.EjectMedia(ctx, id, req.GetDeviceId())
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoVM(*vm), nil
+}
+
+func (s *Server) ListVirtualMachineSnapshots(ctx context.Context, req *nasv1.ListVirtualMachineSnapshotsRequest) (*nasv1.ListVirtualMachineSnapshotsResponse, error) {
+	if err := s.prereq.RequireModule("kvm"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	vmID, err := ParseSingleResourceID(patternVirtualMachine, req.GetParent())
+	if err != nil {
+		return nil, err
+	}
+	snaps, err := s.kvm.ListSnapshots(ctx, vmID)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	paged, nextToken, total, err := PaginateSlice(snaps, req.GetPageSize(), req.GetPageToken())
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*nasv1.VirtualMachineSnapshot, 0, len(paged))
+	for _, snap := range paged {
+		out = append(out, toProtoVMSnapshot(vmID, snap))
+	}
+	return &nasv1.ListVirtualMachineSnapshotsResponse{
+		Snapshots:     out,
+		NextPageToken: nextToken,
+		TotalSize:     total,
+	}, nil
+}
+
+func (s *Server) CreateVirtualMachineSnapshot(ctx context.Context, req *nasv1.CreateVirtualMachineSnapshotRequest) (*nasv1.VirtualMachineSnapshot, error) {
+	if err := s.prereq.RequireModule("kvm"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	vmID, err := ParseSingleResourceID(patternVirtualMachine, req.GetParent())
+	if err != nil {
+		return nil, err
+	}
+	in := req.GetSnapshot()
+	created, err := s.kvm.CreateSnapshot(ctx, vmID, domain.VirtualMachineSnapshot{
+		SnapshotID:  req.GetSnapshotId(),
+		Description: in.GetDescription(),
+		IncludeRAM:  in.GetIncludeRam(),
+	})
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoVMSnapshot(vmID, *created), nil
+}
+
+func (s *Server) RollbackVirtualMachineSnapshot(ctx context.Context, req *nasv1.RollbackVirtualMachineSnapshotRequest) (*nasv1.VirtualMachine, error) {
+	if err := s.prereq.RequireModule("kvm"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	vmID, snapID, err := ParseChildResourceIDs(patternVirtualMachineSnapshot, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	vm, err := s.kvm.RollbackSnapshot(ctx, vmID, snapID)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoVM(*vm), nil
+}
+
+func (s *Server) DeleteVirtualMachineSnapshot(ctx context.Context, req *nasv1.DeleteVirtualMachineSnapshotRequest) (*emptypb.Empty, error) {
+	if err := s.prereq.RequireModule("kvm"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	vmID, snapID, err := ParseChildResourceIDs(patternVirtualMachineSnapshot, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.kvm.DeleteSnapshot(ctx, vmID, snapID); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return &emptypb.Empty{}, nil
 }
 
 // =============================================================================
@@ -1944,22 +2188,187 @@ func toProtoZfsVolume(v domain.ZfsVolume) *nasv1.ZfsVolume {
 }
 
 func toProtoVM(vm domain.VirtualMachine) *nasv1.VirtualMachine {
+	var protoDisks []*nasv1.VirtualMachineDisk
+	for _, d := range vm.Disks {
+		protoDisks = append(protoDisks, toProtoVMDisk(d))
+	}
+	var protoIfaces []*nasv1.VirtualMachineNetworkInterface
+	for _, iface := range vm.NetworkIfaces {
+		protoIfaces = append(protoIfaces, toProtoVMNetworkInterface(iface))
+	}
+	var protoPcis []*nasv1.VirtualMachinePciDevice
+	for _, p := range vm.PciDevices {
+		protoPcis = append(protoPcis, &nasv1.VirtualMachinePciDevice{
+			HostAddress: p.HostAddress,
+			Pcie:        p.PCIE,
+			PrimaryGpu:  p.PrimaryGPU,
+		})
+	}
+	var protoUsbs []*nasv1.VirtualMachineUsbDevice
+	for _, u := range vm.UsbDevices {
+		protoUsbs = append(protoUsbs, &nasv1.VirtualMachineUsbDevice{
+			HostBusPort:     u.HostBusPort,
+			VendorProductId: u.VendorProductID,
+		})
+	}
+
 	return &nasv1.VirtualMachine{
-		Name:          resourcename.Sprint(patternVirtualMachine, vm.ID),
-		VmName:        vm.VMName,
-		Uuid:          vm.UUID,
-		State:         vm.State,
-		Vcpus:         vm.VCPUs,
-		MemoryMib:     vm.MemoryMiB,
-		DiskPath:      vm.DiskPath,
-		DiskSizeGib:   vm.DiskSizeGiB,
-		IsoImage:      vm.ISOImage,
-		NetworkBridge: vm.NetworkBridge,
-		VncPort:       vm.VNCPort,
-		VncDisplay:    vm.VNCDisplay,
-		Autostart:     vm.Autostart,
-		OsVariant:     vm.OSVariant,
-		Description:   vm.Description,
+		Name:                resourcename.Sprint(patternVirtualMachine, vm.ID),
+		VmName:              vm.VMName,
+		Uuid:                vm.UUID,
+		State:               vm.State,
+		Vcpus:               vm.VCPUs,
+		MemoryMib:           vm.MemoryMiB,
+		DiskPath:            vm.DiskPath,
+		DiskSizeGib:         vm.DiskSizeGiB,
+		IsoImage:            vm.ISOImage,
+		CdromIsoImage:       vm.CdromIsoImage,
+		NetworkBridge:       vm.NetworkBridge,
+		VncPort:             vm.VNCPort,
+		VncDisplay:          vm.VNCDisplay,
+		Autostart:           vm.Autostart,
+		OsVariant:           vm.OSVariant,
+		Description:         vm.Description,
+		Sockets:             vm.Sockets,
+		Cores:               vm.Cores,
+		CpuType:             vm.CPUType,
+		CpuUnits:            vm.CPUUnits,
+		CpuLimit:            vm.CPULimit,
+		Numa:                vm.NUMA,
+		BalloonMinMib:       vm.BalloonMinMiB,
+		Hugepages:           vm.Hugepages,
+		MachineType:         vm.MachineType,
+		BiosType:            vm.BiosType,
+		TpmVersion:          vm.TPMVersion,
+		SecureBoot:          vm.SecureBoot,
+		Disks:               protoDisks,
+		NetworkInterfaces:   protoIfaces,
+		CloudInit:           toProtoVMCloudInit(vm.CloudInit),
+		PciDevices:          protoPcis,
+		UsbDevices:          protoUsbs,
+		AgentEnabled:        vm.AgentEnabled,
+		AgentRunning:        vm.AgentRunning,
+		GuestIpAddresses:    vm.GuestIPAddresses,
+		GuestOsName:         vm.GuestOSName,
+		GuestCpuPercent:     vm.GuestCPUPercent,
+		GuestMemoryUsedMib:  vm.GuestMemoryUsedMiB,
+		StartupDelaySeconds: vm.StartupDelaySeconds,
+		BootOrder:           vm.BootOrder,
+		WatchdogModel:       vm.WatchdogModel,
+		WatchdogAction:      vm.WatchdogAction,
+		DisplayType:         vm.DisplayType,
+		IsTemplate:          vm.IsTemplate,
+		QemuCommandlineArgs: vm.QemuCommandlineArgs,
+		SerialConsoleUrl:    vm.SerialConsoleURL,
+	}
+}
+
+func toProtoVMDisk(d domain.VirtualMachineDisk) *nasv1.VirtualMachineDisk {
+	return &nasv1.VirtualMachineDisk{
+		Id:             d.ID,
+		Bus:            d.Bus,
+		DiskPath:       d.DiskPath,
+		SizeBytes:      d.SizeBytes,
+		CacheMode:      d.CacheMode,
+		Discard:        d.Discard,
+		Iothread:       d.IOThread,
+		ReadOnly:       d.ReadOnly,
+		SsdEmulation:   d.SSDEmulation,
+		Backup:         d.Backup,
+		IopsLimitRead:  d.IOPSLimitRead,
+		IopsLimitWrite: d.IOPSLimitWrite,
+		MbpsLimitRead:  d.MbpsLimitRead,
+		MbpsLimitWrite: d.MbpsLimitWrite,
+	}
+}
+
+func fromProtoVMDisk(d *nasv1.VirtualMachineDisk) domain.VirtualMachineDisk {
+	if d == nil {
+		return domain.VirtualMachineDisk{}
+	}
+	return domain.VirtualMachineDisk{
+		ID:             d.GetId(),
+		Bus:            d.GetBus(),
+		DiskPath:       d.GetDiskPath(),
+		SizeBytes:      d.GetSizeBytes(),
+		CacheMode:      d.GetCacheMode(),
+		Discard:        d.GetDiscard(),
+		IOThread:       d.GetIothread(),
+		ReadOnly:       d.GetReadOnly(),
+		SSDEmulation:   d.GetSsdEmulation(),
+		Backup:         d.GetBackup(),
+		IOPSLimitRead:  d.GetIopsLimitRead(),
+		IOPSLimitWrite: d.GetIopsLimitWrite(),
+		MbpsLimitRead:  d.GetMbpsLimitRead(),
+		MbpsLimitWrite: d.GetMbpsLimitWrite(),
+	}
+}
+
+func toProtoVMNetworkInterface(iface domain.VirtualMachineNetworkInterface) *nasv1.VirtualMachineNetworkInterface {
+	return &nasv1.VirtualMachineNetworkInterface{
+		Id:            iface.ID,
+		Model:         iface.Model,
+		Bridge:        iface.Bridge,
+		VlanTag:       iface.VlanTag,
+		MacAddress:    iface.MacAddress,
+		RateLimitMbps: iface.RateLimitMbps,
+		Disconnected:  iface.Disconnected,
+		Firewall:      iface.Firewall,
+	}
+}
+
+func fromProtoVMNetworkInterface(iface *nasv1.VirtualMachineNetworkInterface) domain.VirtualMachineNetworkInterface {
+	if iface == nil {
+		return domain.VirtualMachineNetworkInterface{}
+	}
+	return domain.VirtualMachineNetworkInterface{
+		ID:            iface.GetId(),
+		Model:         iface.GetModel(),
+		Bridge:        iface.GetBridge(),
+		VlanTag:       iface.GetVlanTag(),
+		MacAddress:    iface.GetMacAddress(),
+		RateLimitMbps: iface.GetRateLimitMbps(),
+		Disconnected:  iface.GetDisconnected(),
+		Firewall:      iface.GetFirewall(),
+	}
+}
+
+func toProtoVMCloudInit(c domain.VirtualMachineCloudInit) *nasv1.VirtualMachineCloudInit {
+	return &nasv1.VirtualMachineCloudInit{
+		User:           c.User,
+		Password:       c.Password,
+		SshPublicKeys:  c.SSHPublicKeys,
+		IpConfig:       c.IPConfig,
+		DnsNameservers: c.DNSNameservers,
+		DnsSearch:      c.DNSSearch,
+		CustomUserData: c.CustomUserData,
+	}
+}
+
+func fromProtoVMCloudInit(c *nasv1.VirtualMachineCloudInit) domain.VirtualMachineCloudInit {
+	if c == nil {
+		return domain.VirtualMachineCloudInit{}
+	}
+	return domain.VirtualMachineCloudInit{
+		User:           c.GetUser(),
+		Password:       c.GetPassword(),
+		SSHPublicKeys:  c.GetSshPublicKeys(),
+		IPConfig:       c.GetIpConfig(),
+		DNSNameservers: c.GetDnsNameservers(),
+		DNSSearch:      c.GetDnsSearch(),
+		CustomUserData: c.GetCustomUserData(),
+	}
+}
+
+func toProtoVMSnapshot(vmID string, s domain.VirtualMachineSnapshot) *nasv1.VirtualMachineSnapshot {
+	return &nasv1.VirtualMachineSnapshot{
+		Name:           resourcename.Sprint(patternVirtualMachineSnapshot, vmID, s.SnapshotID),
+		SnapshotId:     s.SnapshotID,
+		Description:    s.Description,
+		CreateTime:     timestamppb.New(s.CreateTime),
+		IncludeRam:     s.IncludeRAM,
+		ParentSnapshot: s.ParentSnapshot,
+		VmState:        s.VMState,
 	}
 }
 

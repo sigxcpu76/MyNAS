@@ -23,7 +23,11 @@ import type {
   SmartParameter,
   User,
   VirtualMachine,
+  VirtualMachineCloudInit,
   VirtualMachineConsoleSession,
+  VirtualMachineDisk,
+  VirtualMachineNetworkInterface,
+  VirtualMachineSnapshot,
   WebdavShare,
   ZfsDataset,
   ZfsPool,
@@ -296,7 +300,70 @@ export function mapZfsVolume(raw: any): ZfsVolume {
   };
 }
 
+export function mapVirtualMachineDisk(raw: any): VirtualMachineDisk {
+  return {
+    id: raw?.id ?? '',
+    bus: raw?.bus ?? 'scsi',
+    diskPath: raw?.diskPath ?? raw?.disk_path ?? '',
+    sizeBytes: normalizeInt64(raw?.sizeBytes ?? raw?.size_bytes),
+    cacheMode: raw?.cacheMode ?? raw?.cache_mode ?? 'none',
+    discard: Boolean(raw?.discard ?? true),
+    iothread: Boolean(raw?.iothread ?? true),
+    readOnly: Boolean(raw?.readOnly ?? raw?.read_only ?? false),
+    ssdEmulation: Boolean(raw?.ssdEmulation ?? raw?.ssd_emulation ?? false),
+    backup: Boolean(raw?.backup ?? true),
+    iopsLimitRead: normalizeInt64(raw?.iopsLimitRead ?? raw?.iops_limit_read),
+    iopsLimitWrite: normalizeInt64(raw?.iopsLimitWrite ?? raw?.iops_limit_write),
+    mbpsLimitRead: normalizeInt64(raw?.mbpsLimitRead ?? raw?.mbps_limit_read),
+    mbpsLimitWrite: normalizeInt64(raw?.mbpsLimitWrite ?? raw?.mbps_limit_write),
+  };
+}
+
+export function mapVirtualMachineNetworkInterface(raw: any): VirtualMachineNetworkInterface {
+  return {
+    id: raw?.id ?? '',
+    model: raw?.model ?? 'virtio',
+    bridge: raw?.bridge ?? 'virbr0',
+    vlanTag: Number(raw?.vlanTag ?? raw?.vlan_tag ?? 0),
+    macAddress: raw?.macAddress ?? raw?.mac_address ?? '',
+    rateLimitMbps: normalizeInt64(raw?.rateLimitMbps ?? raw?.rate_limit_mbps),
+    disconnected: Boolean(raw?.disconnected ?? false),
+    firewall: Boolean(raw?.firewall ?? true),
+  };
+}
+
+export function mapVirtualMachineCloudInit(raw: any): VirtualMachineCloudInit {
+  if (!raw) return {};
+  return {
+    user: raw?.user ?? '',
+    password: raw?.password ?? '',
+    sshPublicKeys: Array.isArray(raw?.sshPublicKeys ?? raw?.ssh_public_keys)
+      ? (raw?.sshPublicKeys ?? raw?.ssh_public_keys)
+      : [],
+    ipConfig: raw?.ipConfig ?? raw?.ip_config ?? '',
+    dnsNameservers: raw?.dnsNameservers ?? raw?.dns_nameservers ?? '',
+    dnsSearch: raw?.dnsSearch ?? raw?.dns_search ?? '',
+    customUserData: raw?.customUserData ?? raw?.custom_user_data ?? '',
+  };
+}
+
+export function mapVirtualMachineSnapshot(raw: any): VirtualMachineSnapshot {
+  return {
+    name: raw?.name ?? '',
+    snapshotId: raw?.snapshotId ?? raw?.snapshot_id ?? '',
+    description: raw?.description ?? '',
+    createTime: raw?.createTime ?? raw?.create_time ?? '',
+    includeRam: Boolean(raw?.includeRam ?? raw?.include_ram ?? false),
+    parentSnapshot: raw?.parentSnapshot ?? raw?.parent_snapshot ?? '',
+    vmState: raw?.vmState ?? raw?.vm_state ?? 'STOPPED',
+  };
+}
+
 export function mapVirtualMachine(raw: any): VirtualMachine {
+  const disks = Array.isArray(raw?.disks) ? raw.disks.map(mapVirtualMachineDisk) : [];
+  const ifaces = Array.isArray(raw?.networkInterfaces ?? raw?.network_interfaces)
+    ? (raw.networkInterfaces ?? raw.network_interfaces).map(mapVirtualMachineNetworkInterface)
+    : [];
   return {
     name: raw?.name ?? '',
     vmName: raw?.vmName ?? raw?.vm_name ?? '',
@@ -307,12 +374,50 @@ export function mapVirtualMachine(raw: any): VirtualMachine {
     diskPath: raw?.diskPath ?? raw?.disk_path ?? '',
     diskSizeGib: normalizeInt64(raw?.diskSizeGib ?? raw?.disk_size_gib),
     isoImage: raw?.isoImage ?? raw?.iso_image ?? '',
+    cdromIsoImage: raw?.cdromIsoImage ?? raw?.cdrom_iso_image ?? '',
     networkBridge: raw?.networkBridge ?? raw?.network_bridge ?? 'virbr0',
     vncPort: Number(raw?.vncPort ?? raw?.vnc_port ?? 0),
     vncDisplay: raw?.vncDisplay ?? raw?.vnc_display ?? '',
     autostart: Boolean(raw?.autostart ?? false),
     osVariant: raw?.osVariant ?? raw?.os_variant ?? '',
     description: raw?.description ?? '',
+
+    sockets: Number(raw?.sockets ?? 1),
+    cores: Number(raw?.cores ?? (raw?.vcpus ?? 2)),
+    cpuType: raw?.cpuType ?? raw?.cpu_type ?? 'host',
+    cpuUnits: Number(raw?.cpuUnits ?? raw?.cpu_units ?? 1024),
+    cpuLimit: Number(raw?.cpuLimit ?? raw?.cpu_limit ?? 0),
+    numa: Boolean(raw?.numa ?? false),
+    balloonMinMib: normalizeInt64(raw?.balloonMinMib ?? raw?.balloon_min_mib),
+    hugepages: raw?.hugepages ?? 'off',
+    machineType: raw?.machineType ?? raw?.machine_type ?? 'q35',
+    biosType: raw?.biosType ?? raw?.bios_type ?? 'seabios',
+    tpmVersion: raw?.tpmVersion ?? raw?.tpm_version ?? 'none',
+    secureBoot: Boolean(raw?.secureBoot ?? raw?.secure_boot ?? false),
+
+    disks,
+    networkInterfaces: ifaces,
+    cloudInit: mapVirtualMachineCloudInit(raw?.cloudInit ?? raw?.cloud_init),
+
+    agentEnabled: Boolean(raw?.agentEnabled ?? raw?.agent_enabled ?? false),
+    agentRunning: Boolean(raw?.agentRunning ?? raw?.agent_running ?? false),
+    guestIpAddresses: Array.isArray(raw?.guestIpAddresses ?? raw?.guest_ip_addresses)
+      ? (raw.guestIpAddresses ?? raw.guest_ip_addresses)
+      : [],
+    guestOsName: raw?.guestOsName ?? raw?.guest_os_name ?? '',
+    guestCpuPercent: Number(raw?.guestCpuPercent ?? raw?.guest_cpu_percent ?? 0),
+    guestMemoryUsedMib: normalizeInt64(raw?.guestMemoryUsedMib ?? raw?.guest_memory_used_mib),
+
+    startupDelaySeconds: Number(raw?.startupDelaySeconds ?? raw?.startup_delay_seconds ?? 0),
+    bootOrder: raw?.bootOrder ?? raw?.boot_order ?? '',
+    watchdogModel: raw?.watchdogModel ?? raw?.watchdog_model ?? 'none',
+    watchdogAction: raw?.watchdogAction ?? raw?.watchdog_action ?? 'reset',
+    displayType: raw?.displayType ?? raw?.display_type ?? 'virtio-gpu',
+    isTemplate: Boolean(raw?.isTemplate ?? raw?.is_template ?? false),
+    qemuCommandlineArgs: Array.isArray(raw?.qemuCommandlineArgs ?? raw?.qemu_commandline_args)
+      ? (raw.qemuCommandlineArgs ?? raw.qemu_commandline_args)
+      : [],
+    serialConsoleUrl: raw?.serialConsoleUrl ?? raw?.serial_console_url ?? '',
   };
 }
 
@@ -741,10 +846,31 @@ export class HttpKvmAdapter implements KvmPort {
       diskPath: vm.diskPath,
       diskSizeGib: vm.diskSizeGib,
       isoImage: vm.isoImage,
+      cdromIsoImage: vm.cdromIsoImage,
       networkBridge: vm.networkBridge,
       autostart: vm.autostart,
       osVariant: vm.osVariant,
       description: vm.description,
+      sockets: vm.sockets,
+      cores: vm.cores,
+      cpuType: vm.cpuType,
+      cpuUnits: vm.cpuUnits,
+      cpuLimit: vm.cpuLimit,
+      numa: vm.numa,
+      balloonMinMib: vm.balloonMinMib,
+      hugepages: vm.hugepages,
+      machineType: vm.machineType,
+      biosType: vm.biosType,
+      tpmVersion: vm.tpmVersion,
+      secureBoot: vm.secureBoot,
+      disks: vm.disks,
+      networkInterfaces: vm.networkInterfaces,
+      cloudInit: vm.cloudInit,
+      bootOrder: vm.bootOrder,
+      watchdogModel: vm.watchdogModel,
+      watchdogAction: vm.watchdogAction,
+      displayType: vm.displayType,
+      qemuCommandlineArgs: vm.qemuCommandlineArgs,
     };
     const raw = await this.client.post<any>('virtualMachines', payload, {
       virtualMachineId: vmId,
@@ -764,6 +890,23 @@ export class HttpKvmAdapter implements KvmPort {
       autostart: vm.autostart,
       description: vm.description,
       isoImage: vm.isoImage,
+      cdromIsoImage: vm.cdromIsoImage,
+      sockets: vm.sockets,
+      cores: vm.cores,
+      cpuType: vm.cpuType,
+      balloonMinMib: vm.balloonMinMib,
+      machineType: vm.machineType,
+      biosType: vm.biosType,
+      tpmVersion: vm.tpmVersion,
+      secureBoot: vm.secureBoot,
+      disks: vm.disks,
+      networkInterfaces: vm.networkInterfaces,
+      cloudInit: vm.cloudInit,
+      bootOrder: vm.bootOrder,
+      watchdogModel: vm.watchdogModel,
+      watchdogAction: vm.watchdogAction,
+      displayType: vm.displayType,
+      qemuCommandlineArgs: vm.qemuCommandlineArgs,
     };
     const raw = await this.client.patch<any>(name, payload, updateMask);
     return mapVirtualMachine(raw);
@@ -786,6 +929,84 @@ export class HttpKvmAdapter implements KvmPort {
   async rebootVirtualMachine(name: string): Promise<VirtualMachine> {
     const raw = await this.client.customMethod<any>(name, 'reboot', {});
     return mapVirtualMachine(raw);
+  }
+
+  async resetVirtualMachine(name: string): Promise<VirtualMachine> {
+    const raw = await this.client.customMethod<any>(name, 'reset', {});
+    return mapVirtualMachine(raw);
+  }
+
+  async pauseVirtualMachine(name: string): Promise<VirtualMachine> {
+    const raw = await this.client.customMethod<any>(name, 'pause', {});
+    return mapVirtualMachine(raw);
+  }
+
+  async resumeVirtualMachine(name: string): Promise<VirtualMachine> {
+    const raw = await this.client.customMethod<any>(name, 'resume', {});
+    return mapVirtualMachine(raw);
+  }
+
+  async cloneVirtualMachine(
+    name: string,
+    newId: string,
+    newName?: string,
+    targetPool?: string,
+    linkedClone = true
+  ): Promise<VirtualMachine> {
+    const raw = await this.client.customMethod<any>(name, 'clone', {
+      newVirtualMachineId: newId,
+      newName: newName || newId,
+      targetPool: targetPool || 'tank',
+      linkedClone,
+    });
+    return mapVirtualMachine(raw);
+  }
+
+  async attachMedia(name: string, isoPath: string, deviceId = 'hdc'): Promise<VirtualMachine> {
+    const raw = await this.client.customMethod<any>(name, 'attachMedia', {
+      deviceId,
+      isoPath,
+    });
+    return mapVirtualMachine(raw);
+  }
+
+  async ejectMedia(name: string, deviceId = 'hdc'): Promise<VirtualMachine> {
+    const raw = await this.client.customMethod<any>(name, 'ejectMedia', {
+      deviceId,
+    });
+    return mapVirtualMachine(raw);
+  }
+
+  async listSnapshots(vmName: string): Promise<VirtualMachineSnapshot[]> {
+    const res = await this.client.get<any>(`${vmName}/snapshots`);
+    const items = res.snapshots ?? [];
+    return items.map(mapVirtualMachineSnapshot);
+  }
+
+  async createSnapshot(
+    vmName: string,
+    snapshotId: string,
+    description = '',
+    includeRam = false
+  ): Promise<VirtualMachineSnapshot> {
+    const raw = await this.client.post<any>(`${vmName}/snapshots`, {
+      snapshot: {
+        description,
+        includeRam,
+      },
+    }, {
+      snapshotId,
+    });
+    return mapVirtualMachineSnapshot(raw);
+  }
+
+  async rollbackSnapshot(snapName: string): Promise<VirtualMachine> {
+    const raw = await this.client.customMethod<any>(snapName, 'rollback', {});
+    return mapVirtualMachine(raw);
+  }
+
+  async deleteSnapshot(snapName: string): Promise<void> {
+    await this.client.delete(snapName);
   }
 
   async openVirtualMachineConsole(name: string): Promise<VirtualMachineConsoleSession> {

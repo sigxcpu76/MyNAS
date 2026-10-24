@@ -185,6 +185,54 @@ export interface ZfsVolume {
 
 export type VirtualMachineState = 'RUNNING' | 'STOPPED' | 'PAUSED';
 
+export interface VirtualMachineDisk {
+  id: string; // "scsi0", "virtio0", "sata1"
+  bus: string; // "scsi", "virtio", "sata", "ide", "nvme"
+  diskPath: string; // ZFS zvol or qcow2 file
+  sizeBytes: number;
+  cacheMode?: string; // "none", "writeback", "writethrough", "unsafe"
+  discard?: boolean; // TRIM
+  iothread?: boolean;
+  readOnly?: boolean;
+  ssdEmulation?: boolean;
+  backup?: boolean;
+  iopsLimitRead?: number;
+  iopsLimitWrite?: number;
+  mbpsLimitRead?: number;
+  mbpsLimitWrite?: number;
+}
+
+export interface VirtualMachineNetworkInterface {
+  id: string; // "net0", "net1"
+  model: string; // "virtio", "e1000", "rtl8139", "vmxnet3"
+  bridge: string; // "virbr0", "vmbr0", "br0"
+  vlanTag?: number; // 0 = untagged, 1..4094
+  macAddress?: string;
+  rateLimitMbps?: number;
+  disconnected?: boolean;
+  firewall?: boolean;
+}
+
+export interface VirtualMachineCloudInit {
+  user?: string;
+  password?: string;
+  sshPublicKeys?: string[];
+  ipConfig?: string; // "dhcp" or "ip=192.168.1.50/24,gw=192.168.1.1"
+  dnsNameservers?: string;
+  dnsSearch?: string;
+  customUserData?: string;
+}
+
+export interface VirtualMachineSnapshot {
+  name: string; // virtualMachines/{vm}/snapshots/{snapshot}
+  snapshotId: string;
+  description?: string;
+  createTime?: string;
+  includeRam?: boolean;
+  parentSnapshot?: string;
+  vmState?: string;
+}
+
 export interface VirtualMachine {
   name: string; // virtualMachines/{virtual_machine}
   vmName: string;
@@ -201,6 +249,46 @@ export interface VirtualMachine {
   autostart: boolean;
   osVariant: string;
   description: string;
+
+  // Proxmox VE Hardware Topology
+  sockets?: number;
+  cores?: number;
+  cpuType?: string; // "host", "kvm64", "x86-64-v2-AES", "EPYC"
+  cpuUnits?: number;
+  cpuLimit?: number;
+  numa?: boolean;
+  balloonMinMib?: number;
+  hugepages?: string;
+  machineType?: string; // "q35", "i440fx"
+  biosType?: string; // "seabios", "ovmf" (UEFI)
+  tpmVersion?: string; // "none", "v2.0"
+  secureBoot?: boolean;
+
+  // Multi-Disk & Media
+  disks?: VirtualMachineDisk[];
+  cdromIsoImage?: string;
+
+  // Networking & Cloud-Init
+  networkInterfaces?: VirtualMachineNetworkInterface[];
+  cloudInit?: VirtualMachineCloudInit;
+
+  // QEMU Guest Agent & Runtime Telemetry
+  agentEnabled?: boolean;
+  agentRunning?: boolean;
+  guestIpAddresses?: string[];
+  guestOsName?: string;
+  guestCpuPercent?: number;
+  guestMemoryUsedMib?: number;
+
+  // Lifecycle, Boot Order & Consoles
+  startupDelaySeconds?: number;
+  bootOrder?: string;
+  watchdogModel?: string;
+  watchdogAction?: string;
+  displayType?: string;
+  isTemplate?: boolean;
+  qemuCommandlineArgs?: string[];
+  serialConsoleUrl?: string;
 }
 
 export interface VirtualMachineConsoleSession {

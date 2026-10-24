@@ -70,6 +70,79 @@ func (s *KvmService) RebootVM(ctx context.Context, id string) (*domain.VirtualMa
 	return s.hypervisor.RebootVM(ctx, id)
 }
 
+func (s *KvmService) ResetVM(ctx context.Context, id string) (*domain.VirtualMachine, error) {
+	if err := domain.ValidateResourceID(id, "virtual_machine"); err != nil {
+		return nil, err
+	}
+	return s.hypervisor.ResetVM(ctx, id)
+}
+
+func (s *KvmService) PauseVM(ctx context.Context, id string) (*domain.VirtualMachine, error) {
+	if err := domain.ValidateResourceID(id, "virtual_machine"); err != nil {
+		return nil, err
+	}
+	return s.hypervisor.PauseVM(ctx, id)
+}
+
+func (s *KvmService) ResumeVM(ctx context.Context, id string) (*domain.VirtualMachine, error) {
+	if err := domain.ValidateResourceID(id, "virtual_machine"); err != nil {
+		return nil, err
+	}
+	return s.hypervisor.ResumeVM(ctx, id)
+}
+
+func (s *KvmService) CloneVM(ctx context.Context, id, newID, newName, targetPool string, linkedClone bool) (*domain.VirtualMachine, error) {
+	if err := domain.ValidateResourceID(id, "virtual_machine"); err != nil {
+		return nil, err
+	}
+	if err := domain.ValidateResourceID(newID, "virtual_machine_id"); err != nil {
+		return nil, err
+	}
+	return s.hypervisor.CloneVM(ctx, id, newID, newName, targetPool, linkedClone)
+}
+
+func (s *KvmService) AttachMedia(ctx context.Context, id, deviceID, isoPath string) (*domain.VirtualMachine, error) {
+	if err := domain.ValidateResourceID(id, "virtual_machine"); err != nil {
+		return nil, err
+	}
+	return s.hypervisor.AttachMedia(ctx, id, deviceID, isoPath)
+}
+
+func (s *KvmService) EjectMedia(ctx context.Context, id, deviceID string) (*domain.VirtualMachine, error) {
+	if err := domain.ValidateResourceID(id, "virtual_machine"); err != nil {
+		return nil, err
+	}
+	return s.hypervisor.EjectMedia(ctx, id, deviceID)
+}
+
+func (s *KvmService) ListSnapshots(ctx context.Context, vmID string) ([]domain.VirtualMachineSnapshot, error) {
+	if err := domain.ValidateResourceID(vmID, "virtual_machine"); err != nil {
+		return nil, err
+	}
+	return s.hypervisor.ListSnapshots(ctx, vmID)
+}
+
+func (s *KvmService) CreateSnapshot(ctx context.Context, vmID string, snap domain.VirtualMachineSnapshot) (*domain.VirtualMachineSnapshot, error) {
+	if err := domain.ValidateResourceID(vmID, "virtual_machine"); err != nil {
+		return nil, err
+	}
+	return s.hypervisor.CreateSnapshot(ctx, vmID, snap)
+}
+
+func (s *KvmService) RollbackSnapshot(ctx context.Context, vmID, snapID string) (*domain.VirtualMachine, error) {
+	if err := domain.ValidateResourceID(vmID, "virtual_machine"); err != nil {
+		return nil, err
+	}
+	return s.hypervisor.RollbackSnapshot(ctx, vmID, snapID)
+}
+
+func (s *KvmService) DeleteSnapshot(ctx context.Context, vmID, snapID string) error {
+	if err := domain.ValidateResourceID(vmID, "virtual_machine"); err != nil {
+		return err
+	}
+	return s.hypervisor.DeleteSnapshot(ctx, vmID, snapID)
+}
+
 func (s *KvmService) OpenConsole(ctx context.Context, id string) (*domain.ConsoleSession, error) {
 	if err := domain.ValidateResourceID(id, "virtual_machine"); err != nil {
 		return nil, err
