@@ -326,24 +326,53 @@ const poolHierarchyTree = computed<ZfsHierarchyNode[]>(() => {
     });
   }
 
+  // Ensure the pool root dataset exists in nodeMap
+  if (!nodeMap.has(poolShort) && activePool.value) {
+    nodeMap.set(poolShort, {
+      id: `ds:${poolShort}`,
+      name: poolShort,
+      fullPath: poolShort,
+      type: 'dataset',
+      mountpoint: activePool.value.mountpoint || `/${poolShort}`,
+      usedBytes: activePool.value.allocatedBytes,
+      availableBytes: activePool.value.freeBytes,
+      compression: activePool.value.compression || 'lz4',
+      recordsize: '128k',
+      readonly: false,
+      sync: 'standard',
+      dedup: false,
+      snapshotsCount: 0,
+      children: [],
+      depth: 0,
+    });
+  }
+
   // 3. Assemble parent-child relationships
   const rootNodes: ZfsHierarchyNode[] = [];
 
   for (const [path, node] of nodeMap.entries()) {
-    const lastSlash = path.lastIndexOf('/');
-    if (lastSlash === -1 || path === poolShort) {
+    if (path === poolShort) {
       rootNodes.push(node);
       continue;
     }
 
+    const lastSlash = path.lastIndexOf('/');
+    if (lastSlash === -1) {
+      if (nodeMap.has(poolShort)) {
+        nodeMap.get(poolShort)!.children.push(node);
+      } else {
+        rootNodes.push(node);
+      }
+      continue;
+    }
+
     const parentPath = path.substring(0, lastSlash);
-    if (parentPath === poolShort) {
-      // Direct child of the pool
-      rootNodes.push(node);
-    } else if (nodeMap.has(parentPath)) {
+    if (nodeMap.has(parentPath)) {
       nodeMap.get(parentPath)!.children.push(node);
+    } else if (nodeMap.has(poolShort)) {
+      nodeMap.get(poolShort)!.children.push(node);
     } else {
-      // Orphan or intermediate segment not listed as a dataset
+      // Orphan
       rootNodes.push(node);
     }
   }

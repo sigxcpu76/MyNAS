@@ -36,6 +36,16 @@ func TestZfsHybridSimulation(t *testing.T) {
 	if len(datasets) < 2 {
 		t.Fatalf("expected >= 2 datasets in tank, got %d", len(datasets))
 	}
+	hasTankRoot := false
+	for _, d := range datasets {
+		if d.DatasetPath == "tank" {
+			hasTankRoot = true
+			break
+		}
+	}
+	if !hasTankRoot {
+		t.Fatalf("expected root dataset 'tank' to be present in ListDatasets, got: %v", datasets)
+	}
 
 	volumes, err := adapter.ListVolumes(ctx, "tank")
 	if err != nil {
@@ -95,6 +105,12 @@ func TestZfsLiveHostDiscovery(t *testing.T) {
 	}
 	if _, ok := dsMap["ds2"]; !ok {
 		t.Fatalf("expected ds2 dataset in f1, got: %v", datasets)
+	}
+	if _, ok := dsMap["root"]; !ok {
+		t.Fatalf("expected root dataset in f1, got: %v", datasets)
+	}
+	if dsMap["root"].DatasetPath != "f1" {
+		t.Fatalf("expected root dataset path 'f1', got %s", dsMap["root"].DatasetPath)
 	}
 	if dsMap["ds1"].Mountpoint != "/f1/ds1" {
 		t.Fatalf("expected /f1/ds1 mountpoint, got %s", dsMap["ds1"].Mountpoint)

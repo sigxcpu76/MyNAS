@@ -85,6 +85,22 @@ func (a *Adapter) seedDefaults() {
 	}
 
 	a.datasets["tank"] = map[string]domain.ZfsDataset{
+		"root": {
+			PoolID:          "tank",
+			ID:              "root",
+			DatasetPath:     "tank",
+			Mountpoint:      "/tank",
+			UsedBytes:       5000000000000,
+			AvailableBytes:  10600000000000,
+			ReferencedBytes: 1048576,
+			QuotaBytes:      0,
+			Compression:     "lz4",
+			Readonly:        false,
+			Atime:           false,
+			Recordsize:      "128K",
+			SnapshotsCount:  0,
+			Sync:            "standard",
+		},
 		"media": {
 			PoolID:          "tank",
 			ID:              "media",
@@ -119,6 +135,22 @@ func (a *Adapter) seedDefaults() {
 		},
 	}
 	a.datasets["nvme-fast"] = map[string]domain.ZfsDataset{
+		"root": {
+			PoolID:          "nvme-fast",
+			ID:              "root",
+			DatasetPath:     "nvme-fast",
+			Mountpoint:      "/nvme-fast",
+			UsedBytes:       120000000000,
+			AvailableBytes:  1580000000000,
+			ReferencedBytes: 1048576,
+			QuotaBytes:      0,
+			Compression:     "zstd",
+			Readonly:        false,
+			Atime:           false,
+			Recordsize:      "128K",
+			SnapshotsCount:  0,
+			Sync:            "standard",
+		},
 		"appdata": {
 			PoolID:          "nvme-fast",
 			ID:              "appdata",
@@ -764,11 +796,16 @@ func (a *Adapter) listHostDatasets(ctx context.Context, poolID string) ([]domain
 	var datasets []domain.ZfsDataset
 	for _, item := range zfsData.Datasets {
 		name := item.Name
-		if name == poolID || !strings.HasPrefix(name, poolID+"/") {
+		if name != poolID && !strings.HasPrefix(name, poolID+"/") {
 			continue
 		}
-		cleanID := strings.TrimPrefix(name, poolID+"/")
-		cleanID = strings.ReplaceAll(cleanID, "/", "-")
+		var cleanID string
+		if name == poolID {
+			cleanID = "root"
+		} else {
+			cleanID = strings.TrimPrefix(name, poolID+"/")
+			cleanID = strings.ReplaceAll(cleanID, "/", "-")
+		}
 
 		used, _ := strconv.ParseInt(item.Properties["used"].Value, 10, 64)
 		avail, _ := strconv.ParseInt(item.Properties["available"].Value, 10, 64)
@@ -806,7 +843,14 @@ func (a *Adapter) listHostDatasets(ctx context.Context, poolID string) ([]domain
 	}
 
 	sort.Slice(datasets, func(i, j int) bool {
-		return datasets[i].ID < datasets[j].ID
+		// Root pool dataset always first
+		if datasets[i].DatasetPath == poolID {
+			return true
+		}
+		if datasets[j].DatasetPath == poolID {
+			return false
+		}
+		return datasets[i].DatasetPath < datasets[j].DatasetPath
 	})
 	return datasets, nil
 }

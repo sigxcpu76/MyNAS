@@ -58,18 +58,56 @@ const editDatasetForm = reactive({
   dedup: false,
 });
 
-// All datasets combined or filtered by selectedPool
-const allDatasets = computed<Array<ZfsDataset & { poolName: string }>>(() => {
-  const result: Array<ZfsDataset & { poolName: string }> = [];
+// All datasets combined or filtered by selectedPool, ensuring each pool tree has the zpool dataset as root
+const allDatasets = computed<Array<ZfsDataset & { poolName: string; isPoolRoot: boolean }>>(() => {
+  const result: Array<ZfsDataset & { poolName: string; isPoolRoot: boolean }> = [];
   for (const pool of nasState.pools) {
     const pName = pool.name;
     const shortName = pool.poolName || pName.replace(/^zfsPools\//, '');
-    if (selectedPool.value !== 'all' && selectedPool.value !== pName) {
+    if (selectedPool.value !== 'all' && selectedPool.value !== pName && selectedPool.value !== shortName) {
       continue;
     }
     const dss = nasState.datasetsByPool[pName] || [];
+
+    // Find if the pool's root dataset is present in dss
+    const poolRootDs = dss.find(
+      (d) => d.datasetPath === shortName || d.datasetPath === pool.poolName || d.name.endsWith('/datasets/root')
+    );
+
+    if (poolRootDs) {
+      result.push({
+        ...poolRootDs,
+        datasetPath: shortName,
+        poolName: shortName,
+        isPoolRoot: true,
+      });
+    } else {
+      // Synthesize root dataset node for this pool from pool metadata so it always exists as tree root
+      result.push({
+        name: `${pName}/datasets/root`,
+        datasetPath: shortName,
+        mountpoint: pool.mountpoint || `/${shortName}`,
+        usedBytes: pool.allocatedBytes,
+        availableBytes: pool.freeBytes,
+        referencedBytes: 0,
+        quotaBytes: 0,
+        compression: pool.compression || 'lz4',
+        recordsize: '128k',
+        readonly: false,
+        atime: true,
+        snapshotsCount: 0,
+        lastSnapshot: '',
+        poolName: shortName,
+        isPoolRoot: true,
+      });
+    }
+
     for (const ds of dss) {
-      result.push({ ...ds, poolName: shortName });
+      // Do not duplicate the pool root dataset
+      if (ds === poolRootDs || ds.datasetPath === shortName || ds.name.endsWith('/datasets/root')) {
+        continue;
+      }
+      result.push({ ...ds, poolName: shortName, isPoolRoot: false });
     }
   }
   return result;
@@ -94,6 +132,7 @@ interface DatasetNode {
   snapshotsCount?: number;
   lastSnapshot?: string;
   depth: number;
+  isPoolRoot: boolean;
   raw: ZfsDataset;
   children: DatasetNode[];
 }
@@ -124,7 +163,8 @@ const hierarchyTree = computed<DatasetNode[]>(() => {
       dedup: ds.dedup,
       snapshotsCount: ds.snapshotsCount,
       lastSnapshot: ds.lastSnapshot,
-      depth: segments.length - 1,
+      depth: ds.isPoolRoot ? 0 : 1,
+      isPoolRoot: ds.isPoolRoot,
       raw: ds,
       children: [],
     };
@@ -133,6 +173,11 @@ const hierarchyTree = computed<DatasetNode[]>(() => {
 
   // Link children
   for (const [, node] of nodesMap) {
+    if (node.isPoolRoot) {
+      rootNodes.push(node);
+      continue;
+    }
+
     const lastSlash = node.fullName.lastIndexOf('/');
     if (lastSlash !== -1) {
       const parentFullName = node.fullName.substring(0, lastSlash);
@@ -141,9 +186,42 @@ const hierarchyTree = computed<DatasetNode[]>(() => {
         parent.children.push(node);
         continue;
       }
+    } else {
+      // If single segment dataset not marked as root, attach to its pool root
+      const poolRoot = nodesMap.get(node.poolName);
+      if (poolRoot && poolRoot !== node) {
+        poolRoot.children.push(node);
+        continue;
+      }
     }
     rootNodes.push(node);
   }
+
+  // Sort: Pool root datasets first, then children recursively
+  function sortNodes(nodes: DatasetNode[]) {
+    nodes.sort((a, b) => {
+      if (a.isPoolRoot && !b.isPoolRoot) return -1;
+      if (!a.isPoolRoot && b.isPoolRoot) return 1;
+      return a.fullName.localeCompare(b.fullName);
+    });
+    for (const n of nodes) {
+      if (n.children.length > 0) {
+        sortNodes(n.children);
+      }
+    }
+  }
+  sortNodes(rootNodes);
+
+  // Compute depths based on tree nesting level
+  function assignDepths(nodes: DatasetNode[], currentDepth: number) {
+    for (const n of nodes) {
+      n.depth = currentDepth;
+      if (n.children.length > 0) {
+        assignDepths(n.children, currentDepth + 1);
+      }
+    }
+  }
+  assignDepths(rootNodes, 0);
 
   return rootNodes;
 });
@@ -187,7 +265,8 @@ const visibleNodes = computed<DatasetNode[]>(() => {
           dedup: ds.dedup,
           snapshotsCount: ds.snapshotsCount,
           lastSnapshot: ds.lastSnapshot,
-          depth: 0,
+          depth: ds.isPoolRoot ? 0 : 1,
+          isPoolRoot: ds.isPoolRoot,
           raw: ds,
           children: [],
         };
@@ -221,15 +300,15 @@ function openCreateModal(parentPath?: string) {
 
 async function handleCreateDataset() {
   try {
-    let poolName = datasetForm.parentPoolOrDataset;
-    let fullDatasetId = datasetForm.datasetId.trim();
+    let rawParent = datasetForm.parentPoolOrDataset.trim();
+    rawParent = rawParent.replace(/^zfsPools\//, '').replace(/\/datasets\/.*/, '');
+    const slashIdx = rawParent.indexOf('/');
+    const poolName = slashIdx === -1 ? rawParent : rawParent.substring(0, slashIdx);
+    const parentPrefix = slashIdx === -1 ? '' : rawParent.substring(slashIdx + 1);
 
-    if (poolName.includes('/datasets/')) {
-      const match = poolName.match(/^(zfsPools\/[^/]+)/);
-      poolName = match ? match[1] : poolName;
-    }
-    if (!poolName.startsWith('zfsPools/')) {
-      poolName = `zfsPools/${poolName}`;
+    let fullDatasetId = datasetForm.datasetId.trim();
+    if (parentPrefix) {
+      fullDatasetId = `${parentPrefix}/${fullDatasetId}`;
     }
 
     const payload: Partial<ZfsDataset> = {
@@ -242,10 +321,10 @@ async function handleCreateDataset() {
     };
     if (datasetForm.mountpoint) payload.mountpoint = datasetForm.mountpoint;
 
-    const created = await services.zfs.createDataset(poolName, fullDatasetId, payload);
+    const created = await services.zfs.createDataset(`zfsPools/${poolName}`, fullDatasetId, payload);
     notify('success', `Created dataset ${created.datasetPath || created.name}`);
     showCreateDataset.value = false;
-    await refreshZfsSubresources(poolName);
+    await refreshZfsSubresources(`zfsPools/${poolName}`);
   } catch (err: any) {
     notify('error', err?.message || 'Failed to create dataset');
   }
@@ -441,13 +520,20 @@ onMounted(async () => {
                   </button>
                   <span v-else-if="viewMode === 'tree' && !searchQuery" class="chevron-spacer"></span>
 
-                  <MdiIcon :path="mdiDatabase" size="16" style="color: var(--accent-primary); flex-shrink: 0" />
+                  <MdiIcon
+                    :path="node.isPoolRoot ? mdiDatabase : mdiFolderOutline"
+                    size="16"
+                    :style="{ color: node.isPoolRoot ? 'var(--accent-primary)' : '#38bdf8', flexShrink: 0 }"
+                  />
 
                   <div style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
                     <span class="mono font-semibold" style="font-size: 13px" :title="node.fullName">
                       {{ node.name }}
                     </span>
-                    <span v-if="viewMode === 'flat'" class="card-subtitle mono" style="font-size: 11px; margin-left: 6px">
+                    <span v-if="node.isPoolRoot" class="badge badge-info mono" style="font-size: 10px; margin-left: 6px">
+                      zpool
+                    </span>
+                    <span v-if="viewMode === 'flat' && !node.isPoolRoot" class="card-subtitle mono" style="font-size: 11px; margin-left: 6px">
                       ({{ node.fullName }})
                     </span>
                   </div>
@@ -535,9 +621,19 @@ onMounted(async () => {
                     <MdiIcon :path="mdiCamera" size="13" />
                   </button>
                   <button
+                    v-if="!node.isPoolRoot"
                     class="btn btn-danger btn-sm btn-icon"
                     title="Delete Dataset"
                     @click="handleDeleteDataset(node.raw.name)"
+                  >
+                    <MdiIcon :path="mdiDelete" size="13" />
+                  </button>
+                  <button
+                    v-else
+                    class="btn btn-sm btn-icon disabled"
+                    disabled
+                    title="Root zpool dataset cannot be deleted directly"
+                    style="opacity: 0.3; cursor: not-allowed"
                   >
                     <MdiIcon :path="mdiDelete" size="13" />
                   </button>
