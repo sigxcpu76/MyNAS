@@ -46,8 +46,8 @@ func (a *Adapter) ListDisks(ctx context.Context) ([]domain.Disk, error) {
 		for _, entry := range entries {
 			name := entry.Name()
 
-			// Skip virtual loop, ram, and device-mapper devices
-			if strings.HasPrefix(name, "loop") || strings.HasPrefix(name, "ram") || strings.HasPrefix(name, "dm-") {
+			// Skip virtual loop, ram, device-mapper, and ZFS volume (zvol) block devices
+			if strings.HasPrefix(name, "loop") || strings.HasPrefix(name, "ram") || strings.HasPrefix(name, "dm-") || strings.HasPrefix(name, "zd") {
 				continue
 			}
 
@@ -134,11 +134,9 @@ func (a *Adapter) inspectSysfsDisk(devName string, poolMap map[string]string) (*
 		if transport == "" {
 			transport = "virtio"
 		}
-	} else if strings.HasPrefix(devName, "zd") {
-		diskType = "VIRTUAL"
-		if transport == "" {
-			transport = "zvol"
-		}
+	} else if strings.HasPrefix(devName, "zd") || transport == "zvol" {
+		// ZFS volume (zvol) block device - skip, managed under Storage Volumes
+		return nil, nil
 	} else if rotational {
 		diskType = "HDD"
 		if transport == "" {

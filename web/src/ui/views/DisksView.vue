@@ -28,8 +28,12 @@ const smartSearch = ref('');
 
 const filteredDisks = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
-  if (!q) return nasState.disks;
-  return nasState.disks.filter((d) =>
+  // Exclude virtual ZFS volumes (zvols) which are managed in Storage > Volumes
+  const nonZvolDisks = nasState.disks.filter(
+    (d) => !d.diskId.startsWith('zd') && d.transport !== 'zvol' && !d.devicePath.includes('/zd')
+  );
+  if (!q) return nonZvolDisks;
+  return nonZvolDisks.filter((d) =>
     d.diskId.toLowerCase().includes(q) ||
     d.model.toLowerCase().includes(q) ||
     d.vendor.toLowerCase().includes(q) ||
