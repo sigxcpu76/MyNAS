@@ -20,6 +20,7 @@ import type {
   LxcContainer,
   Prerequisite,
   PrerequisiteSummary,
+  SmartParameter,
   User,
   VirtualMachine,
   VirtualMachineConsoleSession,
@@ -133,6 +134,20 @@ export function mapDiskPartition(raw: any): DiskPartition {
   };
 }
 
+export function mapSmartParameter(raw: any): SmartParameter {
+  return {
+    id: Number(raw?.id ?? 0),
+    name: raw?.name ?? '',
+    value: String(raw?.value ?? ''),
+    worst: String(raw?.worst ?? ''),
+    threshold: String(raw?.threshold ?? ''),
+    rawValue: String(raw?.rawValue ?? raw?.raw_value ?? ''),
+    status: raw?.status ?? 'OK',
+    type: raw?.type ?? '',
+    description: raw?.description ?? '',
+  };
+}
+
 export function mapDisk(raw: any): Disk {
   if (!raw) {
     return {
@@ -156,9 +171,21 @@ export function mapDisk(raw: any): Disk {
       healthPercentage: 100,
       owningZfsPool: '',
       partitions: [],
+      smartParameters: [],
+      powerOnHours: 0,
+      powerCycleCount: 0,
+      unsafeShutdowns: 0,
+      mediaErrors: 0,
+      totalBytesRead: 0,
+      totalBytesWritten: 0,
+      reallocatedSectors: 0,
+      pendingSectors: 0,
     };
   }
   const parts = Array.isArray(raw.partitions) ? raw.partitions.map(mapDiskPartition) : [];
+  const smartParams = Array.isArray(raw.smartParameters ?? raw.smart_parameters)
+    ? (raw.smartParameters ?? raw.smart_parameters).map(mapSmartParameter)
+    : [];
   return {
     name: raw.name ?? '',
     diskId: raw.diskId ?? raw.disk_id ?? '',
@@ -180,6 +207,15 @@ export function mapDisk(raw: any): Disk {
     healthPercentage: Number(raw.healthPercentage ?? raw.health_percentage ?? 100),
     owningZfsPool: raw.owningZfsPool ?? raw.owning_zfs_pool ?? '',
     partitions: parts,
+    smartParameters: smartParams,
+    powerOnHours: normalizeInt64(raw.powerOnHours ?? raw.power_on_hours),
+    powerCycleCount: normalizeInt64(raw.powerCycleCount ?? raw.power_cycle_count),
+    unsafeShutdowns: normalizeInt64(raw.unsafeShutdowns ?? raw.unsafe_shutdowns),
+    mediaErrors: normalizeInt64(raw.mediaErrors ?? raw.media_errors),
+    totalBytesRead: normalizeInt64(raw.totalBytesRead ?? raw.total_bytes_read),
+    totalBytesWritten: normalizeInt64(raw.totalBytesWritten ?? raw.total_bytes_written),
+    reallocatedSectors: normalizeInt64(raw.reallocatedSectors ?? raw.reallocated_sectors),
+    pendingSectors: normalizeInt64(raw.pendingSectors ?? raw.pending_sectors),
   };
 }
 

@@ -35,4 +35,9 @@ func TestDiskAdapter(t *testing.T) {
 	if found.DiskID != first.DiskID {
 		t.Errorf("expected %q, got %q", first.DiskID, found.DiskID)
 	}
+	if len(found.SmartParameters) == 0 {
+		t.Errorf("expected SMART parameters for disk %q, got 0", found.DiskID)
+	}
+	t.Logf("Disk %s has %d SMART parameters, powerOnHours=%d, writtenBytes=%d",
+		found.DiskID, len(found.SmartParameters), found.PowerOnHours, found.TotalBytesWritten)
 }

@@ -59,6 +59,18 @@ export interface DiskPartition {
   owningZfsPool?: string;
 }
 
+export interface SmartParameter {
+  id: number;
+  name: string;
+  value: string;
+  worst: string;
+  threshold: string;
+  rawValue: string;
+  status: string;
+  type: string;
+  description?: string;
+}
+
 export interface Disk {
   name: string; // disks/{disk}
   diskId: string;
@@ -80,6 +92,15 @@ export interface Disk {
   healthPercentage: number;
   owningZfsPool: string;
   partitions: DiskPartition[];
+  smartParameters?: SmartParameter[];
+  powerOnHours?: number;
+  powerCycleCount?: number;
+  unsafeShutdowns?: number;
+  mediaErrors?: number;
+  totalBytesRead?: number;
+  totalBytesWritten?: number;
+  reallocatedSectors?: number;
+  pendingSectors?: number;
 }
 
 // ---------------------------------------------------------------------------

@@ -774,6 +774,18 @@ message DiskPartition {
   string owning_zfs_pool = 7;
 }
 
+message SmartParameter {
+  int32 id = 1;               // ATA attribute ID (e.g. 5, 9, 194) or index
+  string name = 2;             // Attribute name e.g. "Reallocated_Sector_Ct", "Power_On_Hours"
+  string value = 3;            // Normalized value (e.g. "100")
+  string worst = 4;            // Worst value (e.g. "100")
+  string threshold = 5;        // Failure threshold (e.g. "36")
+  string raw_value = 6;        // Raw value string (e.g. "0", "3200 hrs", "38 C")
+  string status = 7;           // "OK", "PASSED", "WARNING", "PRE_FAIL", "FAILED"
+  string type = 8;             // "Pre-fail", "Old_age", "NVMe"
+  string description = 9;      // Human-readable explanation
+}
+
 message Disk {
   option (google.api.resource) = {
     type: "nas.sigxcpu.io/Disk"
@@ -802,6 +814,15 @@ message Disk {
   int32 health_percentage = 18; // 0..100
   string owning_zfs_pool = 19;
   repeated DiskPartition partitions = 20;
+  repeated SmartParameter smart_parameters = 21;
+  int64 power_on_hours = 22;
+  int64 power_cycle_count = 23;
+  int64 unsafe_shutdowns = 24;
+  int64 media_errors = 25;
+  int64 total_bytes_read = 26;
+  int64 total_bytes_written = 27;
+  int64 reallocated_sectors = 28;
+  int64 pending_sectors = 29;
 }
 
 message ListDisksRequest {

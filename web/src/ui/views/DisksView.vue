@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import {
   mdiAlertCircle,
   mdiCheckCircle,
+  mdiClockOutline,
   mdiClose,
   mdiDatabase,
   mdiFlash,
@@ -11,6 +12,8 @@ import {
   mdiMagnify,
   mdiRefresh,
   mdiServer,
+  mdiShieldCheck,
+  mdiSpeedometer,
   mdiThermometer,
 } from '@mdi/js';
 import { formatBytes, type Disk } from '../../domain/models';
@@ -20,6 +23,8 @@ import { navigateTo } from '../router';
 
 const searchQuery = ref('');
 const selectedDisk = ref<Disk | null>(null);
+const modalTab = ref<'smart' | 'hardware' | 'partitions'>('smart');
+const smartSearch = ref('');
 
 const filteredDisks = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
@@ -32,6 +37,19 @@ const filteredDisks = computed(() => {
     d.type.toLowerCase().includes(q) ||
     d.devicePath.toLowerCase().includes(q) ||
     d.owningZfsPool.toLowerCase().includes(q)
+  );
+});
+
+const filteredSmartParams = computed(() => {
+  if (!selectedDisk.value?.smartParameters) return [];
+  const q = smartSearch.value.trim().toLowerCase();
+  if (!q) return selectedDisk.value.smartParameters;
+  return selectedDisk.value.smartParameters.filter((p) =>
+    p.name.toLowerCase().includes(q) ||
+    p.rawValue.toLowerCase().includes(q) ||
+    p.type.toLowerCase().includes(q) ||
+    p.status.toLowerCase().includes(q) ||
+    (p.description && p.description.toLowerCase().includes(q))
   );
 });
 
@@ -260,30 +278,76 @@ function goToPool(poolName: string) {
 
     <!-- Disk Inspector Modal -->
     <div v-if="selectedDisk" class="modal-overlay" @click.self="selectedDisk = null">
-      <div class="modal-container" style="max-width: 650px; width: 100%">
+      <div class="modal-container" style="max-width: 860px; width: 100%">
         <div class="modal-header">
           <div style="display: flex; align-items: center; gap: 10px">
-            <MdiIcon :path="mdiHarddisk" size="22" style="color: var(--accent-primary)" />
-            <h3 class="card-title" style="margin: 0">
-              Disk Inspector: <span class="mono">{{ selectedDisk.diskId }}</span>
-            </h3>
+            <MdiIcon
+              :path="selectedDisk.type === 'NVME' ? mdiFlash : (selectedDisk.rotational ? mdiHarddisk : mdiServer)"
+              size="22"
+              :style="{ color: selectedDisk.type === 'NVME' ? '#c084fc' : (selectedDisk.rotational ? '#f59e0b' : '#38bdf8') }"
+            />
+            <div>
+              <h3 class="card-title" style="margin: 0; font-size: 15px">
+                Disk Inspector: <span class="mono">{{ selectedDisk.diskId }}</span>
+              </h3>
+              <div class="mono" style="font-size: 11px; color: var(--text-secondary)">
+                {{ selectedDisk.model || selectedDisk.vendor || selectedDisk.devicePath }}
+              </div>
+            </div>
           </div>
           <button class="btn btn-sm btn-icon" @click="selectedDisk = null">
             <MdiIcon :path="mdiClose" size="16" />
           </button>
         </div>
 
-        <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px">
-          <!-- Overview Grid -->
-          <div class="info-stat-row" style="grid-template-columns: repeat(3, 1fr)">
+        <!-- Modal Sub-Navigation Tabs -->
+        <div class="modal-nav-tabs">
+          <button
+            class="modal-nav-tab"
+            :class="{ active: modalTab === 'smart' }"
+            @click="modalTab = 'smart'"
+          >
+            <MdiIcon :path="mdiSpeedometer" size="15" style="margin-right: 6px" />
+            S.M.A.R.T. Telemetry
+            <span class="badge badge-neutral" style="font-size: 10px; margin-left: 6px">
+              {{ selectedDisk.smartParameters?.length || 0 }}
+            </span>
+          </button>
+          <button
+            class="modal-nav-tab"
+            :class="{ active: modalTab === 'hardware' }"
+            @click="modalTab = 'hardware'"
+          >
+            <MdiIcon :path="mdiInformationOutline" size="15" style="margin-right: 6px" />
+            Hardware & Sysfs
+          </button>
+          <button
+            class="modal-nav-tab"
+            :class="{ active: modalTab === 'partitions' }"
+            @click="modalTab = 'partitions'"
+          >
+            <MdiIcon :path="mdiDatabase" size="15" style="margin-right: 6px" />
+            Partitions
+            <span class="badge badge-neutral" style="font-size: 10px; margin-left: 6px">
+              {{ selectedDisk.partitions?.length || 0 }}
+            </span>
+          </button>
+        </div>
+
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px; max-height: 70vh; overflow-y: auto">
+          <!-- Overview Stats Grid (Always Visible) -->
+          <div class="info-stat-row">
             <div class="stat-col">
               <span class="stat-label">Capacity</span>
               <span class="stat-value text-sky mono">{{ formatBytes(selectedDisk.sizeBytes) }}</span>
             </div>
             <div class="stat-col">
-              <span class="stat-label">S.M.A.R.T. Status</span>
+              <span class="stat-label">S.M.A.R.T. Health</span>
               <span class="stat-value mono" :class="selectedDisk.smartStatus === 'PASSED' ? 'text-emerald' : 'text-sky'">
                 {{ selectedDisk.smartStatus }}
+                <span v-if="selectedDisk.healthPercentage > 0 && selectedDisk.healthPercentage < 100" style="font-size: 11px; color: var(--text-secondary)">
+                  ({{ selectedDisk.healthPercentage }}%)
+                </span>
               </span>
             </div>
             <div class="stat-col">
@@ -292,24 +356,136 @@ function goToPool(poolName: string) {
                 {{ selectedDisk.temperatureCelsius > 0 ? `${selectedDisk.temperatureCelsius.toFixed(1)}°C` : 'N/A' }}
               </span>
             </div>
+            <div v-if="selectedDisk.powerOnHours" class="stat-col">
+              <span class="stat-label">Power-On Time</span>
+              <span class="stat-value mono" style="font-size: 13px" :title="`${(selectedDisk.powerOnHours / 24).toFixed(1)} operating days`">
+                {{ selectedDisk.powerOnHours.toLocaleString() }} hrs
+              </span>
+            </div>
+            <div v-if="selectedDisk.totalBytesWritten" class="stat-col">
+              <span class="stat-label">Total Written</span>
+              <span class="stat-value mono" style="font-size: 13px; color: #a78bfa">
+                {{ formatBytes(selectedDisk.totalBytesWritten) }}
+              </span>
+            </div>
+            <div v-if="selectedDisk.powerCycleCount" class="stat-col">
+              <span class="stat-label">Power Cycles</span>
+              <span class="stat-value mono" style="font-size: 13px">
+                {{ selectedDisk.powerCycleCount }}
+              </span>
+            </div>
           </div>
 
-          <!-- Sysfs Properties Table -->
-          <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px">
-            <div style="font-weight: 600; font-size: 13px; margin-bottom: 8px; color: var(--text-primary)">
+          <!-- TAB 1: S.M.A.R.T. PARAMETERS -->
+          <div v-if="modalTab === 'smart'" style="display: flex; flex-direction: column; gap: 12px">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap">
+              <div style="font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px">
+                <span>Diagnostic Attributes & Parameters</span>
+                <span class="badge badge-neutral mono" style="font-size: 10.5px">
+                  {{ filteredSmartParams.length }} of {{ selectedDisk.smartParameters?.length || 0 }}
+                </span>
+              </div>
+              <div class="search-input-wrap">
+                <MdiIcon :path="mdiMagnify" size="14" class="search-icon" />
+                <input
+                  v-model="smartSearch"
+                  class="input search-input"
+                  style="width: 220px; height: 30px; font-size: 11.5px"
+                  placeholder="Filter parameters..."
+                />
+              </div>
+            </div>
+
+            <!-- Parameters Table -->
+            <div v-if="filteredSmartParams.length > 0" class="table-wrap" style="max-height: 380px; overflow-y: auto">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th style="min-width: 45px">ID</th>
+                    <th style="min-width: 220px">Parameter Name</th>
+                    <th style="min-width: 150px">Raw Value</th>
+                    <th style="min-width: 110px">Normalized</th>
+                    <th style="min-width: 80px">Status</th>
+                    <th style="min-width: 85px">Type</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="sp in filteredSmartParams" :key="sp.id + '-' + sp.name">
+                    <!-- ID -->
+                    <td class="mono font-semibold" style="color: var(--text-secondary); font-size: 11px">
+                      #{{ sp.id.toString().padStart(2, '0') }}
+                    </td>
+
+                    <!-- Name & Description -->
+                    <td>
+                      <div class="mono font-semibold" style="font-size: 12px; color: var(--text-primary)">
+                        {{ sp.name }}
+                      </div>
+                      <div v-if="sp.description" style="font-size: 10.5px; color: var(--text-secondary); line-height: 1.3; margin-top: 2px">
+                        {{ sp.description }}
+                      </div>
+                    </td>
+
+                    <!-- Raw Value -->
+                    <td>
+                      <span class="mono font-semibold" style="color: var(--accent-primary); font-size: 12px">
+                        {{ sp.rawValue || '-' }}
+                      </span>
+                    </td>
+
+                    <!-- Normalized (Val / Worst / Thresh) -->
+                    <td class="mono" style="font-size: 11px; color: var(--text-secondary)">
+                      <span v-if="sp.value && sp.value !== 'N/A'">
+                        {{ sp.value }}
+                        <span v-if="sp.worst && sp.worst !== '-'"> / {{ sp.worst }}</span>
+                        <span v-if="sp.threshold && sp.threshold !== '-'" style="color: var(--text-muted)"> (T: {{ sp.threshold }})</span>
+                      </span>
+                      <span v-else>-</span>
+                    </td>
+
+                    <!-- Status -->
+                    <td>
+                      <span
+                        class="badge mono"
+                        :class="sp.status === 'OK' || sp.status === 'PASSED' ? 'badge-success' : (sp.status === 'WARNING' ? 'badge-warning' : 'badge-danger')"
+                        style="font-size: 10px"
+                      >
+                        {{ sp.status }}
+                      </span>
+                    </td>
+
+                    <!-- Type -->
+                    <td>
+                      <span class="badge mono badge-neutral" style="font-size: 10px">
+                        {{ sp.type || 'Standard' }}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-else style="color: var(--text-secondary); font-size: 12px; padding: 24px; text-align: center; background: var(--bg-base); border-radius: 6px">
+              <span v-if="smartSearch">No parameters match filter "<strong>{{ smartSearch }}</strong>".</span>
+              <span v-else>No S.M.A.R.T. parameters reported for this storage device.</span>
+            </div>
+          </div>
+
+          <!-- TAB 2: HARDWARE & SYSFS -->
+          <div v-else-if="modalTab === 'hardware'" style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px">
+            <div style="font-weight: 600; font-size: 13px; margin-bottom: 12px; color: var(--text-primary)">
               Linux <code class="mono">/sys/block/{{ selectedDisk.diskId }}</code> Attributes
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; font-size: 12px">
-              <div><span style="color: var(--text-secondary)">Device Path:</span> <span class="mono font-semibold">{{ selectedDisk.devicePath }}</span></div>
-              <div><span style="color: var(--text-secondary)">Model:</span> <span class="font-semibold">{{ selectedDisk.model || '-' }}</span></div>
-              <div><span style="color: var(--text-secondary)">Vendor:</span> <span class="font-semibold">{{ selectedDisk.vendor || '-' }}</span></div>
-              <div><span style="color: var(--text-secondary)">Serial:</span> <span class="mono font-semibold">{{ selectedDisk.serial || '-' }}</span></div>
-              <div><span style="color: var(--text-secondary)">Firmware:</span> <span class="mono font-semibold">{{ selectedDisk.firmwareRev || '-' }}</span></div>
-              <div><span style="color: var(--text-secondary)">Type:</span> <span class="mono font-semibold">{{ selectedDisk.type }} (Rotational: {{ selectedDisk.rotational }})</span></div>
-              <div><span style="color: var(--text-secondary)">Transport:</span> <span class="mono font-semibold">{{ selectedDisk.transport || '-' }}</span></div>
-              <div><span style="color: var(--text-secondary)">Block Sizes:</span> <span class="mono font-semibold">L: {{ selectedDisk.logicalBlockSize }}B / P: {{ selectedDisk.physicalBlockSize }}B</span></div>
-              <div><span style="color: var(--text-secondary)">Removable:</span> <span class="mono font-semibold">{{ selectedDisk.removable ? 'Yes' : 'No' }}</span></div>
-              <div><span style="color: var(--text-secondary)">State:</span> <span class="mono font-semibold">{{ selectedDisk.state || 'running' }}</span></div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; font-size: 12px">
+              <div><span style="color: var(--text-secondary)">Device Path:</span> <span class="mono font-semibold" style="margin-left: 6px">{{ selectedDisk.devicePath }}</span></div>
+              <div><span style="color: var(--text-secondary)">Model:</span> <span class="font-semibold" style="margin-left: 6px">{{ selectedDisk.model || '-' }}</span></div>
+              <div><span style="color: var(--text-secondary)">Vendor:</span> <span class="font-semibold" style="margin-left: 6px">{{ selectedDisk.vendor || '-' }}</span></div>
+              <div><span style="color: var(--text-secondary)">Serial:</span> <span class="mono font-semibold" style="margin-left: 6px">{{ selectedDisk.serial || '-' }}</span></div>
+              <div><span style="color: var(--text-secondary)">Firmware:</span> <span class="mono font-semibold" style="margin-left: 6px">{{ selectedDisk.firmwareRev || '-' }}</span></div>
+              <div><span style="color: var(--text-secondary)">Type:</span> <span class="mono font-semibold" style="margin-left: 6px">{{ selectedDisk.type }} (Rotational: {{ selectedDisk.rotational }})</span></div>
+              <div><span style="color: var(--text-secondary)">Transport:</span> <span class="mono font-semibold" style="margin-left: 6px">{{ selectedDisk.transport || '-' }}</span></div>
+              <div><span style="color: var(--text-secondary)">Block Sizes:</span> <span class="mono font-semibold" style="margin-left: 6px">Logical: {{ selectedDisk.logicalBlockSize }}B / Physical: {{ selectedDisk.physicalBlockSize }}B</span></div>
+              <div><span style="color: var(--text-secondary)">Removable:</span> <span class="mono font-semibold" style="margin-left: 6px">{{ selectedDisk.removable ? 'Yes' : 'No' }}</span></div>
+              <div><span style="color: var(--text-secondary)">Kernel State:</span> <span class="mono font-semibold" style="margin-left: 6px">{{ selectedDisk.state || 'running' }}</span></div>
               <div v-if="selectedDisk.owningZfsPool" style="grid-column: span 2">
                 <span style="color: var(--text-secondary)">Owning ZFS Pool:</span>
                 <span class="mono" style="color: var(--accent-primary); font-weight: 700; margin-left: 6px">{{ selectedDisk.owningZfsPool }}</span>
@@ -317,8 +493,8 @@ function goToPool(poolName: string) {
             </div>
           </div>
 
-          <!-- Partitions Breakdown -->
-          <div>
+          <!-- TAB 3: PARTITIONS -->
+          <div v-else-if="modalTab === 'partitions'">
             <div style="font-weight: 600; font-size: 13px; margin-bottom: 8px">
               Partitions Table ({{ selectedDisk.partitions?.length || 0 }})
             </div>
@@ -344,7 +520,7 @@ function goToPool(poolName: string) {
                 </tbody>
               </table>
             </div>
-            <div v-else style="color: var(--text-secondary); font-size: 12px; padding: 8px; background: var(--bg-base); border-radius: 6px">
+            <div v-else style="color: var(--text-secondary); font-size: 12px; padding: 12px; background: var(--bg-base); border-radius: 6px">
               No partitions found. This device is managed as a whole block storage disk.
             </div>
           </div>
@@ -385,9 +561,40 @@ function goToPool(poolName: string) {
   border: 1px solid rgba(168, 85, 247, 0.3);
 }
 
+.modal-nav-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.modal-nav-tab {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.modal-nav-tab:hover {
+  color: var(--text-primary);
+}
+
+.modal-nav-tab.active {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
+}
+
 .info-stat-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 8px;
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid var(--border-subtle);

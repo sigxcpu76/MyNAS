@@ -1352,8 +1352,43 @@ func newDiskCmd(rootOpts *RootOptions) *cobra.Command {
 			fmt.Fprintf(rootOpts.Out, "Block Sizes:    logical=%d, physical=%d\n", d.GetLogicalBlockSize(), d.GetPhysicalBlockSize())
 			fmt.Fprintf(rootOpts.Out, "Temperature:    %.1f°C\n", d.GetTemperatureCelsius())
 			fmt.Fprintf(rootOpts.Out, "SMART Status:   %s (Health %d%%)\n", d.GetSmartStatus(), d.GetHealthPercentage())
+			if d.GetPowerOnHours() > 0 {
+				fmt.Fprintf(rootOpts.Out, "Power On Hours: %d hrs\n", d.GetPowerOnHours())
+			}
+			if d.GetPowerCycleCount() > 0 {
+				fmt.Fprintf(rootOpts.Out, "Power Cycles:   %d\n", d.GetPowerCycleCount())
+			}
+			if d.GetTotalBytesWritten() > 0 {
+				fmt.Fprintf(rootOpts.Out, "Data Written:   %s\n", domain.FormatBytes(d.GetTotalBytesWritten()))
+			}
+			if d.GetTotalBytesRead() > 0 {
+				fmt.Fprintf(rootOpts.Out, "Data Read:      %s\n", domain.FormatBytes(d.GetTotalBytesRead()))
+			}
+			if d.GetUnsafeShutdowns() > 0 {
+				fmt.Fprintf(rootOpts.Out, "Unsafe Offs:    %d\n", d.GetUnsafeShutdowns())
+			}
+			if d.GetMediaErrors() > 0 {
+				fmt.Fprintf(rootOpts.Out, "Media Errors:   %d\n", d.GetMediaErrors())
+			}
+			if d.GetReallocatedSectors() > 0 {
+				fmt.Fprintf(rootOpts.Out, "Realloc Sectors:%d\n", d.GetReallocatedSectors())
+			}
+			if d.GetPendingSectors() > 0 {
+				fmt.Fprintf(rootOpts.Out, "Pending Sectors:%d\n", d.GetPendingSectors())
+			}
 			if d.GetOwningZfsPool() != "" {
 				fmt.Fprintf(rootOpts.Out, "Owning ZFS Pool:%s\n", d.GetOwningZfsPool())
+			}
+
+			if len(d.GetSmartParameters()) > 0 {
+				fmt.Fprintln(rootOpts.Out, "\nSMART Parameters:")
+				tw := tabwriter.NewWriter(rootOpts.Out, 0, 4, 2, ' ', 0)
+				fmt.Fprintln(tw, "  ID\tNAME\tVALUE\tWORST\tTHRESH\tRAW\tSTATUS\tTYPE")
+				for _, sp := range d.GetSmartParameters() {
+					fmt.Fprintf(tw, "  #%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+						sp.GetId(), sp.GetName(), sp.GetValue(), sp.GetWorst(), sp.GetThreshold(), sp.GetRawValue(), sp.GetStatus(), sp.GetType())
+				}
+				_ = tw.Flush()
 			}
 
 			if len(d.GetPartitions()) > 0 {

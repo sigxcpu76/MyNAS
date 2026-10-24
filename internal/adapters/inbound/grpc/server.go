@@ -213,6 +213,20 @@ func toProtoDisk(d domain.Disk) *nasv1.Disk {
 			OwningZfsPool: p.OwningZfsPool,
 		})
 	}
+	var smartParams []*nasv1.SmartParameter
+	for _, sp := range d.SmartParameters {
+		smartParams = append(smartParams, &nasv1.SmartParameter{
+			Id:          sp.ID,
+			Name:        sp.Name,
+			Value:       sp.Value,
+			Worst:       sp.Worst,
+			Threshold:   sp.Threshold,
+			RawValue:    sp.RawValue,
+			Status:      sp.Status,
+			Type:        sp.Type,
+			Description: sp.Description,
+		})
+	}
 	return &nasv1.Disk{
 		Name:               name,
 		DiskId:             d.DiskID,
@@ -234,6 +248,15 @@ func toProtoDisk(d domain.Disk) *nasv1.Disk {
 		HealthPercentage:   d.HealthPercentage,
 		OwningZfsPool:      d.OwningZfsPool,
 		Partitions:         parts,
+		SmartParameters:    smartParams,
+		PowerOnHours:       d.PowerOnHours,
+		PowerCycleCount:    d.PowerCycleCount,
+		UnsafeShutdowns:    d.UnsafeShutdowns,
+		MediaErrors:        d.MediaErrors,
+		TotalBytesRead:     d.TotalBytesRead,
+		TotalBytesWritten:  d.TotalBytesWritten,
+		ReallocatedSectors: d.ReallocatedSectors,
+		PendingSectors:     d.PendingSectors,
 	}
 }
 
