@@ -590,6 +590,7 @@ type DiskPartition struct {
 	Mountpoint    string                 `protobuf:"bytes,5,opt,name=mountpoint,proto3" json:"mountpoint,omitempty"`
 	Label         string                 `protobuf:"bytes,6,opt,name=label,proto3" json:"label,omitempty"`
 	OwningZfsPool string                 `protobuf:"bytes,7,opt,name=owning_zfs_pool,json=owningZfsPool,proto3" json:"owning_zfs_pool,omitempty"`
+	Aliases       []string               `protobuf:"bytes,8,rep,name=aliases,proto3" json:"aliases,omitempty"` // e.g. "/dev/disk/by-id/...", "/dev/disk/by-partuuid/..."
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -671,6 +672,13 @@ func (x *DiskPartition) GetOwningZfsPool() string {
 		return x.OwningZfsPool
 	}
 	return ""
+}
+
+func (x *DiskPartition) GetAliases() []string {
+	if x != nil {
+		return x.Aliases
+	}
+	return nil
 }
 
 type SmartParameter struct {
@@ -812,6 +820,7 @@ type Disk struct {
 	TotalBytesWritten  int64                  `protobuf:"varint,27,opt,name=total_bytes_written,json=totalBytesWritten,proto3" json:"total_bytes_written,omitempty"`
 	ReallocatedSectors int64                  `protobuf:"varint,28,opt,name=reallocated_sectors,json=reallocatedSectors,proto3" json:"reallocated_sectors,omitempty"`
 	PendingSectors     int64                  `protobuf:"varint,29,opt,name=pending_sectors,json=pendingSectors,proto3" json:"pending_sectors,omitempty"`
+	Aliases            []string               `protobuf:"bytes,30,rep,name=aliases,proto3" json:"aliases,omitempty"` // e.g. "/dev/disk/by-id/...", "/dev/disk/by-path/..."
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -1047,6 +1056,13 @@ func (x *Disk) GetPendingSectors() int64 {
 		return x.PendingSectors
 	}
 	return 0
+}
+
+func (x *Disk) GetAliases() []string {
+	if x != nil {
+		return x.Aliases
+	}
+	return nil
 }
 
 type ListDisksRequest struct {
@@ -8471,7 +8487,7 @@ const file_nas_v1_nas_proto_rawDesc = "" +
 	"\rprerequisites\x18\x01 \x03(\v2\x14.nas.v1.PrerequisiteR\rprerequisites\x12'\n" +
 	"\x0finstalled_count\x18\x02 \x01(\x05R\x0einstalledCount\x12#\n" +
 	"\rmissing_count\x18\x03 \x01(\x05R\fmissingCount\x126\n" +
-	"\x17hybrid_fallback_enabled\x18\x04 \x01(\bR\x15hybridFallbackEnabled\"\xd9\x01\n" +
+	"\x17hybrid_fallback_enabled\x18\x04 \x01(\bR\x15hybridFallbackEnabled\"\xf3\x01\n" +
 	"\rDiskPartition\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
 	"\vdevice_path\x18\x02 \x01(\tR\n" +
@@ -8483,7 +8499,8 @@ const file_nas_v1_nas_proto_rawDesc = "" +
 	"mountpoint\x18\x05 \x01(\tR\n" +
 	"mountpoint\x12\x14\n" +
 	"\x05label\x18\x06 \x01(\tR\x05label\x12&\n" +
-	"\x0fowning_zfs_pool\x18\a \x01(\tR\rowningZfsPool\"\xe9\x01\n" +
+	"\x0fowning_zfs_pool\x18\a \x01(\tR\rowningZfsPool\x12\x18\n" +
+	"\aaliases\x18\b \x03(\tR\aaliases\"\xe9\x01\n" +
 	"\x0eSmartParameter\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
@@ -8493,7 +8510,7 @@ const file_nas_v1_nas_proto_rawDesc = "" +
 	"\traw_value\x18\x06 \x01(\tR\brawValue\x12\x16\n" +
 	"\x06status\x18\a \x01(\tR\x06status\x12\x12\n" +
 	"\x04type\x18\b \x01(\tR\x04type\x12 \n" +
-	"\vdescription\x18\t \x01(\tR\vdescription\"\xf2\b\n" +
+	"\vdescription\x18\t \x01(\tR\vdescription\"\x8c\t\n" +
 	"\x04Disk\x12\x18\n" +
 	"\x04name\x18\x01 \x01(\tB\x04\xe2A\x01\bR\x04name\x12\x17\n" +
 	"\adisk_id\x18\x02 \x01(\tR\x06diskId\x12\x1f\n" +
@@ -8530,7 +8547,8 @@ const file_nas_v1_nas_proto_rawDesc = "" +
 	"\x10total_bytes_read\x18\x1a \x01(\x03R\x0etotalBytesRead\x12.\n" +
 	"\x13total_bytes_written\x18\x1b \x01(\x03R\x11totalBytesWritten\x12/\n" +
 	"\x13reallocated_sectors\x18\x1c \x01(\x03R\x12reallocatedSectors\x12'\n" +
-	"\x0fpending_sectors\x18\x1d \x01(\x03R\x0ependingSectors:3\xeaA0\n" +
+	"\x0fpending_sectors\x18\x1d \x01(\x03R\x0ependingSectors\x12\x18\n" +
+	"\aaliases\x18\x1e \x03(\tR\aaliases:3\xeaA0\n" +
 	"\x13nas.sigxcpu.io/Disk\x12\fdisks/{disk}*\x05disks2\x04disk\"f\n" +
 	"\x10ListDisksRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +

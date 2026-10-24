@@ -122,7 +122,7 @@ export function mapPrerequisite(raw: any): Prerequisite {
 }
 
 export function mapDiskPartition(raw: any): DiskPartition {
-  if (!raw) return { name: '', devicePath: '', sizeBytes: 0, fstype: '', mountpoint: '', label: '', owningZfsPool: '' };
+  if (!raw) return { name: '', devicePath: '', sizeBytes: 0, fstype: '', mountpoint: '', label: '', owningZfsPool: '', aliases: [] };
   return {
     name: raw.name ?? '',
     devicePath: raw.devicePath ?? raw.device_path ?? '',
@@ -131,6 +131,7 @@ export function mapDiskPartition(raw: any): DiskPartition {
     mountpoint: raw.mountpoint ?? '',
     label: raw.label ?? '',
     owningZfsPool: raw.owningZfsPool ?? raw.owning_zfs_pool ?? '',
+    aliases: Array.isArray(raw.aliases) ? raw.aliases : [],
   };
 }
 
@@ -171,6 +172,7 @@ export function mapDisk(raw: any): Disk {
       healthPercentage: 100,
       owningZfsPool: '',
       partitions: [],
+      aliases: [],
       smartParameters: [],
       powerOnHours: 0,
       powerCycleCount: 0,
@@ -207,6 +209,7 @@ export function mapDisk(raw: any): Disk {
     healthPercentage: Number(raw.healthPercentage ?? raw.health_percentage ?? 100),
     owningZfsPool: raw.owningZfsPool ?? raw.owning_zfs_pool ?? '',
     partitions: parts,
+    aliases: Array.isArray(raw.aliases) ? raw.aliases : [],
     smartParameters: smartParams,
     powerOnHours: normalizeInt64(raw.powerOnHours ?? raw.power_on_hours),
     powerCycleCount: normalizeInt64(raw.powerCycleCount ?? raw.power_cycle_count),

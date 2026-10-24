@@ -37,10 +37,16 @@ func (a *Adapter) ListDisks(ctx context.Context) ([]domain.Disk, error) {
 
 	var disks []domain.Disk
 
-	// 1. Fetch ZFS Pool vdev mappings to match owning pools
-	poolDeviceMap := a.getPoolDeviceMap(ctx)
+	// 1. Collect all device aliases (by-id, by-uuid, by-partuuid, by-path, etc.)
+	devToAliases, aliasToDev := a.collectDeviceAliases()
 
-	// 2. Discover block devices in /sys/block
+	// 2. Build partition-to-parent-disk mapping
+	partitionToDisk := a.buildPartitionToDiskMap()
+
+	// 3. Fetch ZFS Pool vdev mappings using alias matching, symlink resolution, and backing devices
+	poolDeviceMap := a.getPoolDeviceMap(ctx, aliasToDev, partitionToDisk)
+
+	// 4. Discover block devices in /sys/block
 	entries, err := os.ReadDir(a.sysFS)
 	if err == nil {
 		for _, entry := range entries {
@@ -51,14 +57,14 @@ func (a *Adapter) ListDisks(ctx context.Context) ([]domain.Disk, error) {
 				continue
 			}
 
-			disk, err := a.inspectSysfsDisk(name, poolDeviceMap)
+			disk, err := a.inspectSysfsDisk(name, poolDeviceMap, devToAliases)
 			if err == nil && disk != nil {
 				disks = append(disks, *disk)
 			}
 		}
 	}
 
-	// 3. Fallback if no disks discovered (e.g. restricted container or test environment)
+	// 5. Fallback if no disks discovered (e.g. restricted container or test environment)
 	if len(disks) == 0 && a.fallback {
 		disks = a.getSimulatedDisks(poolDeviceMap)
 	}
@@ -80,7 +86,7 @@ func (a *Adapter) GetDisk(ctx context.Context, id string) (*domain.Disk, error) 
 	return nil, fmt.Errorf("disk %q not found", cleanID)
 }
 
-func (a *Adapter) inspectSysfsDisk(devName string, poolMap map[string]string) (*domain.Disk, error) {
+func (a *Adapter) inspectSysfsDisk(devName string, poolMap map[string]string, devToAliases map[string][]string) (*domain.Disk, error) {
 	devDir := filepath.Join(a.sysFS, devName)
 
 	// Read size in 512-byte sectors
@@ -158,18 +164,38 @@ func (a *Adapter) inspectSysfsDisk(devName string, poolMap map[string]string) (*
 	if owningPool == "" {
 		owningPool = poolMap[devPath]
 	}
+	if owningPool == "" {
+		for _, alias := range devToAliases[devName] {
+			if p := poolMap[alias]; p != "" {
+				owningPool = p
+				break
+			}
+			if p := poolMap[filepath.Base(alias)]; p != "" {
+				owningPool = p
+				break
+			}
+		}
+	}
 
 	// Partitions discovery
-	partitions := a.inspectSysfsPartitions(devDir, devName, poolMap)
+	partitions := a.inspectSysfsPartitions(devDir, devName, poolMap, devToAliases)
 
 	// If any child partition is owned by a ZFS pool, disk is also associated
 	if owningPool == "" {
 		for _, p := range partitions {
 			if p.OwningZfsPool != "" {
-				owningPool = p.OwningZfsPool
-				break
+				addPool(poolMap, devName, p.OwningZfsPool)
+				owningPool = poolMap[devName]
 			}
 		}
+	}
+
+	diskAliases := devToAliases[devName]
+	if len(diskAliases) == 0 {
+		diskAliases = devToAliases[devPath]
+	}
+	if diskAliases == nil {
+		diskAliases = []string{}
 	}
 
 	disk := &domain.Disk{
@@ -193,6 +219,7 @@ func (a *Adapter) inspectSysfsDisk(devName string, poolMap map[string]string) (*
 		HealthPercentage:   100,
 		OwningZfsPool:      owningPool,
 		Partitions:         partitions,
+		Aliases:            diskAliases,
 	}
 
 	readIOs, writeIOs := readSysfsStat(devDir, disk)
@@ -201,7 +228,7 @@ func (a *Adapter) inspectSysfsDisk(devName string, poolMap map[string]string) (*
 	return disk, nil
 }
 
-func (a *Adapter) inspectSysfsPartitions(devDir, devName string, poolMap map[string]string) []domain.DiskPartition {
+func (a *Adapter) inspectSysfsPartitions(devDir, devName string, poolMap map[string]string, devToAliases map[string][]string) []domain.DiskPartition {
 	var parts []domain.DiskPartition
 
 	entries, err := os.ReadDir(devDir)
@@ -219,9 +246,29 @@ func (a *Adapter) inspectSysfsPartitions(devDir, devName string, poolMap map[str
 			sec, _ := strconv.ParseInt(sizeSectorsStr, 10, 64)
 			partPath := "/dev/" + subName
 
+			partAliases := devToAliases[subName]
+			if len(partAliases) == 0 {
+				partAliases = devToAliases[partPath]
+			}
+			if partAliases == nil {
+				partAliases = []string{}
+			}
+
 			owningPool := poolMap[subName]
 			if owningPool == "" {
 				owningPool = poolMap[partPath]
+			}
+			if owningPool == "" {
+				for _, alias := range partAliases {
+					if p := poolMap[alias]; p != "" {
+						owningPool = p
+						break
+					}
+					if p := poolMap[filepath.Base(alias)]; p != "" {
+						owningPool = p
+						break
+					}
+				}
 			}
 
 			parts = append(parts, domain.DiskPartition{
@@ -230,6 +277,7 @@ func (a *Adapter) inspectSysfsPartitions(devDir, devName string, poolMap map[str
 				SizeBytes:     sec * 512,
 				Mountpoint:    mounts[partPath],
 				OwningZfsPool: owningPool,
+				Aliases:       partAliases,
 			})
 		}
 	}
@@ -717,7 +765,273 @@ func getAtaAttributeDescription(name string) string {
 	}
 }
 
-func (a *Adapter) getPoolDeviceMap(ctx context.Context) map[string]string {
+func (a *Adapter) collectDeviceAliases() (map[string][]string, map[string]string) {
+	devToAliases := make(map[string][]string)
+	aliasToDev := make(map[string]string)
+
+	byDirs := []string{
+		"/dev/disk/by-id",
+		"/dev/disk/by-uuid",
+		"/dev/disk/by-partuuid",
+		"/dev/disk/by-path",
+		"/dev/disk/by-partlabel",
+		"/dev/disk/by-label",
+		"/dev/disk/by-diskseq",
+		"/dev/disk/by-designator",
+	}
+
+	for _, dir := range byDirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			fullPath := filepath.Join(dir, e.Name())
+			target, err := filepath.EvalSymlinks(fullPath)
+			if err != nil {
+				continue
+			}
+			canonicalName := filepath.Base(target)
+			canonicalPath := "/dev/" + canonicalName
+
+			aliasToDev[fullPath] = canonicalName
+			aliasToDev[e.Name()] = canonicalName
+
+			if !containsString(devToAliases[canonicalName], fullPath) {
+				devToAliases[canonicalName] = append(devToAliases[canonicalName], fullPath)
+			}
+			if !containsString(devToAliases[canonicalPath], fullPath) {
+				devToAliases[canonicalPath] = append(devToAliases[canonicalPath], fullPath)
+			}
+		}
+	}
+
+	// Also parse lsblk -J -o NAME,PATH,UUID,PARTUUID to register UUIDs and PARTUUIDs
+	if lsblkPath, err := exec.LookPath("lsblk"); err == nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, lsblkPath, "-J", "-o", "NAME,PATH,UUID,PARTUUID")
+		out, err := cmd.Output()
+		if err == nil {
+			var lsblkData struct {
+				BlockDevices []struct {
+					Name     string `json:"name"`
+					Path     string `json:"path"`
+					UUID     string `json:"uuid"`
+					PartUUID string `json:"partuuid"`
+					Children []struct {
+						Name     string `json:"name"`
+						Path     string `json:"path"`
+						UUID     string `json:"uuid"`
+						PartUUID string `json:"partuuid"`
+					} `json:"children"`
+				} `json:"blockdevices"`
+			}
+			if err := json.Unmarshal(out, &lsblkData); err == nil {
+				for _, d := range lsblkData.BlockDevices {
+					if d.UUID != "" {
+						aliasToDev[d.UUID] = d.Name
+					}
+					if d.PartUUID != "" {
+						aliasToDev[d.PartUUID] = d.Name
+					}
+					for _, c := range d.Children {
+						if c.UUID != "" {
+							aliasToDev[c.UUID] = c.Name
+						}
+						if c.PartUUID != "" {
+							aliasToDev[c.PartUUID] = c.Name
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return devToAliases, aliasToDev
+}
+
+func (a *Adapter) buildPartitionToDiskMap() map[string]string {
+	partToDisk := make(map[string]string)
+	entries, err := os.ReadDir(a.sysFS)
+	if err != nil {
+		return partToDisk
+	}
+
+	for _, entry := range entries {
+		diskName := entry.Name()
+		diskDir := filepath.Join(a.sysFS, diskName)
+		subEntries, err := os.ReadDir(diskDir)
+		if err != nil {
+			continue
+		}
+		for _, sub := range subEntries {
+			subName := sub.Name()
+			subDir := filepath.Join(diskDir, subName)
+			if _, err := os.Stat(filepath.Join(subDir, "partition")); err == nil {
+				partToDisk[subName] = diskName
+				partToDisk["/dev/"+subName] = diskName
+			}
+		}
+	}
+	return partToDisk
+}
+
+func findBackingDeviceForPath(filePath string) string {
+	if filePath == "" {
+		return ""
+	}
+	// Try df -P <filePath>
+	if dfPath, err := exec.LookPath("df"); err == nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, dfPath, "-P", filePath)
+		out, err := cmd.Output()
+		if err == nil {
+			lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+			if len(lines) >= 2 {
+				fields := strings.Fields(lines[1])
+				if len(fields) >= 1 && strings.HasPrefix(fields[0], "/dev/") {
+					return fields[0]
+				}
+			}
+		}
+	}
+
+	// Fallback to /proc/mounts longest prefix match
+	mounts := parseProcMounts()
+	var bestDev string
+	bestLen := -1
+	for dev, mountpoint := range mounts {
+		if strings.HasPrefix(filePath, mountpoint) && len(mountpoint) > bestLen {
+			bestLen = len(mountpoint)
+			bestDev = dev
+		}
+	}
+	return bestDev
+}
+
+func addPool(poolMap map[string]string, key, poolName string) {
+	if key == "" || poolName == "" {
+		return
+	}
+	existing := poolMap[key]
+	if existing == "" {
+		poolMap[key] = poolName
+		return
+	}
+	pools := strings.Split(existing, ", ")
+	for _, p := range pools {
+		if p == poolName {
+			return
+		}
+	}
+	poolMap[key] = existing + ", " + poolName
+}
+
+func containsString(slice []string, val string) bool {
+	for _, s := range slice {
+		if s == val {
+			return true
+		}
+	}
+	return false
+}
+
+func registerVdev(vdev, poolName string, poolMap, aliasToDev, partitionToDisk map[string]string) {
+	if vdev == "" || poolName == "" {
+		return
+	}
+	addPool(poolMap, vdev, poolName)
+	addPool(poolMap, filepath.Base(vdev), poolName)
+
+	if canonical, ok := aliasToDev[vdev]; ok && canonical != "" {
+		addPool(poolMap, canonical, poolName)
+		addPool(poolMap, "/dev/"+canonical, poolName)
+		if parent := partitionToDisk[canonical]; parent != "" {
+			addPool(poolMap, parent, poolName)
+			addPool(poolMap, "/dev/"+parent, poolName)
+		}
+	}
+	base := filepath.Base(vdev)
+	if canonical, ok := aliasToDev[base]; ok && canonical != "" {
+		addPool(poolMap, canonical, poolName)
+		addPool(poolMap, "/dev/"+canonical, poolName)
+		if parent := partitionToDisk[canonical]; parent != "" {
+			addPool(poolMap, parent, poolName)
+			addPool(poolMap, "/dev/"+parent, poolName)
+		}
+	}
+
+	if target, err := filepath.EvalSymlinks(vdev); err == nil && target != vdev {
+		targetBase := filepath.Base(target)
+		addPool(poolMap, target, poolName)
+		addPool(poolMap, targetBase, poolName)
+		if parent := partitionToDisk[targetBase]; parent != "" {
+			addPool(poolMap, parent, poolName)
+			addPool(poolMap, "/dev/"+parent, poolName)
+		}
+	}
+
+	isRegularFile := false
+	if fi, err := os.Stat(vdev); err == nil && fi.Mode().IsRegular() {
+		isRegularFile = true
+	} else if strings.HasPrefix(vdev, "/") && !strings.HasPrefix(vdev, "/dev/") {
+		isRegularFile = true
+	}
+
+	if isRegularFile {
+		backingDev := findBackingDeviceForPath(vdev)
+		if backingDev != "" {
+			backingBase := filepath.Base(backingDev)
+			addPool(poolMap, backingDev, poolName)
+			addPool(poolMap, backingBase, poolName)
+			if parent := partitionToDisk[backingBase]; parent != "" {
+				addPool(poolMap, parent, poolName)
+				addPool(poolMap, "/dev/"+parent, poolName)
+			}
+		}
+	}
+
+	if parent := partitionToDisk[base]; parent != "" {
+		addPool(poolMap, parent, poolName)
+		addPool(poolMap, "/dev/"+parent, poolName)
+	}
+	if parent := partitionToDisk[vdev]; parent != "" {
+		addPool(poolMap, parent, poolName)
+		addPool(poolMap, "/dev/"+parent, poolName)
+	}
+}
+
+type zpoolJSONVdevNode struct {
+	Name     string                        `json:"name"`
+	Path     string                        `json:"path"`
+	VdevType string                        `json:"vdev_type"`
+	Vdevs    map[string]*zpoolJSONVdevNode `json:"vdevs"`
+}
+
+type zpoolJSONStatus struct {
+	Pools map[string]struct {
+		Name  string                        `json:"name"`
+		Vdevs map[string]*zpoolJSONVdevNode `json:"vdevs"`
+	} `json:"pools"`
+}
+
+func walkZpoolVdevTree(node *zpoolJSONVdevNode, poolName string, poolMap, aliasToDev, partitionToDisk map[string]string) {
+	if node == nil {
+		return
+	}
+	if node.Path != "" {
+		registerVdev(node.Path, poolName, poolMap, aliasToDev, partitionToDisk)
+	} else if node.Name != "" && (strings.HasPrefix(node.Name, "/") || strings.HasPrefix(node.Name, "sd") || strings.HasPrefix(node.Name, "nvme") || strings.HasPrefix(node.Name, "vd")) {
+		registerVdev(node.Name, poolName, poolMap, aliasToDev, partitionToDisk)
+	}
+	for _, child := range node.Vdevs {
+		walkZpoolVdevTree(child, poolName, poolMap, aliasToDev, partitionToDisk)
+	}
+}
+
+func (a *Adapter) getPoolDeviceMap(ctx context.Context, aliasToDev, partitionToDisk map[string]string) map[string]string {
 	poolMap := make(map[string]string)
 
 	// 1. Query ZFS engine port if available
@@ -730,34 +1044,72 @@ func (a *Adapter) getPoolDeviceMap(ctx context.Context) map[string]string {
 					poolName = p.ID
 				}
 				for _, dev := range p.Devices {
-					poolMap[dev] = poolName
-					poolMap[filepath.Base(dev)] = poolName
+					registerVdev(dev, poolName, poolMap, aliasToDev, partitionToDisk)
 				}
 				for _, v := range p.Vdevs {
-					matchDevsInVdev(v, poolName, poolMap)
+					a.matchVdevTree(v, poolName, poolMap, aliasToDev, partitionToDisk)
 				}
 			}
 		}
 	}
 
-	// 2. Query zpool status -P directly if available
+	// 2. Query zpool status -P -L -j (JSON format)
 	if zpoolPath, err := exec.LookPath("zpool"); err == nil {
-		cmd := exec.CommandContext(ctx, zpoolPath, "status", "-P")
+		cmd := exec.CommandContext(ctx, zpoolPath, "status", "-P", "-L", "-j")
 		out, err := cmd.Output()
-		if err == nil {
-			parseZpoolStatusDevices(string(out), poolMap)
+		if err == nil && len(out) > 0 {
+			var zpoolStatus zpoolJSONStatus
+			if err := json.Unmarshal(out, &zpoolStatus); err == nil && len(zpoolStatus.Pools) > 0 {
+				for _, pool := range zpoolStatus.Pools {
+					for _, vdevNode := range pool.Vdevs {
+						walkZpoolVdevTree(vdevNode, pool.Name, poolMap, aliasToDev, partitionToDisk)
+					}
+				}
+			}
+		}
+
+		// Fallback/Supplement: parse textual zpool status -P -L
+		cmdText := exec.CommandContext(ctx, zpoolPath, "status", "-P", "-L")
+		outText, errText := cmdText.Output()
+		if errText != nil || len(outText) == 0 {
+			cmdText = exec.CommandContext(ctx, zpoolPath, "status", "-P")
+			outText, _ = cmdText.Output()
+		}
+		if len(outText) > 0 {
+			parseZpoolStatusDevices(string(outText), poolMap, aliasToDev, partitionToDisk)
 		}
 	}
 
-	// 3. Resolve symlinks from /dev/disk/by-id to map to underlying disks
-	byIDMatches, _ := filepath.Glob("/dev/disk/by-id/*")
-	for _, byIDPath := range byIDMatches {
-		target, err := filepath.EvalSymlinks(byIDPath)
+	// 3. Inspect lsblk -J -o NAME,PATH,FSTYPE,LABEL for any zfs_member partitions
+	if lsblkPath, err := exec.LookPath("lsblk"); err == nil {
+		cmd := exec.CommandContext(ctx, lsblkPath, "-J", "-o", "NAME,PATH,FSTYPE,LABEL")
+		out, err := cmd.Output()
 		if err == nil {
-			devName := filepath.Base(target)
-			if pool, exists := poolMap[byIDPath]; exists {
-				poolMap[devName] = pool
-				poolMap[target] = pool
+			var lsblkData struct {
+				BlockDevices []struct {
+					Name     string `json:"name"`
+					Path     string `json:"path"`
+					FSType   string `json:"fstype"`
+					Label    string `json:"label"`
+					Children []struct {
+						Name   string `json:"name"`
+						Path   string `json:"path"`
+						FSType string `json:"fstype"`
+						Label  string `json:"label"`
+					} `json:"children"`
+				} `json:"blockdevices"`
+			}
+			if err := json.Unmarshal(out, &lsblkData); err == nil {
+				for _, d := range lsblkData.BlockDevices {
+					if d.FSType == "zfs_member" && d.Label != "" {
+						registerVdev(d.Path, d.Label, poolMap, aliasToDev, partitionToDisk)
+					}
+					for _, c := range d.Children {
+						if c.FSType == "zfs_member" && c.Label != "" {
+							registerVdev(c.Path, c.Label, poolMap, aliasToDev, partitionToDisk)
+						}
+					}
+				}
 			}
 		}
 	}
@@ -765,17 +1117,16 @@ func (a *Adapter) getPoolDeviceMap(ctx context.Context) map[string]string {
 	return poolMap
 }
 
-func matchDevsInVdev(v domain.ZfsVdev, poolName string, poolMap map[string]string) {
+func (a *Adapter) matchVdevTree(v domain.ZfsVdev, poolName string, poolMap, aliasToDev, partitionToDisk map[string]string) {
 	if v.Path != "" {
-		poolMap[v.Path] = poolName
-		poolMap[filepath.Base(v.Path)] = poolName
+		registerVdev(v.Path, poolName, poolMap, aliasToDev, partitionToDisk)
 	}
 	for _, child := range v.Children {
-		matchDevsInVdev(child, poolName, poolMap)
+		a.matchVdevTree(child, poolName, poolMap, aliasToDev, partitionToDisk)
 	}
 }
 
-func parseZpoolStatusDevices(statusOut string, poolMap map[string]string) {
+func parseZpoolStatusDevices(statusOut string, poolMap, aliasToDev, partitionToDisk map[string]string) {
 	lines := strings.Split(statusOut, "\n")
 	var currentPool string
 	inConfig := false
@@ -795,9 +1146,8 @@ func parseZpoolStatusDevices(statusOut string, poolMap map[string]string) {
 			fields := strings.Fields(trimmed)
 			if len(fields) >= 2 {
 				name := fields[0]
-				if strings.HasPrefix(name, "/") || strings.HasPrefix(name, "sd") || strings.HasPrefix(name, "nvme") || strings.HasPrefix(name, "zd") {
-					poolMap[name] = currentPool
-					poolMap[filepath.Base(name)] = currentPool
+				if strings.HasPrefix(name, "/") || strings.HasPrefix(name, "sd") || strings.HasPrefix(name, "nvme") || strings.HasPrefix(name, "vd") {
+					registerVdev(name, currentPool, poolMap, aliasToDev, partitionToDisk)
 				}
 			}
 		}
@@ -841,9 +1191,35 @@ func (a *Adapter) getSimulatedDisks(poolMap map[string]string) []domain.Disk {
 			MediaErrors:        0,
 			TotalBytesRead:     14850000000000,
 			TotalBytesWritten:  28400000000000,
+			Aliases: []string{
+				"/dev/disk/by-id/nvme-Micron_7450_PRO_Enterprise_NVMe_242749B56EA0",
+				"/dev/disk/by-id/nvme-eui.000000000000000100a0752449b56ea0",
+				"/dev/disk/by-path/pci-0000:c1:00.0-nvme-1",
+			},
 			Partitions: []domain.DiskPartition{
-				{Name: "nvme0n1p1", DevicePath: "/dev/nvme0n1p1", SizeBytes: 1073741824, Mountpoint: "/boot"},
-				{Name: "nvme0n1p2", DevicePath: "/dev/nvme0n1p2", SizeBytes: 2047334506496, Mountpoint: "/"},
+				{
+					Name:       "nvme0n1p1",
+					DevicePath: "/dev/nvme0n1p1",
+					SizeBytes:  1073741824,
+					Mountpoint: "/boot",
+					Aliases: []string{
+						"/dev/disk/by-id/nvme-Micron_7450_PRO_Enterprise_NVMe_242749B56EA0-part1",
+						"/dev/disk/by-partuuid/d7aa3dad-36b0-477e-9cf1-e90ca9e13c63",
+						"/dev/disk/by-uuid/C71F-0BC5",
+					},
+				},
+				{
+					Name:          "nvme0n1p2",
+					DevicePath:    "/dev/nvme0n1p2",
+					SizeBytes:     2047334506496,
+					Mountpoint:    "/",
+					OwningZfsPool: pool1,
+					Aliases: []string{
+						"/dev/disk/by-id/nvme-Micron_7450_PRO_Enterprise_NVMe_242749B56EA0-part2",
+						"/dev/disk/by-partuuid/09e19a71-0135-43a9-b2fe-68686b13a95e",
+						"/dev/disk/by-uuid/78b1d480-c85d-45bb-9000-7b6873e67220",
+					},
+				},
 			},
 			SmartParameters: []domain.SmartParameter{
 				{ID: 1, Name: "Critical_Warning", Value: "0x00", Worst: "0x00", Threshold: "0x00", RawValue: "0x00", Status: "OK", Type: "NVMe", Description: "Device critical warning flags (temperature, spare, reliability)"},
@@ -890,6 +1266,10 @@ func (a *Adapter) getSimulatedDisks(poolMap map[string]string) []domain.Disk {
 			TotalBytesWritten:  38900000000000,
 			ReallocatedSectors: 0,
 			PendingSectors:     0,
+			Aliases: []string{
+				"/dev/disk/by-id/ata-WDC_WD40EFRX-68N32N0_WD-WCC7K1122334",
+				"/dev/disk/by-path/pci-0000:00:17.0-ata-1",
+			},
 			SmartParameters: []domain.SmartParameter{
 				{ID: 1, Name: "Raw_Read_Error_Rate", Value: "100", Worst: "100", Threshold: "51", RawValue: "0", Status: "OK", Type: "Pre-fail", Description: "Frequency of errors that occurred while reading raw data from the disk."},
 				{ID: 3, Name: "Spin_Up_Time", Value: "180", Worst: "175", Threshold: "21", RawValue: "4120", Status: "OK", Type: "Pre-fail", Description: "Average time of spindle spin up (from zero RPM to full speed)."},

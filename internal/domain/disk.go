@@ -6,13 +6,14 @@ import (
 )
 
 type DiskPartition struct {
-	Name          string `json:"name"`
-	DevicePath    string `json:"device_path"`
-	SizeBytes     int64  `json:"size_bytes"`
-	FSType        string `json:"fstype"`
-	Mountpoint    string `json:"mountpoint"`
-	Label         string `json:"label"`
-	OwningZfsPool string `json:"owning_zfs_pool"`
+	Name          string   `json:"name"`
+	DevicePath    string   `json:"device_path"`
+	SizeBytes     int64    `json:"size_bytes"`
+	FSType        string   `json:"fstype"`
+	Mountpoint    string   `json:"mountpoint"`
+	Label         string   `json:"label"`
+	OwningZfsPool string   `json:"owning_zfs_pool"`
+	Aliases       []string `json:"aliases"`
 }
 
 type SmartParameter struct {
@@ -57,6 +58,7 @@ type Disk struct {
 	TotalBytesWritten  int64            `json:"total_bytes_written"`
 	ReallocatedSectors int64            `json:"reallocated_sectors"`
 	PendingSectors     int64            `json:"pending_sectors"`
+	Aliases            []string         `json:"aliases"`
 }
 
 func (d *Disk) Validate() error {

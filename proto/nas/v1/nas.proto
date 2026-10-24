@@ -772,6 +772,7 @@ message DiskPartition {
   string mountpoint = 5;
   string label = 6;
   string owning_zfs_pool = 7;
+  repeated string aliases = 8; // e.g. "/dev/disk/by-id/...", "/dev/disk/by-partuuid/..."
 }
 
 message SmartParameter {
@@ -823,6 +824,7 @@ message Disk {
   int64 total_bytes_written = 27;
   int64 reallocated_sectors = 28;
   int64 pending_sectors = 29;
+  repeated string aliases = 30; // e.g. "/dev/disk/by-id/...", "/dev/disk/by-path/..."
 }
 
 message ListDisksRequest {

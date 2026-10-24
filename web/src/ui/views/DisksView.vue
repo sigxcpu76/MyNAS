@@ -495,6 +495,18 @@ function goToPool(poolName: string) {
                 <span class="mono" style="color: var(--accent-primary); font-weight: 700; margin-left: 6px">{{ selectedDisk.owningZfsPool }}</span>
               </div>
             </div>
+
+            <!-- Device Aliases & Persistent Paths -->
+            <div v-if="selectedDisk.aliases && selectedDisk.aliases.length > 0" style="margin-top: 14px; border-top: 1px solid var(--border-subtle); padding-top: 12px">
+              <div style="font-weight: 600; font-size: 12px; margin-bottom: 6px; color: var(--text-primary)">
+                Persistent Device Aliases (by-id / by-path / by-uuid)
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <code v-for="alias in selectedDisk.aliases" :key="alias" class="mono" style="font-size: 11px; color: var(--text-secondary); background: var(--bg-surface); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-subtle); word-break: break-all">
+                  {{ alias }}
+                </code>
+              </div>
+            </div>
           </div>
 
           <!-- TAB 3: PARTITIONS -->

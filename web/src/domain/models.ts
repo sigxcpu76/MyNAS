@@ -57,6 +57,7 @@ export interface DiskPartition {
   mountpoint: string;
   label: string;
   owningZfsPool?: string;
+  aliases?: string[];
 }
 
 export interface SmartParameter {
@@ -92,6 +93,7 @@ export interface Disk {
   healthPercentage: number;
   owningZfsPool: string;
   partitions: DiskPartition[];
+  aliases?: string[];
   smartParameters?: SmartParameter[];
   powerOnHours?: number;
   powerCycleCount?: number;

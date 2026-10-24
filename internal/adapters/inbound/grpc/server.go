@@ -211,6 +211,7 @@ func toProtoDisk(d domain.Disk) *nasv1.Disk {
 			Mountpoint:    p.Mountpoint,
 			Label:         p.Label,
 			OwningZfsPool: p.OwningZfsPool,
+			Aliases:       p.Aliases,
 		})
 	}
 	var smartParams []*nasv1.SmartParameter
@@ -257,6 +258,7 @@ func toProtoDisk(d domain.Disk) *nasv1.Disk {
 		TotalBytesWritten:  d.TotalBytesWritten,
 		ReallocatedSectors: d.ReallocatedSectors,
 		PendingSectors:     d.PendingSectors,
+		Aliases:            d.Aliases,
 	}
 }
 

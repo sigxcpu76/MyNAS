@@ -1380,6 +1380,13 @@ func newDiskCmd(rootOpts *RootOptions) *cobra.Command {
 				fmt.Fprintf(rootOpts.Out, "Owning ZFS Pool:%s\n", d.GetOwningZfsPool())
 			}
 
+			if len(d.GetAliases()) > 0 {
+				fmt.Fprintln(rootOpts.Out, "\nAliases & Persistent Paths:")
+				for _, a := range d.GetAliases() {
+					fmt.Fprintf(rootOpts.Out, "  - %s\n", a)
+				}
+			}
+
 			if len(d.GetSmartParameters()) > 0 {
 				fmt.Fprintln(rootOpts.Out, "\nSMART Parameters:")
 				tw := tabwriter.NewWriter(rootOpts.Out, 0, 4, 2, ' ', 0)
