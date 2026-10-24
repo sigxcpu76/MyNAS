@@ -1,0 +1,179 @@
+package lxc
+
+import (
+	"context"
+	"fmt"
+	"os/exec"
+	"sync"
+
+	"github.com/sigxcpu/nas/internal/domain"
+)
+
+type Adapter struct {
+	mu         sync.RWMutex
+	hybrid     bool
+	containers map[string]domain.LxcContainer
+	nextIP     int
+}
+
+func NewAdapter(hybrid bool) *Adapter {
+	a := &Adapter{
+		hybrid:     hybrid,
+		containers: make(map[string]domain.LxcContainer),
+		nextIP:     15,
+	}
+	if hybrid {
+		a.seedDefaults()
+	}
+	return a
+}
+
+func (a *Adapter) seedDefaults() {
+	a.containers["pihole-dns"] = domain.LxcContainer{
+		ID:             "pihole-dns",
+		ContainerName:  "pihole-dns",
+		State:          "RUNNING",
+		Distribution:   "debian",
+		Release:        "bookworm",
+		Architecture:   "amd64",
+		IPv4Address:    "10.10.20.10",
+		Autostart:      true,
+		Unprivileged:   true,
+		RootfsPath:     "/var/lib/lxc/pihole-dns/rootfs",
+		MemoryLimitMiB: 512,
+		CPUCores:       1,
+	}
+	a.containers["postgres-cluster"] = domain.LxcContainer{
+		ID:             "postgres-cluster",
+		ContainerName:  "postgres-cluster",
+		State:          "RUNNING",
+		Distribution:   "ubuntu",
+		Release:        "noble",
+		Architecture:   "amd64",
+		IPv4Address:    "10.10.20.12",
+		Autostart:      true,
+		Unprivileged:   true,
+		RootfsPath:     "/var/lib/lxc/postgres-cluster/rootfs",
+		MemoryLimitMiB: 2048,
+		CPUCores:       2,
+	}
+	a.containers["alpine-rsync"] = domain.LxcContainer{
+		ID:             "alpine-rsync",
+		ContainerName:  "alpine-rsync",
+		State:          "STOPPED",
+		Distribution:   "alpine",
+		Release:        "3.20",
+		Architecture:   "amd64",
+		IPv4Address:    "-",
+		Autostart:      false,
+		Unprivileged:   true,
+		RootfsPath:     "/var/lib/lxc/alpine-rsync/rootfs",
+		MemoryLimitMiB: 256,
+		CPUCores:       1,
+	}
+}
+
+func (a *Adapter) ListContainers(ctx context.Context) ([]domain.LxcContainer, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	out := make([]domain.LxcContainer, 0, len(a.containers))
+	for _, c := range a.containers {
+		out = append(out, c)
+	}
+	return out, nil
+}
+
+func (a *Adapter) GetContainer(ctx context.Context, id string) (*domain.LxcContainer, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	c, ok := a.containers[id]
+	if !ok {
+		return nil, fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, id)
+	}
+	cp := c
+	return &cp, nil
+}
+
+func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*domain.LxcContainer, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if _, exists := a.containers[c.ID]; exists {
+		return nil, fmt.Errorf("%w: lxc container %q", domain.ErrAlreadyExists, c.ID)
+	}
+	a.nextIP++
+	c.State = "RUNNING"
+	c.IPv4Address = fmt.Sprintf("10.10.20.%d", a.nextIP)
+	if c.RootfsPath == "" {
+		c.RootfsPath = fmt.Sprintf("/var/lib/lxc/%s/rootfs", c.ID)
+	}
+	a.containers[c.ID] = c
+	cp := c
+	return &cp, nil
+}
+
+func (a *Adapter) DeleteContainer(ctx context.Context, id string, force bool) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	c, ok := a.containers[id]
+	if !ok {
+		return fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, id)
+	}
+	if c.State == "RUNNING" && !force {
+		return fmt.Errorf("%w: lxc container %q is running; stop it or set force=true", domain.ErrFailedPrecondition, id)
+	}
+	delete(a.containers, id)
+	return nil
+}
+
+func (a *Adapter) StartContainer(ctx context.Context, id string) (*domain.LxcContainer, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	c, ok := a.containers[id]
+	if !ok {
+		return nil, fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, id)
+	}
+	if _, err := exec.LookPath("lxc-start"); err == nil {
+		_ = exec.CommandContext(ctx, "lxc-start", "-n", id).Run()
+	}
+	c.State = "RUNNING"
+	if c.IPv4Address == "" || c.IPv4Address == "-" {
+		a.nextIP++
+		c.IPv4Address = fmt.Sprintf("10.10.20.%d", a.nextIP)
+	}
+	a.containers[id] = c
+	cp := c
+	return &cp, nil
+}
+
+func (a *Adapter) StopContainer(ctx context.Context, id string) (*domain.LxcContainer, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	c, ok := a.containers[id]
+	if !ok {
+		return nil, fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, id)
+	}
+	if _, err := exec.LookPath("lxc-stop"); err == nil {
+		_ = exec.CommandContext(ctx, "lxc-stop", "-n", id).Run()
+	}
+	c.State = "STOPPED"
+	c.IPv4Address = "-"
+	a.containers[id] = c
+	cp := c
+	return &cp, nil
+}
+
+func (a *Adapter) FreezeContainer(ctx context.Context, id string) (*domain.LxcContainer, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	c, ok := a.containers[id]
+	if !ok {
+		return nil, fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, id)
+	}
+	if _, err := exec.LookPath("lxc-freeze"); err == nil {
+		_ = exec.CommandContext(ctx, "lxc-freeze", "-n", id).Run()
+	}
+	c.State = "FROZEN"
+	a.containers[id] = c
+	cp := c
+	return &cp, nil
+}

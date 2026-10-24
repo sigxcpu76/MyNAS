@@ -1,0 +1,1809 @@
+syntax = "proto3";
+
+package nas.v1;
+
+import "google/api/annotations.proto";
+import "google/api/client.proto";
+import "google/api/field_behavior.proto";
+import "google/api/resource.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1";
+
+// NasService provides Google AIP-compliant resource management for the NAS:
+// Prerequisites, ZFS (Pools, Datasets, Volumes), KVM Virtual Machines + noVNC,
+// Docker Containers, LXC Containers, CIFS/WebDAV Shares, and Linux Users/Groups.
+service NasService {
+  // ---------------------------------------------------------------------------
+  // Authentication & Session
+  // ---------------------------------------------------------------------------
+
+  // Login authenticates a Linux system user (or configured admin) and issues a JWT.
+  rpc Login(LoginRequest) returns (LoginResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth:login"
+      body: "*"
+    };
+  }
+
+  // GetCurrentUser returns the currently authenticated user profile.
+  rpc GetCurrentUser(GetCurrentUserRequest) returns (User) {
+    option (google.api.http) = {
+      get: "/v1/auth:me"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Prerequisites (AIP-131 Get, AIP-132 List, AIP-136 Custom :check)
+  // ---------------------------------------------------------------------------
+
+  rpc ListPrerequisites(ListPrerequisitesRequest) returns (ListPrerequisitesResponse) {
+    option (google.api.http) = {
+      get: "/v1/prerequisites"
+    };
+  }
+
+  rpc GetPrerequisite(GetPrerequisiteRequest) returns (Prerequisite) {
+    option (google.api.http) = {
+      get: "/v1/{name=prerequisites/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CheckPrerequisites(CheckPrerequisitesRequest) returns (CheckPrerequisitesResponse) {
+    option (google.api.http) = {
+      post: "/v1/prerequisites:check"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Disks & Block Devices (AIP-131, AIP-132)
+  // ---------------------------------------------------------------------------
+
+  rpc ListDisks(ListDisksRequest) returns (ListDisksResponse) {
+    option (google.api.http) = {
+      get: "/v1/disks"
+    };
+  }
+
+  rpc GetDisk(GetDiskRequest) returns (Disk) {
+    option (google.api.http) = {
+      get: "/v1/{name=disks/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // ---------------------------------------------------------------------------
+  // ZFS Pools (AIP-131..136)
+  // ---------------------------------------------------------------------------
+
+  rpc ListZfsPools(ListZfsPoolsRequest) returns (ListZfsPoolsResponse) {
+    option (google.api.http) = {
+      get: "/v1/zfsPools"
+    };
+  }
+
+  rpc GetZfsPool(GetZfsPoolRequest) returns (ZfsPool) {
+    option (google.api.http) = {
+      get: "/v1/{name=zfsPools/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateZfsPool(CreateZfsPoolRequest) returns (ZfsPool) {
+    option (google.api.http) = {
+      post: "/v1/zfsPools"
+      body: "zfs_pool"
+    };
+    option (google.api.method_signature) = "zfs_pool,zfs_pool_id";
+  }
+
+  rpc DeleteZfsPool(DeleteZfsPoolRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=zfsPools/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc ScrubZfsPool(ScrubZfsPoolRequest) returns (ZfsPool) {
+    option (google.api.http) = {
+      post: "/v1/{name=zfsPools/*}:scrub"
+      body: "*"
+    };
+  }
+
+  rpc UpdateZfsPool(UpdateZfsPoolRequest) returns (ZfsPool) {
+    option (google.api.http) = {
+      patch: "/v1/{zfs_pool.name=zfsPools/*}"
+      body: "zfs_pool"
+    };
+    option (google.api.method_signature) = "zfs_pool,update_mask";
+  }
+
+  rpc AddZfsPoolVdev(AddZfsPoolVdevRequest) returns (ZfsPool) {
+    option (google.api.http) = {
+      post: "/v1/{name=zfsPools/*}:addVdev"
+      body: "*"
+    };
+  }
+
+  rpc RemoveZfsPoolVdev(RemoveZfsPoolVdevRequest) returns (ZfsPool) {
+    option (google.api.http) = {
+      post: "/v1/{name=zfsPools/*}:removeVdev"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // ZFS Datasets (Sub-resource of ZfsPool: zfsPools/{zfs_pool}/datasets/{dataset})
+  // ---------------------------------------------------------------------------
+
+  rpc ListZfsDatasets(ListZfsDatasetsRequest) returns (ListZfsDatasetsResponse) {
+    option (google.api.http) = {
+      get: "/v1/{parent=zfsPools/*}/datasets"
+    };
+    option (google.api.method_signature) = "parent";
+  }
+
+  rpc GetZfsDataset(GetZfsDatasetRequest) returns (ZfsDataset) {
+    option (google.api.http) = {
+      get: "/v1/{name=zfsPools/*/datasets/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateZfsDataset(CreateZfsDatasetRequest) returns (ZfsDataset) {
+    option (google.api.http) = {
+      post: "/v1/{parent=zfsPools/*}/datasets"
+      body: "zfs_dataset"
+    };
+    option (google.api.method_signature) = "parent,zfs_dataset,zfs_dataset_id";
+  }
+
+  rpc UpdateZfsDataset(UpdateZfsDatasetRequest) returns (ZfsDataset) {
+    option (google.api.http) = {
+      patch: "/v1/{zfs_dataset.name=zfsPools/*/datasets/*}"
+      body: "zfs_dataset"
+    };
+    option (google.api.method_signature) = "zfs_dataset,update_mask";
+  }
+
+  rpc DeleteZfsDataset(DeleteZfsDatasetRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=zfsPools/*/datasets/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc SnapshotZfsDataset(SnapshotZfsDatasetRequest) returns (ZfsDataset) {
+    option (google.api.http) = {
+      post: "/v1/{name=zfsPools/*/datasets/*}:snapshot"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // ZFS Volumes / ZVols (Sub-resource of ZfsPool: zfsPools/{zfs_pool}/volumes/{volume})
+  // ---------------------------------------------------------------------------
+
+  rpc ListZfsVolumes(ListZfsVolumesRequest) returns (ListZfsVolumesResponse) {
+    option (google.api.http) = {
+      get: "/v1/{parent=zfsPools/*}/volumes"
+    };
+    option (google.api.method_signature) = "parent";
+  }
+
+  rpc GetZfsVolume(GetZfsVolumeRequest) returns (ZfsVolume) {
+    option (google.api.http) = {
+      get: "/v1/{name=zfsPools/*/volumes/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateZfsVolume(CreateZfsVolumeRequest) returns (ZfsVolume) {
+    option (google.api.http) = {
+      post: "/v1/{parent=zfsPools/*}/volumes"
+      body: "zfs_volume"
+    };
+    option (google.api.method_signature) = "parent,zfs_volume,zfs_volume_id";
+  }
+
+  rpc UpdateZfsVolume(UpdateZfsVolumeRequest) returns (ZfsVolume) {
+    option (google.api.http) = {
+      patch: "/v1/{zfs_volume.name=zfsPools/*/volumes/*}"
+      body: "zfs_volume"
+    };
+    option (google.api.method_signature) = "zfs_volume,update_mask";
+  }
+
+  rpc DeleteZfsVolume(DeleteZfsVolumeRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=zfsPools/*/volumes/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // ---------------------------------------------------------------------------
+  // KVM Virtual Machines (libvirt + noVNC)
+  // ---------------------------------------------------------------------------
+
+  rpc ListVirtualMachines(ListVirtualMachinesRequest) returns (ListVirtualMachinesResponse) {
+    option (google.api.http) = {
+      get: "/v1/virtualMachines"
+    };
+  }
+
+  rpc GetVirtualMachine(GetVirtualMachineRequest) returns (VirtualMachine) {
+    option (google.api.http) = {
+      get: "/v1/{name=virtualMachines/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateVirtualMachine(CreateVirtualMachineRequest) returns (VirtualMachine) {
+    option (google.api.http) = {
+      post: "/v1/virtualMachines"
+      body: "virtual_machine"
+    };
+    option (google.api.method_signature) = "virtual_machine,virtual_machine_id";
+  }
+
+  rpc UpdateVirtualMachine(UpdateVirtualMachineRequest) returns (VirtualMachine) {
+    option (google.api.http) = {
+      patch: "/v1/{virtual_machine.name=virtualMachines/*}"
+      body: "virtual_machine"
+    };
+    option (google.api.method_signature) = "virtual_machine,update_mask";
+  }
+
+  rpc DeleteVirtualMachine(DeleteVirtualMachineRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=virtualMachines/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc StartVirtualMachine(StartVirtualMachineRequest) returns (VirtualMachine) {
+    option (google.api.http) = {
+      post: "/v1/{name=virtualMachines/*}:start"
+      body: "*"
+    };
+  }
+
+  rpc StopVirtualMachine(StopVirtualMachineRequest) returns (VirtualMachine) {
+    option (google.api.http) = {
+      post: "/v1/{name=virtualMachines/*}:stop"
+      body: "*"
+    };
+  }
+
+  rpc RebootVirtualMachine(RebootVirtualMachineRequest) returns (VirtualMachine) {
+    option (google.api.http) = {
+      post: "/v1/{name=virtualMachines/*}:reboot"
+      body: "*"
+    };
+  }
+
+  rpc OpenVirtualMachineConsole(OpenVirtualMachineConsoleRequest) returns (VirtualMachineConsoleSession) {
+    option (google.api.http) = {
+      post: "/v1/{name=virtualMachines/*}:openConsole"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Docker Containers
+  // ---------------------------------------------------------------------------
+
+  rpc ListDockerContainers(ListDockerContainersRequest) returns (ListDockerContainersResponse) {
+    option (google.api.http) = {
+      get: "/v1/dockerContainers"
+    };
+  }
+
+  rpc GetDockerContainer(GetDockerContainerRequest) returns (DockerContainer) {
+    option (google.api.http) = {
+      get: "/v1/{name=dockerContainers/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateDockerContainer(CreateDockerContainerRequest) returns (DockerContainer) {
+    option (google.api.http) = {
+      post: "/v1/dockerContainers"
+      body: "docker_container"
+    };
+    option (google.api.method_signature) = "docker_container,docker_container_id";
+  }
+
+  rpc UpdateDockerContainer(UpdateDockerContainerRequest) returns (DockerContainer) {
+    option (google.api.http) = {
+      patch: "/v1/{docker_container.name=dockerContainers/*}"
+      body: "docker_container"
+    };
+    option (google.api.method_signature) = "docker_container,update_mask";
+  }
+
+  rpc DeleteDockerContainer(DeleteDockerContainerRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=dockerContainers/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc GetDockerContainerLogs(GetDockerContainerLogsRequest) returns (GetDockerContainerLogsResponse) {
+    option (google.api.http) = {
+      get: "/v1/{name=dockerContainers/*}:logs"
+    };
+  }
+
+  rpc StartDockerContainer(StartDockerContainerRequest) returns (DockerContainer) {
+    option (google.api.http) = {
+      post: "/v1/{name=dockerContainers/*}:start"
+      body: "*"
+    };
+  }
+
+  rpc StopDockerContainer(StopDockerContainerRequest) returns (DockerContainer) {
+    option (google.api.http) = {
+      post: "/v1/{name=dockerContainers/*}:stop"
+      body: "*"
+    };
+  }
+
+  rpc RestartDockerContainer(RestartDockerContainerRequest) returns (DockerContainer) {
+    option (google.api.http) = {
+      post: "/v1/{name=dockerContainers/*}:restart"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Docker Apps (TrueNAS SCALE Compose Descriptors)
+  // ---------------------------------------------------------------------------
+
+  rpc ListDockerApps(ListDockerAppsRequest) returns (ListDockerAppsResponse) {
+    option (google.api.http) = {
+      get: "/v1/dockerApps"
+    };
+  }
+
+  rpc GetDockerApp(GetDockerAppRequest) returns (DockerApp) {
+    option (google.api.http) = {
+      get: "/v1/{name=dockerApps/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateDockerApp(CreateDockerAppRequest) returns (DockerApp) {
+    option (google.api.http) = {
+      post: "/v1/dockerApps"
+      body: "docker_app"
+    };
+    option (google.api.method_signature) = "docker_app,docker_app_id";
+  }
+
+  rpc UpdateDockerApp(UpdateDockerAppRequest) returns (DockerApp) {
+    option (google.api.http) = {
+      patch: "/v1/{docker_app.name=dockerApps/*}"
+      body: "docker_app"
+    };
+    option (google.api.method_signature) = "docker_app,update_mask";
+  }
+
+  rpc DeleteDockerApp(DeleteDockerAppRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=dockerApps/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc StartDockerApp(StartDockerAppRequest) returns (DockerApp) {
+    option (google.api.http) = {
+      post: "/v1/{name=dockerApps/*}:start"
+      body: "*"
+    };
+  }
+
+  rpc StopDockerApp(StopDockerAppRequest) returns (DockerApp) {
+    option (google.api.http) = {
+      post: "/v1/{name=dockerApps/*}:stop"
+      body: "*"
+    };
+  }
+
+  rpc RestartDockerApp(RestartDockerAppRequest) returns (DockerApp) {
+    option (google.api.http) = {
+      post: "/v1/{name=dockerApps/*}:restart"
+      body: "*"
+    };
+  }
+
+  rpc GetDockerAppLogs(GetDockerAppLogsRequest) returns (GetDockerAppLogsResponse) {
+    option (google.api.http) = {
+      get: "/v1/{name=dockerApps/*}:logs"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Docker Storage & Apps Pool Configuration
+  // ---------------------------------------------------------------------------
+
+  rpc GetDockerConfig(GetDockerConfigRequest) returns (DockerConfig) {
+    option (google.api.http) = {
+      get: "/v1/dockerConfig"
+    };
+  }
+
+  rpc UpdateDockerConfig(UpdateDockerConfigRequest) returns (DockerConfig) {
+    option (google.api.http) = {
+      patch: "/v1/dockerConfig"
+      body: "docker_config"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Host Filesystem Directory Browser
+  // ---------------------------------------------------------------------------
+
+  rpc ListFileSystemDirectories(ListFileSystemDirectoriesRequest) returns (ListFileSystemDirectoriesResponse) {
+    option (google.api.http) = {
+      get: "/v1/filesystem:directories"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // LXC Containers
+  // ---------------------------------------------------------------------------
+
+  rpc ListLxcContainers(ListLxcContainersRequest) returns (ListLxcContainersResponse) {
+    option (google.api.http) = {
+      get: "/v1/lxcContainers"
+    };
+  }
+
+  rpc GetLxcContainer(GetLxcContainerRequest) returns (LxcContainer) {
+    option (google.api.http) = {
+      get: "/v1/{name=lxcContainers/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateLxcContainer(CreateLxcContainerRequest) returns (LxcContainer) {
+    option (google.api.http) = {
+      post: "/v1/lxcContainers"
+      body: "lxc_container"
+    };
+    option (google.api.method_signature) = "lxc_container,lxc_container_id";
+  }
+
+  rpc DeleteLxcContainer(DeleteLxcContainerRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=lxcContainers/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc StartLxcContainer(StartLxcContainerRequest) returns (LxcContainer) {
+    option (google.api.http) = {
+      post: "/v1/{name=lxcContainers/*}:start"
+      body: "*"
+    };
+  }
+
+  rpc StopLxcContainer(StopLxcContainerRequest) returns (LxcContainer) {
+    option (google.api.http) = {
+      post: "/v1/{name=lxcContainers/*}:stop"
+      body: "*"
+    };
+  }
+
+  rpc FreezeLxcContainer(FreezeLxcContainerRequest) returns (LxcContainer) {
+    option (google.api.http) = {
+      post: "/v1/{name=lxcContainers/*}:freeze"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // CIFS (Samba) Shares
+  // ---------------------------------------------------------------------------
+
+  rpc ListCifsShares(ListCifsSharesRequest) returns (ListCifsSharesResponse) {
+    option (google.api.http) = {
+      get: "/v1/cifsShares"
+    };
+  }
+
+  rpc GetCifsShare(GetCifsShareRequest) returns (CifsShare) {
+    option (google.api.http) = {
+      get: "/v1/{name=cifsShares/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateCifsShare(CreateCifsShareRequest) returns (CifsShare) {
+    option (google.api.http) = {
+      post: "/v1/cifsShares"
+      body: "cifs_share"
+    };
+    option (google.api.method_signature) = "cifs_share,cifs_share_id";
+  }
+
+  rpc UpdateCifsShare(UpdateCifsShareRequest) returns (CifsShare) {
+    option (google.api.http) = {
+      patch: "/v1/{cifs_share.name=cifsShares/*}"
+      body: "cifs_share"
+    };
+    option (google.api.method_signature) = "cifs_share,update_mask";
+  }
+
+  rpc DeleteCifsShare(DeleteCifsShareRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=cifsShares/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // ---------------------------------------------------------------------------
+  // WebDAV Shares
+  // ---------------------------------------------------------------------------
+
+  rpc ListWebdavShares(ListWebdavSharesRequest) returns (ListWebdavSharesResponse) {
+    option (google.api.http) = {
+      get: "/v1/webdavShares"
+    };
+  }
+
+  rpc GetWebdavShare(GetWebdavShareRequest) returns (WebdavShare) {
+    option (google.api.http) = {
+      get: "/v1/{name=webdavShares/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateWebdavShare(CreateWebdavShareRequest) returns (WebdavShare) {
+    option (google.api.http) = {
+      post: "/v1/webdavShares"
+      body: "webdav_share"
+    };
+    option (google.api.method_signature) = "webdav_share,webdav_share_id";
+  }
+
+  rpc UpdateWebdavShare(UpdateWebdavShareRequest) returns (WebdavShare) {
+    option (google.api.http) = {
+      patch: "/v1/{webdav_share.name=webdavShares/*}"
+      body: "webdav_share"
+    };
+    option (google.api.method_signature) = "webdav_share,update_mask";
+  }
+
+  rpc DeleteWebdavShare(DeleteWebdavShareRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=webdavShares/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // ---------------------------------------------------------------------------
+  // Linux System Users & Groups
+  // ---------------------------------------------------------------------------
+
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse) {
+    option (google.api.http) = {
+      get: "/v1/users"
+    };
+  }
+
+  rpc GetUser(GetUserRequest) returns (User) {
+    option (google.api.http) = {
+      get: "/v1/{name=users/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateUser(CreateUserRequest) returns (User) {
+    option (google.api.http) = {
+      post: "/v1/users"
+      body: "user"
+    };
+    option (google.api.method_signature) = "user,user_id";
+  }
+
+  rpc UpdateUser(UpdateUserRequest) returns (User) {
+    option (google.api.http) = {
+      patch: "/v1/{user.name=users/*}"
+      body: "user"
+    };
+    option (google.api.method_signature) = "user,update_mask";
+  }
+
+  rpc DeleteUser(DeleteUserRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=users/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc ListGroups(ListGroupsRequest) returns (ListGroupsResponse) {
+    option (google.api.http) = {
+      get: "/v1/groups"
+    };
+  }
+
+  rpc GetGroup(GetGroupRequest) returns (Group) {
+    option (google.api.http) = {
+      get: "/v1/{name=groups/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateGroup(CreateGroupRequest) returns (Group) {
+    option (google.api.http) = {
+      post: "/v1/groups"
+      body: "group"
+    };
+    option (google.api.method_signature) = "group,group_id";
+  }
+
+  rpc UpdateGroup(UpdateGroupRequest) returns (Group) {
+    option (google.api.http) = {
+      patch: "/v1/{group.name=groups/*}"
+      body: "group"
+    };
+    option (google.api.method_signature) = "group,update_mask";
+  }
+
+  rpc DeleteGroup(DeleteGroupRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=groups/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // ---------------------------------------------------------------------------
+  // Application Catalog (TrueNAS SCALE Catalog Integration)
+  // ---------------------------------------------------------------------------
+
+  rpc ListCatalogApps(ListCatalogAppsRequest) returns (ListCatalogAppsResponse) {
+    option (google.api.http) = {
+      get: "/v1/catalog/apps"
+    };
+  }
+
+  rpc GetCatalogApp(GetCatalogAppRequest) returns (CatalogApp) {
+    option (google.api.http) = {
+      get: "/v1/catalog/apps/{app_id}"
+    };
+  }
+
+  rpc SyncCatalog(SyncCatalogRequest) returns (SyncCatalogResponse) {
+    option (google.api.http) = {
+      post: "/v1/catalog:sync"
+      body: "*"
+    };
+  }
+}
+
+// =============================================================================
+// Auth Messages
+// =============================================================================
+
+message LoginRequest {
+  string username = 1 [(google.api.field_behavior) = REQUIRED];
+  string password = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message LoginResponse {
+  string access_token = 1;
+  string token_type = 2;
+  int64 expires_in = 3;
+  User user = 4;
+}
+
+message GetCurrentUserRequest {}
+
+// =============================================================================
+// Prerequisite Resource
+// =============================================================================
+
+message Prerequisite {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/Prerequisite"
+    pattern: "prerequisites/{prerequisite}"
+    singular: "prerequisite"
+    plural: "prerequisites"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string display_name = 2;
+  string category = 3; // STORAGE, VIRTUALIZATION, CONTAINERS, SHARING, SECURITY
+  string kind = 4; // BINARY, LIBRARY, KERNEL_MODULE, DAEMON
+  string binary_or_path = 5;
+  string status = 6; // INSTALLED, MISSING, DEGRADED, FALLBACK_ACTIVE
+  string version = 7;
+  string details = 8;
+  string install_hint = 9;
+  repeated string required_by = 10;
+  bool fallback_mode = 11;
+  google.protobuf.Timestamp checked_time = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+message ListPrerequisitesRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string filter = 3;
+}
+
+message ListPrerequisitesResponse {
+  repeated Prerequisite prerequisites = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetPrerequisiteRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/Prerequisite"}
+  ];
+}
+
+message CheckPrerequisitesRequest {}
+
+message CheckPrerequisitesResponse {
+  repeated Prerequisite prerequisites = 1;
+  int32 installed_count = 2;
+  int32 missing_count = 3;
+  bool hybrid_fallback_enabled = 4;
+}
+
+// =============================================================================
+// Disk & Storage Hardware Resources
+// =============================================================================
+
+message DiskPartition {
+  string name = 1;
+  string device_path = 2;
+  int64 size_bytes = 3;
+  string fstype = 4;
+  string mountpoint = 5;
+  string label = 6;
+  string owning_zfs_pool = 7;
+}
+
+message Disk {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/Disk"
+    pattern: "disks/{disk}"
+    singular: "disk"
+    plural: "disks"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER]; // "disks/nvme0n1"
+  string disk_id = 2; // "nvme0n1"
+  string device_path = 3; // "/dev/nvme0n1"
+  int64 size_bytes = 4;
+  string model = 5;
+  string serial = 6;
+  string vendor = 7;
+  string transport = 8; // "nvme", "sata", "sas", "usb", "virtio"
+  bool rotational = 9;
+  string type = 10; // "NVME", "SSD", "HDD", "VIRTUAL"
+  string firmware_rev = 11;
+  string state = 12; // "live", "running"
+  bool removable = 13;
+  int64 logical_block_size = 14;
+  int64 physical_block_size = 15;
+  double temperature_celsius = 16;
+  string smart_status = 17; // "PASSED", "FAILED", "UNKNOWN"
+  int32 health_percentage = 18; // 0..100
+  string owning_zfs_pool = 19;
+  repeated DiskPartition partitions = 20;
+}
+
+message ListDisksRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string filter = 3;
+}
+
+message ListDisksResponse {
+  repeated Disk disks = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetDiskRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/Disk"}
+  ];
+}
+
+// =============================================================================
+// ZFS Pool, Dataset, Volume Resources
+// =============================================================================
+
+message ZfsPool {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/ZfsPool"
+    pattern: "zfsPools/{zfs_pool}"
+    singular: "zfsPool"
+    plural: "zfsPools"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string pool_name = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string state = 3 [(google.api.field_behavior) = OUTPUT_ONLY]; // ONLINE, DEGRADED, FAULTED
+  int64 size_bytes = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 allocated_bytes = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 free_bytes = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int32 fragmentation_percent = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int32 capacity_percent = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
+  double dedup_ratio = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string vdev_layout = 10; // stripe, mirror, raidz1, raidz2
+  repeated string devices = 11;
+  string mountpoint = 12;
+  string compression = 13;
+  string last_scrub_status = 14 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string health_details = 15 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string sync = 16; // "standard", "always", "disabled"
+  string autotrim = 17; // "on", "off"
+  repeated ZfsVdev vdevs = 18;
+}
+
+message ZfsVdev {
+  string name = 1;
+  string type = 2; // "data", "cache", "log", "special", "dedup", "spare"
+  string layout = 3; // "stripe", "mirror", "raidz1", "raidz2", "file", "disk"
+  string state = 4; // "ONLINE", "DEGRADED", etc.
+  string path = 5;
+  repeated ZfsVdev children = 6;
+  string read_errors = 7;
+  string write_errors = 8;
+  string checksum_errors = 9;
+}
+
+message ListZfsPoolsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string filter = 3;
+}
+
+message ListZfsPoolsResponse {
+  repeated ZfsPool zfs_pools = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetZfsPoolRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+}
+
+message CreateZfsPoolRequest {
+  string zfs_pool_id = 1 [(google.api.field_behavior) = REQUIRED];
+  ZfsPool zfs_pool = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message DeleteZfsPoolRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+  bool force = 2;
+}
+
+message ScrubZfsPoolRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+}
+
+message UpdateZfsPoolRequest {
+  ZfsPool zfs_pool = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message AddZfsPoolVdevRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+  string type = 2 [(google.api.field_behavior) = REQUIRED]; // "data", "cache", "log", "special", "dedup", "spare"
+  string layout = 3; // "stripe", "mirror", "raidz1", "raidz2"
+  repeated string devices = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message RemoveZfsPoolVdevRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+  string device = 2 [(google.api.field_behavior) = REQUIRED]; // e.g. "/dev/nvme0n1"
+}
+
+message ZfsDataset {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/ZfsDataset"
+    pattern: "zfsPools/{zfs_pool}/datasets/{dataset}"
+    singular: "zfsDataset"
+    plural: "zfsDatasets"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string dataset_path = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string mountpoint = 3;
+  int64 used_bytes = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 available_bytes = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 referenced_bytes = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 quota_bytes = 7;
+  string compression = 8; // lz4, zstd, off, gzip
+  bool readonly = 9;
+  bool atime = 10;
+  string recordsize = 11;
+  int32 snapshots_count = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string last_snapshot = 13 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string sync = 14;
+  int64 reservation_bytes = 15;
+  bool dedup = 16;
+}
+
+message ListZfsDatasetsRequest {
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+  int32 page_size = 2;
+  string page_token = 3;
+  string filter = 4;
+}
+
+message ListZfsDatasetsResponse {
+  repeated ZfsDataset zfs_datasets = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetZfsDatasetRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsDataset"}
+  ];
+}
+
+message CreateZfsDatasetRequest {
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+  string zfs_dataset_id = 2 [(google.api.field_behavior) = REQUIRED];
+  ZfsDataset zfs_dataset = 3 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateZfsDatasetRequest {
+  ZfsDataset zfs_dataset = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteZfsDatasetRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsDataset"}
+  ];
+  bool recursive = 2;
+}
+
+message SnapshotZfsDatasetRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsDataset"}
+  ];
+  string snapshot_name = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message ZfsVolume {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/ZfsVolume"
+    pattern: "zfsPools/{zfs_pool}/volumes/{volume}"
+    singular: "zfsVolume"
+    plural: "zfsVolumes"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string volume_path = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string device_path = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 size_bytes = 4;
+  int64 used_bytes = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string volblocksize = 6;
+  string compression = 7;
+  bool thin_provisioned = 8;
+  string sync = 9;
+  bool readonly = 10;
+  bool dedup = 11;
+}
+
+message ListZfsVolumesRequest {
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListZfsVolumesResponse {
+  repeated ZfsVolume zfs_volumes = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetZfsVolumeRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsVolume"}
+  ];
+}
+
+message CreateZfsVolumeRequest {
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+  string zfs_volume_id = 2 [(google.api.field_behavior) = REQUIRED];
+  ZfsVolume zfs_volume = 3 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateZfsVolumeRequest {
+  ZfsVolume zfs_volume = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteZfsVolumeRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsVolume"}
+  ];
+}
+
+// =============================================================================
+// KVM Virtual Machine Resource (libvirt + noVNC)
+// =============================================================================
+
+message VirtualMachine {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/VirtualMachine"
+    pattern: "virtualMachines/{virtual_machine}"
+    singular: "virtualMachine"
+    plural: "virtualMachines"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string vm_name = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string uuid = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string state = 4 [(google.api.field_behavior) = OUTPUT_ONLY]; // RUNNING, STOPPED, PAUSED
+  int32 vcpus = 5;
+  int64 memory_mib = 6;
+  string disk_path = 7;
+  int64 disk_size_gib = 8;
+  string iso_image = 9;
+  string network_bridge = 10;
+  int32 vnc_port = 11 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string vnc_display = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
+  bool autostart = 13;
+  string os_variant = 14;
+  string description = 15;
+}
+
+message ListVirtualMachinesRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string filter = 3;
+}
+
+message ListVirtualMachinesResponse {
+  repeated VirtualMachine virtual_machines = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetVirtualMachineRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+}
+
+message CreateVirtualMachineRequest {
+  string virtual_machine_id = 1 [(google.api.field_behavior) = REQUIRED];
+  VirtualMachine virtual_machine = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateVirtualMachineRequest {
+  VirtualMachine virtual_machine = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteVirtualMachineRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+}
+
+message StartVirtualMachineRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+}
+
+message StopVirtualMachineRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+  bool force = 2;
+}
+
+message RebootVirtualMachineRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+}
+
+message OpenVirtualMachineConsoleRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+}
+
+message VirtualMachineConsoleSession {
+  string vm_name = 1;
+  string token = 2;
+  string websocket_url = 3;
+  int32 vnc_port = 4;
+  string resolution = 5;
+  string expires_at = 6;
+}
+
+// =============================================================================
+// Docker Container Resource
+// =============================================================================
+
+message DockerContainer {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/DockerContainer"
+    pattern: "dockerContainers/{docker_container}"
+    singular: "dockerContainer"
+    plural: "dockerContainers"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string container_id = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string container_name = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string image = 4;
+  string state = 5 [(google.api.field_behavior) = OUTPUT_ONLY]; // RUNNING, EXITED, CREATED, PAUSED
+  string status_text = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+  repeated string ports = 7; // e.g. "8080:80/tcp"
+  repeated string volumes = 8; // e.g. "/tank/appdata:/config"
+  repeated string environment = 9; // e.g. "TZ=UTC"
+  string restart_policy = 10; // unless-stopped, always, no, on-failure
+  string network_mode = 11; // bridge, host
+  double cpu_percent = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 memory_usage_mib = 13 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string created_at = 14 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 memory_limit_mib = 15;
+  repeated string command = 16;
+  bool privileged = 17;
+  string compose_yaml = 18;
+}
+
+message ListDockerContainersRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string filter = 3;
+}
+
+message ListDockerContainersResponse {
+  repeated DockerContainer docker_containers = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetDockerContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerContainer"}
+  ];
+}
+
+message CreateDockerContainerRequest {
+  string docker_container_id = 1 [(google.api.field_behavior) = REQUIRED];
+  DockerContainer docker_container = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateDockerContainerRequest {
+  DockerContainer docker_container = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message GetDockerContainerLogsRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerContainer"}
+  ];
+  int32 tail = 2;
+}
+
+message GetDockerContainerLogsResponse {
+  string logs = 1;
+}
+
+message DeleteDockerContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerContainer"}
+  ];
+  bool force = 2;
+}
+
+message StartDockerContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerContainer"}
+  ];
+}
+
+message StopDockerContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerContainer"}
+  ];
+}
+
+message RestartDockerContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerContainer"}
+  ];
+}
+
+// =============================================================================
+// Docker App Resource (TrueNAS SCALE Compose Descriptors)
+// =============================================================================
+
+message DockerApp {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/DockerApp"
+    pattern: "dockerApps/{docker_app}"
+    singular: "dockerApp"
+    plural: "dockerApps"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string app_id = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string title = 3;
+  string state = 4 [(google.api.field_behavior) = OUTPUT_ONLY]; // RUNNING, STOPPED, PARTIALLY_RUNNING, ERROR
+  string status_text = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string compose_yaml = 6;
+  string compose_file_path = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
+  repeated string services = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
+  repeated DockerAppContainer containers = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
+  repeated string port_mappings = 10 [(google.api.field_behavior) = OUTPUT_ONLY];
+  repeated string volumes = 11 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string web_ui_url = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
+  double total_cpu_percent = 13 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 total_memory_mib = 14 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string created_at = 15 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string updated_at = 16 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 total_net_rx_bytes = 17 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 total_net_tx_bytes = 18 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 total_net_rx_rate = 19 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 total_net_tx_rate = 20 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+message DockerAppContainer {
+  string container_id = 1;
+  string name = 2;
+  string service_name = 3;
+  string image = 4;
+  string state = 5;
+  string status = 6;
+  double cpu_percent = 7;
+  int64 memory_mib = 8;
+  repeated string ports = 9;
+  string created_at = 10;
+  int64 net_rx_bytes = 11;
+  int64 net_tx_bytes = 12;
+  int64 net_rx_rate = 13;
+  int64 net_tx_rate = 14;
+}
+
+message ListDockerAppsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string filter = 3;
+}
+
+message ListDockerAppsResponse {
+  repeated DockerApp docker_apps = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetDockerAppRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerApp"}
+  ];
+}
+
+message CreateDockerAppRequest {
+  string docker_app_id = 1 [(google.api.field_behavior) = REQUIRED];
+  DockerApp docker_app = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateDockerAppRequest {
+  DockerApp docker_app = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteDockerAppRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerApp"}
+  ];
+  bool delete_volumes = 2;
+}
+
+message StartDockerAppRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerApp"}
+  ];
+}
+
+message StopDockerAppRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerApp"}
+  ];
+}
+
+message RestartDockerAppRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerApp"}
+  ];
+}
+
+message GetDockerAppLogsRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerApp"}
+  ];
+  int32 tail = 2;
+  string service_name = 3;
+}
+
+message GetDockerAppLogsResponse {
+  string logs = 1;
+  int32 line_count = 2;
+}
+
+// =============================================================================
+// Docker Storage & ZFS Dataset Configuration
+// =============================================================================
+
+message DockerConfig {
+  string dataset = 1;                  // ZFS dataset owned by Docker, e.g. "tank/apps" or "tank/docker"
+  string pool = 2;                     // Parent ZFS pool, e.g. "tank"
+  string mountpoint = 3;               // Mountpoint of the dataset, e.g. "/tank/apps"
+  string appdata_path = 4;             // Path for container appdata volumes, e.g. "/tank/apps/appdata"
+  string docker_data_root = 5;         // Path for Docker engine data-root, e.g. "/tank/apps/docker"
+  repeated string available_datasets = 6;
+  repeated string available_pools = 7;
+  bool dataset_selected = 8;
+  string appdata_dataset = 9;
+  bool pool_selected = 10;
+}
+
+message GetDockerConfigRequest {}
+
+message UpdateDockerConfigRequest {
+  DockerConfig docker_config = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+// =============================================================================
+// Host Filesystem Directory Browser (for Host Paths & Volumes)
+// =============================================================================
+
+message DirectoryEntry {
+  string name = 1;
+  string path = 2;
+  bool is_dir = 3;
+}
+
+message ListFileSystemDirectoriesRequest {
+  string path = 1;
+}
+
+message ListFileSystemDirectoriesResponse {
+  string current_path = 1;
+  string parent_path = 2;
+  repeated DirectoryEntry entries = 3;
+}
+
+// =============================================================================
+// LXC Container Resource
+// =============================================================================
+
+message LxcContainer {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/LxcContainer"
+    pattern: "lxcContainers/{lxc_container}"
+    singular: "lxcContainer"
+    plural: "lxcContainers"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string container_name = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string state = 3 [(google.api.field_behavior) = OUTPUT_ONLY]; // RUNNING, STOPPED, FROZEN
+  string distribution = 4; // debian, ubuntu, alpine, archlinux
+  string release = 5; // bookworm, noble, 3.20, current
+  string architecture = 6; // amd64, arm64
+  string ipv4_address = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
+  bool autostart = 8;
+  bool unprivileged = 9;
+  string rootfs_path = 10;
+  int64 memory_limit_mib = 11;
+  int32 cpu_cores = 12;
+}
+
+message ListLxcContainersRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string filter = 3;
+}
+
+message ListLxcContainersResponse {
+  repeated LxcContainer lxc_containers = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetLxcContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/LxcContainer"}
+  ];
+}
+
+message CreateLxcContainerRequest {
+  string lxc_container_id = 1 [(google.api.field_behavior) = REQUIRED];
+  LxcContainer lxc_container = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message DeleteLxcContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/LxcContainer"}
+  ];
+  bool force = 2;
+}
+
+message StartLxcContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/LxcContainer"}
+  ];
+}
+
+message StopLxcContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/LxcContainer"}
+  ];
+}
+
+message FreezeLxcContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/LxcContainer"}
+  ];
+}
+
+// =============================================================================
+// CIFS (Samba) & WebDAV Share Resources
+// =============================================================================
+
+message CifsShare {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/CifsShare"
+    pattern: "cifsShares/{cifs_share}"
+    singular: "cifsShare"
+    plural: "cifsShares"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string share_name = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string path = 3 [(google.api.field_behavior) = REQUIRED];
+  string comment = 4;
+  bool read_only = 5;
+  bool guest_ok = 6;
+  bool browseable = 7;
+  repeated string valid_users = 8;
+  repeated string valid_groups = 9;
+  string create_mask = 10;
+  string directory_mask = 11;
+  bool enabled = 12;
+}
+
+message ListCifsSharesRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListCifsSharesResponse {
+  repeated CifsShare cifs_shares = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetCifsShareRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/CifsShare"}
+  ];
+}
+
+message CreateCifsShareRequest {
+  string cifs_share_id = 1 [(google.api.field_behavior) = REQUIRED];
+  CifsShare cifs_share = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateCifsShareRequest {
+  CifsShare cifs_share = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteCifsShareRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/CifsShare"}
+  ];
+}
+
+message WebdavShare {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/WebdavShare"
+    pattern: "webdavShares/{webdav_share}"
+    singular: "webdavShare"
+    plural: "webdavShares"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string share_name = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string path = 3 [(google.api.field_behavior) = REQUIRED];
+  string url_prefix = 4 [(google.api.field_behavior) = OUTPUT_ONLY]; // e.g. "/dav/documents"
+  string description = 5;
+  bool read_only = 6;
+  repeated string allowed_users = 7;
+  repeated string allowed_groups = 8;
+  bool enabled = 9;
+}
+
+message ListWebdavSharesRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListWebdavSharesResponse {
+  repeated WebdavShare webdav_shares = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetWebdavShareRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/WebdavShare"}
+  ];
+}
+
+message CreateWebdavShareRequest {
+  string webdav_share_id = 1 [(google.api.field_behavior) = REQUIRED];
+  WebdavShare webdav_share = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateWebdavShareRequest {
+  WebdavShare webdav_share = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteWebdavShareRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/WebdavShare"}
+  ];
+}
+
+// =============================================================================
+// Linux Users & Groups Resources
+// =============================================================================
+
+message User {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/User"
+    pattern: "users/{user}"
+    singular: "user"
+    plural: "users"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string username = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int32 uid = 3;
+  int32 primary_gid = 4;
+  string primary_group = 5;
+  repeated string supplementary_groups = 6;
+  string full_name = 7;
+  string home_directory = 8;
+  string shell = 9;
+  bool ssh_enabled = 10;
+  bool ssh_password_auth = 11;
+  repeated string ssh_authorized_keys = 12;
+  bool locked = 13;
+  bool system_account = 14 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string password = 15 [(google.api.field_behavior) = INPUT_ONLY];
+  bool is_admin = 16;
+}
+
+message ListUsersRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  bool include_system_accounts = 3;
+}
+
+message ListUsersResponse {
+  repeated User users = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetUserRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/User"}
+  ];
+}
+
+message CreateUserRequest {
+  string user_id = 1 [(google.api.field_behavior) = REQUIRED];
+  User user = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateUserRequest {
+  User user = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteUserRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/User"}
+  ];
+  bool remove_home = 2;
+}
+
+message Group {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/Group"
+    pattern: "groups/{group}"
+    singular: "group"
+    plural: "groups"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string group_name = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int32 gid = 3;
+  repeated string members = 4;
+  bool system_group = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+message ListGroupsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  bool include_system_groups = 3;
+}
+
+message ListGroupsResponse {
+  repeated Group groups = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetGroupRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/Group"}
+  ];
+}
+
+message CreateGroupRequest {
+  string group_id = 1 [(google.api.field_behavior) = REQUIRED];
+  Group group = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateGroupRequest {
+  Group group = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteGroupRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/Group"}
+  ];
+}
+
+// =============================================================================
+// Application Catalog Messages (TrueNAS SCALE Catalog)
+// =============================================================================
+
+message CatalogApp {
+  string app_id = 1;
+  string title = 2;
+  string description = 3;
+  string category = 4;
+  repeated string categories = 5;
+  string icon_url = 6;
+  string home = 7;
+  string train = 8;
+  string version = 9;
+  string app_version = 10;
+  repeated string tags = 11;
+  repeated string screenshots = 12;
+  string compose_yaml = 13;
+  int32 default_port = 14;
+}
+
+message ListCatalogAppsRequest {
+  string train = 1;
+  string category = 2;
+  string query = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+}
+
+message ListCatalogAppsResponse {
+  repeated CatalogApp apps = 1;
+  int32 total_size = 2;
+  string last_sync_time = 3;
+}
+
+message GetCatalogAppRequest {
+  string app_id = 1;
+  string train = 2;
+}
+
+message SyncCatalogRequest {
+  bool force = 1;
+}
+
+message SyncCatalogResponse {
+  bool success = 1;
+  string message = 2;
+  int32 total_apps = 3;
+  string last_sync_time = 4;
+}
+

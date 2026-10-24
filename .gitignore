@@ -1,0 +1,51 @@
+# Binaries and build artifacts
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test artifacts and coverage
+*.out
+*.test
+coverage/
+
+# Go dependency and cache files
+vendor/
+
+# Node.js and Frontend build
+web/node_modules/
+web/.npm
+web/npm-debug.log*
+web/yarn-debug.log*
+web/yarn-error.log*
+web/pnpm-debug.log*
+web/.vite/
+*.tsbuildinfo
+web/dist/*
+!web/dist/.gitkeep
+
+# Environment and local state
+.env
+.env.*
+!.env.example
+tmp/
+*.log
+*.pid
+
+# macOS / Windows OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE and Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

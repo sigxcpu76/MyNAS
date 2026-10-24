@@ -1,0 +1,67 @@
+name: CI & Build Pipeline
+
+on:
+  push:
+    branches: [ master, main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ master, main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build & Verify (Go & Vue 3)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          check-latest: true
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install Frontend Dependencies
+        run: npm ci --prefix web
+
+      - name: Run Frontend Unit Tests (Vitest)
+        run: npm test --prefix web -- --run
+
+      - name: Build Embedded Frontend Assets (Vite)
+        run: npm run build --prefix web
+
+      - name: Run Backend Unit Tests (Go)
+        run: go test -v -race ./...
+
+      - name: Compile Single Embedded Binary (nasctl)
+        run: |
+          mkdir -p bin
+          go build -v -ldflags="-s -w" -o bin/nasctl ./cmd/nasctl
+
+      - name: Smoke Test CLI Executable
+        run: |
+          ./bin/nasctl --help
+          ./bin/nasctl disk --help
+          ./bin/nasctl zfs --help
+          ./bin/nasctl app --help
+          ./bin/nasctl prereq --help
+
+      - name: Upload Single Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nasctl-linux-amd64
+          path: bin/nasctl
+          if-no-files-found: error
+          retention-days: 14
