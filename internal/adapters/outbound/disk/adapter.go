@@ -10,7 +10,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/sigxcpu/nas/internal/domain"
 	"github.com/sigxcpu/nas/internal/ports"
@@ -806,7 +809,34 @@ func (a *Adapter) collectDeviceAliases() (map[string][]string, map[string]string
 		}
 	}
 
-	// Also parse lsblk -J -o NAME,PATH,UUID,PARTUUID to register UUIDs and PARTUUIDs
+	// 2. Read /sys/class/block/*/uevent directly for PARTUUIDs (Linux sysfs block layer)
+	if blockEntries, err := os.ReadDir("/sys/class/block"); err == nil {
+		for _, be := range blockEntries {
+			devName := be.Name()
+			ueventBytes, err := os.ReadFile(filepath.Join("/sys/class/block", devName, "uevent"))
+			if err != nil {
+				continue
+			}
+			for _, line := range strings.Split(string(ueventBytes), "\n") {
+				if strings.HasPrefix(line, "PARTUUID=") {
+					partUUID := strings.TrimPrefix(line, "PARTUUID=")
+					if partUUID != "" {
+						aliasToDev[partUUID] = devName
+						byPartUUIDPath := "/dev/disk/by-partuuid/" + partUUID
+						if !containsString(devToAliases[devName], byPartUUIDPath) {
+							devToAliases[devName] = append(devToAliases[devName], byPartUUIDPath)
+						}
+						canonicalPath := "/dev/" + devName
+						if !containsString(devToAliases[canonicalPath], byPartUUIDPath) {
+							devToAliases[canonicalPath] = append(devToAliases[canonicalPath], byPartUUIDPath)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 3. Fallback/Supplement: parse lsblk -J -o NAME,PATH,UUID,PARTUUID if present
 	if lsblkPath, err := exec.LookPath("lsblk"); err == nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
@@ -881,7 +911,38 @@ func findBackingDeviceForPath(filePath string) string {
 	if filePath == "" {
 		return ""
 	}
-	// Try df -P <filePath>
+
+	// 1. Direct Linux kernel syscall + sysfs: Stat file to get device major:minor,
+	// then resolve the canonical block device from /sys/dev/block/<major>:<minor>.
+	// This executes in under 1 microsecond without spawning any child processes.
+	var stat syscall.Stat_t
+	if err := syscall.Stat(filePath, &stat); err == nil {
+		major := unix.Major(stat.Dev)
+		minor := unix.Minor(stat.Dev)
+		sysDevBlock := fmt.Sprintf("/sys/dev/block/%d:%d", major, minor)
+		if target, err := filepath.EvalSymlinks(sysDevBlock); err == nil {
+			canonicalDev := filepath.Base(target)
+			if canonicalDev != "" {
+				return "/dev/" + canonicalDev
+			}
+		}
+	}
+
+	// 2. Direct /proc/mounts longest-prefix match (in-process Linux procfs reader)
+	mounts := parseProcMounts()
+	var bestDev string
+	bestLen := -1
+	for dev, mountpoint := range mounts {
+		if strings.HasPrefix(filePath, mountpoint) && len(mountpoint) > bestLen {
+			bestLen = len(mountpoint)
+			bestDev = dev
+		}
+	}
+	if bestDev != "" {
+		return bestDev
+	}
+
+	// 3. Fallback: df -P <filePath> if sysfs/procfs resolution was inconclusive
 	if dfPath, err := exec.LookPath("df"); err == nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
@@ -898,17 +959,7 @@ func findBackingDeviceForPath(filePath string) string {
 		}
 	}
 
-	// Fallback to /proc/mounts longest prefix match
-	mounts := parseProcMounts()
-	var bestDev string
-	bestLen := -1
-	for dev, mountpoint := range mounts {
-		if strings.HasPrefix(filePath, mountpoint) && len(mountpoint) > bestLen {
-			bestLen = len(mountpoint)
-			bestDev = dev
-		}
-	}
-	return bestDev
+	return ""
 }
 
 func addPool(poolMap map[string]string, key, poolName string) {

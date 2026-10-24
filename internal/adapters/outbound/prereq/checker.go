@@ -314,10 +314,26 @@ func (c *SystemChecker) CheckAll(ctx context.Context) ([]domain.Prerequisite, bo
 		}
 
 		if spec.Kind == "KERNEL_MODULE" {
-			if _, err := os.Stat(spec.Target); err == nil {
+			modName := strings.TrimPrefix(spec.Target, "/dev/")
+			modSysPath := filepath.Join("/sys/module", modName)
+			if info, err := os.Stat(modSysPath); err == nil && info.IsDir() {
+				p.Status = domain.StatusInstalled
+				version := readFileTrim(filepath.Join(modSysPath, "version"))
+				if version == "" {
+					version = "kernel-loaded"
+				}
+				p.Version = version
+				p.Details = fmt.Sprintf("Kernel module %s is active in /sys/module (%s)", modName, version)
+				p.FallbackMode = false
+			} else if _, err := os.Stat(spec.Target); err == nil {
 				p.Status = domain.StatusInstalled
 				p.Version = "kernel-loaded"
 				p.Details = fmt.Sprintf("Kernel path %s is active on host", spec.Target)
+				p.FallbackMode = false
+			} else if isModuleInProcModules(modName) {
+				p.Status = domain.StatusInstalled
+				p.Version = "kernel-loaded"
+				p.Details = fmt.Sprintf("Kernel module %s is loaded in /proc/modules", modName)
 				p.FallbackMode = false
 			} else if c.hybridFallback {
 				p.Status = domain.StatusFallbackActive
@@ -338,6 +354,16 @@ func (c *SystemChecker) CheckAll(ctx context.Context) ([]domain.Prerequisite, bo
 				p.Status = domain.StatusInstalled
 				p.Version = filepath.Base(libPath)
 				p.Details = fmt.Sprintf("Shared library located at %s", libPath)
+				p.FallbackMode = false
+			} else if spec.ID == "libzfs" && (isModuleInProcModules("zfs") || isDirExists("/sys/module/zfs")) {
+				// OpenZFS kernel module loaded with in-kernel kstat/sysfs API
+				version := readFileTrim("/sys/module/zfs/version")
+				if version == "" {
+					version = "in-kernel"
+				}
+				p.Status = domain.StatusInstalled
+				p.Version = version
+				p.Details = fmt.Sprintf("ZFS kernel module active via /sys/module/zfs (%s)", version)
 				p.FallbackMode = false
 			} else if c.hybridFallback {
 				p.Status = domain.StatusFallbackActive
@@ -429,4 +455,31 @@ func detectVersion(ctx context.Context, bin string, args []string) string {
 		return first
 	}
 	return "installed"
+}
+
+func isModuleInProcModules(modName string) bool {
+	data, err := os.ReadFile("/proc/modules")
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) > 0 && fields[0] == modName {
+			return true
+		}
+	}
+	return false
+}
+
+func isDirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+func readFileTrim(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
 }
