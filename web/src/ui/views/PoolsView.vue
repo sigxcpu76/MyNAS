@@ -5,8 +5,8 @@ import {
   mdiCheckCircleOutline,
   mdiClose,
   mdiCogOutline,
-  mdiCrown,
   mdiDatabase,
+  mdiDatabaseCheck,
   mdiDatabaseExportOutline,
   mdiDelete,
   mdiDragVariant,
@@ -595,194 +595,201 @@ function viewPoolDatasets(poolName: string) {
       </div>
     </div>
 
-    <!-- Pools Table Card -->
-    <div class="card" style="padding: 18px 20px">
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th style="min-width: 140px">Pool Name</th>
-              <th style="min-width: 90px">Health</th>
-              <th style="min-width: 130px">Layout</th>
-              <th style="min-width: 220px">Capacity & Usage</th>
-              <th style="min-width: 90px">Frag</th>
-              <th style="min-width: 110px">Sync / Dedup</th>
-              <th style="min-width: 170px">Scrub Status</th>
-              <th style="min-width: 260px; text-align: right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="nasState.pools.length === 0">
-              <td colspan="8" style="text-align: center; color: var(--text-secondary); padding: 36px">
-                No storage pools found on the host. Click <strong>"New Pool"</strong> above to create one.
-              </td>
-            </tr>
+    <!-- Pools Grid Cards -->
+    <div
+      v-if="nasState.pools.length === 0"
+      class="card"
+      style="padding: 48px 24px; text-align: center; color: var(--text-secondary)"
+    >
+      <MdiIcon :path="mdiDatabase" size="44" style="opacity: 0.35; margin-bottom: 12px; color: var(--accent-primary)" />
+      <div style="font-size: 16px; font-weight: 600; color: var(--text-primary)">No Storage Pools Found</div>
+      <p style="margin: 6px auto 18px; font-size: 13px; max-width: 480px; line-height: 1.5">
+        No OpenZFS storage pools are currently imported on the host. Click <strong>"New Pool"</strong> to design and create a storage pool.
+      </p>
+      <button class="btn btn-primary btn-sm" @click="openCreatePoolModal">
+        <MdiIcon :path="mdiPlus" size="16" style="margin-right: 4px" />
+        New Pool
+      </button>
+    </div>
 
-            <tr v-for="p in nasState.pools" :key="p.name">
-              <!-- Pool Name -->
-              <td>
-                <div style="display: flex; align-items: center; gap: 8px">
-                  <MdiIcon :path="mdiDatabase" size="18" style="color: var(--accent-primary)" />
-                  <div>
-                    <div style="display: flex; align-items: center; gap: 6px">
-                      <span class="mono" style="font-weight: 700; font-size: 14px; color: var(--text-primary)">
-                        {{ p.poolName || p.name.replace(/^zfsPools\//, '') }}
-                      </span>
-                      <span
-                        v-if="(p.poolName || p.name.replace(/^zfsPools\//, '')) === nasState.systemConfig?.mainPool"
-                        class="badge badge-main-pool"
-                        style="font-size: 10px; padding: 1px 7px"
-                        title="Active Main Storage Pool"
-                      >
-                        <MdiIcon :path="mdiCrown" size="12" /> MAIN POOL
-                      </span>
-                    </div>
-                    <div class="mono" style="font-size: 11px; color: var(--text-secondary)">
-                      {{ p.mountpoint || `/nas/${p.poolName || p.name.replace(/^zfsPools\//, '')}` }}
-                    </div>
-                  </div>
-                </div>
-              </td>
-
-              <!-- Health -->
-              <td>
+    <div v-else class="pools-grid">
+      <div
+        v-for="p in nasState.pools"
+        :key="p.name"
+        class="card pool-card"
+        :class="{ 'is-main-pool': (p.poolName || p.name.replace(/^zfsPools\//, '')) === nasState.systemConfig?.mainPool }"
+      >
+        <!-- Card Top Bar: Icon, Pool Name, Main Pool Badge, Health Badge -->
+        <div class="pool-card-header">
+          <div style="display: flex; align-items: center; gap: 10px; min-width: 0">
+            <MdiIcon
+              :path="(p.poolName || p.name.replace(/^zfsPools\//, '')) === nasState.systemConfig?.mainPool ? mdiDatabaseCheck : mdiDatabase"
+              size="24"
+              :style="{ color: (p.poolName || p.name.replace(/^zfsPools\//, '')) === nasState.systemConfig?.mainPool ? 'var(--accent-primary)' : 'var(--text-secondary)' }"
+            />
+            <div style="min-width: 0">
+              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+                <span class="mono" style="font-weight: 700; font-size: 16px; color: var(--text-primary)">
+                  {{ p.poolName || p.name.replace(/^zfsPools\//, '') }}
+                </span>
                 <span
-                  class="badge mono"
-                  :class="p.state === 'ONLINE' ? 'badge-success' : 'badge-danger'"
-                  style="font-size: 11px"
+                  v-if="(p.poolName || p.name.replace(/^zfsPools\//, '')) === nasState.systemConfig?.mainPool"
+                  class="badge badge-main-pool"
+                  title="Designated Main Storage Pool"
                 >
-                  {{ p.state }}
+                  <MdiIcon :path="mdiDatabaseCheck" size="12" style="margin-right: 3px" />
+                  MAIN POOL
                 </span>
-              </td>
+              </div>
+              <div class="mono" style="font-size: 11.5px; color: var(--text-muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
+                {{ p.mountpoint || `/nas/${p.poolName || p.name.replace(/^zfsPools\//, '')}` }}
+              </div>
+            </div>
+          </div>
 
-              <!-- Layout -->
-              <td>
-                <div style="display: flex; flex-direction: column; gap: 3px">
-                  <span class="badge badge-info mono" style="font-size: 10.5px">
-                    {{ (p.vdevLayout || 'stripe').toUpperCase() }}
-                  </span>
-                  <div
-                    v-if="p.devices && p.devices.length > 0"
-                    class="mono"
-                    style="font-size: 10.5px; color: var(--text-secondary); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap"
-                    :title="p.devices.join(', ')"
-                  >
-                    {{ p.devices.length }} dev{{ p.devices.length === 1 ? '' : 's' }}: {{ p.devices.join(', ') }}
-                  </div>
-                </div>
-              </td>
+          <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0">
+            <span
+              class="badge mono"
+              :class="p.state === 'ONLINE' ? 'badge-success' : 'badge-danger'"
+              style="font-size: 11px; font-weight: 600"
+            >
+              {{ p.state }}
+            </span>
+          </div>
+        </div>
 
-              <!-- Capacity & Usage -->
-              <td>
-                <div style="display: flex; flex-direction: column; gap: 5px">
-                  <div style="display: flex; justify-content: space-between; font-size: 11.5px">
-                    <span class="mono" style="font-weight: 600">
-                      {{ formatBytes(p.allocatedBytes) }} / {{ formatBytes(p.sizeBytes) }}
-                    </span>
-                    <span class="mono" style="color: var(--accent-primary); font-weight: 700">
-                      {{ p.capacityPercent }}%
-                    </span>
-                  </div>
-                  <!-- Progress Bar -->
-                  <div style="width: 100%; height: 6px; background: rgba(0, 0, 0, 0.3); border-radius: 3px; overflow: hidden; border: 1px solid var(--border-subtle)">
-                    <div
-                      :style="{
-                        width: `${Math.min(100, p.capacityPercent)}%`,
-                        background: p.capacityPercent > 85 ? 'var(--danger)' : p.capacityPercent > 70 ? 'var(--warning)' : 'var(--accent-primary)'
-                      }"
-                      style="height: 100%; border-radius: 2px; transition: width 0.3s ease"
-                    ></div>
-                  </div>
-                  <div style="font-size: 10.5px; color: var(--text-secondary)">
-                    Free: {{ formatBytes(p.freeBytes) }}
-                  </div>
-                </div>
-              </td>
+        <!-- Layout & Devices Info Tag -->
+        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; margin-top: 14px; padding: 6px 10px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-subtle)">
+          <div style="display: flex; align-items: center; gap: 6px">
+            <span style="color: var(--text-muted)">Topology:</span>
+            <span class="badge badge-info mono" style="font-size: 10px; padding: 1px 6px">
+              {{ (p.vdevLayout || 'stripe').toUpperCase() }}
+            </span>
+          </div>
+          <div
+            v-if="p.devices && p.devices.length > 0"
+            class="mono"
+            style="color: var(--text-secondary); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px"
+            :title="p.devices.join(', ')"
+          >
+            {{ p.devices.length }} dev{{ p.devices.length === 1 ? '' : 's' }} ({{ p.devices.map(d => d.replace(/^\/dev\//, '')).join(', ') }})
+          </div>
+        </div>
 
-              <!-- Fragmentation -->
-              <td>
-                <span class="mono" style="font-weight: 600; font-size: 12px; color: #c084fc">
-                  {{ p.fragmentationPercent }}%
-                </span>
-              </td>
+        <!-- Capacity Section -->
+        <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 14px">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; font-size: 12px">
+            <div>
+              <span class="mono" style="font-weight: 700; color: var(--text-primary)">
+                {{ formatBytes(p.allocatedBytes) }}
+              </span>
+              <span style="color: var(--text-muted); font-size: 11px; margin: 0 4px">used of</span>
+              <span class="mono" style="color: var(--text-secondary)">
+                {{ formatBytes(p.sizeBytes) }}
+              </span>
+            </div>
+            <span
+              class="mono"
+              :style="{
+                color: p.capacityPercent > 85 ? 'var(--danger)' : p.capacityPercent > 70 ? 'var(--warning)' : 'var(--accent-primary)',
+                fontWeight: 700,
+                fontSize: '13px'
+              }"
+            >
+              {{ p.capacityPercent }}%
+            </span>
+          </div>
 
-              <!-- Sync / Dedup -->
-              <td>
-                <div style="display: flex; flex-direction: column; gap: 3px; align-items: flex-start">
-                  <span
-                    class="badge mono"
-                    :class="p.sync === 'always' ? 'badge-success' : p.sync === 'disabled' ? 'badge-danger' : 'badge-neutral'"
-                    style="font-size: 10px"
-                  >
-                    sync:{{ p.sync || 'std' }}
-                  </span>
-                  <span class="mono" style="font-size: 10.5px; color: var(--text-secondary)">
-                    dedup: {{ p.dedupRatio > 1 ? `${p.dedupRatio.toFixed(2)}x` : '1.00x' }}
-                  </span>
-                </div>
-              </td>
+          <!-- Progress Bar -->
+          <div class="capacity-track">
+            <div
+              class="capacity-fill"
+              :style="{
+                width: `${Math.min(100, p.capacityPercent)}%`,
+                background: p.capacityPercent > 85 ? 'var(--danger)' : p.capacityPercent > 70 ? 'var(--warning)' : 'var(--accent-primary)'
+              }"
+            ></div>
+          </div>
 
-              <!-- Scrub Status -->
-              <td>
-                <div class="mono" style="font-size: 11px; color: var(--text-secondary); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap" :title="p.lastScrubStatus || 'Never scrubbed'">
-                  {{ p.lastScrubStatus || 'Never scrubbed' }}
-                </div>
-              </td>
+          <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted)">
+            <span>Free: <strong class="mono" style="color: var(--text-secondary)">{{ formatBytes(p.freeBytes) }}</strong></span>
+            <span>Frag: <strong class="mono" style="color: #c084fc">{{ p.fragmentationPercent }}%</strong></span>
+          </div>
+        </div>
 
-              <!-- Actions -->
-              <td style="text-align: right">
-                <div style="display: inline-flex; gap: 6px; justify-content: flex-end; align-items: center">
-                  <button
-                    v-if="(p.poolName || p.name.replace(/^zfsPools\//, '')) !== nasState.systemConfig?.mainPool"
-                    class="btn btn-sm btn-primary-outline"
-                    title="Designate as Main Storage Pool"
-                    @click="handleSetMainPool(p.poolName || p.name.replace(/^zfsPools\//, ''))"
-                  >
-                    <MdiIcon :path="mdiCrown" size="14" style="margin-right: 3px; color: #fbbf24" />
-                    Set Main
-                  </button>
-                  <button
-                    class="btn btn-sm"
-                    title="View Child Datasets in this pool"
-                    @click="viewPoolDatasets(p.name)"
-                  >
-                    Datasets
-                  </button>
-                  <button
-                    class="btn btn-sm"
-                    title="Scrub pool integrity"
-                    @click="handleScrubPool(p.name)"
-                  >
-                    <MdiIcon :path="mdiShieldCheckOutline" size="14" style="margin-right: 3px" />
-                    Scrub
-                  </button>
-                  <button
-                    class="btn btn-sm"
-                    title="Configure Sync & VDEVs"
-                    @click="openPoolConfig(p)"
-                  >
-                    <MdiIcon :path="mdiCogOutline" size="14" />
-                  </button>
-                  <button
-                    class="btn btn-sm"
-                    title="Export pool (safely unmount and detach)"
-                    @click="handleExportPool(p.name)"
-                  >
-                    <MdiIcon :path="mdiDatabaseExportOutline" size="14" style="margin-right: 3px" />
-                    Export
-                  </button>
-                  <button
-                    class="btn btn-danger btn-sm btn-icon"
-                    title="Destroy Pool"
-                    @click="handleDeletePool(p.name)"
-                  >
-                    <MdiIcon :path="mdiDelete" size="14" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <!-- Key Metrics Grid -->
+        <div class="pool-metrics-grid">
+          <div class="metric-box">
+            <div class="metric-label">Sync</div>
+            <div class="metric-val mono">{{ p.sync || 'standard' }}</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Dedup</div>
+            <div class="metric-val mono">{{ p.dedupRatio > 1 ? `${p.dedupRatio.toFixed(2)}x` : '1.00x' }}</div>
+          </div>
+          <div class="metric-box" style="grid-column: span 2">
+            <div class="metric-label">Scrub</div>
+            <div class="metric-val mono" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap" :title="p.lastScrubStatus || 'Never scrubbed'">
+              {{ p.lastScrubStatus || 'Never scrubbed' }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Card Footer / Action Buttons -->
+        <div class="pool-card-footer">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <button
+              class="btn btn-sm btn-primary"
+              title="View Child Datasets in this pool"
+              @click="viewPoolDatasets(p.name)"
+            >
+              <MdiIcon :path="mdiTreeOutline" size="14" style="margin-right: 4px" />
+              Datasets
+            </button>
+            <button
+              class="btn btn-sm"
+              title="Scrub pool integrity"
+              @click="handleScrubPool(p.name)"
+            >
+              <MdiIcon :path="mdiShieldCheckOutline" size="14" style="margin-right: 4px" />
+              Scrub
+            </button>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 6px">
+            <button
+              v-if="(p.poolName || p.name.replace(/^zfsPools\//, '')) !== nasState.systemConfig?.mainPool"
+              class="btn btn-sm btn-ghost"
+              title="Designate as Main Storage Pool"
+              style="padding: 4px 8px; font-size: 11px"
+              @click="handleSetMainPool(p.poolName || p.name.replace(/^zfsPools\//, ''))"
+            >
+              <MdiIcon :path="mdiDatabaseCheck" size="13" style="margin-right: 3px; color: var(--accent-primary)" />
+              Set Main
+            </button>
+            <button
+              class="btn btn-sm btn-icon"
+              title="Configure Sync & VDEVs"
+              @click="openPoolConfig(p)"
+            >
+              <MdiIcon :path="mdiCogOutline" size="14" />
+            </button>
+            <button
+              class="btn btn-sm btn-icon"
+              title="Export pool (safely unmount and detach)"
+              @click="handleExportPool(p.name)"
+            >
+              <MdiIcon :path="mdiDatabaseExportOutline" size="14" />
+            </button>
+            <button
+              class="btn btn-danger btn-sm btn-icon"
+              title="Destroy Pool"
+              @click="handleDeletePool(p.name)"
+            >
+              <MdiIcon :path="mdiDelete" size="14" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1630,6 +1637,95 @@ function viewPoolDatasets(poolName: string) {
   padding: 14px;
 }
 
+.pools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 18px;
+  width: 100%;
+}
+
+.pool-card {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+
+.pool-card:hover {
+  border-color: rgba(6, 182, 212, 0.4);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+
+.pool-card.is-main-pool {
+  border-color: rgba(6, 182, 212, 0.45);
+  box-shadow: 0 0 14px rgba(6, 182, 212, 0.08);
+}
+
+.pool-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.capacity-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+
+.capacity-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.pool-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.metric-box {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.metric-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.metric-val {
+  font-size: 11.5px;
+  color: var(--text-primary);
+  margin-top: 2px;
+}
+
+.pool-card-footer {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .badge-purple {
   background: rgba(168, 85, 247, 0.15);
   color: #c084fc;
@@ -1637,11 +1733,16 @@ function viewPoolDatasets(poolName: string) {
 }
 
 .badge-main-pool {
-  background: rgba(251, 191, 36, 0.15);
-  color: #fbbf24;
-  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(6, 182, 212, 0.12);
+  color: var(--accent-primary);
+  border: 1px solid rgba(6, 182, 212, 0.35);
   font-weight: 700;
   letter-spacing: 0.03em;
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .spin {
