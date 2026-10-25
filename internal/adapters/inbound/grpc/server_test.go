@@ -121,6 +121,7 @@ func TestAIPResourceNamesPaginationAndErrors(t *testing.T) {
 	dockerAdapter := docker.NewAdapter()
 	zfsAdapter := newStubZfsServerPort(t.TempDir())
 	prereqChecker := prereq.NewSystemChecker()
+	prereqChecker.SetAllModulesInstalledForTest()
 	sysAdapter := system.NewAdapter(zfsAdapter, prereqChecker)
 	srv := grpcadapter.NewServer(
 		application.NewSystemService(sysAdapter),
@@ -289,6 +290,7 @@ func TestDockerConfigAndFilesystemGRPC(t *testing.T) {
 func TestSystemConfigAndPoolSelection(t *testing.T) {
 	ctx := context.Background()
 	checker := prereq.NewSystemChecker()
+	checker.SetAllModulesInstalledForTest()
 	checker.SetMainPool("") // unselect initially
 
 	tempDir := t.TempDir()

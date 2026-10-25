@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	osuser "os/user"
 	"strings"
 	"testing"
 	"time"
@@ -421,13 +422,18 @@ func TestIdentityAndPrerequisites(t *testing.T) {
 		t.Fatalf("CheckPrerequisites failed: len=%d installed=%d missing=%d err=%v", len(items), installed, missing, err)
 	}
 
+	testUser := "root"
+	if curr, err := osuser.Current(); err == nil && curr.Username != "" {
+		testUser = curr.Username
+	}
+
 	idSvc := application.NewIdentityService(identity.NewAdapter(), "unit-test-secret")
-	token, _, user, err := idSvc.Login(ctx, "sigxcpu", "admin123")
-	if err != nil || token == "" || user.Username != "sigxcpu" {
+	token, _, user, err := idSvc.Login(ctx, testUser, "admin123")
+	if err != nil || token == "" || user.Username != testUser {
 		t.Fatalf("Login failed: %v", err)
 	}
 	verified, err := idSvc.VerifyToken(ctx, "Bearer "+token)
-	if err != nil || verified.Username != "sigxcpu" {
+	if err != nil || verified.Username != testUser {
 		t.Fatalf("VerifyToken failed: %v", err)
 	}
 

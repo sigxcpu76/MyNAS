@@ -250,6 +250,20 @@ func (c *SystemChecker) GetLinuxFlavor() domain.LinuxFlavor {
 	return c.flavor
 }
 
+// SetAllModulesInstalledForTest forces all prerequisite items to be marked as installed.
+// This is used in unit tests to decouple domain, state-machine, and API routing tests
+// from host machine environmental dependencies.
+func (c *SystemChecker) SetAllModulesInstalledForTest() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i := range c.cached {
+		c.cached[i].Status = domain.StatusInstalled
+		if c.cached[i].Version == "" || c.cached[i].Version == "not-found" {
+			c.cached[i].Version = "test-mock-v1.0"
+		}
+	}
+}
+
 // IsModuleEnabled returns true if all required underlying binaries and libraries for the module
 // ("zfs", "kvm", "docker", "lxc", "cifs") are installed on the host,
 // and verifies that a main ZFS storage pool has been selected for modules other than zfs.

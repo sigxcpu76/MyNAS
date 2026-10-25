@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	osuser "os/user"
 	"strings"
 	"testing"
 	"time"
@@ -188,6 +189,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	ctx := context.Background()
 
 	prereqChecker := prereq.NewSystemChecker()
+	prereqChecker.SetAllModulesInstalledForTest()
 	prereqChecker.SetMainPool("tank")
 	prereqSvc := application.NewPrerequisiteService(prereqChecker)
 
@@ -254,7 +256,12 @@ func TestGoogleAIPGatewayEndToEnd(t *testing.T) {
 	client := srv.Client()
 
 	// 1. Auth custom method POST /v1/auth:login
-	loginResp, err := client.Post(srv.URL+"/v1/auth:login", "application/json", strings.NewReader(`{"username":"sigxcpu","password":"admin123"}`))
+	testUsername := "root"
+	if curr, err := osuser.Current(); err == nil && curr.Username != "" {
+		testUsername = curr.Username
+	}
+	loginPayload := fmt.Sprintf(`{"username":%q,"password":"admin123"}`, testUsername)
+	loginResp, err := client.Post(srv.URL+"/v1/auth:login", "application/json", strings.NewReader(loginPayload))
 	if err != nil {
 		t.Fatalf("login request failed: %v", err)
 	}

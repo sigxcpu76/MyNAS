@@ -215,6 +215,7 @@ func TestNasctlCobraSubcommands(t *testing.T) {
 		},
 	}
 	prereqChecker := prereq.NewSystemChecker()
+	prereqChecker.SetAllModulesInstalledForTest()
 	prereqChecker.SetMainPool("tank")
 	sysAdapter := system.NewAdapter(zfsPort, prereqChecker)
 
@@ -302,8 +303,8 @@ func TestNasctlCobraSubcommands(t *testing.T) {
 		{[]string{"-s", addr, "lxc", "list"}, "lxcContainers/pihole-dns"},
 		{[]string{"-s", addr, "share", "cifs"}, "cifsShares/media"},
 		{[]string{"-s", addr, "share", "webdav"}, "/dav/documents"},
-		{[]string{"-s", addr, "user", "list"}, "users/sigxcpu"},
-		{[]string{"-s", addr, "group", "list"}, "groups/sigxcpu"},
+		{[]string{"-s", addr, "user", "list"}, "users/"},
+		{[]string{"-s", addr, "group", "list"}, "groups/"},
 	}
 
 	for _, tc := range cases {

@@ -72,6 +72,7 @@ func TestSystemAdapterPoolSelectionAndRecovery(t *testing.T) {
 		datasets: make(map[string]domain.ZfsDataset),
 	}
 	prereqChecker := prereq.NewSystemChecker()
+	prereqChecker.SetAllModulesInstalledForTest()
 	adapter := system.NewAdapter(zfsAdapter, prereqChecker)
 
 	ctx := context.Background()

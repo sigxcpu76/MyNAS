@@ -28,6 +28,10 @@ func TestRealLibvirtDomainLifecycle(t *testing.T) {
 	tempDir := t.TempDir()
 	adapter := kvm.NewAdapterWithStateDir(tempDir)
 
+	if _, err := adapter.ListVMs(ctx); err != nil {
+		t.Skipf("virsh/libvirt not available on this host: %v", err)
+	}
+
 	vmID := "nasctl-ci-test-vm"
 	diskPath := tempDir + "/ci-test.raw"
 
