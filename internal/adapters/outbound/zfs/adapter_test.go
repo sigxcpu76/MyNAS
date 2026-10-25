@@ -131,3 +131,78 @@ func TestZfsLiveHostDiscovery(t *testing.T) {
 		t.Fatalf("expected /dev/zvol/f1/ds3 device path, got %s", volMap["ds3"].DevicePath)
 	}
 }
+
+func TestZfsCreateAndExportPoolMultiVdev(t *testing.T) {
+	ctx := context.Background()
+	adapter := zfs.NewAdapter(true)
+
+	// Create pool with Data, Cache, Log, and Spare vdevs
+	pool := domain.ZfsPool{
+		ID:          "vault",
+		PoolName:    "vault",
+		Mountpoint:  "/nas/vault",
+		Compression: "lz4",
+		Vdevs: []domain.ZfsVdev{
+			{
+				Type:   "data",
+				Layout: "mirror",
+				Children: []domain.ZfsVdev{
+					{Path: "/dev/sdb"},
+					{Path: "/dev/sdc"},
+				},
+			},
+			{
+				Type:   "cache",
+				Layout: "stripe",
+				Children: []domain.ZfsVdev{
+					{Path: "/dev/nvme1n1"},
+				},
+			},
+			{
+				Type:   "log",
+				Layout: "mirror",
+				Children: []domain.ZfsVdev{
+					{Path: "/dev/nvme2n1p1"},
+					{Path: "/dev/nvme2n1p2"},
+				},
+			},
+			{
+				Type:   "spare",
+				Layout: "stripe",
+				Children: []domain.ZfsVdev{
+					{Path: "/dev/sdd"},
+				},
+			},
+		},
+	}
+
+	created, err := adapter.CreatePool(ctx, pool)
+	if err != nil {
+		t.Fatalf("CreatePool failed: %v", err)
+	}
+	if created.ID != "vault" {
+		t.Fatalf("expected vault ID, got %s", created.ID)
+	}
+	if len(created.Devices) < 5 {
+		t.Fatalf("expected at least 5 aggregate devices, got %d: %v", len(created.Devices), created.Devices)
+	}
+
+	p, err := adapter.GetPool(ctx, "vault")
+	if err != nil {
+		t.Fatalf("GetPool vault failed: %v", err)
+	}
+	if p.ID != "vault" {
+		t.Fatalf("expected vault, got %s", p.ID)
+	}
+
+	// Export pool
+	if err := adapter.ExportPool(ctx, "vault", false); err != nil {
+		t.Fatalf("ExportPool failed: %v", err)
+	}
+
+	// Should not exist after export
+	if _, err := adapter.GetPool(ctx, "vault"); err == nil {
+		t.Fatalf("expected GetPool vault to fail after export, but succeeded")
+	}
+}
+

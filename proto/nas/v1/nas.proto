@@ -139,6 +139,14 @@ service NasService {
     option (google.api.method_signature) = "name";
   }
 
+  rpc ExportZfsPool(ExportZfsPoolRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/v1/{name=zfsPools/*}:export"
+      body: "*"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
   rpc ScrubZfsPool(ScrubZfsPoolRequest) returns (ZfsPool) {
     option (google.api.http) = {
       post: "/v1/{name=zfsPools/*}:scrub"
@@ -1035,6 +1043,14 @@ message CreateZfsPoolRequest {
 }
 
 message DeleteZfsPoolRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+  bool force = 2;
+}
+
+message ExportZfsPoolRequest {
   string name = 1 [
     (google.api.field_behavior) = REQUIRED,
     (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}

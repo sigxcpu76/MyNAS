@@ -54,11 +54,11 @@ func (p *ZfsPool) Validate() error {
 	if err := ValidateResourceID(p.ID, "zfs_pool_id"); err != nil {
 		return err
 	}
-	if len(p.Devices) == 0 {
-		return fmt.Errorf("%w: at least one backing device is required to create ZFS pool %q", ErrInvalidArgument, p.ID)
+	if len(p.Devices) == 0 && len(p.Vdevs) == 0 {
+		return fmt.Errorf("%w: at least one backing device or vdev is required to create ZFS pool %q", ErrInvalidArgument, p.ID)
 	}
 	switch p.VdevLayout {
-	case "", "stripe", "mirror", "raidz1", "raidz2":
+	case "", "stripe", "mirror", "raidz1", "raidz2", "raidz3":
 	default:
 		return fmt.Errorf("%w: unsupported vdev_layout %q", ErrInvalidArgument, p.VdevLayout)
 	}

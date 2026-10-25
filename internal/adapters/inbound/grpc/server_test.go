@@ -264,4 +264,43 @@ func TestSystemConfigAndPoolSelection(t *testing.T) {
 		t.Fatalf("expected discovered pools")
 	}
 	t.Logf("Discovered %d pools; main pool is %s", len(discResp.GetPools()), selResp.GetMainPool())
+
+	// 5. Create pool with multi-VDEV topology and Export pool
+	createResp, err := srv.CreateZfsPool(ctx, &nasv1.CreateZfsPoolRequest{
+		ZfsPoolId: "archive",
+		ZfsPool: &nasv1.ZfsPool{
+			Vdevs: []*nasv1.ZfsVdev{
+				{
+					Type:   "data",
+					Layout: "mirror",
+					Children: []*nasv1.ZfsVdev{
+						{Path: "/dev/sdb"},
+						{Path: "/dev/sdc"},
+					},
+				},
+				{
+					Type:   "cache",
+					Layout: "stripe",
+					Children: []*nasv1.ZfsVdev{
+						{Path: "/dev/nvme1n1"},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateZfsPool with VDEVs failed: %v", err)
+	}
+	if createResp.GetPoolName() != "archive" {
+		t.Fatalf("expected archive pool, got %s", createResp.GetPoolName())
+	}
+
+	// Export the newly created pool
+	_, err = srv.ExportZfsPool(ctx, &nasv1.ExportZfsPoolRequest{
+		Name:  "zfsPools/archive",
+		Force: true,
+	})
+	if err != nil {
+		t.Fatalf("ExportZfsPool failed: %v", err)
+	}
 }

@@ -419,12 +419,17 @@ func (s *Server) CreateZfsPool(ctx context.Context, req *nasv1.CreateZfsPoolRequ
 		}
 	}
 	p := req.GetZfsPool()
+	var vdevs []domain.ZfsVdev
+	for _, v := range p.GetVdevs() {
+		vdevs = append(vdevs, fromProtoZfsVdev(v))
+	}
 	created, err := s.zfs.CreatePool(ctx, domain.ZfsPool{
 		ID:          id,
 		VdevLayout:  p.GetVdevLayout(),
 		Devices:     p.GetDevices(),
 		Mountpoint:  p.GetMountpoint(),
 		Compression: p.GetCompression(),
+		Vdevs:       vdevs,
 	})
 	if err != nil {
 		return nil, ToGRPCError(err)
@@ -441,6 +446,20 @@ func (s *Server) DeleteZfsPool(ctx context.Context, req *nasv1.DeleteZfsPoolRequ
 		return nil, err
 	}
 	if err := s.zfs.DeletePool(ctx, id, req.GetForce()); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *Server) ExportZfsPool(ctx context.Context, req *nasv1.ExportZfsPoolRequest) (*emptypb.Empty, error) {
+	if err := s.prereq.RequireModule("zfs"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	id, err := ParseSingleResourceID(patternZfsPool, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.zfs.ExportPool(ctx, id, req.GetForce()); err != nil {
 		return nil, ToGRPCError(err)
 	}
 	return &emptypb.Empty{}, nil
@@ -2271,6 +2290,27 @@ func toProtoPrerequisite(p domain.Prerequisite) *nasv1.Prerequisite {
 		RequiredBy:   p.RequiredBy,
 		FallbackMode: p.FallbackMode,
 		CheckedTime:  timestamppb.New(p.CheckedTime),
+	}
+}
+
+func fromProtoZfsVdev(v *nasv1.ZfsVdev) domain.ZfsVdev {
+	if v == nil {
+		return domain.ZfsVdev{}
+	}
+	var children []domain.ZfsVdev
+	for _, c := range v.GetChildren() {
+		children = append(children, fromProtoZfsVdev(c))
+	}
+	return domain.ZfsVdev{
+		Name:           v.GetName(),
+		Type:           v.GetType(),
+		Layout:         v.GetLayout(),
+		State:          v.GetState(),
+		Path:           v.GetPath(),
+		ReadErrors:     v.GetReadErrors(),
+		WriteErrors:    v.GetWriteErrors(),
+		ChecksumErrors: v.GetChecksumErrors(),
+		Children:       children,
 	}
 }
 

@@ -741,6 +741,7 @@ export class HttpZfsAdapter implements ZfsPort {
       devices: pool.devices ?? [],
       mountpoint: pool.mountpoint,
       compression: pool.compression,
+      vdevs: pool.vdevs ?? [],
     };
     const raw = await this.client.post<any>('zfsPools', payload, {
       zfsPoolId: poolId,
@@ -750,6 +751,10 @@ export class HttpZfsAdapter implements ZfsPort {
 
   async deletePool(name: string, force = false): Promise<void> {
     await this.client.delete(name, { force });
+  }
+
+  async exportPool(name: string, force = false): Promise<void> {
+    await this.client.customMethod<any>(name, 'export', { force });
   }
 
   async scrubPool(name: string): Promise<ZfsPool> {

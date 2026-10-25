@@ -276,7 +276,29 @@ func newZfsCmd(rootOpts *RootOptions) *cobra.Command {
 	}
 
 
-	cmd.AddCommand(poolsCmd, scrubCmd, datasetsCmd, volumesCmd)
+	var forceExport bool
+	exportCmd := &cobra.Command{
+		Use:   "export <pool-id>",
+		Short: "Export a ZFS storage pool (:export)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			name := ensurePrefix(args[0], "zfsPools/")
+			_, err = client.ExportZfsPool(cmd.Context(), &nasv1.ExportZfsPoolRequest{Name: name, Force: forceExport})
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(rootOpts.Out, "Exported %s successfully\n", name)
+			return nil
+		},
+	}
+	exportCmd.Flags().BoolVarP(&forceExport, "force", "f", false, "Force export even if busy")
+
+	cmd.AddCommand(poolsCmd, scrubCmd, exportCmd, datasetsCmd, volumesCmd)
 	return cmd
 }
 

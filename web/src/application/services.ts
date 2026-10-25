@@ -161,19 +161,25 @@ export class ZfsService {
     if (!isValidResourceId(poolId)) {
       throw new Error(`Invalid ZFS pool ID: "${poolId}"`);
     }
-    if (!pool.devices || pool.devices.length === 0) {
+    const hasDevices = pool.devices && pool.devices.length > 0;
+    const hasVdevs = pool.vdevs && pool.vdevs.length > 0;
+    if (!hasDevices && !hasVdevs) {
       throw new Error('At least one backing device path is required to create a ZFS pool');
     }
     return this.zfsPort.createPool(poolId.trim(), {
       vdevLayout: pool.vdevLayout || 'mirror',
       compression: pool.compression || 'lz4',
-      mountpoint: pool.mountpoint || `/${poolId.trim()}`,
+      mountpoint: pool.mountpoint || `/nas/${poolId.trim()}`,
       ...pool,
     });
   }
 
   async deletePool(poolIdOrName: string, force = false): Promise<void> {
     return this.zfsPort.deletePool(ResourceNames.zfsPool(poolIdOrName), force);
+  }
+
+  async exportPool(poolIdOrName: string, force = false): Promise<void> {
+    return this.zfsPort.exportPool(ResourceNames.zfsPool(poolIdOrName), force);
   }
 
   async scrubPool(poolIdOrName: string): Promise<ZfsPool> {

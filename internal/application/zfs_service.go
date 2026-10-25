@@ -52,6 +52,13 @@ func (s *ZfsService) DeletePool(ctx context.Context, id string, force bool) erro
 	return s.engine.DeletePool(ctx, id, force)
 }
 
+func (s *ZfsService) ExportPool(ctx context.Context, id string, force bool) error {
+	if err := domain.ValidateResourceID(id, "zfs_pool"); err != nil {
+		return err
+	}
+	return s.engine.ExportPool(ctx, id, force)
+}
+
 func (s *ZfsService) ScrubPool(ctx context.Context, id string) (*domain.ZfsPool, error) {
 	if err := domain.ValidateResourceID(id, "zfs_pool"); err != nil {
 		return nil, err

@@ -519,17 +519,106 @@ func (a *Adapter) CreatePool(ctx context.Context, pool domain.ZfsPool) (*domain.
 	if pool.Mountpoint == "" {
 		pool.Mountpoint = fmt.Sprintf("/nas/%s", pool.ID)
 	}
+
+	var allDevices []string
+	if len(pool.Vdevs) > 0 {
+		for _, v := range pool.Vdevs {
+			for _, c := range v.Children {
+				p := c.Path
+				if p == "" {
+					p = c.Name
+				}
+				if p != "" {
+					allDevices = append(allDevices, p)
+				}
+			}
+			if len(v.Children) == 0 && v.Path != "" {
+				allDevices = append(allDevices, v.Path)
+			}
+		}
+	}
+	if len(pool.Devices) == 0 && len(allDevices) > 0 {
+		pool.Devices = allDevices
+	}
+
 	if a.canUseHostZfs() {
 		_ = os.MkdirAll("/nas", 0755)
-		args := []string{"create", "-m", pool.Mountpoint, pool.ID}
-		if pool.VdevLayout != "" && pool.VdevLayout != "stripe" {
-			args = append(args, pool.VdevLayout)
+		args := []string{"create", "-m", pool.Mountpoint}
+		if pool.Compression != "" && pool.Compression != "off" {
+			args = append(args, "-O", fmt.Sprintf("compression=%s", pool.Compression))
 		}
-		args = append(args, pool.Devices...)
-		_ = exec.CommandContext(ctx, "zpool", args...).Run()
+		args = append(args, pool.ID)
+
+		if len(pool.Vdevs) > 0 {
+			for _, v := range pool.Vdevs {
+				vType := strings.ToLower(v.Type)
+				vLayout := strings.ToLower(v.Layout)
+				var devPaths []string
+				for _, c := range v.Children {
+					p := c.Path
+					if p == "" {
+						p = c.Name
+					}
+					if p != "" {
+						devPaths = append(devPaths, p)
+					}
+				}
+				if len(devPaths) == 0 && v.Path != "" {
+					devPaths = append(devPaths, v.Path)
+				}
+				if len(devPaths) == 0 {
+					continue
+				}
+
+				switch vType {
+				case "cache", "l2arc":
+					args = append(args, "cache")
+					args = append(args, devPaths...)
+				case "log", "slog":
+					args = append(args, "log")
+					if vLayout == "mirror" {
+						args = append(args, "mirror")
+					}
+					args = append(args, devPaths...)
+				case "spare", "spares":
+					args = append(args, "spare")
+					args = append(args, devPaths...)
+				case "special", "metadata":
+					args = append(args, "special")
+					if vLayout == "mirror" {
+						args = append(args, "mirror")
+					}
+					args = append(args, devPaths...)
+				case "dedup":
+					args = append(args, "dedup")
+					if vLayout == "mirror" {
+						args = append(args, "mirror")
+					}
+					args = append(args, devPaths...)
+				default: // data
+					if vLayout != "" && vLayout != "stripe" {
+						args = append(args, vLayout)
+					}
+					args = append(args, devPaths...)
+				}
+			}
+		} else {
+			if pool.VdevLayout != "" && pool.VdevLayout != "stripe" {
+				args = append(args, pool.VdevLayout)
+			}
+			args = append(args, pool.Devices...)
+		}
+		out, err := exec.CommandContext(ctx, "zpool", args...).CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("zpool create failed: %v (%s)", err, strings.TrimSpace(string(out)))
+		}
 	}
 	pool.State = "ONLINE"
-	pool.SizeBytes = int64(len(pool.Devices)) * 2000000000000
+	devCount := len(pool.Devices)
+	if devCount == 0 {
+		devCount = 1
+	}
+	pool.SizeBytes = int64(devCount) * 2000000000000
 	pool.AllocatedBytes = 1048576
 	pool.FreeBytes = pool.SizeBytes - pool.AllocatedBytes
 	pool.FragmentationPercent = 0
@@ -546,6 +635,27 @@ func (a *Adapter) CreatePool(ctx context.Context, pool domain.ZfsPool) (*domain.
 	}
 	cp := pool
 	return &cp, nil
+}
+
+func (a *Adapter) ExportPool(ctx context.Context, id string, force bool) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	cleanID := strings.TrimPrefix(id, "zfsPools/")
+	if a.canUseHostZfs() {
+		args := []string{"export"}
+		if force {
+			args = append(args, "-f")
+		}
+		args = append(args, cleanID)
+		out, err := exec.CommandContext(ctx, "zpool", args...).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("zpool export failed: %v (%s)", err, strings.TrimSpace(string(out)))
+		}
+	}
+	delete(a.pools, cleanID)
+	delete(a.datasets, cleanID)
+	delete(a.volumes, cleanID)
+	return nil
 }
 
 func (a *Adapter) DeletePool(ctx context.Context, id string, force bool) error {

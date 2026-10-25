@@ -41,6 +41,7 @@ type ZfsEnginePort interface {
 	CreatePool(ctx context.Context, pool domain.ZfsPool) (*domain.ZfsPool, error)
 	UpdatePool(ctx context.Context, id string, update domain.ZfsPoolUpdate) (*domain.ZfsPool, error)
 	DeletePool(ctx context.Context, id string, force bool) error
+	ExportPool(ctx context.Context, id string, force bool) error
 	ScrubPool(ctx context.Context, id string) (*domain.ZfsPool, error)
 	AddVdev(ctx context.Context, poolID string, req domain.ZfsAddVdevRequest) (*domain.ZfsPool, error)
 	RemoveVdev(ctx context.Context, poolID string, device string) (*domain.ZfsPool, error)

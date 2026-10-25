@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
 import {
+  mdiAlertCircleOutline,
   mdiCamera,
   mdiCheck,
   mdiChevronDown,
@@ -9,11 +10,14 @@ import {
   mdiCogOutline,
   mdiCrown,
   mdiDatabase,
+  mdiDatabaseExportOutline,
   mdiDelete,
+  mdiDragVariant,
   mdiFlash,
   mdiFolderOutline,
   mdiFormatListBulleted,
   mdiHarddisk,
+  mdiHelpCircleOutline,
   mdiInformationOutline,
   mdiLayersOutline,
   mdiMagnify,
@@ -30,6 +34,7 @@ import {
   bytesToGib,
   formatBytes,
   gibToBytes,
+  type Disk,
   type ZfsDataset,
   type ZfsPool,
   type ZfsVdev,
@@ -43,14 +48,291 @@ import { nasState, notify, refreshAllData, refreshZfsSubresources } from '../sto
 // 1. Top-Level State & Selection
 // ---------------------------------------------------------------------------
 
+export interface BuilderVdev {
+  id: string;
+  type: 'data' | 'cache' | 'log' | 'special' | 'dedup' | 'spare';
+  layout: 'stripe' | 'mirror' | 'raidz1' | 'raidz2' | 'raidz3';
+  devicePaths: string[];
+}
+
 const showCreatePool = ref(false);
+const driveSearchQuery = ref('');
+const draggedDevicePath = ref<string | null>(null);
+const hoveredVdevId = ref<string | null>(null);
+let vdevCounter = 1;
+
 const poolForm = reactive({
   poolId: '',
-  vdevLayout: 'raidz1',
-  devicesText: '/dev/sdb, /dev/sdc, /dev/sdd',
   compression: 'lz4',
   mountpoint: '',
 });
+
+const builderVdevs = ref<BuilderVdev[]>([
+  {
+    id: 'vdev-data-0',
+    type: 'data',
+    layout: 'mirror',
+    devicePaths: [],
+  },
+]);
+
+function resetPoolBuilder() {
+  poolForm.poolId = '';
+  poolForm.compression = 'lz4';
+  poolForm.mountpoint = '';
+  vdevCounter = 1;
+  builderVdevs.value = [
+    {
+      id: 'vdev-data-0',
+      type: 'data',
+      layout: 'mirror',
+      devicePaths: [],
+    },
+  ];
+}
+
+function openCreatePool() {
+  resetPoolBuilder();
+  showCreatePool.value = true;
+}
+
+function toggleDeviceInAddVdev(devicePath: string) {
+  const current = addVdevForm.devicesText
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const idx = current.indexOf(devicePath);
+  if (idx !== -1) {
+    current.splice(idx, 1);
+  } else {
+    current.push(devicePath);
+  }
+  addVdevForm.devicesText = current.join(', ');
+}
+
+const unassignedDisks = computed(() => {
+  return nasState.disks.filter((d) => !d.owningZfsPool);
+});
+
+const builderAssignedPaths = computed(() => {
+  return new Set(builderVdevs.value.flatMap((v) => v.devicePaths));
+});
+
+const filteredUnassignedDisks = computed(() => {
+  const q = driveSearchQuery.value.trim().toLowerCase();
+  return unassignedDisks.value.filter((d) => {
+    if (!q) return true;
+    return (
+      d.devicePath.toLowerCase().includes(q) ||
+      d.diskId.toLowerCase().includes(q) ||
+      (d.model || '').toLowerCase().includes(q) ||
+      (d.serial || '').toLowerCase().includes(q) ||
+      (d.type || '').toLowerCase().includes(q) ||
+      (d.transport || '').toLowerCase().includes(q)
+    );
+  });
+});
+
+function getDiskByPath(path: string): Disk | undefined {
+  return nasState.disks.find(
+    (d) => d.devicePath === path || d.diskId === path.replace(/^\/dev\//, '')
+  );
+}
+
+function getAssignedVdevName(devicePath: string): string | null {
+  for (const vdev of builderVdevs.value) {
+    if (vdev.devicePaths.includes(devicePath)) {
+      return `${vdev.type.toUpperCase()} (${vdev.layout})`;
+    }
+  }
+  return null;
+}
+
+const poolCapacitySummary = computed(() => {
+  let totalRawBytes = 0;
+  let estimatedUsableBytes = 0;
+  let dataDrivesCount = 0;
+  let cacheDrivesCount = 0;
+  let logDrivesCount = 0;
+  let spareDrivesCount = 0;
+
+  for (const vdev of builderVdevs.value) {
+    const driveSizes = vdev.devicePaths
+      .map((p) => getDiskByPath(p)?.sizeBytes || 0)
+      .filter((s) => s > 0);
+
+    const vdevRaw = driveSizes.reduce((acc, s) => acc + s, 0);
+    totalRawBytes += vdevRaw;
+
+    if (vdev.type === 'data') {
+      dataDrivesCount += vdev.devicePaths.length;
+      if (driveSizes.length > 0) {
+        const minSize = Math.min(...driveSizes);
+        if (vdev.layout === 'stripe') {
+          estimatedUsableBytes += vdevRaw;
+        } else if (vdev.layout === 'mirror') {
+          estimatedUsableBytes += minSize;
+        } else if (vdev.layout === 'raidz1') {
+          estimatedUsableBytes += Math.max(0, (driveSizes.length - 1) * minSize);
+        } else if (vdev.layout === 'raidz2') {
+          estimatedUsableBytes += Math.max(0, (driveSizes.length - 2) * minSize);
+        } else if (vdev.layout === 'raidz3') {
+          estimatedUsableBytes += Math.max(0, (driveSizes.length - 3) * minSize);
+        }
+      }
+    } else if (vdev.type === 'cache') {
+      cacheDrivesCount += vdev.devicePaths.length;
+    } else if (vdev.type === 'log') {
+      logDrivesCount += vdev.devicePaths.length;
+    } else if (vdev.type === 'spare') {
+      spareDrivesCount += vdev.devicePaths.length;
+    }
+  }
+
+  return {
+    totalRawBytes,
+    estimatedUsableBytes,
+    dataDrivesCount,
+    cacheDrivesCount,
+    logDrivesCount,
+    spareDrivesCount,
+  };
+});
+
+function getVdevValidation(vdev: BuilderVdev): { valid: boolean; message: string; state: 'ok' | 'warn' | 'info' } {
+  const count = vdev.devicePaths.length;
+  if (count === 0) {
+    return { valid: false, message: 'No drives assigned yet. Drag unassigned drives here.', state: 'info' };
+  }
+  if (vdev.type === 'data') {
+    if (vdev.layout === 'mirror') {
+      if (count < 2) return { valid: false, message: 'Mirror requires at least 2 drives (currently 1).', state: 'warn' };
+      return { valid: true, message: `✓ Valid ${count}-way Mirror. Tolerates ${count - 1} drive failure(s).`, state: 'ok' };
+    }
+    if (vdev.layout === 'raidz1') {
+      if (count < 3) return { valid: false, message: `RAIDZ1 requires at least 3 drives (currently ${count}).`, state: 'warn' };
+      return { valid: true, message: `✓ Valid RAIDZ1 (${count} drives, 1 parity disk).`, state: 'ok' };
+    }
+    if (vdev.layout === 'raidz2') {
+      if (count < 4) return { valid: false, message: `RAIDZ2 requires at least 4 drives (currently ${count}).`, state: 'warn' };
+      return { valid: true, message: `✓ Valid RAIDZ2 (${count} drives, 2 parity disks).`, state: 'ok' };
+    }
+    if (vdev.layout === 'raidz3') {
+      if (count < 5) return { valid: false, message: `RAIDZ3 requires at least 5 drives (currently ${count}).`, state: 'warn' };
+      return { valid: true, message: `✓ Valid RAIDZ3 (${count} drives, 3 parity disks).`, state: 'ok' };
+    }
+    return { valid: true, message: `✓ Stripe layout (${count} concatenated drive(s), no parity).`, state: 'ok' };
+  }
+  if (vdev.type === 'log') {
+    if (vdev.layout === 'mirror') {
+      if (count < 2) return { valid: false, message: 'Mirrored SLOG requires at least 2 drives.', state: 'warn' };
+      return { valid: true, message: `✓ Mirrored SLOG write accelerator (${count} drives).`, state: 'ok' };
+    }
+    return { valid: true, message: `SLOG write accelerator (${count} drive(s)). Mirrored SLOG is recommended for write safety.`, state: 'ok' };
+  }
+  if (vdev.type === 'cache') {
+    return { valid: true, message: `✓ L2ARC Read Cache (${count} drive(s)).`, state: 'ok' };
+  }
+  if (vdev.type === 'spare') {
+    return { valid: true, message: `✓ Hot Spare (${count} drive(s)).`, state: 'ok' };
+  }
+  if (vdev.type === 'special') {
+    if (vdev.layout === 'mirror' && count < 2) {
+      return { valid: false, message: 'Special metadata VDEV requires at least 2 drives for redundancy.', state: 'warn' };
+    }
+    return { valid: true, message: `✓ Special Metadata & Small Files VDEV (${count} drive(s)).`, state: 'ok' };
+  }
+  return { valid: true, message: `✓ ${vdev.type.toUpperCase()} VDEV (${count} drive(s)).`, state: 'ok' };
+}
+
+const isPoolBuilderValid = computed(() => {
+  if (!poolForm.poolId.trim()) return false;
+  const dataVdevs = builderVdevs.value.filter((v) => v.type === 'data');
+  if (dataVdevs.length === 0 || dataVdevs.every((v) => v.devicePaths.length === 0)) return false;
+  for (const v of builderVdevs.value) {
+    if (v.devicePaths.length > 0) {
+      const val = getVdevValidation(v);
+      if (!val.valid) return false;
+    }
+  }
+  return true;
+});
+
+function onDragStartDrive(e: DragEvent, devicePath: string) {
+  draggedDevicePath.value = devicePath;
+  if (e.dataTransfer) {
+    e.dataTransfer.setData('text/plain', devicePath);
+    e.dataTransfer.effectAllowed = 'move';
+  }
+}
+
+function onDragEndDrive() {
+  draggedDevicePath.value = null;
+  hoveredVdevId.value = null;
+}
+
+function onDragOverVdev(e: DragEvent, vdevId: string) {
+  e.preventDefault();
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = 'move';
+  }
+  hoveredVdevId.value = vdevId;
+}
+
+function onDragLeaveVdev(vdevId: string) {
+  if (hoveredVdevId.value === vdevId) {
+    hoveredVdevId.value = null;
+  }
+}
+
+function onDropDriveToVdev(e: DragEvent, targetVdevId: string) {
+  e.preventDefault();
+  hoveredVdevId.value = null;
+  const path = e.dataTransfer?.getData('text/plain') || draggedDevicePath.value;
+  if (!path) return;
+  assignDriveToVdev(path, targetVdevId);
+  draggedDevicePath.value = null;
+}
+
+function assignDriveToVdev(devicePath: string, targetVdevId: string) {
+  for (const vdev of builderVdevs.value) {
+    vdev.devicePaths = vdev.devicePaths.filter((p) => p !== devicePath);
+  }
+  const target = builderVdevs.value.find((v) => v.id === targetVdevId);
+  if (target && !target.devicePaths.includes(devicePath)) {
+    target.devicePaths.push(devicePath);
+  }
+}
+
+function removeDriveFromVdev(devicePath: string, vdevId: string) {
+  const target = builderVdevs.value.find((v) => v.id === vdevId);
+  if (target) {
+    target.devicePaths = target.devicePaths.filter((p) => p !== devicePath);
+  }
+}
+
+function addBuilderVdev(type: 'data' | 'cache' | 'log' | 'special' | 'dedup' | 'spare') {
+  vdevCounter++;
+  let defaultLayout: 'stripe' | 'mirror' | 'raidz1' | 'raidz2' = 'stripe';
+  if (type === 'data') defaultLayout = 'mirror';
+  if (type === 'log') defaultLayout = 'mirror';
+  if (type === 'special') defaultLayout = 'mirror';
+
+  builderVdevs.value.push({
+    id: `vdev-${type}-${vdevCounter}`,
+    type,
+    layout: defaultLayout,
+    devicePaths: [],
+  });
+}
+
+function removeBuilderVdev(vdevId: string) {
+  if (builderVdevs.value.length <= 1) {
+    notify('error', 'A storage pool must have at least one VDEV');
+    return;
+  }
+  builderVdevs.value = builderVdevs.value.filter((v) => v.id !== vdevId);
+}
 
 const activePool = computed(() =>
   nasState.pools.find((p) => p.name === nasState.selectedPoolName) || nasState.pools[0] || null
@@ -70,28 +352,88 @@ async function selectPool(poolName: string) {
 }
 
 // ---------------------------------------------------------------------------
-// 2. Pool Operations (Create, Scrub, Delete)
+// 2. Pool Operations (Create, Export, Scrub, Delete)
 // ---------------------------------------------------------------------------
 
 async function handleCreatePool() {
+  if (!poolForm.poolId.trim()) {
+    notify('error', 'Pool ID is required');
+    return;
+  }
+  const dataVdevs = builderVdevs.value.filter((v) => v.type === 'data');
+  if (dataVdevs.length === 0 || dataVdevs.every((v) => v.devicePaths.length === 0)) {
+    notify('error', 'At least one Data VDEV with assigned drives is required');
+    return;
+  }
+
+  for (const v of builderVdevs.value) {
+    if (v.devicePaths.length > 0) {
+      const val = getVdevValidation(v);
+      if (!val.valid) {
+        notify('error', val.message);
+        return;
+      }
+    }
+  }
+
+  const vdevs: ZfsVdev[] = builderVdevs.value
+    .filter((bv) => bv.devicePaths.length > 0)
+    .map((bv, idx) => ({
+      name: `${bv.type}-${idx}`,
+      type: bv.type,
+      layout: bv.layout,
+      state: 'ONLINE',
+      children: bv.devicePaths.map((dp) => ({
+        name: dp,
+        path: dp,
+        type: bv.type,
+        layout: 'disk',
+        state: 'ONLINE',
+      })),
+    }));
+
+  const allDevices = builderVdevs.value.flatMap((bv) => bv.devicePaths);
+  const primaryDataVdev = dataVdevs[0];
+
   try {
-    const devices = poolForm.devicesText
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const created = await services.zfs.createPool(poolForm.poolId, {
-      vdevLayout: poolForm.vdevLayout,
-      devices,
-      compression: poolForm.compression,
+    const created = await services.zfs.createPool(poolForm.poolId.trim(), {
+      vdevLayout: primaryDataVdev?.layout || 'mirror',
+      devices: allDevices,
+      compression: poolForm.compression || 'lz4',
       mountpoint: poolForm.mountpoint || `/nas/${poolForm.poolId.trim()}`,
+      vdevs,
     });
-    notify('success', `Created ZFS pool ${created.poolName || created.name}`);
-    poolForm.poolId = '';
+    notify(
+      'success',
+      `Created ZFS pool "${created.poolName || created.name}" with ${vdevs.length} VDEV tier(s)`
+    );
     showCreatePool.value = false;
+    resetPoolBuilder();
     await refreshAllData();
     nasState.selectedPoolName = created.name;
   } catch (err: any) {
     notify('error', err?.message || 'Failed to create ZFS pool');
+  }
+}
+
+async function handleExportPool(poolName: string) {
+  const cleanId = poolName.replace(/^zfsPools\//, '');
+  const isMain = cleanId === nasState.systemConfig?.mainPool;
+  let confirmMsg = `Are you sure you want to export ZFS pool "${cleanId}"? It will be unmounted and detached.`;
+  if (isMain) {
+    confirmMsg = `WARNING: "${cleanId}" is currently designated as the MAIN POOL!\n\nExporting it will detach storage for all Docker Apps and LXC containers.\n\nAre you sure you want to export "${cleanId}"?`;
+  }
+  if (!confirm(confirmMsg)) return;
+
+  try {
+    await services.zfs.exportPool(poolName, false);
+    notify('success', `Exported ZFS pool "${cleanId}" successfully`);
+    if (isMain) {
+      await services.system.selectMainPool('', false);
+    }
+    await refreshAllData();
+  } catch (err: any) {
+    notify('error', err?.message || `Failed to export pool "${cleanId}"`);
   }
 }
 
@@ -734,62 +1076,404 @@ async function handleDeleteVolume(volName: string) {
           </p>
         </div>
 
-        <button class="btn btn-primary" @click="showCreatePool = !showCreatePool">
+        <button class="btn btn-primary" @click="showCreatePool ? (showCreatePool = false) : openCreatePool()">
           <MdiIcon :path="showCreatePool ? mdiClose : mdiPlus" size="16" style="margin-right: 4px" />
           {{ showCreatePool ? 'Cancel' : 'Create Storage Pool' }}
         </button>
       </div>
 
-      <!-- Create Pool Form Modal/Inline -->
-      <form
+      <!-- Advanced Drag-and-Drop ZFS Storage Pool Infrastructure Builder -->
+      <div
         v-if="showCreatePool"
-        @submit.prevent="handleCreatePool"
+        class="pool-builder-card"
         style="
           background: var(--bg-base);
           border: 1px solid var(--border-strong);
-          border-radius: 8px;
-          padding: 16px;
+          border-radius: 10px;
+          padding: 20px;
           margin-top: 18px;
         "
       >
-        <div class="form-grid">
+        <!-- Header -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px">
+          <div>
+            <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px">
+              <MdiIcon :path="mdiLayersOutline" size="20" style="color: var(--accent-primary)" />
+              ZFS Storage Pool Builder & Infrastructure Designer
+            </h3>
+            <p style="margin: 4px 0 0; font-size: 12.5px; color: var(--text-secondary)">
+              Drag unassigned physical drives directly into target VDEVs. Configure Data, Cache (L2ARC), Log (SLOG), and Spare tiers with enterprise redundancy.
+            </p>
+          </div>
+          <button class="btn btn-icon btn-sm" @click="showCreatePool = false">
+            <MdiIcon :path="mdiClose" size="16" />
+          </button>
+        </div>
+
+        <!-- Top Settings Grid -->
+        <div class="form-grid" style="margin-bottom: 18px">
           <div class="form-group">
-            <label>Pool Name</label>
+            <label>Pool Name (`zfs_pool_id`)</label>
             <input v-model="poolForm.poolId" class="input mono" placeholder="tank" required />
           </div>
           <div class="form-group">
-            <label>Redundancy Layout</label>
-            <select v-model="poolForm.vdevLayout" class="select">
-              <option value="mirror">Mirror (RAID-1)</option>
-              <option value="raidz1">RAIDZ1 (Single Parity)</option>
-              <option value="raidz2">RAIDZ2 (Dual Parity)</option>
-              <option value="stripe">Stripe (No Parity / RAID-0)</option>
-            </select>
+            <label>Mountpoint</label>
+            <input
+              v-model="poolForm.mountpoint"
+              class="input mono"
+              :placeholder="poolForm.poolId ? `/nas/${poolForm.poolId.trim()}` : '/nas/<pool-name>'"
+            />
           </div>
           <div class="form-group">
             <label>Default Compression</label>
-            <select v-model="poolForm.compression" class="select">
-              <option value="lz4">lz4 (Recommended)</option>
-              <option value="zstd">zstd</option>
-              <option value="gzip">gzip</option>
+            <select v-model="poolForm.compression" class="select mono">
+              <option value="lz4">lz4 (Fast, Recommended)</option>
+              <option value="zstd">zstd (Higher ratio)</option>
+              <option value="gzip">gzip (Legacy)</option>
               <option value="off">off</option>
             </select>
           </div>
-          <div class="form-group">
-            <label>Backing Block Devices (comma-separated)</label>
-            <input
-              v-model="poolForm.devicesText"
-              class="input mono"
-              placeholder="/dev/sdb, /dev/sdc"
-              required
-            />
+        </div>
+
+        <!-- Main Workspace (Drives Bank & VDEV Canvas) -->
+        <div class="builder-workspace" style="display: grid; grid-template-columns: 340px 1fr; gap: 18px; margin-bottom: 18px">
+          <!-- Left: Available Drives Bank -->
+          <div class="drives-bank-panel" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px; display: flex; flex-direction: column">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px">
+              <div style="font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px">
+                <MdiIcon :path="mdiHarddisk" size="16" style="color: var(--accent-primary)" />
+                <span>Available Drives</span>
+              </div>
+              <span class="badge badge-neutral" style="font-size: 11px">
+                {{ unassignedDisks.length }} unattached
+              </span>
+            </div>
+
+            <!-- Drive Search -->
+            <div style="position: relative; margin-bottom: 12px">
+              <MdiIcon
+                :path="mdiMagnify"
+                size="15"
+                style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--text-muted)"
+              />
+              <input
+                v-model="driveSearchQuery"
+                class="input"
+                placeholder="Filter drives, model, serial..."
+                style="padding-left: 28px; font-size: 12px; height: 32px"
+              />
+            </div>
+
+            <!-- Drives List -->
+            <div style="overflow-y: auto; max-height: 520px; display: flex; flex-direction: column; gap: 8px; padding-right: 2px">
+              <div
+                v-if="filteredUnassignedDisks.length === 0"
+                style="text-align: center; padding: 24px 10px; color: var(--text-muted); font-size: 12px"
+              >
+                No unassigned drives match criteria. All host drives are currently attached to imported ZFS pools.
+              </div>
+
+              <div
+                v-for="d in filteredUnassignedDisks"
+                :key="d.devicePath"
+                class="drive-card"
+                :class="{ 'is-assigned': builderAssignedPaths.has(d.devicePath) }"
+                draggable="true"
+                @dragstart="onDragStartDrive($event, d.devicePath)"
+                @dragend="onDragEndDrive"
+                style="
+                  background: var(--bg-surface);
+                  border: 1px solid var(--border-subtle);
+                  border-radius: 6px;
+                  padding: 10px;
+                  cursor: grab;
+                  user-select: none;
+                  transition: all 0.15s ease;
+                "
+              >
+                <div style="display: flex; justify-content: space-between; align-items: flex-start">
+                  <div style="display: flex; align-items: center; gap: 6px">
+                    <MdiIcon :path="mdiDragVariant" size="16" style="color: var(--text-muted); cursor: grab" />
+                    <span class="mono" style="font-weight: 700; font-size: 13px">{{ d.devicePath }}</span>
+                  </div>
+                  <span class="badge badge-info mono" style="font-weight: 700; font-size: 11px">
+                    {{ formatBytes(d.sizeBytes) }}
+                  </span>
+                </div>
+
+                <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
+                  {{ d.model || d.vendor || 'Generic Disk' }}
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 10.5px">
+                  <div style="display: flex; gap: 4px">
+                    <span class="badge badge-neutral" style="font-size: 9.5px">{{ d.type }}</span>
+                    <span class="badge badge-neutral" style="font-size: 9.5px">{{ (d.transport || 'disk').toUpperCase() }}</span>
+                    <span v-if="d.smartStatus" class="badge badge-success" style="font-size: 9.5px">{{ d.smartStatus }}</span>
+                  </div>
+
+                  <span v-if="builderAssignedPaths.has(d.devicePath)" class="badge badge-success" style="font-size: 9.5px">
+                    In VDEV
+                  </span>
+                </div>
+
+                <!-- Quick Assign Dropdown -->
+                <div v-if="!builderAssignedPaths.has(d.devicePath)" style="margin-top: 8px; border-top: 1px dashed var(--border-subtle); padding-top: 6px; display: flex; justify-content: flex-end; gap: 4px">
+                  <button
+                    v-for="(v, vIdx) in builderVdevs"
+                    :key="v.id"
+                    type="button"
+                    class="btn btn-xs"
+                    style="font-size: 10px; padding: 1px 6px"
+                    title="Click to assign to VDEV"
+                    @click="assignDriveToVdev(d.devicePath, v.id)"
+                  >
+                    + {{ v.type.toUpperCase() }} {{ vIdx + 1 }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: VDEV Infrastructure Canvas -->
+          <div class="vdev-canvas-panel" style="display: flex; flex-direction: column; gap: 14px">
+            <div style="display: flex; justify-content: space-between; align-items: center">
+              <div style="font-weight: 700; font-size: 13.5px; color: var(--text-primary); display: flex; align-items: center; gap: 6px">
+                <MdiIcon :path="mdiTreeOutline" size="16" style="color: var(--accent-primary)" />
+                <span>Configured VDEV Topology</span>
+              </div>
+
+              <!-- Add VDEV Buttons -->
+              <div style="display: flex; gap: 6px; flex-wrap: wrap">
+                <button type="button" class="btn btn-xs btn-primary-outline" @click="addBuilderVdev('data')">
+                  <MdiIcon :path="mdiPlus" size="12" /> Data VDEV
+                </button>
+                <button type="button" class="btn btn-xs btn-primary-outline" @click="addBuilderVdev('cache')">
+                  <MdiIcon :path="mdiPlus" size="12" /> Cache (L2ARC)
+                </button>
+                <button type="button" class="btn btn-xs btn-primary-outline" @click="addBuilderVdev('log')">
+                  <MdiIcon :path="mdiPlus" size="12" /> Log (SLOG)
+                </button>
+                <button type="button" class="btn btn-xs btn-primary-outline" @click="addBuilderVdev('spare')">
+                  <MdiIcon :path="mdiPlus" size="12" /> Hot Spare
+                </button>
+                <button type="button" class="btn btn-xs btn-primary-outline" @click="addBuilderVdev('special')">
+                  <MdiIcon :path="mdiPlus" size="12" /> Special (Metadata)
+                </button>
+              </div>
+            </div>
+
+            <!-- VDEVs List -->
+            <div style="display: flex; flex-direction: column; gap: 12px">
+              <div
+                v-for="(vdev, vIdx) in builderVdevs"
+                :key="vdev.id"
+                class="vdev-builder-card"
+                :class="{
+                  'is-dragover': hoveredVdevId === vdev.id,
+                  'vdev-type-data': vdev.type === 'data',
+                  'vdev-type-cache': vdev.type === 'cache',
+                  'vdev-type-log': vdev.type === 'log',
+                  'vdev-type-spare': vdev.type === 'spare',
+                  'vdev-type-special': vdev.type === 'special' || vdev.type === 'dedup',
+                }"
+                style="
+                  background: var(--bg-surface);
+                  border: 2px dashed var(--border-strong);
+                  border-radius: 8px;
+                  padding: 14px;
+                  transition: all 0.2s ease;
+                "
+                @dragover="onDragOverVdev($event, vdev.id)"
+                @dragleave="onDragLeaveVdev(vdev.id)"
+                @drop="onDropDriveToVdev($event, vdev.id)"
+              >
+                <!-- VDEV Card Header -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px">
+                  <div style="display: flex; align-items: center; gap: 8px">
+                    <span
+                      class="badge"
+                      :class="{
+                        'badge-info': vdev.type === 'data',
+                        'badge-success': vdev.type === 'cache',
+                        'badge-warning': vdev.type === 'log',
+                        'badge-neutral': vdev.type === 'spare',
+                        'badge-purple': vdev.type === 'special' || vdev.type === 'dedup',
+                      }"
+                      style="font-weight: 700; font-size: 11px"
+                    >
+                      {{ vdev.type.toUpperCase() }}
+                    </span>
+                    <span style="font-weight: 700; font-size: 13.5px">VDEV #{{ vIdx + 1 }}</span>
+                    <span style="font-size: 11px; color: var(--text-muted)">
+                      ({{ vdev.devicePaths.length }} drive{{ vdev.devicePaths.length === 1 ? '' : 's' }})
+                    </span>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 8px">
+                    <div v-if="vdev.type === 'data'" style="display: flex; align-items: center; gap: 6px">
+                      <label style="font-size: 11.5px; color: var(--text-secondary)">Layout:</label>
+                      <select v-model="vdev.layout" class="select mono" style="height: 28px; font-size: 12px; padding: 2px 8px">
+                        <option value="mirror">Mirror (RAID-1)</option>
+                        <option value="raidz1">RAIDZ1 (Single Parity)</option>
+                        <option value="raidz2">RAIDZ2 (Dual Parity)</option>
+                        <option value="raidz3">RAIDZ3 (Triple Parity)</option>
+                        <option value="stripe">Stripe (No Parity / RAID-0)</option>
+                      </select>
+                    </div>
+
+                    <div v-else-if="vdev.type === 'log' || vdev.type === 'special'" style="display: flex; align-items: center; gap: 6px">
+                      <label style="font-size: 11.5px; color: var(--text-secondary)">Layout:</label>
+                      <select v-model="vdev.layout" class="select mono" style="height: 28px; font-size: 12px; padding: 2px 8px">
+                        <option value="mirror">Mirror (Recommended)</option>
+                        <option value="stripe">Stripe (Single)</option>
+                      </select>
+                    </div>
+
+                    <button
+                      v-if="builderVdevs.length > 1"
+                      type="button"
+                      class="btn btn-icon btn-sm btn-danger"
+                      title="Remove this VDEV tier"
+                      @click="removeBuilderVdev(vdev.id)"
+                    >
+                      <MdiIcon :path="mdiDelete" size="14" />
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Drop Target / Drives Chips Container -->
+                <div
+                  style="
+                    min-height: 64px;
+                    border-radius: 6px;
+                    background: rgba(0,0,0,0.15);
+                    padding: 8px;
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                    align-items: center;
+                  "
+                >
+                  <div
+                    v-if="vdev.devicePaths.length === 0"
+                    style="color: var(--text-muted); font-size: 12px; padding: 12px; text-align: center; width: 100%"
+                  >
+                    Drag & drop unassigned drives from the left bank here, or click "+ {{ vdev.type.toUpperCase() }}" on a drive.
+                  </div>
+
+                  <!-- Assigned Drive Chips -->
+                  <div
+                    v-for="path in vdev.devicePaths"
+                    :key="path"
+                    style="
+                      background: var(--bg-base);
+                      border: 1px solid var(--border-strong);
+                      border-radius: 6px;
+                      padding: 6px 10px;
+                      display: flex;
+                      align-items: center;
+                      gap: 8px;
+                      font-size: 12px;
+                    "
+                  >
+                    <MdiIcon :path="mdiHarddisk" size="14" style="color: var(--accent-primary)" />
+                    <span class="mono" style="font-weight: 700">{{ path }}</span>
+                    <span class="mono" style="color: var(--text-secondary); font-size: 11px">
+                      {{ formatBytes(getDiskByPath(path)?.sizeBytes || 0) }}
+                    </span>
+                    <button
+                      type="button"
+                      class="btn-icon"
+                      style="background: none; border: none; padding: 0; cursor: pointer; color: var(--danger); display: flex"
+                      title="Remove drive from this VDEV"
+                      @click="removeDriveFromVdev(path, vdev.id)"
+                    >
+                      <MdiIcon :path="mdiClose" size="14" />
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Validation Hint Bar -->
+                <div style="margin-top: 8px; font-size: 11.5px; display: flex; align-items: center; gap: 6px">
+                  <span
+                    :style="{
+                      color:
+                        getVdevValidation(vdev).state === 'ok'
+                          ? 'var(--success)'
+                          : getVdevValidation(vdev).state === 'warn'
+                          ? '#f59e0b'
+                          : 'var(--text-muted)',
+                    }"
+                  >
+                    {{ getVdevValidation(vdev).message }}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-        <div style="margin-top: 14px; display: flex; justify-content: flex-end; gap: 8px">
-          <button type="button" class="btn btn-sm" @click="showCreatePool = false">Cancel</button>
-          <button type="submit" class="btn btn-primary btn-sm">Create Storage Pool</button>
+
+        <!-- Bottom Capacity & Validation Summary Bar -->
+        <div
+          style="
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 14px 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+          "
+        >
+          <div style="display: flex; gap: 24px; align-items: center; flex-wrap: wrap">
+            <div>
+              <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600">
+                Total Raw Storage
+              </div>
+              <div class="mono" style="font-size: 15px; font-weight: 700">
+                {{ formatBytes(poolCapacitySummary.totalRawBytes) }}
+              </div>
+            </div>
+
+            <div>
+              <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600">
+                Estimated Usable Storage
+              </div>
+              <div class="mono text-emerald" style="font-size: 15px; font-weight: 700">
+                {{ formatBytes(poolCapacitySummary.estimatedUsableBytes) }}
+              </div>
+            </div>
+
+            <div>
+              <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600">
+                Infrastructure Tiers
+              </div>
+              <div style="font-size: 12px; color: var(--text-primary)">
+                {{ poolCapacitySummary.dataDrivesCount }} Data
+                <span v-if="poolCapacitySummary.cacheDrivesCount > 0">, {{ poolCapacitySummary.cacheDrivesCount }} L2ARC Cache</span>
+                <span v-if="poolCapacitySummary.logDrivesCount > 0">, {{ poolCapacitySummary.logDrivesCount }} SLOG</span>
+                <span v-if="poolCapacitySummary.spareDrivesCount > 0">, {{ poolCapacitySummary.spareDrivesCount }} Spare</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 10px; align-items: center">
+            <button type="button" class="btn btn-sm" @click="showCreatePool = false">Cancel</button>
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              :disabled="!isPoolBuilderValid"
+              @click="handleCreatePool"
+            >
+              <MdiIcon :path="mdiCheck" size="15" style="margin-right: 4px" />
+              Create Storage Pool
+            </button>
+          </div>
         </div>
-      </form>
+      </div>
 
       <!-- Pools Grid as Rich Cards with Gauges -->
       <div class="pools-grid" style="margin-top: 20px">
@@ -933,6 +1617,14 @@ async function handleDeleteVolume(volName: string) {
               >
                 <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" />
                 Scrub
+              </button>
+              <button
+                class="btn btn-sm btn-primary-outline"
+                title="Export pool (unmount and detach from system)"
+                @click="handleExportPool(pool.name)"
+              >
+                <MdiIcon :path="mdiDatabaseExportOutline" size="14" style="margin-right: 4px" />
+                Export
               </button>
               <button
                 class="btn btn-sm btn-danger"
@@ -1184,6 +1876,38 @@ async function handleDeleteVolume(volName: string) {
 
               <div class="form-group full-width">
                 <label>Device Paths (comma-separated)</label>
+                <div v-if="unassignedDisks.length > 0" style="margin-bottom: 8px">
+                  <span style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; display: block">
+                    Unassigned Disks (click to add/remove):
+                  </span>
+                  <div style="display: flex; flex-wrap: wrap; gap: 6px">
+                    <button
+                      v-for="d in unassignedDisks"
+                      :key="d.devicePath"
+                      type="button"
+                      class="chip"
+                      :style="{
+                        cursor: 'pointer',
+                        fontSize: '11px',
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        border: addVdevForm.devicesText.split(',').map((s) => s.trim()).includes(d.devicePath)
+                          ? '1px solid var(--accent-primary)'
+                          : '1px solid var(--border-subtle)',
+                        background: addVdevForm.devicesText.split(',').map((s) => s.trim()).includes(d.devicePath)
+                          ? 'rgba(59, 130, 246, 0.2)'
+                          : 'var(--bg-surface)',
+                        color: addVdevForm.devicesText.split(',').map((s) => s.trim()).includes(d.devicePath)
+                          ? 'var(--accent-primary)'
+                          : 'var(--text-secondary)',
+                      }"
+                      @click="toggleDeviceInAddVdev(d.devicePath)"
+                    >
+                      <span class="mono">{{ d.devicePath }}</span>
+                      <span style="opacity: 0.7; margin-left: 4px">({{ formatBytes(d.sizeBytes) }} - {{ d.type || 'Disk' }})</span>
+                    </button>
+                  </div>
+                </div>
                 <input
                   v-model="addVdevForm.devicesText"
                   class="input mono"
@@ -2341,5 +3065,73 @@ async function handleDeleteVolume(volName: string) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Pool Builder & Drag-and-Drop Infrastructure */
+.pool-builder-card {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.builder-workspace {
+  min-height: 480px;
+}
+
+@media (max-width: 900px) {
+  .builder-workspace {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.drive-card:hover {
+  border-color: var(--accent-primary) !important;
+  transform: translateY(-1px);
+}
+
+.drive-card.is-assigned {
+  opacity: 0.65;
+  border-style: dashed !important;
+}
+
+.vdev-builder-card {
+  border: 2px dashed var(--border-strong);
+  transition: all 0.2s ease;
+}
+
+.vdev-builder-card.is-dragover {
+  border-color: var(--accent-primary) !important;
+  background: rgba(59, 130, 246, 0.08) !important;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.2);
+}
+
+.vdev-builder-card.vdev-type-data {
+  border-left: 4px solid #3b82f6;
+}
+
+.vdev-builder-card.vdev-type-cache {
+  border-left: 4px solid #10b981;
+}
+
+.vdev-builder-card.vdev-type-log {
+  border-left: 4px solid #f59e0b;
+}
+
+.vdev-builder-card.vdev-type-spare {
+  border-left: 4px solid #6b7280;
+}
+
+.vdev-builder-card.vdev-type-special {
+  border-left: 4px solid #8b5cf6;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>
