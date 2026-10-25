@@ -256,7 +256,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 		return err
 	}
 
-	gateway, err := httpadapter.NewGateway(ctx, nasGRPC, kvmSvc, webdavAdapter, uiFS, eventBus)
+	gateway, err := httpadapter.NewGateway(ctx, nasGRPC, kvmSvc, dockerSvc, webdavAdapter, uiFS, eventBus)
 	if err != nil {
 		return err
 	}

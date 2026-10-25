@@ -1,6 +1,7 @@
 package httpadapter
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -23,6 +24,7 @@ type Gateway struct {
 	mux           *http.ServeMux
 	grpcServer    nasv1.NasServiceServer
 	kvmService    *application.KvmService
+	dockerService *application.DockerService
 	webdavHandler http.Handler
 	uiFS          fs.FS
 	eventBus      *application.EventBus
@@ -34,6 +36,7 @@ func NewGateway(
 	ctx context.Context,
 	grpcServer nasv1.NasServiceServer,
 	kvmService *application.KvmService,
+	dockerService *application.DockerService,
 	webdavHandler http.Handler,
 	uiFS fs.FS,
 	eventBus *application.EventBus,
@@ -57,6 +60,7 @@ func NewGateway(
 		mux:           mux,
 		grpcServer:    grpcServer,
 		kvmService:    kvmService,
+		dockerService: dockerService,
 		webdavHandler: webdavHandler,
 		uiFS:          uiFS,
 		eventBus:      eventBus,
@@ -82,12 +86,23 @@ func NewGateway(
 		Handler: g.handleNoVNCWebSocket,
 	})
 
-	// 4. Embedded WebDAV File Sharing Server (/dav/{share_name}/...)
+	// 4. Docker Container Interactive Terminal WebSocket (/ws/docker/terminal/{containerId}?shell=/bin/sh)
+	mux.Handle("/ws/docker/terminal/", websocket.Server{
+		Handshake: func(cfg *websocket.Config, req *http.Request) error {
+			if len(cfg.Protocol) > 0 {
+				cfg.Protocol = cfg.Protocol[:1]
+			}
+			return nil
+		},
+		Handler: g.handleDockerTerminalWebSocket,
+	})
+
+	// 5. Embedded WebDAV File Sharing Server (/dav/{share_name}/...)
 	if webdavHandler != nil {
 		mux.Handle("/dav/", corsMiddleware(webdavHandler))
 	}
 
-	// 5. Embedded Vue.js Single-Page Application (SPA)
+	// 6. Embedded Vue.js Single-Page Application (SPA)
 	mux.HandleFunc("/", g.handleSPA)
 
 	return g, nil
@@ -185,6 +200,71 @@ func (g *Gateway) handleNoVNCWebSocket(ws *websocket.Conn) {
 		_, _ = io.Copy(vncConn, ws)
 		done <- struct{}{}
 	}()
+	<-done
+}
+
+func (g *Gateway) handleDockerTerminalWebSocket(ws *websocket.Conn) {
+	defer ws.Close()
+	req := ws.Request()
+	containerID := strings.TrimPrefix(req.URL.Path, "/ws/docker/terminal/")
+	containerID = strings.Trim(containerID, "/")
+	if containerID == "" {
+		return
+	}
+
+	shell := req.URL.Query().Get("shell")
+	if shell == "" {
+		shell = "/bin/sh"
+	}
+
+	ws.PayloadType = websocket.BinaryFrame
+
+	if g.dockerService == nil {
+		_, _ = ws.Write([]byte("Docker service unavailable\r\n"))
+		return
+	}
+
+	conn, execID, err := g.dockerService.ExecAttach(req.Context(), containerID, []string{shell})
+	if err != nil {
+		_, _ = ws.Write([]byte(fmt.Sprintf("Failed to exec into container %s (%s): %v\r\n", containerID, shell, err)))
+		return
+	}
+	defer conn.Close()
+
+	done := make(chan struct{}, 2)
+
+	// Pipe container output (stdout/stderr) to WebSocket
+	go func() {
+		_, _ = io.Copy(ws, conn)
+		done <- struct{}{}
+	}()
+
+	// Pipe WebSocket client input to container stdin and handle terminal resize
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := ws.Read(buf)
+			if err != nil {
+				break
+			}
+			data := buf[:n]
+			if bytes.HasPrefix(data, []byte(`{"type":"resize"`)) {
+				var resizeMsg struct {
+					Cols uint `json:"cols"`
+					Rows uint `json:"rows"`
+				}
+				if err := json.Unmarshal(data, &resizeMsg); err == nil && resizeMsg.Cols > 0 && resizeMsg.Rows > 0 {
+					_ = g.dockerService.ResizeExec(req.Context(), execID, resizeMsg.Rows, resizeMsg.Cols)
+					continue
+				}
+			}
+			if _, err := conn.Write(data); err != nil {
+				break
+			}
+		}
+		done <- struct{}{}
+	}()
+
 	<-done
 }
 

@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -914,6 +915,128 @@ func (a *Adapter) GetContainerLogs(ctx context.Context, id string, tail int) (st
 		c.ContainerName, c.Image,
 		now.Add(-4*time.Minute).Format(time.RFC3339),
 		now.Add(-1*time.Minute).Format(time.RFC3339)), nil
+}
+
+type dockerHijackedConn struct {
+	net.Conn
+	r *bufio.Reader
+}
+
+func (c *dockerHijackedConn) Read(p []byte) (int, error) {
+	return c.r.Read(p)
+}
+
+// ExecAttach creates an interactive exec instance in the specified container and connects raw I/O to it.
+func (a *Adapter) ExecAttach(ctx context.Context, id string, cmd []string) (net.Conn, string, error) {
+	if !a.hasSocket {
+		c1, c2 := net.Pipe()
+		go func() {
+			defer c2.Close()
+			_, _ = fmt.Fprintf(c2, "Connected to simulated container %s (docker socket not connected)\r\n$ ", id)
+			buf := make([]byte, 256)
+			for {
+				n, err := c2.Read(buf)
+				if err != nil {
+					break
+				}
+				_, _ = c2.Write(buf[:n])
+			}
+		}()
+		return c1, "mock-exec-" + id, nil
+	}
+
+	if len(cmd) == 0 {
+		cmd = []string{"/bin/sh"}
+	}
+
+	createPayload := map[string]any{
+		"AttachStdin":  true,
+		"AttachStdout": true,
+		"AttachStderr": true,
+		"Tty":          true,
+		"Cmd":          cmd,
+	}
+	bodyBytes, err := json.Marshal(createPayload)
+	if err != nil {
+		return nil, "", fmt.Errorf("marshal exec create payload: %w", err)
+	}
+
+	createURL := fmt.Sprintf("%s/containers/%s/exec", a.baseURL(), url.PathEscape(id))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, createURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, "", fmt.Errorf("create exec request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("docker exec create request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		out, _ := io.ReadAll(resp.Body)
+		return nil, "", fmt.Errorf("docker exec create failed (status %d): %s", resp.StatusCode, strings.TrimSpace(string(out)))
+	}
+
+	var execResp struct {
+		ID string `json:"Id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&execResp); err != nil {
+		return nil, "", fmt.Errorf("decode exec create response: %w", err)
+	}
+	if execResp.ID == "" {
+		return nil, "", fmt.Errorf("docker daemon returned empty exec ID")
+	}
+
+	var dialer net.Dialer
+	rawConn, err := dialer.DialContext(ctx, "unix", a.socketPath)
+	if err != nil {
+		return nil, "", fmt.Errorf("dial docker socket for exec hijack: %w", err)
+	}
+
+	startPayload := `{"Detach":false,"Tty":true}`
+	reqStr := fmt.Sprintf("POST /exec/%s/start HTTP/1.1\r\nHost: docker\r\nContent-Type: application/json\r\nConnection: Upgrade\r\nUpgrade: tcp\r\nContent-Length: %d\r\n\r\n%s",
+		execResp.ID, len(startPayload), startPayload)
+
+	if _, err := rawConn.Write([]byte(reqStr)); err != nil {
+		_ = rawConn.Close()
+		return nil, "", fmt.Errorf("failed to send exec start request: %w", err)
+	}
+
+	br := bufio.NewReader(rawConn)
+	startResp, err := http.ReadResponse(br, nil)
+	if err != nil {
+		_ = rawConn.Close()
+		return nil, "", fmt.Errorf("failed to read exec start response: %w", err)
+	}
+	if startResp.StatusCode != http.StatusOK && startResp.StatusCode != http.StatusSwitchingProtocols {
+		_ = rawConn.Close()
+		return nil, "", fmt.Errorf("docker exec start returned status %d", startResp.StatusCode)
+	}
+
+	return &dockerHijackedConn{Conn: rawConn, r: br}, execResp.ID, nil
+}
+
+// ResizeExec resizes the TTY session for a running exec instance.
+func (a *Adapter) ResizeExec(ctx context.Context, execID string, height, width uint) error {
+	if !a.hasSocket {
+		return nil
+	}
+	resizeURL := fmt.Sprintf("%s/exec/%s/resize?h=%d&w=%d", a.baseURL(), url.PathEscape(execID), height, width)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, resizeURL, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("resize failed with status %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func (a *Adapter) ensureImage(ctx context.Context, image string) {

@@ -170,6 +170,19 @@ func (d *stubDockerPort) ListDirectories(ctx context.Context, reqPath string) (*
 	}, nil
 }
 
+func (d *stubDockerPort) ExecAttach(ctx context.Context, id string, cmd []string) (net.Conn, string, error) {
+	c1, c2 := net.Pipe()
+	go func() {
+		defer c2.Close()
+		_, _ = c2.Write([]byte("stub container shell session\r\n$ "))
+	}()
+	return c1, "stub-exec-id", nil
+}
+
+func (d *stubDockerPort) ResizeExec(ctx context.Context, execID string, height, width uint) error {
+	return nil
+}
+
 func setupTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	ctx := context.Background()
@@ -228,7 +241,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 		t.Fatalf("failed to load embedded UI FS: %v", err)
 	}
 	eventBus := application.NewEventBus()
-	gw, err := httpadapter.NewGateway(ctx, grpcSrv, kvmSvc, webdavAdapter, uiFS, eventBus)
+	gw, err := httpadapter.NewGateway(ctx, grpcSrv, kvmSvc, dockerSvc, webdavAdapter, uiFS, eventBus)
 	if err != nil {
 		t.Fatalf("failed to create gateway: %v", err)
 	}
@@ -360,6 +373,35 @@ func TestGoogleAIPGatewayEndToEnd(t *testing.T) {
 	_ = spaResp.Body.Close()
 	if !strings.Contains(string(spaHTML), "<div id=\"app\"></div>") {
 		t.Fatalf("expected embedded Vue index.html, got: %s", string(spaHTML))
+	}
+
+	// 8. Docker Interactive Terminal WebSocket (/ws/docker/terminal/{containerId})
+	dockerWsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws/docker/terminal/c1?shell=/bin/sh"
+	wsConfig, wsErr := websocket.NewConfig(dockerWsURL, srv.URL)
+	if wsErr != nil {
+		t.Fatalf("failed to create ws config: %v", wsErr)
+	}
+	var wsConn *websocket.Conn
+	wsConn, wsErr = websocket.DialConfig(wsConfig)
+	if wsErr != nil {
+		t.Fatalf("failed to connect to docker terminal ws: %v", wsErr)
+	}
+	defer wsConn.Close()
+
+	wsBuf := make([]byte, 256)
+	_ = wsConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	wsN, err := wsConn.Read(wsBuf)
+	if err != nil {
+		t.Fatalf("failed to read from docker terminal ws: %v", err)
+	}
+	if !strings.Contains(string(wsBuf[:wsN]), "stub container shell") {
+		t.Fatalf("expected stub shell prompt, got: %s", string(wsBuf[:wsN]))
+	}
+
+	// Test sending resize JSON frame
+	_, err = wsConn.Write([]byte(`{"type":"resize","cols":120,"rows":35}`))
+	if err != nil {
+		t.Fatalf("failed to send resize to ws: %v", err)
 	}
 
 	// 8. Docker storage config & filesystem directories API

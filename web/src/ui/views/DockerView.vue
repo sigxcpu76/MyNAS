@@ -5,6 +5,7 @@ import {
   mdiCheck,
   mdiClose,
   mdiCloudSync,
+  mdiConsole,
   mdiContentCopy,
   mdiDelete,
   mdiDocker,
@@ -34,6 +35,7 @@ import {
 } from '../../domain/models';
 import ComposeFormEditor from '../components/ComposeFormEditor.vue';
 import CodeMirrorEditor from '../components/CodeMirrorEditor.vue';
+import DockerTerminalModal, { type TerminalContainerOption } from '../components/DockerTerminalModal.vue';
 import MdiIcon from '../components/MdiIcon.vue';
 import { askModal, nasState, notify } from '../store';
 
@@ -503,6 +505,60 @@ function copyCompose(yaml: string) {
 }
 
 // =============================================================================
+// Container Terminal Modal
+// =============================================================================
+const isTerminalOpen = ref(false);
+const terminalTarget = ref<{
+  appTitle: string;
+  containers: TerminalContainerOption[];
+  defaultContainerId: string;
+} | null>(null);
+
+function openTerminalForApp(app: DockerApp) {
+  const containerList: TerminalContainerOption[] = (app.containers || []).map((c) => ({
+    id: c.containerId || c.name,
+    name: c.name || c.containerId,
+    serviceName: c.serviceName,
+    state: c.state,
+  }));
+  const firstRunning = containerList.find((c) => c.state === 'RUNNING') || containerList[0];
+  terminalTarget.value = {
+    appTitle: app.title || app.appId,
+    containers: containerList,
+    defaultContainerId: firstRunning?.id || firstRunning?.name || app.appId,
+  };
+  isTerminalOpen.value = true;
+}
+
+function openTerminalForContainer(
+  app: DockerApp | null,
+  container: { containerId?: string; name?: string; serviceName?: string; state?: string }
+) {
+  const containerList: TerminalContainerOption[] = app?.containers
+    ? app.containers.map((c) => ({
+        id: c.containerId || c.name,
+        name: c.name || c.containerId,
+        serviceName: c.serviceName,
+        state: c.state,
+      }))
+    : [
+        {
+          id: container.containerId || container.name || '',
+          name: container.name || container.containerId || '',
+          serviceName: container.serviceName,
+          state: container.state,
+        },
+      ];
+
+  terminalTarget.value = {
+    appTitle: app?.title || app?.appId || container.name || 'Container',
+    containers: containerList,
+    defaultContainerId: container.containerId || container.name || '',
+  };
+  isTerminalOpen.value = true;
+}
+
+// =============================================================================
 // App Lifecycle Actions
 // =============================================================================
 async function startApp(app: DockerApp) {
@@ -937,6 +993,16 @@ onUnmounted(() => {
                   <MdiIcon :path="mdiRestart" size="16" />
                 </button>
                 <button
+                  v-if="app.state === 'RUNNING'"
+                  class="btn btn-sm btn-icon"
+                  style="color: #38bdf8"
+                  title="Open Shell Terminal"
+                  aria-label="Open Shell Terminal"
+                  @click="openTerminalForApp(app)"
+                >
+                  <MdiIcon :path="mdiConsole" size="16" />
+                </button>
+                <button
                   v-if="app.state !== 'RUNNING'"
                   class="btn btn-sm btn-icon btn-success"
                   title="Start Application"
@@ -1148,6 +1214,7 @@ onUnmounted(() => {
                 <th style="padding: 8px">CPU</th>
                 <th style="padding: 8px">RAM</th>
                 <th style="padding: 8px">PORTS</th>
+                <th style="padding: 8px; text-align: right">ACTIONS</th>
               </tr>
             </thead>
             <tbody>
@@ -1162,6 +1229,18 @@ onUnmounted(() => {
                 <td style="padding: 8px" class="mono">{{ c.memoryMib }} MiB</td>
                 <td class="mono" style="padding: 8px; font-size: 11px">
                   {{ formatContainerPorts(c.ports) }}
+                </td>
+                <td style="padding: 8px; text-align: right">
+                  <button
+                    v-if="c.state === 'RUNNING'"
+                    class="btn btn-sm btn-icon"
+                    style="color: #38bdf8; padding: 2px 6px"
+                    title="Open Shell Terminal"
+                    aria-label="Open Shell Terminal"
+                    @click="openTerminalForContainer(inspectedApp, c)"
+                  >
+                    <MdiIcon :path="mdiConsole" size="15" />
+                  </button>
                 </td>
               </tr>
             </tbody>
@@ -1708,5 +1787,16 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- ===================================================================== -->
+    <!-- MODAL 4: Docker Interactive Container Terminal                        -->
+    <!-- ===================================================================== -->
+    <DockerTerminalModal
+      v-if="isTerminalOpen && terminalTarget"
+      :app-title="terminalTarget.appTitle"
+      :containers="terminalTarget.containers"
+      :initial-container-id="terminalTarget.defaultContainerId"
+      @close="isTerminalOpen = false"
+    />
   </div>
 </template>

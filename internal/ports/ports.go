@@ -94,6 +94,8 @@ type DockerRuntimePort interface {
 	StopContainer(ctx context.Context, id string) (*domain.DockerContainer, error)
 	RestartContainer(ctx context.Context, id string) (*domain.DockerContainer, error)
 	GetContainerLogs(ctx context.Context, id string, tail int) (string, error)
+	ExecAttach(ctx context.Context, id string, cmd []string) (net.Conn, string, error)
+	ResizeExec(ctx context.Context, execID string, height, width uint) error
 }
 
 type DockerAppPort interface {

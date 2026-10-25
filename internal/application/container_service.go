@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"net"
 
 	"github.com/sigxcpu/nas/internal/domain"
 	"github.com/sigxcpu/nas/internal/ports"
@@ -92,6 +93,17 @@ func (s *DockerService) RestartContainer(ctx context.Context, id string) (*domai
 		return nil, err
 	}
 	return s.runtime.RestartContainer(ctx, id)
+}
+
+func (s *DockerService) ExecAttach(ctx context.Context, id string, cmd []string) (net.Conn, string, error) {
+	if err := domain.ValidateResourceID(id, "docker_container"); err != nil {
+		return nil, "", err
+	}
+	return s.runtime.ExecAttach(ctx, id, cmd)
+}
+
+func (s *DockerService) ResizeExec(ctx context.Context, execID string, height, width uint) error {
+	return s.runtime.ResizeExec(ctx, execID, height, width)
 }
 
 type LxcService struct {
