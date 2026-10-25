@@ -2,6 +2,7 @@ package cli_test
 
 import (
 	"bytes"
+	"context"
 	"net"
 	"strings"
 	"testing"
@@ -9,19 +10,190 @@ import (
 	grpcadapter "github.com/sigxcpu/nas/internal/adapters/inbound/grpc"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/catalog"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/disk"
-	"github.com/sigxcpu/nas/internal/adapters/outbound/docker"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/identity"
-	"github.com/sigxcpu/nas/internal/adapters/outbound/kvm"
-	"github.com/sigxcpu/nas/internal/adapters/outbound/lxc"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/prereq"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/share"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/system"
-	"github.com/sigxcpu/nas/internal/adapters/outbound/zfs"
 	"github.com/sigxcpu/nas/internal/application"
 	"github.com/sigxcpu/nas/internal/cli"
+	"github.com/sigxcpu/nas/internal/domain"
 	nasv1 "github.com/sigxcpu/nas/internal/gen/nas/v1"
+	"github.com/sigxcpu/nas/internal/ports"
 	"google.golang.org/grpc"
 )
+
+type cliZfsPort struct {
+	ports.ZfsEnginePort
+	pools    map[string]domain.ZfsPool
+	datasets map[string]domain.ZfsDataset
+	volumes  map[string]domain.ZfsVolume
+}
+
+func (s *cliZfsPort) GetPool(ctx context.Context, id string) (*domain.ZfsPool, error) {
+	p, ok := s.pools[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	return &p, nil
+}
+
+func (s *cliZfsPort) ListPools(ctx context.Context) ([]domain.ZfsPool, error) {
+	var res []domain.ZfsPool
+	for _, p := range s.pools {
+		res = append(res, p)
+	}
+	return res, nil
+}
+
+func (s *cliZfsPort) ListDatasets(ctx context.Context, poolID string) ([]domain.ZfsDataset, error) {
+	var res []domain.ZfsDataset
+	for k, d := range s.datasets {
+		if strings.HasPrefix(k, poolID+"/") {
+			res = append(res, d)
+		}
+	}
+	return res, nil
+}
+
+func (s *cliZfsPort) ListVolumes(ctx context.Context, poolID string) ([]domain.ZfsVolume, error) {
+	var res []domain.ZfsVolume
+	for k, v := range s.volumes {
+		if strings.HasPrefix(k, poolID+"/") {
+			res = append(res, v)
+		}
+	}
+	return res, nil
+}
+
+func (s *cliZfsPort) GetDataset(ctx context.Context, poolID, datasetID string) (*domain.ZfsDataset, error) {
+	key := poolID + "/" + datasetID
+	ds, ok := s.datasets[key]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	return &ds, nil
+}
+
+func (s *cliZfsPort) CreateDataset(ctx context.Context, ds domain.ZfsDataset) (*domain.ZfsDataset, error) {
+	key := ds.PoolID + "/" + ds.ID
+	s.datasets[key] = ds
+	return &ds, nil
+}
+
+type cliKvmPort struct {
+	ports.KvmHypervisorPort
+	vms map[string]domain.VirtualMachine
+}
+
+func (k *cliKvmPort) ListVMs(ctx context.Context) ([]domain.VirtualMachine, error) {
+	var res []domain.VirtualMachine
+	for _, vm := range k.vms {
+		res = append(res, vm)
+	}
+	return res, nil
+}
+
+type cliDockerPort struct {
+	ports.DockerRuntimePort
+	ports.DockerAppPort
+	containers map[string]domain.DockerContainer
+	apps       map[string]domain.DockerApp
+}
+
+func (d *cliDockerPort) ListContainers(ctx context.Context) ([]domain.DockerContainer, error) {
+	var res []domain.DockerContainer
+	for _, c := range d.containers {
+		res = append(res, c)
+	}
+	return res, nil
+}
+
+func (d *cliDockerPort) GetContainer(ctx context.Context, id string) (*domain.DockerContainer, error) {
+	c, ok := d.containers[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	return &c, nil
+}
+
+func (d *cliDockerPort) StopContainer(ctx context.Context, id string) (*domain.DockerContainer, error) {
+	c, ok := d.containers[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	c.State = "EXITED"
+	d.containers[id] = c
+	return &c, nil
+}
+
+func (d *cliDockerPort) StartContainer(ctx context.Context, id string) (*domain.DockerContainer, error) {
+	c, ok := d.containers[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	c.State = "RUNNING"
+	d.containers[id] = c
+	return &c, nil
+}
+
+func (d *cliDockerPort) RestartContainer(ctx context.Context, id string) (*domain.DockerContainer, error) {
+	c, ok := d.containers[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	c.State = "RUNNING"
+	d.containers[id] = c
+	return &c, nil
+}
+
+func (d *cliDockerPort) ListApps(ctx context.Context) ([]domain.DockerApp, error) {
+	var res []domain.DockerApp
+	for _, a := range d.apps {
+		res = append(res, a)
+	}
+	return res, nil
+}
+
+func (d *cliDockerPort) GetApp(ctx context.Context, id string) (*domain.DockerApp, error) {
+	a, ok := d.apps[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	return &a, nil
+}
+
+func (d *cliDockerPort) StopApp(ctx context.Context, id string) (*domain.DockerApp, error) {
+	a, ok := d.apps[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	a.State = "STOPPED"
+	d.apps[id] = a
+	return &a, nil
+}
+
+func (d *cliDockerPort) StartApp(ctx context.Context, id string) (*domain.DockerApp, error) {
+	a, ok := d.apps[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	a.State = "RUNNING"
+	d.apps[id] = a
+	return &a, nil
+}
+
+type cliLxcPort struct {
+	ports.LxcRuntimePort
+	containers map[string]domain.LxcContainer
+}
+
+func (l *cliLxcPort) ListContainers(ctx context.Context) ([]domain.LxcContainer, error) {
+	var res []domain.LxcContainer
+	for _, c := range l.containers {
+		res = append(res, c)
+	}
+	return res, nil
+}
 
 func TestNasctlCobraSubcommands(t *testing.T) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -30,21 +202,69 @@ func TestNasctlCobraSubcommands(t *testing.T) {
 	}
 	defer lis.Close()
 
-	dockerAdapter := docker.NewAdapterFull("/nonexistent/docker.sock", t.TempDir(), true)
-	zfsAdapter := zfs.NewAdapter(true)
-	prereqChecker := prereq.NewSystemChecker(true)
-	sysAdapter := system.NewAdapter(zfsAdapter, prereqChecker, true)
+	tempDir := t.TempDir()
+	zfsPort := &cliZfsPort{
+		pools: map[string]domain.ZfsPool{
+			"tank": {ID: "tank", PoolName: "tank", State: "ONLINE", Mountpoint: tempDir},
+		},
+		datasets: map[string]domain.ZfsDataset{
+			"tank/media": {PoolID: "tank", ID: "media", DatasetPath: "tank/media", Mountpoint: "/nas/tank/media"},
+		},
+		volumes: map[string]domain.ZfsVolume{
+			"tank/kvm-storage-lun0": {PoolID: "tank", ID: "kvm-storage-lun0", DevicePath: "/dev/zvol/tank/kvm-storage-lun0"},
+		},
+	}
+	prereqChecker := prereq.NewSystemChecker()
+	prereqChecker.SetMainPool("tank")
+	sysAdapter := system.NewAdapter(zfsPort, prereqChecker)
+
+	kvmPort := &cliKvmPort{
+		vms: map[string]domain.VirtualMachine{
+			"ubuntu-24-lts": {ID: "ubuntu-24-lts", VMName: "Ubuntu 24.04 LTS", State: "RUNNING"},
+		},
+	}
+
+	dockerPort := &cliDockerPort{
+		containers: map[string]domain.DockerContainer{
+			"jellyfin-media": {ID: "jellyfin-media", ContainerName: "jellyfin-media", Image: "jellyfin/jellyfin:latest", State: "RUNNING"},
+		},
+		apps: map[string]domain.DockerApp{
+			"nextcloud": {ID: "nextcloud", Title: "Nextcloud Hub", State: "RUNNING"},
+		},
+	}
+
+	lxcPort := &cliLxcPort{
+		containers: map[string]domain.LxcContainer{
+			"pihole-dns": {ID: "pihole-dns", State: "RUNNING"},
+		},
+	}
+
+	cifsAdapter := share.NewCifsAdapter(t.TempDir())
+	_, _ = cifsAdapter.CreateShare(context.Background(), domain.CifsShare{
+		ID:       "media",
+		Path:     "/nas/tank/media",
+		Enabled:  true,
+		ReadOnly: false,
+	})
+
+	webdavAdapter := share.NewWebdavAdapter()
+	_, _ = webdavAdapter.CreateShare(context.Background(), domain.WebdavShare{
+		ID:      "documents",
+		Path:    t.TempDir(),
+		Enabled: true,
+	})
+
 	srv := grpcadapter.NewServer(
 		application.NewSystemService(sysAdapter),
 		application.NewPrerequisiteService(prereqChecker),
-		application.NewDiskService(disk.NewAdapter(zfsAdapter, true)),
-		application.NewZfsService(zfsAdapter),
-		application.NewKvmService(kvm.NewAdapter(true)),
-		application.NewDockerService(dockerAdapter),
-		application.NewDockerAppService(dockerAdapter),
-		application.NewLxcService(lxc.NewAdapter(true)),
-		application.NewShareService(share.NewCifsAdapter(true, t.TempDir()), share.NewWebdavAdapter(true)),
-		application.NewIdentityService(identity.NewAdapter(true), "cli-test-secret"),
+		application.NewDiskService(disk.NewAdapter(zfsPort)),
+		application.NewZfsService(zfsPort),
+		application.NewKvmService(kvmPort),
+		application.NewDockerService(dockerPort),
+		application.NewDockerAppService(dockerPort),
+		application.NewLxcService(lxcPort),
+		application.NewShareService(cifsAdapter, webdavAdapter),
+		application.NewIdentityService(identity.NewAdapter(), "cli-test-secret"),
 		application.NewCatalogService(catalog.NewAdapter(t.TempDir())),
 	)
 	grpcServer := grpc.NewServer()

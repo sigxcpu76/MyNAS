@@ -11,7 +11,7 @@ import (
 
 func TestLxcAdapter_MainPoolEnforcement(t *testing.T) {
 	ctx := context.Background()
-	adapter := lxc.NewAdapter(true)
+	adapter := lxc.NewAdapter()
 	adapter.SetMainPool("tank")
 
 	// 1. Rootfs defaults to main pool if empty
@@ -61,7 +61,17 @@ func TestLxcAdapter_MainPoolEnforcement(t *testing.T) {
 
 func TestLxcAdapter_Lifecycle(t *testing.T) {
 	ctx := context.Background()
-	adapter := lxc.NewAdapter(true)
+	adapter := lxc.NewAdapter()
+
+	created, err := adapter.CreateContainer(ctx, domain.LxcContainer{
+		ID:           "ct-test-1",
+		Distribution: "debian",
+		Release:      "bookworm",
+		RootfsPath:   "/nas/mypool/lxc/ct-test-1/rootfs",
+	})
+	if err != nil {
+		t.Fatalf("CreateContainer failed: %v", err)
+	}
 
 	list, err := adapter.ListContainers(ctx)
 	if err != nil || len(list) == 0 {
@@ -69,38 +79,37 @@ func TestLxcAdapter_Lifecycle(t *testing.T) {
 	}
 
 	// GetContainer
-	first := list[0]
-	got, err := adapter.GetContainer(ctx, first.ID)
-	if err != nil || got.ID != first.ID {
+	got, err := adapter.GetContainer(ctx, created.ID)
+	if err != nil || got.ID != created.ID {
 		t.Fatalf("GetContainer failed: %v", err)
 	}
 
 	// Stop container
-	stopped, err := adapter.StopContainer(ctx, first.ID)
+	stopped, err := adapter.StopContainer(ctx, created.ID)
 	if err != nil || stopped.State != "STOPPED" {
 		t.Fatalf("StopContainer failed: %v, state: %s", err, stopped.State)
 	}
 
 	// Freeze container
-	frozen, err := adapter.FreezeContainer(ctx, first.ID)
+	frozen, err := adapter.FreezeContainer(ctx, created.ID)
 	if err != nil || frozen.State != "FROZEN" {
 		t.Fatalf("FreezeContainer failed: %v, state: %s", err, frozen.State)
 	}
 
 	// Start container
-	started, err := adapter.StartContainer(ctx, first.ID)
+	started, err := adapter.StartContainer(ctx, created.ID)
 	if err != nil || started.State != "RUNNING" {
 		t.Fatalf("StartContainer failed: %v, state: %s", err, started.State)
 	}
 
 	// Delete running container without force fails
-	err = adapter.DeleteContainer(ctx, first.ID, false)
+	err = adapter.DeleteContainer(ctx, created.ID, false)
 	if err == nil {
 		t.Fatalf("expected error deleting running container without force")
 	}
 
 	// Delete running container with force succeeds
-	err = adapter.DeleteContainer(ctx, first.ID, true)
+	err = adapter.DeleteContainer(ctx, created.ID, true)
 	if err != nil {
 		t.Fatalf("DeleteContainer with force failed: %v", err)
 	}

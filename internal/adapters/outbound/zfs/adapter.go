@@ -10,36 +10,19 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/sigxcpu/nas/internal/domain"
 )
 
 type Adapter struct {
-	mu       sync.RWMutex
-	hybrid   bool
-	pools    map[string]domain.ZfsPool
-	datasets map[string]map[string]domain.ZfsDataset
-	volumes  map[string]map[string]domain.ZfsVolume
+	mu sync.RWMutex
 }
 
-func NewAdapter(hybrid bool) *Adapter {
-	a := &Adapter{
-		hybrid:   hybrid,
-		pools:    make(map[string]domain.ZfsPool),
-		datasets: make(map[string]map[string]domain.ZfsDataset),
-		volumes:  make(map[string]map[string]domain.ZfsVolume),
-	}
-	if hybrid {
-		a.seedDefaults()
-	}
-	return a
+func NewAdapter() *Adapter {
+	return &Adapter{}
 }
 
 func (a *Adapter) canUseHostZfs() bool {
-	if a.hybrid {
-		return false
-	}
 	if _, err := exec.LookPath("zpool"); err != nil {
 		return false
 	}
@@ -49,168 +32,10 @@ func (a *Adapter) canUseHostZfs() bool {
 	return true
 }
 
-func (a *Adapter) seedDefaults() {
-	a.pools["tank"] = domain.ZfsPool{
-		ID:                   "tank",
-		PoolName:             "tank",
-		State:                "ONLINE",
-		SizeBytes:            16000000000000, // 16 TB
-		AllocatedBytes:       5400000000000,  // 5.4 TB
-		FreeBytes:            10600000000000, // 10.6 TB
-		FragmentationPercent: 6,
-		CapacityPercent:      33,
-		DedupRatio:           1.04,
-		VdevLayout:           "raidz1",
-		Devices:              []string{"/dev/sda", "/dev/sdb", "/dev/sdc", "/dev/sdd"},
-		Mountpoint:           "/tank",
-		Compression:          "lz4",
-		LastScrubStatus:      "0 errors repaired on 2026-10-20",
-		HealthDetails:        "All vdevs ONLINE; RAIDZ1 parity healthy",
-	}
-	a.pools["nvme-fast"] = domain.ZfsPool{
-		ID:                   "nvme-fast",
-		PoolName:             "nvme-fast",
-		State:                "ONLINE",
-		SizeBytes:            2000000000000, // 2 TB
-		AllocatedBytes:       420000000000,  // 420 GB
-		FreeBytes:            1580000000000, // 1.58 TB
-		FragmentationPercent: 3,
-		CapacityPercent:      21,
-		DedupRatio:           1.00,
-		VdevLayout:           "mirror",
-		Devices:              []string{"/dev/nvme0n1", "/dev/nvme1n1"},
-		Mountpoint:           "/nvme-fast",
-		Compression:          "zstd",
-		LastScrubStatus:      "0 errors repaired on 2026-10-22",
-		HealthDetails:        "2-way NVMe mirror ONLINE",
-	}
-
-	a.datasets["tank"] = map[string]domain.ZfsDataset{
-		"root": {
-			PoolID:          "tank",
-			ID:              "root",
-			DatasetPath:     "tank",
-			Mountpoint:      "/tank",
-			UsedBytes:       5000000000000,
-			AvailableBytes:  10600000000000,
-			ReferencedBytes: 1048576,
-			QuotaBytes:      0,
-			Compression:     "lz4",
-			Readonly:        false,
-			Atime:           false,
-			Recordsize:      "128K",
-			SnapshotsCount:  0,
-			Sync:            "standard",
-		},
-		"media": {
-			PoolID:          "tank",
-			ID:              "media",
-			DatasetPath:     "tank/media",
-			Mountpoint:      "/tank/media",
-			UsedBytes:       3800000000000,
-			AvailableBytes:  10600000000000,
-			ReferencedBytes: 3800000000000,
-			QuotaBytes:      8000000000000,
-			Compression:     "lz4",
-			Readonly:        false,
-			Atime:           false,
-			Recordsize:      "1M",
-			SnapshotsCount:  4,
-			LastSnapshot:    "tank/media@auto-2026-10-23",
-		},
-		"backups": {
-			PoolID:          "tank",
-			ID:              "backups",
-			DatasetPath:     "tank/backups",
-			Mountpoint:      "/tank/backups",
-			UsedBytes:       1200000000000,
-			AvailableBytes:  10600000000000,
-			ReferencedBytes: 1200000000000,
-			QuotaBytes:      4000000000000,
-			Compression:     "zstd",
-			Readonly:        false,
-			Atime:           false,
-			Recordsize:      "128K",
-			SnapshotsCount:  12,
-			LastSnapshot:    "tank/backups@daily-2026-10-24",
-		},
-	}
-	a.datasets["nvme-fast"] = map[string]domain.ZfsDataset{
-		"root": {
-			PoolID:          "nvme-fast",
-			ID:              "root",
-			DatasetPath:     "nvme-fast",
-			Mountpoint:      "/nvme-fast",
-			UsedBytes:       120000000000,
-			AvailableBytes:  1580000000000,
-			ReferencedBytes: 1048576,
-			QuotaBytes:      0,
-			Compression:     "zstd",
-			Readonly:        false,
-			Atime:           false,
-			Recordsize:      "128K",
-			SnapshotsCount:  0,
-			Sync:            "standard",
-		},
-		"appdata": {
-			PoolID:          "nvme-fast",
-			ID:              "appdata",
-			DatasetPath:     "nvme-fast/appdata",
-			Mountpoint:      "/nvme-fast/appdata",
-			UsedBytes:       120000000000,
-			AvailableBytes:  1580000000000,
-			ReferencedBytes: 120000000000,
-			QuotaBytes:      500000000000,
-			Compression:     "zstd",
-			Readonly:        false,
-			Atime:           false,
-			Recordsize:      "16K",
-			SnapshotsCount:  7,
-			LastSnapshot:    "nvme-fast/appdata@pre-upgrade",
-		},
-	}
-
-	a.volumes["nvme-fast"] = map[string]domain.ZfsVolume{
-		"vm-ubuntu-root": {
-			PoolID:          "nvme-fast",
-			ID:              "vm-ubuntu-root",
-			VolumePath:      "nvme-fast/vm-ubuntu-root",
-			DevicePath:      "/dev/zvol/nvme-fast/vm-ubuntu-root",
-			SizeBytes:       64 * 1024 * 1024 * 1024, // 64 GiB
-			UsedBytes:       18 * 1024 * 1024 * 1024,
-			Volblocksize:    "16K",
-			Compression:     "lz4",
-			ThinProvisioned: true,
-		},
-	}
-	a.volumes["tank"] = map[string]domain.ZfsVolume{
-		"kvm-storage-lun0": {
-			PoolID:          "tank",
-			ID:              "kvm-storage-lun0",
-			VolumePath:      "tank/kvm-storage-lun0",
-			DevicePath:      "/dev/zvol/tank/kvm-storage-lun0",
-			SizeBytes:       250 * 1024 * 1024 * 1024, // 250 GiB
-			UsedBytes:       90 * 1024 * 1024 * 1024,
-			Volblocksize:    "64K",
-			Compression:     "lz4",
-			ThinProvisioned: false,
-		},
-	}
-}
-
-// =============================================================================
-// ZFS Pools
-// =============================================================================
-
-type zpoolPropertyJSON struct {
-	Value string `json:"value"`
-}
-
 type zpoolPoolJSON struct {
-	Name       string                       `json:"name"`
-	Type       string                       `json:"type"`
-	State      string                       `json:"state"`
-	Properties map[string]zpoolPropertyJSON `json:"properties"`
+	Name       string                     `json:"name"`
+	State      string                     `json:"state"`
+	Properties map[string]zfsPropertyJSON `json:"properties"`
 }
 
 type zpoolListJSON struct {
@@ -348,119 +173,96 @@ func formatRecordsize(raw string) string {
 }
 
 func (a *Adapter) ListPools(ctx context.Context) ([]domain.ZfsPool, error) {
-	if a.canUseHostZfs() {
-		if pools, err := a.listHostPools(ctx); err == nil && len(pools) > 0 {
-			a.mu.Lock()
-			for _, p := range pools {
-				a.pools[p.ID] = p
-			}
-			a.mu.Unlock()
-			return pools, nil
-		}
+	if !a.canUseHostZfs() {
+		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	out := make([]domain.ZfsPool, 0, len(a.pools))
-	for _, p := range a.pools {
-		out = append(out, p)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].ID < out[j].ID
-	})
-	return out, nil
+	return a.listHostPools(ctx)
 }
 
 func (a *Adapter) listHostPools(ctx context.Context) ([]domain.ZfsPool, error) {
 	cmd := exec.CommandContext(ctx, "zpool", "list", "-j", "-p")
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, err
+		// If zpool returns empty or no pools exist
+		return []domain.ZfsPool{}, nil
 	}
 	var zpoolData zpoolListJSON
 	if err := json.Unmarshal(out, &zpoolData); err != nil {
 		return nil, err
 	}
 
-	var statusMap map[string]zpoolStatusPoolJSON
+	// Also inspect zpool status -j for vdev topology and health details
 	statusCmd := exec.CommandContext(ctx, "zpool", "status", "-j")
-	if stOut, stErr := statusCmd.Output(); stErr == nil {
-		var stJSON zpoolStatusJSON
-		if json.Unmarshal(stOut, &stJSON) == nil {
-			statusMap = stJSON.Pools
-		}
-	}
+	statusOut, _ := statusCmd.Output()
+	var statusData zpoolStatusJSON
+	_ = json.Unmarshal(statusOut, &statusData)
 
 	var pools []domain.ZfsPool
 	for poolName, p := range zpoolData.Pools {
 		size, _ := strconv.ParseInt(p.Properties["size"].Value, 10, 64)
 		alloc, _ := strconv.ParseInt(p.Properties["allocated"].Value, 10, 64)
 		free, _ := strconv.ParseInt(p.Properties["free"].Value, 10, 64)
-		frag, _ := strconv.Atoi(strings.TrimSuffix(p.Properties["fragmentation"].Value, "%"))
-		capPct, _ := strconv.Atoi(strings.TrimSuffix(p.Properties["capacity"].Value, "%"))
-		dedup, _ := strconv.ParseFloat(strings.TrimSuffix(p.Properties["dedupratio"].Value, "x"), 64)
-		state := p.State
-		if state == "" {
-			state = p.Properties["health"].Value
-		}
-		if state == "" {
-			state = "ONLINE"
+		frag, _ := strconv.ParseInt(p.Properties["fragmentation"].Value, 10, 64)
+		capPct, _ := strconv.ParseInt(p.Properties["capacity"].Value, 10, 64)
+		dedupStr := p.Properties["dedupratio"].Value
+		dedup, _ := strconv.ParseFloat(strings.TrimSuffix(dedupStr, "x"), 64)
+		if dedup == 0 {
+			dedup = 1.00
 		}
 
-		layout := "stripe"
-		var devices []string
-		var vdevTree []domain.ZfsVdev
-		errCount := "0"
-		if stPool, ok := statusMap[poolName]; ok {
-			layout, devices = extractVdevInfo(stPool.Vdevs)
-			errCount = stPool.ErrorCount
-			if errCount == "" {
-				errCount = "0"
-			}
-			if rootV, hasRoot := stPool.Vdevs[poolName]; hasRoot {
-				vdevTree = buildVdevTree(rootV.Vdevs)
-			} else {
-				vdevTree = buildVdevTree(stPool.Vdevs)
-			}
-		}
-
-		mountpoint := "/" + poolName
+		mountpoint := "/nas/" + poolName
 		compression := "lz4"
-		syncMode := "standard"
-		rootCmd := exec.CommandContext(ctx, "zfs", "list", "-j", "-p", "-o", "name,mountpoint,compression,sync", poolName)
-		if rootOut, rootErr := rootCmd.Output(); rootErr == nil {
-			var rootJSON zfsListJSON
-			if json.Unmarshal(rootOut, &rootJSON) == nil {
-				if rds, ok := rootJSON.Datasets[poolName]; ok {
-					if mp := rds.Properties["mountpoint"].Value; mp != "" && mp != "-" {
-						mountpoint = mp
-					}
-					if comp := rds.Properties["compression"].Value; comp != "" && comp != "-" {
-						compression = comp
-					}
-					if s := rds.Properties["sync"].Value; s != "" && s != "-" {
-						syncMode = s
+		syncProp := "standard"
+		autotrim := "off"
+
+		// Fetch pool dataset properties (mountpoint, compression)
+		zfsGetCmd := exec.CommandContext(ctx, "zfs", "get", "-Hp", "-o", "property,value", "mountpoint,compression,sync", poolName)
+		if zfsGetOut, err := zfsGetCmd.Output(); err == nil {
+			for _, line := range strings.Split(string(zfsGetOut), "\n") {
+				fields := strings.Fields(line)
+				if len(fields) >= 2 {
+					switch fields[0] {
+					case "mountpoint":
+						if fields[1] != "-" && fields[1] != "none" && fields[1] != "legacy" {
+							mountpoint = fields[1]
+						}
+					case "compression":
+						compression = fields[1]
+					case "sync":
+						syncProp = fields[1]
 					}
 				}
 			}
 		}
 
-		autotrim := "off"
-		trimCmd := exec.CommandContext(ctx, "zpool", "get", "-j", "-p", "autotrim", poolName)
-		if trimOut, trimErr := trimCmd.Output(); trimErr == nil {
-			var trimJSON zpoolListJSON
-			if json.Unmarshal(trimOut, &trimJSON) == nil {
-				if tp, ok := trimJSON.Pools[poolName]; ok {
-					if at := tp.Properties["autotrim"].Value; at != "" && at != "-" {
-						autotrim = at
-					}
+		zpoolGetCmd := exec.CommandContext(ctx, "zpool", "get", "-Hp", "-o", "property,value", "autotrim", poolName)
+		if zpoolGetOut, err := zpoolGetCmd.Output(); err == nil {
+			for _, line := range strings.Split(string(zpoolGetOut), "\n") {
+				fields := strings.Fields(line)
+				if len(fields) >= 2 && fields[0] == "autotrim" {
+					autotrim = fields[1]
 				}
+			}
+		}
+
+		var vdevs []domain.ZfsVdev
+		var devices []string
+		layout := "stripe"
+		health := "All vdevs ONLINE; 0 pool errors"
+		scrubStatus := "No scrub errors recorded"
+
+		if stPool, ok := statusData.Pools[poolName]; ok {
+			vdevs = buildVdevTree(stPool.Vdevs)
+			layout, devices = extractVdevInfo(stPool.Vdevs)
+			if stPool.ErrorCount != "" && stPool.ErrorCount != "0" {
+				health = fmt.Sprintf("Pool reported %s errors", stPool.ErrorCount)
 			}
 		}
 
 		pools = append(pools, domain.ZfsPool{
 			ID:                   poolName,
 			PoolName:             poolName,
-			State:                state,
+			State:                p.State,
 			SizeBytes:            size,
 			AllocatedBytes:       alloc,
 			FreeBytes:            free,
@@ -471,11 +273,11 @@ func (a *Adapter) listHostPools(ctx context.Context) ([]domain.ZfsPool, error) {
 			Devices:              devices,
 			Mountpoint:           mountpoint,
 			Compression:          compression,
-			LastScrubStatus:      "No scrub errors recorded",
-			HealthDetails:        fmt.Sprintf("All vdevs %s; %s pool errors", state, errCount),
-			Sync:                 syncMode,
+			LastScrubStatus:      scrubStatus,
+			HealthDetails:        health,
 			Autotrim:             autotrim,
-			Vdevs:                vdevTree,
+			Sync:                 syncProp,
+			Vdevs:                vdevs,
 		})
 	}
 
@@ -487,174 +289,123 @@ func (a *Adapter) listHostPools(ctx context.Context) ([]domain.ZfsPool, error) {
 
 func (a *Adapter) GetPool(ctx context.Context, id string) (*domain.ZfsPool, error) {
 	cleanID := strings.TrimPrefix(id, "zfsPools/")
-	if a.canUseHostZfs() {
-		pools, err := a.listHostPools(ctx)
-		if err == nil {
-			for _, p := range pools {
-				if p.ID == cleanID {
-					a.mu.Lock()
-					a.pools[p.ID] = p
-					a.mu.Unlock()
-					return &p, nil
-				}
-			}
+	if !a.canUseHostZfs() {
+		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
+	}
+	pools, err := a.listHostPools(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range pools {
+		if p.ID == cleanID {
+			return &p, nil
 		}
 	}
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	p, ok := a.pools[cleanID]
-	if !ok {
-		return nil, fmt.Errorf("%w: zfs pool %q", domain.ErrNotFound, cleanID)
-	}
-	cp := p
-	return &cp, nil
+	return nil, fmt.Errorf("%w: zfs pool %q", domain.ErrNotFound, cleanID)
 }
 
 func (a *Adapter) CreatePool(ctx context.Context, pool domain.ZfsPool) (*domain.ZfsPool, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if _, exists := a.pools[pool.ID]; exists {
-		return nil, fmt.Errorf("%w: zfs pool %q", domain.ErrAlreadyExists, pool.ID)
+	if !a.canUseHostZfs() {
+		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
+
 	if pool.Mountpoint == "" {
 		pool.Mountpoint = fmt.Sprintf("/nas/%s", pool.ID)
 	}
 
-	var allDevices []string
+	_ = os.MkdirAll("/nas", 0755)
+	args := []string{"create", "-m", pool.Mountpoint}
+	if pool.Compression != "" && pool.Compression != "off" {
+		args = append(args, "-O", fmt.Sprintf("compression=%s", pool.Compression))
+	}
+	args = append(args, pool.ID)
+
 	if len(pool.Vdevs) > 0 {
 		for _, v := range pool.Vdevs {
+			vType := strings.ToLower(v.Type)
+			vLayout := strings.ToLower(v.Layout)
+			var devPaths []string
 			for _, c := range v.Children {
 				p := c.Path
 				if p == "" {
 					p = c.Name
 				}
 				if p != "" {
-					allDevices = append(allDevices, p)
+					devPaths = append(devPaths, p)
 				}
 			}
-			if len(v.Children) == 0 && v.Path != "" {
-				allDevices = append(allDevices, v.Path)
+			if len(devPaths) == 0 && v.Path != "" {
+				devPaths = append(devPaths, v.Path)
+			}
+			if len(devPaths) == 0 {
+				continue
+			}
+
+			switch vType {
+			case "cache", "l2arc":
+				args = append(args, "cache")
+				args = append(args, devPaths...)
+			case "log", "slog":
+				args = append(args, "log")
+				if vLayout == "mirror" {
+					args = append(args, "mirror")
+				}
+				args = append(args, devPaths...)
+			case "spare", "spares":
+				args = append(args, "spare")
+				args = append(args, devPaths...)
+			case "special", "metadata":
+				args = append(args, "special")
+				if vLayout == "mirror" {
+					args = append(args, "mirror")
+				}
+				args = append(args, devPaths...)
+			case "dedup":
+				args = append(args, "dedup")
+				if vLayout == "mirror" {
+					args = append(args, "mirror")
+				}
+				args = append(args, devPaths...)
+			default: // data
+				if vLayout != "" && vLayout != "stripe" {
+					args = append(args, vLayout)
+				}
+				args = append(args, devPaths...)
 			}
 		}
-	}
-	if len(pool.Devices) == 0 && len(allDevices) > 0 {
-		pool.Devices = allDevices
+	} else {
+		if pool.VdevLayout != "" && pool.VdevLayout != "stripe" {
+			args = append(args, pool.VdevLayout)
+		}
+		args = append(args, pool.Devices...)
 	}
 
-	if a.canUseHostZfs() {
-		_ = os.MkdirAll("/nas", 0755)
-		args := []string{"create", "-m", pool.Mountpoint}
-		if pool.Compression != "" && pool.Compression != "off" {
-			args = append(args, "-O", fmt.Sprintf("compression=%s", pool.Compression))
-		}
-		args = append(args, pool.ID)
+	out, err := exec.CommandContext(ctx, "zpool", args...).CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("zpool create failed: %v (%s)", err, strings.TrimSpace(string(out)))
+	}
 
-		if len(pool.Vdevs) > 0 {
-			for _, v := range pool.Vdevs {
-				vType := strings.ToLower(v.Type)
-				vLayout := strings.ToLower(v.Layout)
-				var devPaths []string
-				for _, c := range v.Children {
-					p := c.Path
-					if p == "" {
-						p = c.Name
-					}
-					if p != "" {
-						devPaths = append(devPaths, p)
-					}
-				}
-				if len(devPaths) == 0 && v.Path != "" {
-					devPaths = append(devPaths, v.Path)
-				}
-				if len(devPaths) == 0 {
-					continue
-				}
-
-				switch vType {
-				case "cache", "l2arc":
-					args = append(args, "cache")
-					args = append(args, devPaths...)
-				case "log", "slog":
-					args = append(args, "log")
-					if vLayout == "mirror" {
-						args = append(args, "mirror")
-					}
-					args = append(args, devPaths...)
-				case "spare", "spares":
-					args = append(args, "spare")
-					args = append(args, devPaths...)
-				case "special", "metadata":
-					args = append(args, "special")
-					if vLayout == "mirror" {
-						args = append(args, "mirror")
-					}
-					args = append(args, devPaths...)
-				case "dedup":
-					args = append(args, "dedup")
-					if vLayout == "mirror" {
-						args = append(args, "mirror")
-					}
-					args = append(args, devPaths...)
-				default: // data
-					if vLayout != "" && vLayout != "stripe" {
-						args = append(args, vLayout)
-					}
-					args = append(args, devPaths...)
-				}
-			}
-		} else {
-			if pool.VdevLayout != "" && pool.VdevLayout != "stripe" {
-				args = append(args, pool.VdevLayout)
-			}
-			args = append(args, pool.Devices...)
-		}
-		out, err := exec.CommandContext(ctx, "zpool", args...).CombinedOutput()
-		if err != nil {
-			return nil, fmt.Errorf("zpool create failed: %v (%s)", err, strings.TrimSpace(string(out)))
-		}
-	}
-	pool.State = "ONLINE"
-	devCount := len(pool.Devices)
-	if devCount == 0 {
-		devCount = 1
-	}
-	pool.SizeBytes = int64(devCount) * 2000000000000
-	pool.AllocatedBytes = 1048576
-	pool.FreeBytes = pool.SizeBytes - pool.AllocatedBytes
-	pool.FragmentationPercent = 0
-	pool.CapacityPercent = 0
-	pool.DedupRatio = 1.00
-	pool.LastScrubStatus = "Never scrubbed (newly created)"
-	pool.HealthDetails = fmt.Sprintf("%s layout across %d device(s) ONLINE", strings.ToUpper(pool.VdevLayout), len(pool.Devices))
-	a.pools[pool.ID] = pool
-	if a.datasets[pool.ID] == nil {
-		a.datasets[pool.ID] = make(map[string]domain.ZfsDataset)
-	}
-	if a.volumes[pool.ID] == nil {
-		a.volumes[pool.ID] = make(map[string]domain.ZfsVolume)
-	}
-	cp := pool
-	return &cp, nil
+	return a.GetPool(ctx, pool.ID)
 }
 
 func (a *Adapter) ExportPool(ctx context.Context, id string, force bool) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	cleanID := strings.TrimPrefix(id, "zfsPools/")
-	if a.canUseHostZfs() {
-		args := []string{"export"}
-		if force {
-			args = append(args, "-f")
-		}
-		args = append(args, cleanID)
-		out, err := exec.CommandContext(ctx, "zpool", args...).CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("zpool export failed: %v (%s)", err, strings.TrimSpace(string(out)))
-		}
+	if !a.canUseHostZfs() {
+		return fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
-	delete(a.pools, cleanID)
-	delete(a.datasets, cleanID)
-	delete(a.volumes, cleanID)
+	args := []string{"export"}
+	if force {
+		args = append(args, "-f")
+	}
+	args = append(args, cleanID)
+	out, err := exec.CommandContext(ctx, "zpool", args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("zpool export failed: %v (%s)", err, strings.TrimSpace(string(out)))
+	}
 	return nil
 }
 
@@ -662,176 +413,111 @@ func (a *Adapter) DeletePool(ctx context.Context, id string, force bool) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	cleanID := strings.TrimPrefix(id, "zfsPools/")
-	if a.canUseHostZfs() {
-		args := []string{"destroy"}
-		if force {
-			args = append(args, "-f")
-		}
-		args = append(args, cleanID)
-		_ = exec.CommandContext(ctx, "zpool", args...).Run()
+	if !a.canUseHostZfs() {
+		return fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
-	delete(a.pools, cleanID)
-	delete(a.datasets, cleanID)
-	delete(a.volumes, cleanID)
+	args := []string{"destroy"}
+	if force {
+		args = append(args, "-f")
+	}
+	args = append(args, cleanID)
+	out, err := exec.CommandContext(ctx, "zpool", args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("zpool destroy failed: %v (%s)", err, strings.TrimSpace(string(out)))
+	}
 	return nil
 }
 
 func (a *Adapter) ScrubPool(ctx context.Context, id string) (*domain.ZfsPool, error) {
 	cleanID := strings.TrimPrefix(id, "zfsPools/")
-	if a.canUseHostZfs() {
-		_ = exec.CommandContext(ctx, "zpool", "scrub", cleanID).Run()
-		return a.GetPool(ctx, cleanID)
+	if !a.canUseHostZfs() {
+		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	pool, exists := a.pools[cleanID]
-	if !exists {
-		return nil, fmt.Errorf("%w: zfs pool %q", domain.ErrNotFound, cleanID)
+	if out, err := exec.CommandContext(ctx, "zpool", "scrub", cleanID).CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("zpool scrub failed: %v (%s)", err, strings.TrimSpace(string(out)))
 	}
-	pool.LastScrubStatus = fmt.Sprintf("Scrub completed at %s (0 errors)", time.Now().UTC().Format("2006-01-02 15:04:05 UTC"))
-	a.pools[cleanID] = pool
-	cp := pool
-	return &cp, nil
+	return a.GetPool(ctx, cleanID)
 }
 
 func (a *Adapter) UpdatePool(ctx context.Context, id string, update domain.ZfsPoolUpdate) (*domain.ZfsPool, error) {
 	cleanID := strings.TrimPrefix(id, "zfsPools/")
-	if a.canUseHostZfs() {
-		if update.Sync != "" {
-			if out, err := exec.CommandContext(ctx, "zfs", "set", "sync="+update.Sync, cleanID).CombinedOutput(); err != nil {
-				return nil, fmt.Errorf("zfs set sync failed: %v (%s)", err, strings.TrimSpace(string(out)))
-			}
-		}
-		if update.Autotrim != "" {
-			if out, err := exec.CommandContext(ctx, "zpool", "set", "autotrim="+update.Autotrim, cleanID).CombinedOutput(); err != nil {
-				return nil, fmt.Errorf("zpool set autotrim failed: %v (%s)", err, strings.TrimSpace(string(out)))
-			}
-		}
-		if update.Compression != "" {
-			if out, err := exec.CommandContext(ctx, "zfs", "set", "compression="+update.Compression, cleanID).CombinedOutput(); err != nil {
-				return nil, fmt.Errorf("zfs set compression failed: %v (%s)", err, strings.TrimSpace(string(out)))
-			}
-		}
-		return a.GetPool(ctx, cleanID)
-	}
-
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	pool, ok := a.pools[cleanID]
-	if !ok {
-		return nil, fmt.Errorf("%w: zfs pool %q", domain.ErrNotFound, cleanID)
+	if !a.canUseHostZfs() {
+		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
 	if update.Sync != "" {
-		pool.Sync = update.Sync
+		if out, err := exec.CommandContext(ctx, "zfs", "set", "sync="+update.Sync, cleanID).CombinedOutput(); err != nil {
+			return nil, fmt.Errorf("zfs set sync failed: %v (%s)", err, strings.TrimSpace(string(out)))
+		}
 	}
 	if update.Autotrim != "" {
-		pool.Autotrim = update.Autotrim
+		if out, err := exec.CommandContext(ctx, "zpool", "set", "autotrim="+update.Autotrim, cleanID).CombinedOutput(); err != nil {
+			return nil, fmt.Errorf("zpool set autotrim failed: %v (%s)", err, strings.TrimSpace(string(out)))
+		}
 	}
 	if update.Compression != "" {
-		pool.Compression = update.Compression
+		if out, err := exec.CommandContext(ctx, "zfs", "set", "compression="+update.Compression, cleanID).CombinedOutput(); err != nil {
+			return nil, fmt.Errorf("zfs set compression failed: %v (%s)", err, strings.TrimSpace(string(out)))
+		}
 	}
-	a.pools[cleanID] = pool
-	cp := pool
-	return &cp, nil
+	return a.GetPool(ctx, cleanID)
 }
 
 func (a *Adapter) AddVdev(ctx context.Context, poolID string, req domain.ZfsAddVdevRequest) (*domain.ZfsPool, error) {
 	cleanID := strings.TrimPrefix(poolID, "zfsPools/")
-	if a.canUseHostZfs() {
-		args := []string{"add"}
-		vType := strings.ToLower(req.Type)
-		switch vType {
-		case "cache", "l2arc":
-			args = append(args, cleanID, "cache")
-			args = append(args, req.Devices...)
-		case "log", "slog":
-			args = append(args, cleanID, "log")
-			if strings.ToLower(req.Layout) == "mirror" {
-				args = append(args, "mirror")
-			}
-			args = append(args, req.Devices...)
-		case "special", "metadata":
-			args = append(args, cleanID, "special")
-			if strings.ToLower(req.Layout) == "mirror" {
-				args = append(args, "mirror")
-			}
-			args = append(args, req.Devices...)
-		case "dedup":
-			args = append(args, cleanID, "dedup")
-			if strings.ToLower(req.Layout) == "mirror" {
-				args = append(args, "mirror")
-			}
-			args = append(args, req.Devices...)
-		case "spare":
-			args = append(args, cleanID, "spare")
-			args = append(args, req.Devices...)
-		default: // data
-			args = append(args, cleanID)
-			layout := strings.ToLower(req.Layout)
-			if layout != "" && layout != "stripe" {
-				args = append(args, layout)
-			}
-			args = append(args, req.Devices...)
+	if !a.canUseHostZfs() {
+		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
+	}
+	args := []string{"add"}
+	vType := strings.ToLower(req.Type)
+	switch vType {
+	case "cache", "l2arc":
+		args = append(args, cleanID, "cache")
+		args = append(args, req.Devices...)
+	case "log", "slog":
+		args = append(args, cleanID, "log")
+		if strings.ToLower(req.Layout) == "mirror" {
+			args = append(args, "mirror")
 		}
-
-		if out, err := exec.CommandContext(ctx, "zpool", args...).CombinedOutput(); err != nil {
-			return nil, fmt.Errorf("zpool add failed: %v (%s)", err, strings.TrimSpace(string(out)))
+		args = append(args, req.Devices...)
+	case "special", "metadata":
+		args = append(args, cleanID, "special")
+		if strings.ToLower(req.Layout) == "mirror" {
+			args = append(args, "mirror")
 		}
-		return a.GetPool(ctx, cleanID)
+		args = append(args, req.Devices...)
+	case "dedup":
+		args = append(args, cleanID, "dedup")
+		if strings.ToLower(req.Layout) == "mirror" {
+			args = append(args, "mirror")
+		}
+		args = append(args, req.Devices...)
+	case "spare":
+		args = append(args, cleanID, "spare")
+		args = append(args, req.Devices...)
+	default: // data
+		args = append(args, cleanID)
+		layout := strings.ToLower(req.Layout)
+		if layout != "" && layout != "stripe" {
+			args = append(args, layout)
+		}
+		args = append(args, req.Devices...)
 	}
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	pool, ok := a.pools[cleanID]
-	if !ok {
-		return nil, fmt.Errorf("%w: zfs pool %q", domain.ErrNotFound, cleanID)
+	if out, err := exec.CommandContext(ctx, "zpool", args...).CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("zpool add failed: %v (%s)", err, strings.TrimSpace(string(out)))
 	}
-	vdevNode := domain.ZfsVdev{
-		Name:   fmt.Sprintf("%s-%d", req.Type, len(pool.Vdevs)+1),
-		Type:   req.Type,
-		Layout: req.Layout,
-		State:  "ONLINE",
-	}
-	for _, dev := range req.Devices {
-		vdevNode.Children = append(vdevNode.Children, domain.ZfsVdev{
-			Name:  dev,
-			Type:  req.Type,
-			State: "ONLINE",
-			Path:  dev,
-		})
-		pool.Devices = append(pool.Devices, dev)
-	}
-	pool.Vdevs = append(pool.Vdevs, vdevNode)
-	a.pools[cleanID] = pool
-	cp := pool
-	return &cp, nil
+	return a.GetPool(ctx, cleanID)
 }
 
 func (a *Adapter) RemoveVdev(ctx context.Context, poolID string, device string) (*domain.ZfsPool, error) {
 	cleanID := strings.TrimPrefix(poolID, "zfsPools/")
-	if a.canUseHostZfs() {
-		if out, err := exec.CommandContext(ctx, "zpool", "remove", cleanID, device).CombinedOutput(); err != nil {
-			return nil, fmt.Errorf("zpool remove failed: %v (%s)", err, strings.TrimSpace(string(out)))
-		}
-		return a.GetPool(ctx, cleanID)
+	if !a.canUseHostZfs() {
+		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
-
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	pool, ok := a.pools[cleanID]
-	if !ok {
-		return nil, fmt.Errorf("%w: zfs pool %q", domain.ErrNotFound, cleanID)
+	if out, err := exec.CommandContext(ctx, "zpool", "remove", cleanID, device).CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("zpool remove failed: %v (%s)", err, strings.TrimSpace(string(out)))
 	}
-	var newDevs []string
-	for _, d := range pool.Devices {
-		if d != device {
-			newDevs = append(newDevs, d)
-		}
-	}
-	pool.Devices = newDevs
-	a.pools[cleanID] = pool
-	cp := pool
-	return &cp, nil
+	return a.GetPool(ctx, cleanID)
 }
 
 // =============================================================================
@@ -839,67 +525,47 @@ func (a *Adapter) RemoveVdev(ctx context.Context, poolID string, device string) 
 // =============================================================================
 
 func (a *Adapter) getSnapshotsInfo(ctx context.Context, poolID string) (map[string]int32, map[string]string) {
-	counts := make(map[string]int32)
-	latest := make(map[string]string)
-
-	cmd := exec.CommandContext(ctx, "zfs", "list", "-j", "-p", "-t", "snapshot", "-r", poolID)
+	snapCounts := make(map[string]int32)
+	snapLatest := make(map[string]string)
+	cmd := exec.CommandContext(ctx, "zfs", "list", "-Hp", "-t", "snapshot", "-o", "name,creation", "-s", "creation", "-r", poolID)
 	out, err := cmd.Output()
 	if err != nil {
-		return counts, latest
+		return snapCounts, snapLatest
 	}
-	var snapJSON zfsListJSON
-	if err := json.Unmarshal(out, &snapJSON); err != nil {
-		return counts, latest
-	}
-	for name := range snapJSON.Datasets {
-		parts := strings.Split(name, "@")
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 1 {
+			continue
+		}
+		snapFullName := fields[0]
+		parts := strings.Split(snapFullName, "@")
 		if len(parts) == 2 {
-			dsName := parts[0]
-			counts[dsName]++
-			latest[dsName] = name
+			parentDS := parts[0]
+			snapCounts[parentDS]++
+			snapLatest[parentDS] = snapFullName
 		}
 	}
-	return counts, latest
+	return snapCounts, snapLatest
 }
 
 func (a *Adapter) ListDatasets(ctx context.Context, poolID string) ([]domain.ZfsDataset, error) {
 	cleanPool := strings.TrimPrefix(poolID, "zfsPools/")
-	if a.canUseHostZfs() {
-		datasets, err := a.listHostDatasets(ctx, cleanPool)
-		if err == nil {
-			a.mu.Lock()
-			if a.datasets[cleanPool] == nil {
-				a.datasets[cleanPool] = make(map[string]domain.ZfsDataset)
-			}
-			for _, d := range datasets {
-				a.datasets[cleanPool][d.ID] = d
-			}
-			a.mu.Unlock()
-			return datasets, nil
-		}
+	if !a.canUseHostZfs() {
+		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if _, exists := a.pools[cleanPool]; !exists {
-		return nil, fmt.Errorf("%w: zfs pool %q", domain.ErrNotFound, cleanPool)
-	}
-	dsMap := a.datasets[cleanPool]
-	out := make([]domain.ZfsDataset, 0, len(dsMap))
-	for _, ds := range dsMap {
-		out = append(out, ds)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].ID < out[j].ID
-	})
-	return out, nil
+	return a.listHostDatasets(ctx, cleanPool)
 }
 
 func (a *Adapter) listHostDatasets(ctx context.Context, poolID string) ([]domain.ZfsDataset, error) {
 	cmd := exec.CommandContext(ctx, "zfs", "list", "-j", "-p", "-r", "-t", "filesystem",
-		"-o", "name,type,used,available,referenced,mountpoint,compression,readonly,atime,recordsize,quota,sync,reservation,dedup", poolID)
+		"-o", "name,type,used,available,referenced,mountpoint,compression,readonly,atime,recordsize,sync,quota,reservation,dedup", poolID)
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, err
+		return []domain.ZfsDataset{}, nil
 	}
 	var zfsData zfsListJSON
 	if err := json.Unmarshal(out, &zfsData); err != nil {
@@ -914,11 +580,10 @@ func (a *Adapter) listHostDatasets(ctx context.Context, poolID string) ([]domain
 		if name != poolID && !strings.HasPrefix(name, poolID+"/") {
 			continue
 		}
-		var cleanID string
+		cleanID := strings.TrimPrefix(name, poolID+"/")
 		if name == poolID {
 			cleanID = "root"
 		} else {
-			cleanID = strings.TrimPrefix(name, poolID+"/")
 			cleanID = strings.ReplaceAll(cleanID, "/", "-")
 		}
 
@@ -928,157 +593,105 @@ func (a *Adapter) listHostDatasets(ctx context.Context, poolID string) ([]domain
 		quota, _ := strconv.ParseInt(item.Properties["quota"].Value, 10, 64)
 		resv, _ := strconv.ParseInt(item.Properties["reservation"].Value, 10, 64)
 
-		mountpoint := item.Properties["mountpoint"].Value
-		compression := item.Properties["compression"].Value
+		mp := item.Properties["mountpoint"].Value
+		if mp == "-" {
+			mp = ""
+		}
+
+		comp := item.Properties["compression"].Value
+		rec := formatRecordsize(item.Properties["recordsize"].Value)
+		sync := item.Properties["sync"].Value
 		readonly := item.Properties["readonly"].Value == "on"
 		atime := item.Properties["atime"].Value == "on"
-		recSize := formatRecordsize(item.Properties["recordsize"].Value)
-		sync := item.Properties["sync"].Value
 		dedup := item.Properties["dedup"].Value == "on"
 
 		datasets = append(datasets, domain.ZfsDataset{
 			PoolID:           poolID,
 			ID:               cleanID,
 			DatasetPath:      name,
-			Mountpoint:       mountpoint,
+			Mountpoint:       mp,
 			UsedBytes:        used,
 			AvailableBytes:   avail,
 			ReferencedBytes:  ref,
 			QuotaBytes:       quota,
-			Compression:      compression,
+			ReservationBytes: resv,
+			Compression:      comp,
 			Readonly:         readonly,
 			Atime:            atime,
-			Recordsize:       recSize,
+			Recordsize:       rec,
+			Sync:             sync,
+			Dedup:            dedup,
 			SnapshotsCount:   snapCounts[name],
 			LastSnapshot:     snapLatest[name],
-			Sync:             sync,
-			ReservationBytes: resv,
-			Dedup:            dedup,
 		})
 	}
 
 	sort.Slice(datasets, func(i, j int) bool {
-		// Root pool dataset always first
-		if datasets[i].DatasetPath == poolID {
-			return true
-		}
-		if datasets[j].DatasetPath == poolID {
-			return false
-		}
-		return datasets[i].DatasetPath < datasets[j].DatasetPath
+		return datasets[i].ID < datasets[j].ID
 	})
 	return datasets, nil
-}
-
-func (a *Adapter) resolveDatasetPath(cleanPool, datasetID string) string {
-	cleanDS := strings.TrimPrefix(datasetID, "datasets/")
-	if cleanDS == cleanPool || cleanDS == "root" || cleanDS == "" {
-		return cleanPool
-	}
-	if strings.HasPrefix(cleanDS, cleanPool+"/") {
-		return cleanDS
-	}
-	exact := fmt.Sprintf("%s/%s", cleanPool, cleanDS)
-	if a.canUseHostZfs() {
-		cmd := exec.Command("zfs", "list", "-H", "-o", "name", exact)
-		if err := cmd.Run(); err == nil {
-			return exact
-		}
-		if strings.Contains(cleanDS, "-") {
-			slashed := fmt.Sprintf("%s/%s", cleanPool, strings.ReplaceAll(cleanDS, "-", "/"))
-			cmdSlashed := exec.Command("zfs", "list", "-H", "-o", "name", slashed)
-			if err := cmdSlashed.Run(); err == nil {
-				return slashed
-			}
-		}
-	}
-	return exact
-}
-
-func (a *Adapter) resolveVolumePath(cleanPool, volumeID string) string {
-	cleanVol := strings.TrimPrefix(volumeID, "volumes/")
-	if strings.HasPrefix(cleanVol, cleanPool+"/") {
-		return cleanVol
-	}
-	exact := fmt.Sprintf("%s/%s", cleanPool, cleanVol)
-	if a.canUseHostZfs() {
-		cmd := exec.Command("zfs", "list", "-H", "-o", "name", exact)
-		if err := cmd.Run(); err == nil {
-			return exact
-		}
-		if strings.Contains(cleanVol, "-") {
-			slashed := fmt.Sprintf("%s/%s", cleanPool, strings.ReplaceAll(cleanVol, "-", "/"))
-			cmdSlashed := exec.Command("zfs", "list", "-H", "-o", "name", slashed)
-			if err := cmdSlashed.Run(); err == nil {
-				return slashed
-			}
-		}
-	}
-	return exact
 }
 
 func (a *Adapter) GetDataset(ctx context.Context, poolID, datasetID string) (*domain.ZfsDataset, error) {
 	cleanPool := strings.TrimPrefix(poolID, "zfsPools/")
 	cleanDS := strings.TrimPrefix(datasetID, "datasets/")
+	cleanDS = strings.TrimPrefix(cleanDS, cleanPool+"/")
 
-	if a.canUseHostZfs() {
-		targetPath := a.resolveDatasetPath(cleanPool, cleanDS)
-		cmd := exec.CommandContext(ctx, "zfs", "list", "-j", "-p", "-o",
-			"name,type,used,available,referenced,mountpoint,compression,readonly,atime,recordsize,quota,sync,reservation,dedup", targetPath)
-		if out, err := cmd.Output(); err == nil {
-			var zfsData zfsListJSON
-			if json.Unmarshal(out, &zfsData) == nil {
-				if item, ok := zfsData.Datasets[targetPath]; ok {
-					used, _ := strconv.ParseInt(item.Properties["used"].Value, 10, 64)
-					avail, _ := strconv.ParseInt(item.Properties["available"].Value, 10, 64)
-					ref, _ := strconv.ParseInt(item.Properties["referenced"].Value, 10, 64)
-					quota, _ := strconv.ParseInt(item.Properties["quota"].Value, 10, 64)
-					resv, _ := strconv.ParseInt(item.Properties["reservation"].Value, 10, 64)
+	if !a.canUseHostZfs() {
+		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
+	}
 
-					snapCounts, snapLatest := a.getSnapshotsInfo(ctx, cleanPool)
+	targetPath := datasetID
+	if !strings.Contains(targetPath, "/") {
+		if cleanDS == "root" || cleanDS == "" {
+			targetPath = cleanPool
+		} else {
+			targetPath = fmt.Sprintf("%s/%s", cleanPool, cleanDS)
+		}
+	}
 
-					return &domain.ZfsDataset{
-						PoolID:           cleanPool,
-						ID:               cleanDS,
-						DatasetPath:      targetPath,
-						Mountpoint:       item.Properties["mountpoint"].Value,
-						UsedBytes:        used,
-						AvailableBytes:   avail,
-						ReferencedBytes:  ref,
-						QuotaBytes:       quota,
-						Compression:      item.Properties["compression"].Value,
-						Readonly:         item.Properties["readonly"].Value == "on",
-						Atime:            item.Properties["atime"].Value == "on",
-						Recordsize:       formatRecordsize(item.Properties["recordsize"].Value),
-						SnapshotsCount:   snapCounts[targetPath],
-						LastSnapshot:     snapLatest[targetPath],
-						Sync:             item.Properties["sync"].Value,
-						ReservationBytes: resv,
-						Dedup:            item.Properties["dedup"].Value == "on",
-					}, nil
+	cmd := exec.CommandContext(ctx, "zfs", "list", "-j", "-p", "-o",
+		"name,type,used,available,referenced,mountpoint,compression,readonly,atime,recordsize,sync,quota,reservation,dedup", targetPath)
+	if out, err := cmd.Output(); err == nil {
+		var zfsData zfsListJSON
+		if json.Unmarshal(out, &zfsData) == nil {
+			if item, ok := zfsData.Datasets[targetPath]; ok {
+				snapCounts, snapLatest := a.getSnapshotsInfo(ctx, cleanPool)
+				used, _ := strconv.ParseInt(item.Properties["used"].Value, 10, 64)
+				avail, _ := strconv.ParseInt(item.Properties["available"].Value, 10, 64)
+				ref, _ := strconv.ParseInt(item.Properties["referenced"].Value, 10, 64)
+				quota, _ := strconv.ParseInt(item.Properties["quota"].Value, 10, 64)
+				resv, _ := strconv.ParseInt(item.Properties["reservation"].Value, 10, 64)
+
+				mp := item.Properties["mountpoint"].Value
+				if mp == "-" {
+					mp = ""
 				}
+
+				return &domain.ZfsDataset{
+					PoolID:           cleanPool,
+					ID:               cleanDS,
+					DatasetPath:      targetPath,
+					Mountpoint:       mp,
+					UsedBytes:        used,
+					AvailableBytes:   avail,
+					ReferencedBytes:  ref,
+					QuotaBytes:       quota,
+					ReservationBytes: resv,
+					Compression:      item.Properties["compression"].Value,
+					Readonly:         item.Properties["readonly"].Value == "on",
+					Atime:            item.Properties["atime"].Value == "on",
+					Recordsize:       formatRecordsize(item.Properties["recordsize"].Value),
+					Sync:             item.Properties["sync"].Value,
+					Dedup:            item.Properties["dedup"].Value == "on",
+					SnapshotsCount:   snapCounts[targetPath],
+					LastSnapshot:     snapLatest[targetPath],
+				}, nil
 			}
 		}
 	}
 
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	dsMap, ok := a.datasets[cleanPool]
-	if !ok {
-		return nil, fmt.Errorf("%w: zfs pool %q", domain.ErrNotFound, cleanPool)
-	}
-	ds, ok := dsMap[cleanDS]
-	if !ok {
-		ds, ok = dsMap[strings.ReplaceAll(cleanDS, "/", "-")]
-	}
-	if !ok {
-		ds, ok = dsMap[strings.ReplaceAll(cleanDS, "-", "/")]
-	}
-	if !ok {
-		return nil, fmt.Errorf("%w: zfs dataset %s/%s", domain.ErrNotFound, cleanPool, cleanDS)
-	}
-	cp := ds
-	return &cp, nil
+	return nil, fmt.Errorf("%w: zfs dataset %s/%s", domain.ErrNotFound, cleanPool, cleanDS)
 }
 
 func (a *Adapter) CreateDataset(ctx context.Context, dataset domain.ZfsDataset) (*domain.ZfsDataset, error) {
@@ -1087,69 +700,40 @@ func (a *Adapter) CreateDataset(ctx context.Context, dataset domain.ZfsDataset) 
 	if dataset.DatasetPath == "" {
 		dataset.DatasetPath = fmt.Sprintf("%s/%s", cleanPool, dataset.ID)
 	}
-	if dataset.Mountpoint == "" {
-		dataset.Mountpoint = "/" + dataset.DatasetPath
+
+	if !a.canUseHostZfs() {
+		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
 
-	if a.canUseHostZfs() {
-		args := []string{"create"}
-		if dataset.Mountpoint != "" {
-			args = append(args, "-o", "mountpoint="+dataset.Mountpoint)
-		}
-		if dataset.Compression != "" {
-			args = append(args, "-o", "compression="+dataset.Compression)
-		}
-		if dataset.Recordsize != "" {
-			args = append(args, "-o", "recordsize="+dataset.Recordsize)
-		}
-		if dataset.QuotaBytes > 0 {
-			args = append(args, "-o", fmt.Sprintf("quota=%d", dataset.QuotaBytes))
-		}
-		if dataset.ReservationBytes > 0 {
-			args = append(args, "-o", fmt.Sprintf("reservation=%d", dataset.ReservationBytes))
-		}
-		if dataset.Readonly {
-			args = append(args, "-o", "readonly=on")
-		}
-		if dataset.Sync != "" {
-			args = append(args, "-o", "sync="+dataset.Sync)
-		}
-		if dataset.Dedup {
-			args = append(args, "-o", "dedup=on")
-		}
-		if dataset.Atime {
-			args = append(args, "-o", "atime=on")
-		} else {
-			args = append(args, "-o", "atime=off")
-		}
-		args = append(args, dataset.DatasetPath)
-		if out, err := exec.CommandContext(ctx, "zfs", args...).CombinedOutput(); err != nil {
-			return nil, fmt.Errorf("zfs create failed: %v (%s)", err, strings.TrimSpace(string(out)))
-		}
-		return a.GetDataset(ctx, cleanPool, dataset.ID)
+	args := []string{"create"}
+	if dataset.Compression != "" {
+		args = append(args, "-o", "compression="+dataset.Compression)
 	}
-
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	pool, ok := a.pools[cleanPool]
-	if !ok {
-		return nil, fmt.Errorf("%w: zfs pool %q", domain.ErrNotFound, cleanPool)
+	if dataset.Mountpoint != "" {
+		args = append(args, "-o", "mountpoint="+dataset.Mountpoint)
 	}
-	if a.datasets[cleanPool] == nil {
-		a.datasets[cleanPool] = make(map[string]domain.ZfsDataset)
+	if dataset.Recordsize != "" {
+		args = append(args, "-o", "recordsize="+dataset.Recordsize)
 	}
-	if _, exists := a.datasets[cleanPool][dataset.ID]; exists {
-		return nil, fmt.Errorf("%w: dataset %s/%s", domain.ErrAlreadyExists, cleanPool, dataset.ID)
+	if dataset.QuotaBytes > 0 {
+		args = append(args, "-o", fmt.Sprintf("quota=%d", dataset.QuotaBytes))
 	}
-	dataset.UsedBytes = 98304
-	dataset.ReferencedBytes = 98304
-	dataset.AvailableBytes = pool.FreeBytes
-	if dataset.QuotaBytes > 0 && dataset.QuotaBytes < dataset.AvailableBytes {
-		dataset.AvailableBytes = dataset.QuotaBytes
+	if dataset.Sync != "" {
+		args = append(args, "-o", "sync="+dataset.Sync)
 	}
-	a.datasets[cleanPool][dataset.ID] = dataset
-	cp := dataset
-	return &cp, nil
+	if dataset.Readonly {
+		args = append(args, "-o", "readonly=on")
+	}
+	if dataset.Atime {
+		args = append(args, "-o", "atime=on")
+	} else {
+		args = append(args, "-o", "atime=off")
+	}
+	args = append(args, dataset.DatasetPath)
+	if out, err := exec.CommandContext(ctx, "zfs", args...).CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("zfs create failed: %v (%s)", err, strings.TrimSpace(string(out)))
+	}
+	return a.GetDataset(ctx, cleanPool, dataset.ID)
 }
 
 func (a *Adapter) UpdateDataset(ctx context.Context, dataset domain.ZfsDataset, fields []string) (*domain.ZfsDataset, error) {
@@ -1157,6 +741,10 @@ func (a *Adapter) UpdateDataset(ctx context.Context, dataset domain.ZfsDataset, 
 	targetPath := dataset.DatasetPath
 	if targetPath == "" {
 		targetPath = fmt.Sprintf("%s/%s", cleanPool, dataset.ID)
+	}
+
+	if !a.canUseHostZfs() {
+		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
 
 	applyAll := len(fields) == 0
@@ -1172,117 +760,67 @@ func (a *Adapter) UpdateDataset(ctx context.Context, dataset domain.ZfsDataset, 
 		return false
 	}
 
-	if a.canUseHostZfs() {
-		if hasField("compression") && dataset.Compression != "" {
-			_ = exec.CommandContext(ctx, "zfs", "set", "compression="+dataset.Compression, targetPath).Run()
-		}
-		if hasField("quota_bytes") || hasField("quotaBytes") {
-			_ = exec.CommandContext(ctx, "zfs", "set", fmt.Sprintf("quota=%d", dataset.QuotaBytes), targetPath).Run()
-		}
-		if hasField("readonly") {
-			val := "off"
-			if dataset.Readonly {
-				val = "on"
-			}
-			_ = exec.CommandContext(ctx, "zfs", "set", "readonly="+val, targetPath).Run()
-		}
-		if hasField("atime") {
-			val := "off"
-			if dataset.Atime {
-				val = "on"
-			}
-			_ = exec.CommandContext(ctx, "zfs", "set", "atime="+val, targetPath).Run()
-		}
-		if hasField("recordsize") && dataset.Recordsize != "" {
-			_ = exec.CommandContext(ctx, "zfs", "set", "recordsize="+dataset.Recordsize, targetPath).Run()
-		}
-		if hasField("mountpoint") && dataset.Mountpoint != "" {
-			_ = exec.CommandContext(ctx, "zfs", "set", "mountpoint="+dataset.Mountpoint, targetPath).Run()
-		}
-		if hasField("sync") && dataset.Sync != "" {
-			_ = exec.CommandContext(ctx, "zfs", "set", "sync="+dataset.Sync, targetPath).Run()
-		}
-		if hasField("reservation_bytes") || hasField("reservationBytes") {
-			_ = exec.CommandContext(ctx, "zfs", "set", fmt.Sprintf("reservation=%d", dataset.ReservationBytes), targetPath).Run()
-		}
-		if hasField("dedup") {
-			val := "off"
-			if dataset.Dedup {
-				val = "on"
-			}
-			_ = exec.CommandContext(ctx, "zfs", "set", "dedup="+val, targetPath).Run()
-		}
-		return a.GetDataset(ctx, cleanPool, dataset.ID)
-	}
-
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	dsMap, ok := a.datasets[cleanPool]
-	if !ok {
-		return nil, fmt.Errorf("%w: zfs pool %q", domain.ErrNotFound, cleanPool)
-	}
-	existing, ok := dsMap[dataset.ID]
-	if !ok {
-		return nil, fmt.Errorf("%w: zfs dataset %s/%s", domain.ErrNotFound, cleanPool, dataset.ID)
-	}
 	if hasField("compression") && dataset.Compression != "" {
-		existing.Compression = dataset.Compression
+		_ = exec.CommandContext(ctx, "zfs", "set", "compression="+dataset.Compression, targetPath).Run()
 	}
 	if hasField("quota_bytes") || hasField("quotaBytes") {
-		existing.QuotaBytes = dataset.QuotaBytes
+		_ = exec.CommandContext(ctx, "zfs", "set", fmt.Sprintf("quota=%d", dataset.QuotaBytes), targetPath).Run()
 	}
 	if hasField("readonly") {
-		existing.Readonly = dataset.Readonly
+		val := "off"
+		if dataset.Readonly {
+			val = "on"
+		}
+		_ = exec.CommandContext(ctx, "zfs", "set", "readonly="+val, targetPath).Run()
 	}
 	if hasField("atime") {
-		existing.Atime = dataset.Atime
+		val := "off"
+		if dataset.Atime {
+			val = "on"
+		}
+		_ = exec.CommandContext(ctx, "zfs", "set", "atime="+val, targetPath).Run()
 	}
 	if hasField("recordsize") && dataset.Recordsize != "" {
-		existing.Recordsize = dataset.Recordsize
+		_ = exec.CommandContext(ctx, "zfs", "set", "recordsize="+dataset.Recordsize, targetPath).Run()
 	}
 	if hasField("mountpoint") && dataset.Mountpoint != "" {
-		existing.Mountpoint = dataset.Mountpoint
+		_ = exec.CommandContext(ctx, "zfs", "set", "mountpoint="+dataset.Mountpoint, targetPath).Run()
 	}
 	if hasField("sync") && dataset.Sync != "" {
-		existing.Sync = dataset.Sync
+		_ = exec.CommandContext(ctx, "zfs", "set", "sync="+dataset.Sync, targetPath).Run()
 	}
 	if hasField("reservation_bytes") || hasField("reservationBytes") {
-		existing.ReservationBytes = dataset.ReservationBytes
+		_ = exec.CommandContext(ctx, "zfs", "set", fmt.Sprintf("reservation=%d", dataset.ReservationBytes), targetPath).Run()
 	}
 	if hasField("dedup") {
-		existing.Dedup = dataset.Dedup
+		val := "off"
+		if dataset.Dedup {
+			val = "on"
+		}
+		_ = exec.CommandContext(ctx, "zfs", "set", "dedup="+val, targetPath).Run()
 	}
-	dsMap[dataset.ID] = existing
-	cp := existing
-	return &cp, nil
+	return a.GetDataset(ctx, cleanPool, dataset.ID)
 }
 
 func (a *Adapter) DeleteDataset(ctx context.Context, poolID, datasetID string, recursive bool) error {
 	cleanPool := strings.TrimPrefix(poolID, "zfsPools/")
 	cleanDS := strings.TrimPrefix(datasetID, "datasets/")
-	targetPath := a.resolveDatasetPath(cleanPool, cleanDS)
-
-	if cleanDS == cleanPool || cleanDS == "" || cleanDS == "root" {
-		return fmt.Errorf("cannot delete root dataset of pool %q; delete the pool instead", cleanPool)
+	if !a.canUseHostZfs() {
+		return fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
 
-	if a.canUseHostZfs() {
-		args := []string{"destroy"}
-		if recursive {
-			args = append(args, "-r")
-		}
-		args = append(args, targetPath)
-		if out, err := exec.CommandContext(ctx, "zfs", args...).CombinedOutput(); err != nil {
-			return fmt.Errorf("zfs destroy failed: %v (%s)", err, strings.TrimSpace(string(out)))
-		}
+	targetPath := datasetID
+	if !strings.Contains(targetPath, "/") {
+		targetPath = fmt.Sprintf("%s/%s", cleanPool, cleanDS)
 	}
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if dsMap, ok := a.datasets[cleanPool]; ok {
-		delete(dsMap, cleanDS)
-		delete(dsMap, strings.ReplaceAll(cleanDS, "/", "-"))
-		delete(dsMap, strings.ReplaceAll(cleanDS, "-", "/"))
+	args := []string{"destroy"}
+	if recursive {
+		args = append(args, "-r")
+	}
+	args = append(args, targetPath)
+	if out, err := exec.CommandContext(ctx, "zfs", args...).CombinedOutput(); err != nil {
+		return fmt.Errorf("zfs destroy failed: %v (%s)", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
@@ -1290,73 +828,66 @@ func (a *Adapter) DeleteDataset(ctx context.Context, poolID, datasetID string, r
 func (a *Adapter) SnapshotDataset(ctx context.Context, poolID, datasetID, snapName string) (*domain.ZfsDataset, error) {
 	cleanPool := strings.TrimPrefix(poolID, "zfsPools/")
 	cleanDS := strings.TrimPrefix(datasetID, "datasets/")
-	targetPath := a.resolveDatasetPath(cleanPool, cleanDS)
-
-	if a.canUseHostZfs() {
-		snapTarget := fmt.Sprintf("%s@%s", targetPath, snapName)
-		if out, err := exec.CommandContext(ctx, "zfs", "snapshot", snapTarget).CombinedOutput(); err != nil {
-			return nil, fmt.Errorf("zfs snapshot failed: %v (%s)", err, strings.TrimSpace(string(out)))
-		}
-		return a.GetDataset(ctx, cleanPool, datasetID)
+	if !a.canUseHostZfs() {
+		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	dsMap, ok := a.datasets[cleanPool]
-	if !ok {
-		return nil, fmt.Errorf("%w: zfs pool %q", domain.ErrNotFound, cleanPool)
+	targetPath := datasetID
+	if !strings.Contains(targetPath, "/") {
+		targetPath = fmt.Sprintf("%s/%s", cleanPool, cleanDS)
 	}
-	ds, ok := dsMap[cleanDS]
-	if !ok {
-		ds, ok = dsMap[strings.ReplaceAll(cleanDS, "/", "-")]
+
+	snapTarget := fmt.Sprintf("%s@%s", targetPath, snapName)
+	if out, err := exec.CommandContext(ctx, "zfs", "snapshot", snapTarget).CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("zfs snapshot failed: %v (%s)", err, strings.TrimSpace(string(out)))
 	}
-	if !ok {
-		ds, ok = dsMap[strings.ReplaceAll(cleanDS, "-", "/")]
+	return a.GetDataset(ctx, cleanPool, cleanDS)
+}
+
+func (a *Adapter) RollbackDataset(ctx context.Context, poolID, datasetID, snapName string) (*domain.ZfsDataset, error) {
+	cleanPool := strings.TrimPrefix(poolID, "zfsPools/")
+	cleanDS := strings.TrimPrefix(datasetID, "datasets/")
+	if !a.canUseHostZfs() {
+		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
-	if !ok {
-		return nil, fmt.Errorf("%w: zfs dataset %s/%s", domain.ErrNotFound, cleanPool, cleanDS)
+
+	targetPath := datasetID
+	if !strings.Contains(targetPath, "/") {
+		targetPath = fmt.Sprintf("%s/%s", cleanPool, cleanDS)
 	}
-	ds.SnapshotsCount++
-	ds.LastSnapshot = fmt.Sprintf("%s@%s", targetPath, snapName)
-	dsMap[ds.ID] = ds
-	cp := ds
-	return &cp, nil
+
+	snapTarget := fmt.Sprintf("%s@%s", targetPath, snapName)
+	if out, err := exec.CommandContext(ctx, "zfs", "rollback", "-r", snapTarget).CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("zfs rollback failed: %v (%s)", err, strings.TrimSpace(string(out)))
+	}
+	return a.GetDataset(ctx, cleanPool, cleanDS)
 }
 
 // =============================================================================
 // ZFS Volumes (ZVols)
 // =============================================================================
 
+func (a *Adapter) resolveVolumePath(cleanPool, cleanVol string) string {
+	if strings.Contains(cleanVol, "/") {
+		if strings.HasPrefix(cleanVol, cleanPool+"/") {
+			return cleanVol
+		}
+		return fmt.Sprintf("%s/%s", cleanPool, cleanVol)
+	}
+	// Try slash-separated if cleanVol has hyphens
+	slashCandidate := fmt.Sprintf("%s/%s", cleanPool, strings.ReplaceAll(cleanVol, "-", "/"))
+	if _, err := exec.Command("zfs", "list", "-t", "volume", slashCandidate).Output(); err == nil {
+		return slashCandidate
+	}
+	return fmt.Sprintf("%s/%s", cleanPool, cleanVol)
+}
+
 func (a *Adapter) ListVolumes(ctx context.Context, poolID string) ([]domain.ZfsVolume, error) {
 	cleanPool := strings.TrimPrefix(poolID, "zfsPools/")
-	if a.canUseHostZfs() {
-		volumes, err := a.listHostVolumes(ctx, cleanPool)
-		if err == nil {
-			a.mu.Lock()
-			if a.volumes[cleanPool] == nil {
-				a.volumes[cleanPool] = make(map[string]domain.ZfsVolume)
-			}
-			for _, v := range volumes {
-				a.volumes[cleanPool][v.ID] = v
-			}
-			a.mu.Unlock()
-			return volumes, nil
-		}
+	if !a.canUseHostZfs() {
+		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if _, exists := a.pools[cleanPool]; !exists {
-		return nil, fmt.Errorf("%w: zfs pool %q", domain.ErrNotFound, cleanPool)
-	}
-	volMap := a.volumes[cleanPool]
-	out := make([]domain.ZfsVolume, 0, len(volMap))
-	for _, v := range volMap {
-		out = append(out, v)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].ID < out[j].ID
-	})
-	return out, nil
+	return a.listHostVolumes(ctx, cleanPool)
 }
 
 func (a *Adapter) listHostVolumes(ctx context.Context, poolID string) ([]domain.ZfsVolume, error) {
@@ -1364,7 +895,7 @@ func (a *Adapter) listHostVolumes(ctx context.Context, poolID string) ([]domain.
 		"-o", "name,type,used,available,volsize,volblocksize,compression,refreservation,sync,readonly,dedup", poolID)
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, err
+		return []domain.ZfsVolume{}, nil
 	}
 	var zfsData zfsListJSON
 	if err := json.Unmarshal(out, &zfsData); err != nil {
@@ -1417,56 +948,41 @@ func (a *Adapter) GetVolume(ctx context.Context, poolID, volumeID string) (*doma
 	cleanPool := strings.TrimPrefix(poolID, "zfsPools/")
 	cleanVol := strings.TrimPrefix(volumeID, "volumes/")
 
-	if a.canUseHostZfs() {
-		targetPath := a.resolveVolumePath(cleanPool, cleanVol)
-		cmd := exec.CommandContext(ctx, "zfs", "list", "-j", "-p", "-o",
-			"name,type,used,available,volsize,volblocksize,compression,refreservation,sync,readonly,dedup", targetPath)
-		if out, err := cmd.Output(); err == nil {
-			var zfsData zfsListJSON
-			if json.Unmarshal(out, &zfsData) == nil {
-				if item, ok := zfsData.Datasets[targetPath]; ok {
-					volSize, _ := strconv.ParseInt(item.Properties["volsize"].Value, 10, 64)
-					used, _ := strconv.ParseInt(item.Properties["used"].Value, 10, 64)
-					refres, _ := strconv.ParseInt(item.Properties["refreservation"].Value, 10, 64)
-					thin := refres == 0 || refres < volSize
+	if !a.canUseHostZfs() {
+		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
+	}
 
-					return &domain.ZfsVolume{
-						PoolID:          cleanPool,
-						ID:              cleanVol,
-						VolumePath:      targetPath,
-						DevicePath:      fmt.Sprintf("/dev/zvol/%s", targetPath),
-						SizeBytes:       volSize,
-						UsedBytes:       used,
-						Volblocksize:    formatRecordsize(item.Properties["volblocksize"].Value),
-						Compression:     item.Properties["compression"].Value,
-						ThinProvisioned: thin,
-						Sync:            item.Properties["sync"].Value,
-						Readonly:        item.Properties["readonly"].Value == "on",
-						Dedup:           item.Properties["dedup"].Value == "on",
-					}, nil
-				}
+	targetPath := a.resolveVolumePath(cleanPool, cleanVol)
+	cmd := exec.CommandContext(ctx, "zfs", "list", "-j", "-p", "-o",
+		"name,type,used,available,volsize,volblocksize,compression,refreservation,sync,readonly,dedup", targetPath)
+	if out, err := cmd.Output(); err == nil {
+		var zfsData zfsListJSON
+		if json.Unmarshal(out, &zfsData) == nil {
+			if item, ok := zfsData.Datasets[targetPath]; ok {
+				volSize, _ := strconv.ParseInt(item.Properties["volsize"].Value, 10, 64)
+				used, _ := strconv.ParseInt(item.Properties["used"].Value, 10, 64)
+				refres, _ := strconv.ParseInt(item.Properties["refreservation"].Value, 10, 64)
+				thin := refres == 0 || refres < volSize
+
+				return &domain.ZfsVolume{
+					PoolID:          cleanPool,
+					ID:              cleanVol,
+					VolumePath:      targetPath,
+					DevicePath:      fmt.Sprintf("/dev/zvol/%s", targetPath),
+					SizeBytes:       volSize,
+					UsedBytes:       used,
+					Volblocksize:    formatRecordsize(item.Properties["volblocksize"].Value),
+					Compression:     item.Properties["compression"].Value,
+					ThinProvisioned: thin,
+					Sync:            item.Properties["sync"].Value,
+					Readonly:        item.Properties["readonly"].Value == "on",
+					Dedup:           item.Properties["dedup"].Value == "on",
+				}, nil
 			}
 		}
 	}
 
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	volMap, ok := a.volumes[cleanPool]
-	if !ok {
-		return nil, fmt.Errorf("%w: zfs pool %q", domain.ErrNotFound, cleanPool)
-	}
-	vol, ok := volMap[cleanVol]
-	if !ok {
-		vol, ok = volMap[strings.ReplaceAll(cleanVol, "/", "-")]
-	}
-	if !ok {
-		vol, ok = volMap[strings.ReplaceAll(cleanVol, "-", "/")]
-	}
-	if !ok {
-		return nil, fmt.Errorf("%w: zfs volume %s/%s", domain.ErrNotFound, cleanPool, cleanVol)
-	}
-	cp := vol
-	return &cp, nil
+	return nil, fmt.Errorf("%w: zfs volume %s/%s", domain.ErrNotFound, cleanPool, cleanVol)
 }
 
 func (a *Adapter) CreateVolume(ctx context.Context, volume domain.ZfsVolume) (*domain.ZfsVolume, error) {
@@ -1479,53 +995,35 @@ func (a *Adapter) CreateVolume(ctx context.Context, volume domain.ZfsVolume) (*d
 		volume.DevicePath = fmt.Sprintf("/dev/zvol/%s", volume.VolumePath)
 	}
 
-	if a.canUseHostZfs() {
-		args := []string{"create"}
-		if volume.ThinProvisioned {
-			args = append(args, "-s")
-		}
-		args = append(args, "-V", fmt.Sprintf("%d", volume.SizeBytes))
-		if volume.Volblocksize != "" {
-			args = append(args, "-b", volume.Volblocksize)
-		}
-		if volume.Compression != "" {
-			args = append(args, "-o", "compression="+volume.Compression)
-		}
-		if volume.Sync != "" {
-			args = append(args, "-o", "sync="+volume.Sync)
-		}
-		if volume.Readonly {
-			args = append(args, "-o", "readonly=on")
-		}
-		if volume.Dedup {
-			args = append(args, "-o", "dedup=on")
-		}
-		args = append(args, volume.VolumePath)
-		if out, err := exec.CommandContext(ctx, "zfs", args...).CombinedOutput(); err != nil {
-			return nil, fmt.Errorf("zfs create -V failed: %v (%s)", err, strings.TrimSpace(string(out)))
-		}
-		return a.GetVolume(ctx, cleanPool, volume.ID)
+	if !a.canUseHostZfs() {
+		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if _, ok := a.pools[cleanPool]; !ok {
-		return nil, fmt.Errorf("%w: zfs pool %q", domain.ErrNotFound, cleanPool)
-	}
-	if a.volumes[cleanPool] == nil {
-		a.volumes[cleanPool] = make(map[string]domain.ZfsVolume)
-	}
-	if _, exists := a.volumes[cleanPool][volume.ID]; exists {
-		return nil, fmt.Errorf("%w: zfs volume %s/%s", domain.ErrAlreadyExists, cleanPool, volume.ID)
-	}
+	args := []string{"create"}
 	if volume.ThinProvisioned {
-		volume.UsedBytes = 65536
-	} else {
-		volume.UsedBytes = volume.SizeBytes / 10
+		args = append(args, "-s")
 	}
-	a.volumes[cleanPool][volume.ID] = volume
-	cp := volume
-	return &cp, nil
+	args = append(args, "-V", fmt.Sprintf("%d", volume.SizeBytes))
+	if volume.Volblocksize != "" {
+		args = append(args, "-b", volume.Volblocksize)
+	}
+	if volume.Compression != "" {
+		args = append(args, "-o", "compression="+volume.Compression)
+	}
+	if volume.Sync != "" {
+		args = append(args, "-o", "sync="+volume.Sync)
+	}
+	if volume.Readonly {
+		args = append(args, "-o", "readonly=on")
+	}
+	if volume.Dedup {
+		args = append(args, "-o", "dedup=on")
+	}
+	args = append(args, volume.VolumePath)
+	if out, err := exec.CommandContext(ctx, "zfs", args...).CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("zfs create -V failed: %v (%s)", err, strings.TrimSpace(string(out)))
+	}
+	return a.GetVolume(ctx, cleanPool, volume.ID)
 }
 
 func (a *Adapter) UpdateVolume(ctx context.Context, volume domain.ZfsVolume, fields []string) (*domain.ZfsVolume, error) {
@@ -1533,6 +1031,10 @@ func (a *Adapter) UpdateVolume(ctx context.Context, volume domain.ZfsVolume, fie
 	targetPath := volume.VolumePath
 	if targetPath == "" {
 		targetPath = fmt.Sprintf("%s/%s", cleanPool, volume.ID)
+	}
+
+	if !a.canUseHostZfs() {
+		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
 
 	applyAll := len(fields) == 0
@@ -1548,83 +1050,47 @@ func (a *Adapter) UpdateVolume(ctx context.Context, volume domain.ZfsVolume, fie
 		return false
 	}
 
-	if a.canUseHostZfs() {
-		if hasField("size_bytes") || hasField("sizeBytes") || (applyAll && volume.SizeBytes > 0) {
-			if volume.SizeBytes > 0 {
-				_ = exec.CommandContext(ctx, "zfs", "set", fmt.Sprintf("volsize=%d", volume.SizeBytes), targetPath).Run()
-			}
-		}
-		if hasField("compression") && volume.Compression != "" {
-			_ = exec.CommandContext(ctx, "zfs", "set", "compression="+volume.Compression, targetPath).Run()
-		}
-		if hasField("sync") && volume.Sync != "" {
-			_ = exec.CommandContext(ctx, "zfs", "set", "sync="+volume.Sync, targetPath).Run()
-		}
-		if hasField("thin_provisioned") || hasField("thinProvisioned") {
-			if volume.ThinProvisioned {
-				_ = exec.CommandContext(ctx, "zfs", "set", "refreservation=none", targetPath).Run()
-			} else {
-				volSize := volume.SizeBytes
-				if volSize <= 0 {
-					if existing, err := a.GetVolume(ctx, cleanPool, volume.ID); err == nil && existing != nil {
-						volSize = existing.SizeBytes
-					}
-				}
-				if volSize > 0 {
-					_ = exec.CommandContext(ctx, "zfs", "set", fmt.Sprintf("refreservation=%d", volSize), targetPath).Run()
-				}
-			}
-		}
-		if hasField("readonly") {
-			val := "off"
-			if volume.Readonly {
-				val = "on"
-			}
-			_ = exec.CommandContext(ctx, "zfs", "set", "readonly="+val, targetPath).Run()
-		}
-		if hasField("dedup") {
-			val := "off"
-			if volume.Dedup {
-				val = "on"
-			}
-			_ = exec.CommandContext(ctx, "zfs", "set", "dedup="+val, targetPath).Run()
-		}
-		return a.GetVolume(ctx, cleanPool, volume.ID)
-	}
-
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	volMap, ok := a.volumes[cleanPool]
-	if !ok {
-		return nil, fmt.Errorf("%w: zfs pool %q", domain.ErrNotFound, cleanPool)
-	}
-	existing, ok := volMap[volume.ID]
-	if !ok {
-		return nil, fmt.Errorf("%w: zfs volume %s/%s", domain.ErrNotFound, cleanPool, volume.ID)
-	}
-	if hasField("size_bytes") || hasField("sizeBytes") || volume.SizeBytes > 0 {
+	if hasField("size_bytes") || hasField("sizeBytes") || (applyAll && volume.SizeBytes > 0) {
 		if volume.SizeBytes > 0 {
-			existing.SizeBytes = volume.SizeBytes
+			_ = exec.CommandContext(ctx, "zfs", "set", fmt.Sprintf("volsize=%d", volume.SizeBytes), targetPath).Run()
 		}
 	}
 	if hasField("compression") && volume.Compression != "" {
-		existing.Compression = volume.Compression
+		_ = exec.CommandContext(ctx, "zfs", "set", "compression="+volume.Compression, targetPath).Run()
 	}
 	if hasField("sync") && volume.Sync != "" {
-		existing.Sync = volume.Sync
+		_ = exec.CommandContext(ctx, "zfs", "set", "sync="+volume.Sync, targetPath).Run()
 	}
 	if hasField("thin_provisioned") || hasField("thinProvisioned") {
-		existing.ThinProvisioned = volume.ThinProvisioned
+		if volume.ThinProvisioned {
+			_ = exec.CommandContext(ctx, "zfs", "set", "refreservation=none", targetPath).Run()
+		} else {
+			volSize := volume.SizeBytes
+			if volSize <= 0 {
+				if existing, err := a.GetVolume(ctx, cleanPool, volume.ID); err == nil && existing != nil {
+					volSize = existing.SizeBytes
+				}
+			}
+			if volSize > 0 {
+				_ = exec.CommandContext(ctx, "zfs", "set", fmt.Sprintf("refreservation=%d", volSize), targetPath).Run()
+			}
+		}
 	}
 	if hasField("readonly") {
-		existing.Readonly = volume.Readonly
+		val := "off"
+		if volume.Readonly {
+			val = "on"
+		}
+		_ = exec.CommandContext(ctx, "zfs", "set", "readonly="+val, targetPath).Run()
 	}
 	if hasField("dedup") {
-		existing.Dedup = volume.Dedup
+		val := "off"
+		if volume.Dedup {
+			val = "on"
+		}
+		_ = exec.CommandContext(ctx, "zfs", "set", "dedup="+val, targetPath).Run()
 	}
-	volMap[volume.ID] = existing
-	cp := existing
-	return &cp, nil
+	return a.GetVolume(ctx, cleanPool, volume.ID)
 }
 
 func (a *Adapter) DeleteVolume(ctx context.Context, poolID, volumeID string) error {
@@ -1632,18 +1098,12 @@ func (a *Adapter) DeleteVolume(ctx context.Context, poolID, volumeID string) err
 	cleanVol := strings.TrimPrefix(volumeID, "volumes/")
 	targetPath := a.resolveVolumePath(cleanPool, cleanVol)
 
-	if a.canUseHostZfs() {
-		if out, err := exec.CommandContext(ctx, "zfs", "destroy", targetPath).CombinedOutput(); err != nil {
-			return fmt.Errorf("zfs destroy volume failed: %v (%s)", err, strings.TrimSpace(string(out)))
-		}
+	if !a.canUseHostZfs() {
+		return fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if volMap, ok := a.volumes[cleanPool]; ok {
-		delete(volMap, cleanVol)
-		delete(volMap, strings.ReplaceAll(cleanVol, "/", "-"))
-		delete(volMap, strings.ReplaceAll(cleanVol, "-", "/"))
+	if out, err := exec.CommandContext(ctx, "zfs", "destroy", targetPath).CombinedOutput(); err != nil {
+		return fmt.Errorf("zfs destroy volume failed: %v (%s)", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }

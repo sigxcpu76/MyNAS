@@ -685,9 +685,6 @@ export class HttpPrerequisiteAdapter implements PrerequisitePort {
       prerequisites: items,
       installedCount: Number(raw.installedCount ?? raw.installed_count ?? installedItems.length),
       missingCount: Number(raw.missingCount ?? raw.missing_count ?? missingItems.length),
-      hybridFallbackEnabled: Boolean(
-        raw.hybridFallbackEnabled ?? raw.hybrid_fallback_enabled ?? false
-      ),
       linuxFlavor: mapLinuxFlavor(raw.linuxFlavor ?? raw.linux_flavor),
       missingPrerequisites: missingItems.length > 0 ? missingItems : items.filter((p: Prerequisite) => p.status !== 'INSTALLED'),
       installedPrerequisites: installedItems.length > 0 ? installedItems : items.filter((p: Prerequisite) => p.status === 'INSTALLED'),

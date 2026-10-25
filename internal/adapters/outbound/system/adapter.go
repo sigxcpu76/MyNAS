@@ -19,16 +19,12 @@ type Adapter struct {
 	mu            sync.RWMutex
 	zfsPort       ports.ZfsEnginePort
 	prereqChecker ports.PrerequisiteCheckerPort
-	simulated     bool
-	simulatedPools map[string]domain.DiscoveredPool
 }
 
-func NewAdapter(zfsPort ports.ZfsEnginePort, prereqChecker ports.PrerequisiteCheckerPort, simulated bool) *Adapter {
+func NewAdapter(zfsPort ports.ZfsEnginePort, prereqChecker ports.PrerequisiteCheckerPort) *Adapter {
 	a := &Adapter{
 		zfsPort:       zfsPort,
 		prereqChecker: prereqChecker,
-		simulated:     simulated,
-		simulatedPools: make(map[string]domain.DiscoveredPool),
 	}
 
 	// Sync initial main pool from config
@@ -64,8 +60,6 @@ func (a *Adapter) GetConfig(ctx context.Context) (*domain.SystemConfig, error) {
 			if ds.Mountpoint != "" && ds.Mountpoint != "none" && ds.Mountpoint != "legacy" {
 				systemMountpoint = ds.Mountpoint
 			}
-		} else if a.simulated {
-			isInit = true
 		}
 	}
 
@@ -127,7 +121,7 @@ func (a *Adapter) SelectMainPool(ctx context.Context, poolName string, autoImpor
 			DatasetPath: datasetPath,
 			Mountpoint:  mountpoint,
 		})
-		if createErr != nil && !a.simulated {
+		if createErr != nil {
 			return nil, fmt.Errorf("failed to create system dataset %s: %w", datasetPath, createErr)
 		}
 	} else if existingDs != nil && existingDs.Mountpoint != "" && existingDs.Mountpoint != "none" {

@@ -10,9 +10,9 @@ import (
 
 func TestPrereqChecker(t *testing.T) {
 	ctx := context.Background()
-	checker := prereq.NewSystemChecker(true)
+	checker := prereq.NewSystemChecker()
 
-	results, fallback, err := checker.CheckAll(ctx)
+	results, err := checker.CheckAll(ctx)
 	if err != nil {
 		t.Fatalf("CheckAll failed: %v", err)
 	}
@@ -22,21 +22,19 @@ func TestPrereqChecker(t *testing.T) {
 	}
 
 	for _, p := range results {
-		t.Logf("Prereq %s (%s): %s [v: %s] fallback=%v (details: %s)",
-			p.ID, p.Category, p.Status, p.Version, p.FallbackMode, p.Details)
+		t.Logf("Prereq %s (%s): %s [v: %s] (details: %s)",
+			p.ID, p.Category, p.Status, p.Version, p.Details)
 		if p.ID == "zfs-module" || p.ID == "libzfs" {
 			if p.Status == domain.StatusInstalled {
 				t.Logf("Verified ZFS kernel/lib loaded: %s", p.Version)
 			}
 		}
 	}
-
-	_ = fallback
 }
 
 func TestPrerequisitesReport(t *testing.T) {
 	ctx := context.Background()
-	checker := prereq.NewSystemChecker(false)
+	checker := prereq.NewSystemChecker()
 
 	report, err := checker.GetReport(ctx)
 	if err != nil {

@@ -35,20 +35,18 @@ import (
 )
 
 type StartOptions struct {
-	HTTPPort   int
-	GRPCPort   int
-	HybridMode bool
-	StateDir   string
-	JWTSecret  string
+	HTTPPort  int
+	GRPCPort  int
+	StateDir  string
+	JWTSecret string
 }
 
 func newStartCmd(rootOpts *RootOptions) *cobra.Command {
 	opts := &StartOptions{
-		HTTPPort:   8080,
-		GRPCPort:   9090,
-		HybridMode: false,
-		StateDir:   "/tmp/nas-state",
-		JWTSecret:  "nas-production-secret-2026",
+		HTTPPort:  8080,
+		GRPCPort:  9090,
+		StateDir:  "/tmp/nas-state",
+		JWTSecret: "nas-production-secret-2026",
 	}
 
 	cmd := &cobra.Command{
@@ -61,7 +59,6 @@ func newStartCmd(rootOpts *RootOptions) *cobra.Command {
 
 	cmd.Flags().IntVar(&opts.HTTPPort, "http-port", opts.HTTPPort, "HTTP/WebUI/gRPC-Gateway/WebDAV/noVNC listen port")
 	cmd.Flags().IntVar(&opts.GRPCPort, "grpc-port", opts.GRPCPort, "Native gRPC API server listen port")
-	cmd.Flags().BoolVar(&opts.HybridMode, "hybrid", opts.HybridMode, "Enable hybrid sandbox fallback when host tools or libraries are missing")
 	cmd.Flags().StringVar(&opts.StateDir, "state-dir", opts.StateDir, "Directory for NAS share & config state")
 	cmd.Flags().StringVar(&opts.JWTSecret, "jwt-secret", opts.JWTSecret, "HMAC secret for JWT issuance")
 
@@ -106,9 +103,6 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	if opts.GRPCPort != 9090 || cfg.Server.GRPCPort == 0 {
 		cfg.Server.GRPCPort = opts.GRPCPort
 	}
-	if opts.HybridMode {
-		cfg.Server.HybridMode = true
-	}
 	if opts.StateDir != "/tmp/nas-state" && opts.StateDir != "" {
 		cfg.Server.StateDir = opts.StateDir
 	}
@@ -117,13 +111,11 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	}
 
 	// 1. Outbound Prerequisite Checker & ZFS Engine
-	prereqAdapter := prereq.NewSystemChecker(cfg.Server.HybridMode)
-	zfsHasHost := prereqAdapter.HasHostPrerequisites("zfs")
-	zfsHybrid := !zfsHasHost
-	zfsAdapter := zfs.NewAdapter(zfsHybrid)
+	prereqAdapter := prereq.NewSystemChecker()
+	zfsAdapter := zfs.NewAdapter()
 
 	// 1b. Outbound System Adapter for Main Pool & Dataset Configuration
-	systemAdapter := system.NewAdapter(zfsAdapter, prereqAdapter, zfsHybrid)
+	systemAdapter := system.NewAdapter(zfsAdapter, prereqAdapter)
 	systemSvc := application.NewSystemService(systemAdapter)
 
 	// Auto-Discovery on Reinstall / Boot:
@@ -160,11 +152,6 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 		}
 	}
 
-	kvmHasHost := prereqAdapter.HasHostPrerequisites("kvm")
-	dockerHasHost := prereqAdapter.HasHostPrerequisites("docker")
-	lxcHasHost := prereqAdapter.HasHostPrerequisites("lxc")
-	cifsHasHost := prereqAdapter.HasHostPrerequisites("cifs")
-
 	zfsEnabled, zfsReason := prereqAdapter.IsModuleEnabled("zfs")
 	kvmEnabled, kvmReason := prereqAdapter.IsModuleEnabled("kvm")
 	dockerEnabled, dockerReason := prereqAdapter.IsModuleEnabled("docker")
@@ -174,21 +161,16 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	for _, mod := range []struct {
 		name    string
 		enabled bool
-		live    bool
 		reason  string
 	}{
-		{"zfs", zfsEnabled, zfsHasHost, zfsReason},
-		{"kvm", kvmEnabled, kvmHasHost, kvmReason},
-		{"docker", dockerEnabled, dockerHasHost, dockerReason},
-		{"lxc", lxcEnabled, lxcHasHost, lxcReason},
-		{"cifs", cifsEnabled, cifsHasHost, cifsReason},
+		{"zfs", zfsEnabled, zfsReason},
+		{"kvm", kvmEnabled, kvmReason},
+		{"docker", dockerEnabled, dockerReason},
+		{"lxc", lxcEnabled, lxcReason},
+		{"cifs", cifsEnabled, cifsReason},
 	} {
 		if mod.enabled {
-			mode := "live"
-			if !mod.live {
-				mode = "hybrid-sandbox"
-			}
-			logger.Info("module enabled", "module", mod.name, "mode", mode, "details", mod.reason)
+			logger.Info("module enabled", "module", mod.name, "details", mod.reason)
 		} else {
 			logger.Warn("module disabled or paused", "module", mod.name, "details", mod.reason)
 		}
@@ -206,20 +188,14 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 
 	logger.Info("filesystem unit state store initialized", "path", stateDir)
 
-	// An adapter runs in hybrid/simulation mode ONLY when host prerequisites are missing
-	kvmHybrid := !kvmHasHost
-	dockerHybrid := !dockerHasHost
-	lxcHybrid := !lxcHasHost
-	cifsHybrid := !cifsHasHost
-
-	kvmAdapter := kvm.NewAdapterWithStateDir(kvmHybrid, vmUnitsDir)
+	kvmAdapter := kvm.NewAdapterWithStateDir(vmUnitsDir)
 	kvmAdapter.SetLogger(logger.With("subsystem", "libvirt"))
-	dockerAdapter := docker.NewAdapterWithStateDir(dockerHybrid, dockerUnitsDir)
+	dockerAdapter := docker.NewAdapterWithStateDir(dockerUnitsDir)
 	dockerAdapter.SetLogger(logger.With("subsystem", "docker"))
-	lxcAdapter := lxc.NewAdapter(lxcHybrid)
-	cifsAdapter := share.NewCifsAdapter(cifsHybrid, sharesDir)
-	webdavAdapter := share.NewWebdavAdapter(true)
-	identityAdapter := identity.NewAdapter(true)
+	lxcAdapter := lxc.NewAdapter()
+	cifsAdapter := share.NewCifsAdapter(sharesDir)
+	webdavAdapter := share.NewWebdavAdapter()
+	identityAdapter := identity.NewAdapter()
 	catalogCacheDir := filepath.Join(stateDir, "catalog")
 	catalogAdapter := catalog.NewAdapter(catalogCacheDir)
 
@@ -241,7 +217,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 
 	// 2b. Application Services (Hexagonal Core Use-Cases)
 	prereqSvc := application.NewPrerequisiteService(prereqAdapter)
-	diskAdapter := disk.NewAdapter(zfsAdapter, !zfsHasHost)
+	diskAdapter := disk.NewAdapter(zfsAdapter)
 	diskSvc := application.NewDiskService(diskAdapter)
 	zfsSvc := application.NewZfsService(zfsAdapter)
 	kvmSvc := application.NewKvmService(kvmAdapter)
@@ -304,7 +280,6 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 		logger.Info("nasctl server started",
 			"http_port", cfg.Server.HTTPPort,
 			"grpc_port", cfg.Server.GRPCPort,
-			"hybrid_fallback", opts.HybridMode,
 			"tty_mode", logging.IsTTY(rootOpts.ErrOut),
 		)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {

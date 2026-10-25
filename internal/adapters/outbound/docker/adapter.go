@@ -47,7 +47,6 @@ type Adapter struct {
 	hasSocket    bool
 	hasCompose   bool
 	composeCmd   []string
-	hybrid       bool
 	zfsPort      ports.ZfsEnginePort
 	mainPool     string
 	// fallback memory store when docker socket is unavailable
@@ -101,22 +100,22 @@ func detectCompose() (bool, []string) {
 }
 
 // NewAdapter creates a Docker runtime adapter connecting to /var/run/docker.sock with default units dir.
-func NewAdapter(hybrid bool) *Adapter {
-	return NewAdapterWithStateDir(hybrid, "")
+func NewAdapter() *Adapter {
+	return NewAdapterWithStateDir("")
 }
 
 // NewAdapterWithStateDir creates a Docker adapter using a dedicated filesystem units directory for compose files.
-func NewAdapterWithStateDir(hybrid bool, unitsDir string) *Adapter {
-	return NewAdapterFull("/var/run/docker.sock", unitsDir, hybrid)
+func NewAdapterWithStateDir(unitsDir string) *Adapter {
+	return NewAdapterFull("/var/run/docker.sock", unitsDir)
 }
 
 // NewAdapterWithSocketPath creates a Docker adapter with a custom socket path.
-func NewAdapterWithSocketPath(socketPath string, hybrid bool) *Adapter {
-	return NewAdapterFull(socketPath, "", hybrid)
+func NewAdapterWithSocketPath(socketPath string) *Adapter {
+	return NewAdapterFull(socketPath, "")
 }
 
-// NewAdapterFull constructs the complete Docker adapter with socket path, units directory, and hybrid mode.
-func NewAdapterFull(socketPath string, unitsDir string, hybrid bool) *Adapter {
+// NewAdapterFull constructs the complete Docker adapter with socket path and units directory.
+func NewAdapterFull(socketPath string, unitsDir string) *Adapter {
 	if unitsDir == "" {
 		unitsDir = filepath.Join(os.TempDir(), fmt.Sprintf("nasctl-docker-units-%d-%d", os.Getpid(), time.Now().UnixNano()))
 	}
@@ -148,19 +147,12 @@ func NewAdapterFull(socketPath string, unitsDir string, hybrid bool) *Adapter {
 		hasSocket:    hasSocket,
 		hasCompose:   hasCompose,
 		composeCmd:   composeCmd,
-		hybrid:       hybrid,
 		containers:   make(map[string]domain.DockerContainer),
 		mockApps:     make(map[string]domain.DockerApp),
 		statsCache:   make(map[string]containerStatsRecord),
 	}
 
 	a.loadPersistedUnits()
-
-	if hybrid && !hasSocket {
-		if _, ok := a.containers["jellyfin-media"]; !ok {
-			a.seedDefaults()
-		}
-	}
 	return a
 }
 
@@ -176,164 +168,12 @@ func NewAdapterWithClient(client *http.Client, baseEndpoint string) *Adapter {
 		unitsDir:     unitsDir,
 		hasSocket:    true,
 		hasCompose:   false,
-		hybrid:       false,
 		containers:   make(map[string]domain.DockerContainer),
 		mockApps:     make(map[string]domain.DockerApp),
 		statsCache:   make(map[string]containerStatsRecord),
 	}
 }
 
-func (a *Adapter) seedDefaults() {
-	c := domain.DockerContainer{
-		ID:             "jellyfin-media",
-		ContainerID:    "8f4c129e3a01",
-		ContainerName:  "jellyfin-media",
-		Image:          "jellyfin/jellyfin:latest",
-		State:          "RUNNING",
-		StatusText:     "Up 4 days (healthy)",
-		Ports:          []string{"8096:8096/tcp", "8920:8920/tcp"},
-		Volumes:        []string{"/tank/media:/media:ro"},
-		Environment:    []string{"TZ=UTC"},
-		RestartPolicy:  "unless-stopped",
-		NetworkMode:    "bridge",
-		CPUPercent:     1.5,
-		MemoryUsageMiB: 412,
-		CreatedAt:      "2026-10-20T08:15:00Z",
-	}
-	c.ComposeYAML = GenerateComposeYAML(c)
-	a.containers[c.ID] = c
-
-	now := time.Now().UTC()
-	nextcloudCompose := `services:
-  app:
-    image: nextcloud:apache
-    container_name: nextcloud-app
-    restart: always
-    ports:
-      - "8080:80"
-    environment:
-      - POSTGRES_HOST=db
-      - POSTGRES_DB=nextcloud
-      - POSTGRES_USER=nextcloud
-      - POSTGRES_PASSWORD=nextcloud
-      - REDIS_HOST=redis
-    volumes:
-      - /tank/appdata/nextcloud:/var/www/html
-    depends_on:
-      - db
-      - redis
-  db:
-    image: postgres:16-alpine
-    container_name: nextcloud-db
-    restart: always
-    environment:
-      - POSTGRES_DB=nextcloud
-      - POSTGRES_USER=nextcloud
-      - POSTGRES_PASSWORD=nextcloud
-    volumes:
-      - /tank/appdata/nextcloud-db:/var/lib/postgresql/data
-  redis:
-    image: redis:alpine
-    container_name: nextcloud-redis
-    restart: always
-`
-	a.mockApps["nextcloud"] = domain.DockerApp{
-		ID:              "nextcloud",
-		Name:            domain.DockerAppName("nextcloud"),
-		Title:           "Nextcloud Hub",
-		State:           "RUNNING",
-		StatusText:      "3/3 running",
-		ComposeYAML:     nextcloudCompose,
-		ComposeFilePath: filepath.Join(a.unitsDir, "nextcloud", "compose.yaml"),
-		Services:        []string{"app", "db", "redis"},
-		Containers: []domain.DockerAppContainer{
-			{
-				ID:          "8fa10b91e23a",
-				Name:        "nextcloud-app",
-				ServiceName: "app",
-				Image:       "nextcloud:apache",
-				State:       "RUNNING",
-				Status:      "Up 3 days (healthy)",
-				CPUPercent:  0.8,
-				MemoryMiB:   195,
-				Ports:       []string{"8080:80/tcp"},
-				CreatedAt:   now.Add(-72 * time.Hour),
-			},
-			{
-				ID:          "4bc82d09f112",
-				Name:        "nextcloud-db",
-				ServiceName: "db",
-				Image:       "postgres:16-alpine",
-				State:       "RUNNING",
-				Status:      "Up 3 days",
-				CPUPercent:  0.2,
-				MemoryMiB:   68,
-				CreatedAt:   now.Add(-72 * time.Hour),
-			},
-			{
-				ID:          "1e77aa54f009",
-				Name:        "nextcloud-redis",
-				ServiceName: "redis",
-				Image:       "redis:alpine",
-				State:       "RUNNING",
-				Status:      "Up 3 days",
-				CPUPercent:  0.1,
-				MemoryMiB:   22,
-				CreatedAt:   now.Add(-72 * time.Hour),
-			},
-		},
-		PortMappings:    []string{"8080:80"},
-		Volumes:         []string{"/tank/appdata/nextcloud:/var/www/html", "/tank/appdata/nextcloud-db:/var/lib/postgresql/data"},
-		WebUIURL:        "http://localhost:8080",
-		TotalCPUPercent: 1.1,
-		TotalMemoryMiB:  285,
-		CreatedAt:       now.Add(-72 * time.Hour),
-		UpdatedAt:       now.Add(-72 * time.Hour),
-	}
-
-	jellyfinCompose := GenerateComposeYAML(c)
-	a.mockApps["jellyfin"] = domain.DockerApp{
-		ID:              "jellyfin",
-		Name:            domain.DockerAppName("jellyfin"),
-		Title:           "Jellyfin Media Server",
-		State:           "RUNNING",
-		StatusText:      "1/1 running",
-		ComposeYAML:     jellyfinCompose,
-		ComposeFilePath: filepath.Join(a.unitsDir, "jellyfin", "compose.yaml"),
-		Services:        []string{"jellyfin-media"},
-		Containers: []domain.DockerAppContainer{
-			{
-				ID:          "8f4c129e3a01",
-				Name:        "jellyfin-media",
-				ServiceName: "jellyfin-media",
-				Image:       "jellyfin/jellyfin:latest",
-				State:       "RUNNING",
-				Status:      "Up 4 days (healthy)",
-				CPUPercent:  1.5,
-				MemoryMiB:   412,
-				Ports:       []string{"8096:8096", "8920:8920"},
-				CreatedAt:   now.Add(-96 * time.Hour),
-			},
-		},
-		PortMappings:    []string{"8096:8096", "8920:8920"},
-		Volumes:         []string{"/tank/media:/media:ro"},
-		WebUIURL:        "http://localhost:8096",
-		TotalCPUPercent: 1.5,
-		TotalMemoryMiB:  412,
-		CreatedAt:       now.Add(-96 * time.Hour),
-		UpdatedAt:       now.Add(-96 * time.Hour),
-	}
-
-	if a.unitsDir != "" {
-		ncDir := filepath.Join(a.unitsDir, "nextcloud")
-		_ = os.MkdirAll(ncDir, 0755)
-		_ = os.WriteFile(filepath.Join(ncDir, "compose.yaml"), []byte(nextcloudCompose), 0644)
-
-		jfDir := filepath.Join(a.unitsDir, "jellyfin")
-		_ = os.MkdirAll(jfDir, 0755)
-		_ = os.WriteFile(filepath.Join(jfDir, "compose.yaml"), []byte(jellyfinCompose), 0644)
-	}
-}
 
 // loadPersistedUnits scans the units filesystem directory and loads existing compose.yaml files.
 func (a *Adapter) loadPersistedUnits() {
@@ -350,21 +190,9 @@ func (a *Adapter) loadPersistedUnits() {
 		}
 		id := entry.Name()
 		composeFile := filepath.Join(a.unitsDir, id, "compose.yaml")
-		content, err := os.ReadFile(composeFile)
+		_, err := os.ReadFile(composeFile)
 		if err != nil {
 			continue
-		}
-		if a.hybrid || !a.hasSocket {
-			a.containers[id] = domain.DockerContainer{
-				ID:            id,
-				ContainerID:   "unit-" + id,
-				ContainerName: id,
-				Image:         "compose:" + id,
-				State:         "STOPPED",
-				StatusText:    "Persisted compose unit",
-				ComposeYAML:   string(content),
-				CreatedAt:     time.Now().UTC().Format(time.RFC3339),
-			}
 		}
 	}
 }
@@ -597,15 +425,6 @@ func (a *Adapter) ListContainers(ctx context.Context) ([]domain.DockerContainer,
 		}
 	}
 
-	if a.hybrid {
-		a.mu.RLock()
-		defer a.mu.RUnlock()
-		out := make([]domain.DockerContainer, 0, len(a.containers))
-		for _, c := range a.containers {
-			out = append(out, c)
-		}
-		return out, nil
-	}
 	return nil, fmt.Errorf("docker daemon is unreachable via %s", a.socketPath)
 }
 
@@ -812,23 +631,7 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.DockerContainer)
 		}
 	}
 
-	// 4. In-memory / hybrid simulation
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if _, exists := a.containers[c.ID]; exists {
-		return nil, fmt.Errorf("%w: docker container %q", domain.ErrAlreadyExists, c.ID)
-	}
-	c.ContainerID = "sim-" + c.ID
-	c.ContainerName = c.ID
-	c.State = "RUNNING"
-	c.StatusText = "Up Less than a second"
-	c.CPUPercent = 0.5
-	c.MemoryUsageMiB = 64
-	c.CreatedAt = time.Now().UTC().Format(time.RFC3339)
-	c.ComposeYAML = yamlContent
-	a.containers[c.ID] = c
-	cp := c
-	return &cp, nil
+	return nil, fmt.Errorf("docker daemon socket %s is not available", a.socketPath)
 }
 
 func (a *Adapter) UpdateContainer(ctx context.Context, c domain.DockerContainer, fields []string) (*domain.DockerContainer, error) {
@@ -925,44 +728,7 @@ func (a *Adapter) UpdateContainer(ctx context.Context, c domain.DockerContainer,
 		return created, nil
 	}
 
-	// 3. In-memory / hybrid fallback
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	current, ok := a.containers[c.ID]
-	if !ok {
-		return nil, fmt.Errorf("%w: docker container %q", domain.ErrNotFound, c.ID)
-	}
-
-	if c.Image != "" {
-		current.Image = c.Image
-	}
-	if len(c.Ports) > 0 || containsString(fields, "ports") {
-		current.Ports = c.Ports
-	}
-	if len(c.Volumes) > 0 || containsString(fields, "volumes") {
-		current.Volumes = c.Volumes
-	}
-	if len(c.Environment) > 0 || containsString(fields, "environment") {
-		current.Environment = c.Environment
-	}
-	if c.RestartPolicy != "" {
-		current.RestartPolicy = c.RestartPolicy
-	}
-	if c.NetworkMode != "" {
-		current.NetworkMode = c.NetworkMode
-	}
-	if c.MemoryLimitMiB > 0 || containsString(fields, "memory_limit_mib") {
-		current.MemoryLimitMiB = c.MemoryLimitMiB
-	}
-	current.Privileged = c.Privileged
-	if len(c.Command) > 0 {
-		current.Command = c.Command
-	}
-	current.ComposeYAML = yamlContent
-
-	a.containers[c.ID] = current
-	cp := current
-	return &cp, nil
+	return nil, fmt.Errorf("docker daemon socket %s is not available", a.socketPath)
 }
 
 func (a *Adapter) StartContainer(ctx context.Context, id string) (*domain.DockerContainer, error) {
@@ -994,17 +760,7 @@ func (a *Adapter) StartContainer(ctx context.Context, id string) (*domain.Docker
 		return a.GetContainer(ctx, id)
 	}
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	c, ok := a.containers[id]
-	if !ok {
-		return nil, fmt.Errorf("%w: docker container %q", domain.ErrNotFound, id)
-	}
-	c.State = "RUNNING"
-	c.StatusText = "Up 1 second"
-	a.containers[id] = c
-	cp := c
-	return &cp, nil
+	return nil, fmt.Errorf("docker daemon socket %s is not available", a.socketPath)
 }
 
 func (a *Adapter) StopContainer(ctx context.Context, id string) (*domain.DockerContainer, error) {
@@ -1036,19 +792,7 @@ func (a *Adapter) StopContainer(ctx context.Context, id string) (*domain.DockerC
 		return a.GetContainer(ctx, id)
 	}
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	c, ok := a.containers[id]
-	if !ok {
-		return nil, fmt.Errorf("%w: docker container %q", domain.ErrNotFound, id)
-	}
-	c.State = "EXITED"
-	c.StatusText = "Exited (0) just now"
-	c.CPUPercent = 0
-	c.MemoryUsageMiB = 0
-	a.containers[id] = c
-	cp := c
-	return &cp, nil
+	return nil, fmt.Errorf("docker daemon socket %s is not available", a.socketPath)
 }
 
 func (a *Adapter) RestartContainer(ctx context.Context, id string) (*domain.DockerContainer, error) {
@@ -1080,17 +824,7 @@ func (a *Adapter) RestartContainer(ctx context.Context, id string) (*domain.Dock
 		return a.GetContainer(ctx, id)
 	}
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	c, ok := a.containers[id]
-	if !ok {
-		return nil, fmt.Errorf("%w: docker container %q", domain.ErrNotFound, id)
-	}
-	c.State = "RUNNING"
-	c.StatusText = "Up 1 second (restarted)"
-	a.containers[id] = c
-	cp := c
-	return &cp, nil
+	return nil, fmt.Errorf("docker daemon socket %s is not available", a.socketPath)
 }
 
 func (a *Adapter) DeleteContainer(ctx context.Context, id string, force bool) error {
@@ -1102,36 +836,30 @@ func (a *Adapter) DeleteContainer(ctx context.Context, id string, force bool) er
 	}
 	_ = os.RemoveAll(unitDir)
 
-	if a.hasSocket {
-		deleteURL := fmt.Sprintf("%s/containers/%s?force=%t&v=1", a.baseURL(), url.PathEscape(id), force)
-		req, err := http.NewRequestWithContext(ctx, http.MethodDelete, deleteURL, nil)
-		if err != nil {
-			return err
-		}
-		resp, err := a.client.Do(req)
-		if err != nil {
-			a.logError("delete", id, err, "")
-			return err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode == http.StatusNotFound {
-			// Container already removed by compose down
-			a.mu.Lock()
-			delete(a.containers, id)
-			a.mu.Unlock()
-			return nil
-		}
-		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-			body, _ := io.ReadAll(resp.Body)
-			err := fmt.Errorf("docker delete failed (%d): %s", resp.StatusCode, string(body))
-			a.logError("delete", id, err, string(body))
-			return err
-		}
+	if !a.hasSocket {
+		return fmt.Errorf("docker daemon socket %s is not available", a.socketPath)
 	}
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	delete(a.containers, id)
+	deleteURL := fmt.Sprintf("%s/containers/%s?force=%t&v=1", a.baseURL(), url.PathEscape(id), force)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, deleteURL, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := a.client.Do(req)
+	if err != nil {
+		a.logError("delete", id, err, "")
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		err := fmt.Errorf("docker delete failed (%d): %s", resp.StatusCode, string(body))
+		a.logError("delete", id, err, string(body))
+		return err
+	}
 	return nil
 }
 
@@ -1445,35 +1173,16 @@ func (a *Adapter) CreateApp(ctx context.Context, app domain.DockerApp) (*domain.
 		return nil, fmt.Errorf("failed to write compose.yaml: %w", err)
 	}
 
-	if a.hasCompose && a.hasSocket && !a.hybrid {
-		if err := a.runCompose(ctx, appDir, app.ID, "up", "-d", "--remove-orphans"); err != nil {
-			_ = os.RemoveAll(appDir)
-			return nil, fmt.Errorf("failed to deploy compose app: %w", err)
-		}
+	if !a.hasSocket {
+		return nil, fmt.Errorf("docker daemon socket %s is not available", a.socketPath)
+	}
+	if !a.hasCompose {
+		return nil, fmt.Errorf("docker compose CLI is not available on host")
 	}
 
-	// In hybrid or mock mode
-	if !a.hasSocket || a.hybrid {
-		services, _, _, _ := parseComposeYAML(app.ComposeYAML)
-		var containers []domain.DockerAppContainer
-		now := time.Now().UTC()
-		for _, svc := range services {
-			containers = append(containers, domain.DockerAppContainer{
-				ID:          fmt.Sprintf("%s-%s", app.ID, svc),
-				Name:        fmt.Sprintf("%s-%s", app.ID, svc),
-				ServiceName: svc,
-				Image:       "compose:" + svc,
-				State:       "RUNNING",
-				Status:      "Up 1 second",
-				CPUPercent:  0.1,
-				MemoryMiB:   32,
-				CreatedAt:   now,
-			})
-		}
-		app.Containers = containers
-		app.State = "RUNNING"
-		app.StatusText = fmt.Sprintf("%d/%d running", len(containers), len(containers))
-		a.mockApps[app.ID] = app
+	if err := a.runCompose(ctx, appDir, app.ID, "up", "-d", "--remove-orphans"); err != nil {
+		_ = os.RemoveAll(appDir)
+		return nil, fmt.Errorf("failed to deploy compose app: %w", err)
 	}
 
 	liveContainers := a.fetchLiveContainers(ctx)
@@ -1496,20 +1205,15 @@ func (a *Adapter) UpdateApp(ctx context.Context, app domain.DockerApp, fields []
 		return nil, fmt.Errorf("failed to update compose.yaml: %w", err)
 	}
 
-	if a.hasCompose && a.hasSocket && !a.hybrid {
-		if err := a.runCompose(ctx, appDir, app.ID, "up", "-d", "--remove-orphans"); err != nil {
-			return nil, fmt.Errorf("failed to redeploy compose app: %w", err)
-		}
+	if !a.hasSocket {
+		return nil, fmt.Errorf("docker daemon socket %s is not available", a.socketPath)
+	}
+	if !a.hasCompose {
+		return nil, fmt.Errorf("docker compose CLI is not available on host")
 	}
 
-	if !a.hasSocket || a.hybrid {
-		if existing, ok := a.mockApps[app.ID]; ok {
-			existing.ComposeYAML = app.ComposeYAML
-			if app.Title != "" {
-				existing.Title = app.Title
-			}
-			a.mockApps[app.ID] = existing
-		}
+	if err := a.runCompose(ctx, appDir, app.ID, "up", "-d", "--remove-orphans"); err != nil {
+		return nil, fmt.Errorf("failed to redeploy compose app: %w", err)
 	}
 
 	liveContainers := a.fetchLiveContainers(ctx)
@@ -1522,7 +1226,7 @@ func (a *Adapter) DeleteApp(ctx context.Context, id string, deleteVolumes bool) 
 	defer a.mu.Unlock()
 
 	appDir := filepath.Join(a.unitsDir, id)
-	if a.hasCompose && a.hasSocket && !a.hybrid {
+	if a.hasCompose && a.hasSocket {
 		args := []string{"down"}
 		if deleteVolumes {
 			args = append(args, "-v", "--remove-orphans")
@@ -1531,7 +1235,6 @@ func (a *Adapter) DeleteApp(ctx context.Context, id string, deleteVolumes bool) 
 	}
 
 	_ = os.RemoveAll(appDir)
-	delete(a.mockApps, id)
 	return nil
 }
 
@@ -1540,24 +1243,19 @@ func (a *Adapter) StartApp(ctx context.Context, id string) (*domain.DockerApp, e
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	appDir := filepath.Join(a.unitsDir, id)
-	composePath := filepath.Join(appDir, "compose.yaml")
-	if a.hasCompose && a.hasSocket && !a.hybrid {
-		if _, err := os.Stat(composePath); err == nil {
-			if err := a.runCompose(ctx, appDir, id, "up", "-d", "--remove-orphans"); err != nil {
-				return nil, err
-			}
-		}
+	if !a.hasSocket {
+		return nil, fmt.Errorf("docker daemon socket %s is not available", a.socketPath)
+	}
+	if !a.hasCompose {
+		return nil, fmt.Errorf("docker compose CLI is not available on host")
 	}
 
-	if mock, ok := a.mockApps[id]; ok {
-		for i := range mock.Containers {
-			mock.Containers[i].State = "RUNNING"
-			mock.Containers[i].Status = "Up 1 second"
+	appDir := filepath.Join(a.unitsDir, id)
+	composePath := filepath.Join(appDir, "compose.yaml")
+	if _, err := os.Stat(composePath); err == nil {
+		if err := a.runCompose(ctx, appDir, id, "up", "-d", "--remove-orphans"); err != nil {
+			return nil, err
 		}
-		mock.State = "RUNNING"
-		mock.StatusText = fmt.Sprintf("%d/%d running", len(mock.Containers), len(mock.Containers))
-		a.mockApps[id] = mock
 	}
 
 	liveContainers := a.fetchLiveContainers(ctx)
@@ -1569,24 +1267,19 @@ func (a *Adapter) StopApp(ctx context.Context, id string) (*domain.DockerApp, er
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	appDir := filepath.Join(a.unitsDir, id)
-	composePath := filepath.Join(appDir, "compose.yaml")
-	if a.hasCompose && a.hasSocket && !a.hybrid {
-		if _, err := os.Stat(composePath); err == nil {
-			if err := a.runCompose(ctx, appDir, id, "stop"); err != nil {
-				return nil, err
-			}
-		}
+	if !a.hasSocket {
+		return nil, fmt.Errorf("docker daemon socket %s is not available", a.socketPath)
+	}
+	if !a.hasCompose {
+		return nil, fmt.Errorf("docker compose CLI is not available on host")
 	}
 
-	if mock, ok := a.mockApps[id]; ok {
-		for i := range mock.Containers {
-			mock.Containers[i].State = "EXITED"
-			mock.Containers[i].Status = "Exited (0)"
+	appDir := filepath.Join(a.unitsDir, id)
+	composePath := filepath.Join(appDir, "compose.yaml")
+	if _, err := os.Stat(composePath); err == nil {
+		if err := a.runCompose(ctx, appDir, id, "stop"); err != nil {
+			return nil, err
 		}
-		mock.State = "STOPPED"
-		mock.StatusText = "Stopped"
-		a.mockApps[id] = mock
 	}
 
 	liveContainers := a.fetchLiveContainers(ctx)
@@ -1598,24 +1291,19 @@ func (a *Adapter) RestartApp(ctx context.Context, id string) (*domain.DockerApp,
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	appDir := filepath.Join(a.unitsDir, id)
-	composePath := filepath.Join(appDir, "compose.yaml")
-	if a.hasCompose && a.hasSocket && !a.hybrid {
-		if _, err := os.Stat(composePath); err == nil {
-			if err := a.runCompose(ctx, appDir, id, "restart"); err != nil {
-				return nil, err
-			}
-		}
+	if !a.hasSocket {
+		return nil, fmt.Errorf("docker daemon socket %s is not available", a.socketPath)
+	}
+	if !a.hasCompose {
+		return nil, fmt.Errorf("docker compose CLI is not available on host")
 	}
 
-	if mock, ok := a.mockApps[id]; ok {
-		for i := range mock.Containers {
-			mock.Containers[i].State = "RUNNING"
-			mock.Containers[i].Status = "Restarted"
+	appDir := filepath.Join(a.unitsDir, id)
+	composePath := filepath.Join(appDir, "compose.yaml")
+	if _, err := os.Stat(composePath); err == nil {
+		if err := a.runCompose(ctx, appDir, id, "restart"); err != nil {
+			return nil, err
 		}
-		mock.State = "RUNNING"
-		mock.StatusText = fmt.Sprintf("%d/%d running", len(mock.Containers), len(mock.Containers))
-		a.mockApps[id] = mock
 	}
 
 	liveContainers := a.fetchLiveContainers(ctx)
@@ -1974,7 +1662,7 @@ type dockerEventMessage struct {
 // StartEventWatcher launches a background worker that streams real-time container lifecycle events
 // directly from the Docker Engine Unix socket and invokes onEvent for every state change.
 func (a *Adapter) StartEventWatcher(ctx context.Context, onEvent func(domain.Event)) {
-	if !a.hasSocket || a.hybrid {
+	if !a.hasSocket {
 		return
 	}
 	go a.watchDockerEvents(ctx, onEvent)
@@ -2344,56 +2032,9 @@ func (a *Adapter) ListDirectories(ctx context.Context, reqPath string) (*domain.
 		}
 	}
 
-	// In sandbox/hybrid or when virtual paths like /tank are queried and not physically on disk:
-	if len(res.Entries) == 0 && (a.hybrid || !a.hasSocket || strings.HasPrefix(cleanPath, "/tank")) {
-		res.Entries = a.getSimulatedDirectories(cleanPath)
-	}
-
 	sort.Slice(res.Entries, func(i, j int) bool {
 		return strings.ToLower(res.Entries[i].Name) < strings.ToLower(res.Entries[j].Name)
 	})
 
 	return res, nil
-}
-
-func (a *Adapter) getSimulatedDirectories(cleanPath string) []domain.DirectoryEntry {
-	var entries []domain.DirectoryEntry
-	switch cleanPath {
-	case "/":
-		entries = []domain.DirectoryEntry{
-			{Name: "tank", Path: "/tank", IsDir: true},
-			{Name: "mnt", Path: "/mnt", IsDir: true},
-			{Name: "var", Path: "/var", IsDir: true},
-		}
-	case "/tank":
-		entries = []domain.DirectoryEntry{
-			{Name: "appdata", Path: "/tank/appdata", IsDir: true},
-			{Name: "docker", Path: "/tank/docker", IsDir: true},
-			{Name: "media", Path: "/tank/media", IsDir: true},
-			{Name: "backups", Path: "/tank/backups", IsDir: true},
-			{Name: "documents", Path: "/tank/documents", IsDir: true},
-			{Name: "photos", Path: "/tank/photos", IsDir: true},
-		}
-	case "/tank/appdata":
-		entries = []domain.DirectoryEntry{
-			{Name: "nextcloud", Path: "/tank/appdata/nextcloud", IsDir: true},
-			{Name: "jellyfin", Path: "/tank/appdata/jellyfin", IsDir: true},
-			{Name: "syncthing", Path: "/tank/appdata/syncthing", IsDir: true},
-			{Name: "uptime-kuma", Path: "/tank/appdata/uptime-kuma", IsDir: true},
-		}
-	case "/tank/media":
-		entries = []domain.DirectoryEntry{
-			{Name: "movies", Path: "/tank/media/movies", IsDir: true},
-			{Name: "tv", Path: "/tank/media/tv", IsDir: true},
-			{Name: "music", Path: "/tank/media/music", IsDir: true},
-			{Name: "downloads", Path: "/tank/media/downloads", IsDir: true},
-		}
-	default:
-		// Subfolder fallback
-		entries = []domain.DirectoryEntry{
-			{Name: "data", Path: filepath.Join(cleanPath, "data"), IsDir: true},
-			{Name: "config", Path: filepath.Join(cleanPath, "config"), IsDir: true},
-		}
-	}
-	return entries
 }

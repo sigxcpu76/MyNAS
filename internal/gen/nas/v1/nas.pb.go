@@ -642,7 +642,6 @@ type CheckPrerequisitesResponse struct {
 	Prerequisites          []*Prerequisite        `protobuf:"bytes,1,rep,name=prerequisites,proto3" json:"prerequisites,omitempty"`
 	InstalledCount         int32                  `protobuf:"varint,2,opt,name=installed_count,json=installedCount,proto3" json:"installed_count,omitempty"`
 	MissingCount           int32                  `protobuf:"varint,3,opt,name=missing_count,json=missingCount,proto3" json:"missing_count,omitempty"`
-	HybridFallbackEnabled  bool                   `protobuf:"varint,4,opt,name=hybrid_fallback_enabled,json=hybridFallbackEnabled,proto3" json:"hybrid_fallback_enabled,omitempty"`
 	LinuxFlavor            *LinuxFlavor           `protobuf:"bytes,5,opt,name=linux_flavor,json=linuxFlavor,proto3" json:"linux_flavor,omitempty"`
 	MissingPrerequisites   []*Prerequisite        `protobuf:"bytes,6,rep,name=missing_prerequisites,json=missingPrerequisites,proto3" json:"missing_prerequisites,omitempty"`
 	InstalledPrerequisites []*Prerequisite        `protobuf:"bytes,7,rep,name=installed_prerequisites,json=installedPrerequisites,proto3" json:"installed_prerequisites,omitempty"`
@@ -701,13 +700,6 @@ func (x *CheckPrerequisitesResponse) GetMissingCount() int32 {
 		return x.MissingCount
 	}
 	return 0
-}
-
-func (x *CheckPrerequisitesResponse) GetHybridFallbackEnabled() bool {
-	if x != nil {
-		return x.HybridFallbackEnabled
-	}
-	return false
 }
 
 func (x *CheckPrerequisitesResponse) GetLinuxFlavor() *LinuxFlavor {
@@ -10526,17 +10518,16 @@ const file_nas_v1_nas_proto_rawDesc = "" +
 	"\x16GetPrerequisiteRequest\x128\n" +
 	"\x04name\x18\x01 \x01(\tB$\xe2A\x01\x02\xfaA\x1d\n" +
 	"\x1bnas.sigxcpu.io/PrerequisiteR\x04name\"\x1b\n" +
-	"\x19CheckPrerequisitesRequest\"\x8d\x04\n" +
+	"\x19CheckPrerequisitesRequest\"\xdb\x03\n" +
 	"\x1aCheckPrerequisitesResponse\x12:\n" +
 	"\rprerequisites\x18\x01 \x03(\v2\x14.nas.v1.PrerequisiteR\rprerequisites\x12'\n" +
 	"\x0finstalled_count\x18\x02 \x01(\x05R\x0einstalledCount\x12#\n" +
 	"\rmissing_count\x18\x03 \x01(\x05R\fmissingCount\x126\n" +
-	"\x17hybrid_fallback_enabled\x18\x04 \x01(\bR\x15hybridFallbackEnabled\x126\n" +
 	"\flinux_flavor\x18\x05 \x01(\v2\x13.nas.v1.LinuxFlavorR\vlinuxFlavor\x12I\n" +
 	"\x15missing_prerequisites\x18\x06 \x03(\v2\x14.nas.v1.PrerequisiteR\x14missingPrerequisites\x12M\n" +
 	"\x17installed_prerequisites\x18\a \x03(\v2\x14.nas.v1.PrerequisiteR\x16installedPrerequisites\x12-\n" +
 	"\x12remediation_script\x18\b \x01(\tR\x11remediationScript\x12,\n" +
-	"\x12is_fully_compliant\x18\t \x01(\bR\x10isFullyCompliant\"\xf3\x01\n" +
+	"\x12is_fully_compliant\x18\t \x01(\bR\x10isFullyCompliantJ\x04\b\x04\x10\x05\"\xf3\x01\n" +
 	"\rDiskPartition\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
 	"\vdevice_path\x18\x02 \x01(\tR\n" +

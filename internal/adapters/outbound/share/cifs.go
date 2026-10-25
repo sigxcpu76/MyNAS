@@ -15,58 +15,21 @@ import (
 
 type CifsAdapter struct {
 	mu         sync.RWMutex
-	hybrid     bool
 	configPath string
 	shares     map[string]domain.CifsShare
 }
 
-func NewCifsAdapter(hybrid bool, stateDir string) *CifsAdapter {
+func NewCifsAdapter(stateDir string) *CifsAdapter {
 	cfgPath := "/etc/samba/smb.nas.conf"
 	if os.Geteuid() != 0 && stateDir != "" {
 		_ = os.MkdirAll(stateDir, 0o755)
 		cfgPath = filepath.Join(stateDir, "smb.nas.conf")
 	}
 	a := &CifsAdapter{
-		hybrid:     hybrid,
 		configPath: cfgPath,
 		shares:     make(map[string]domain.CifsShare),
 	}
-	if hybrid {
-		a.seedDefaults()
-	}
 	return a
-}
-
-func (a *CifsAdapter) seedDefaults() {
-	a.shares["media"] = domain.CifsShare{
-		ID:            "media",
-		ShareName:     "media",
-		Path:          "/tank/media",
-		Comment:       "4K Movies, Music & Family Media Library",
-		ReadOnly:      false,
-		GuestOk:       true,
-		Browseable:    true,
-		ValidUsers:    []string{"sigxcpu"},
-		ValidGroups:   []string{"users"},
-		CreateMask:    "0664",
-		DirectoryMask: "0775",
-		Enabled:       true,
-	}
-	a.shares["backups"] = domain.CifsShare{
-		ID:            "backups",
-		ShareName:     "backups",
-		Path:          "/tank/backups",
-		Comment:       "TimeMachine & Restic Encrypted Backups",
-		ReadOnly:      false,
-		GuestOk:       false,
-		Browseable:    false,
-		ValidUsers:    []string{"sigxcpu"},
-		ValidGroups:   []string{"sudo"},
-		CreateMask:    "0600",
-		DirectoryMask: "0700",
-		Enabled:       true,
-	}
-	_ = a.syncSambaConfig()
 }
 
 func (a *CifsAdapter) ListShares(ctx context.Context) ([]domain.CifsShare, error) {

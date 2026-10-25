@@ -27,11 +27,8 @@ const activeShares = computed(
 const installedPrereqs = computed(
   () => nasState.prerequisites.filter((p) => p.status === 'INSTALLED').length
 );
-const fallbackPrereqs = computed(
-  () =>
-    nasState.prerequisites.filter(
-      (p) => p.status === 'FALLBACK_ACTIVE' || p.fallbackMode
-    ).length
+const missingPrereqs = computed(
+  () => nasState.prerequisites.filter((p) => p.status !== 'INSTALLED').length
 );
 </script>
 
@@ -159,7 +156,7 @@ const fallbackPrereqs = computed(
           <div>
             <h3 class="card-title">System Prerequisites Health</h3>
             <p class="card-subtitle">
-              {{ installedPrereqs }} Native Installed · {{ fallbackPrereqs }} Hybrid Fallback Active
+              {{ installedPrereqs }} Installed · {{ missingPrereqs }} Missing
             </p>
           </div>
           <button class="btn btn-sm" @click="navigateTo('prerequisites')">

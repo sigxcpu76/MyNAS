@@ -8,10 +8,47 @@ import (
 
 	"github.com/sigxcpu/nas/internal/adapters/outbound/prereq"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/system"
-	"github.com/sigxcpu/nas/internal/adapters/outbound/zfs"
 	"github.com/sigxcpu/nas/internal/config"
 	"github.com/sigxcpu/nas/internal/domain"
+	"github.com/sigxcpu/nas/internal/ports"
 )
+
+type testZfsPort struct {
+	ports.ZfsEnginePort
+	pools    map[string]domain.ZfsPool
+	datasets map[string]domain.ZfsDataset
+}
+
+func (m *testZfsPort) GetPool(ctx context.Context, id string) (*domain.ZfsPool, error) {
+	p, ok := m.pools[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	return &p, nil
+}
+
+func (m *testZfsPort) ListPools(ctx context.Context) ([]domain.ZfsPool, error) {
+	var list []domain.ZfsPool
+	for _, p := range m.pools {
+		list = append(list, p)
+	}
+	return list, nil
+}
+
+func (m *testZfsPort) GetDataset(ctx context.Context, poolID, datasetID string) (*domain.ZfsDataset, error) {
+	key := poolID + "/" + datasetID
+	ds, ok := m.datasets[key]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	return &ds, nil
+}
+
+func (m *testZfsPort) CreateDataset(ctx context.Context, ds domain.ZfsDataset) (*domain.ZfsDataset, error) {
+	key := ds.PoolID + "/" + ds.ID
+	m.datasets[key] = ds
+	return &ds, nil
+}
 
 func TestSystemAdapterPoolSelectionAndRecovery(t *testing.T) {
 	tempDir := t.TempDir()
@@ -23,9 +60,19 @@ func TestSystemAdapterPoolSelectionAndRecovery(t *testing.T) {
 		t.Fatalf("config.Load failed: %v", err)
 	}
 
-	zfsAdapter := zfs.NewAdapter(true)
-	prereqChecker := prereq.NewSystemChecker(true)
-	adapter := system.NewAdapter(zfsAdapter, prereqChecker, true)
+	zfsAdapter := &testZfsPort{
+		pools: map[string]domain.ZfsPool{
+			"mypool": {
+				ID:         "mypool",
+				PoolName:   "mypool",
+				Mountpoint: tempDir,
+				State:      "ONLINE",
+			},
+		},
+		datasets: make(map[string]domain.ZfsDataset),
+	}
+	prereqChecker := prereq.NewSystemChecker()
+	adapter := system.NewAdapter(zfsAdapter, prereqChecker)
 
 	ctx := context.Background()
 
@@ -51,16 +98,7 @@ func TestSystemAdapterPoolSelectionAndRecovery(t *testing.T) {
 	}
 	t.Logf("Docker gating verified: %s", dockerReason)
 
-	// 2. Create a test pool in ZFS
-	_, err = zfsAdapter.CreatePool(ctx, domain.ZfsPool{
-		ID:    "mypool",
-		State: "ONLINE",
-	})
-	if err != nil {
-		t.Fatalf("CreatePool failed: %v", err)
-	}
-
-	// 3. Select "mypool" as Main Pool
+	// 2. Select "mypool" as Main Pool
 	updatedCfg, err := adapter.SelectMainPool(ctx, "mypool", true)
 	if err != nil {
 		t.Fatalf("SelectMainPool failed: %v", err)
@@ -72,13 +110,13 @@ func TestSystemAdapterPoolSelectionAndRecovery(t *testing.T) {
 		t.Fatalf("expected dataset 'mypool/.nas-system', got %q", updatedCfg.SystemDataset)
 	}
 
-	// 4. Verify Docker and KVM are now enabled
+	// 3. Verify Docker and KVM are now enabled
 	dockerNowOk, _ := prereqChecker.IsModuleEnabled("docker")
 	if !dockerNowOk {
 		t.Fatalf("expected Docker to be enabled after selecting main pool")
 	}
 
-	// 5. Test Reinstall / Discovery scenario:
+	// 4. Test Reinstall / Discovery scenario:
 	// Reset local config MainPool to "" as if the OS was reinstalled
 	cfg.System.MainPool = ""
 	_ = config.Save(cfg, configFile)

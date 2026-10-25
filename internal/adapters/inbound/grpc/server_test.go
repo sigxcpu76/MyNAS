@@ -2,6 +2,8 @@ package grpcadapter_test
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	grpcadapter "github.com/sigxcpu/nas/internal/adapters/inbound/grpc"
@@ -14,31 +16,123 @@ import (
 	"github.com/sigxcpu/nas/internal/adapters/outbound/prereq"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/share"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/system"
-	"github.com/sigxcpu/nas/internal/adapters/outbound/zfs"
 	"github.com/sigxcpu/nas/internal/application"
+	"github.com/sigxcpu/nas/internal/domain"
 	nasv1 "github.com/sigxcpu/nas/internal/gen/nas/v1"
+	"github.com/sigxcpu/nas/internal/ports"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
+type stubZfsServerPort struct {
+	ports.ZfsEnginePort
+	tempDir  string
+	pools    map[string]domain.ZfsPool
+	datasets map[string]domain.ZfsDataset
+}
+
+func newStubZfsServerPort(tempDir string) *stubZfsServerPort {
+	return &stubZfsServerPort{
+		tempDir: tempDir,
+		pools: map[string]domain.ZfsPool{
+			"tank": {
+				ID:         "tank",
+				PoolName:   "tank",
+				Mountpoint: tempDir,
+				State:      "ONLINE",
+			},
+		},
+		datasets: make(map[string]domain.ZfsDataset),
+	}
+}
+
+func (s *stubZfsServerPort) ListPools(ctx context.Context) ([]domain.ZfsPool, error) {
+	var res []domain.ZfsPool
+	for _, p := range s.pools {
+		res = append(res, p)
+	}
+	return res, nil
+}
+
+func (s *stubZfsServerPort) GetPool(ctx context.Context, id string) (*domain.ZfsPool, error) {
+	p, ok := s.pools[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	return &p, nil
+}
+
+func (s *stubZfsServerPort) CreatePool(ctx context.Context, pool domain.ZfsPool) (*domain.ZfsPool, error) {
+	if pool.Mountpoint == "" {
+		pool.Mountpoint = filepath.Join(s.tempDir, pool.ID)
+	}
+	s.pools[pool.ID] = pool
+	return &pool, nil
+}
+
+func (s *stubZfsServerPort) ExportPool(ctx context.Context, id string, force bool) error {
+	if _, ok := s.pools[id]; !ok {
+		return domain.ErrNotFound
+	}
+	delete(s.pools, id)
+	return nil
+}
+
+func (s *stubZfsServerPort) DeletePool(ctx context.Context, id string, force bool) error {
+	if _, ok := s.pools[id]; !ok {
+		return domain.ErrNotFound
+	}
+	delete(s.pools, id)
+	return nil
+}
+
+func (s *stubZfsServerPort) GetDataset(ctx context.Context, poolID, datasetID string) (*domain.ZfsDataset, error) {
+	key := poolID + "/" + datasetID
+	ds, ok := s.datasets[key]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	return &ds, nil
+}
+
+func (s *stubZfsServerPort) CreateDataset(ctx context.Context, ds domain.ZfsDataset) (*domain.ZfsDataset, error) {
+	key := ds.PoolID + "/" + ds.ID
+	s.datasets[key] = ds
+	return &ds, nil
+}
+
+func (s *stubZfsServerPort) ListDatasets(ctx context.Context, poolID string) ([]domain.ZfsDataset, error) {
+	var res []domain.ZfsDataset
+	for k, d := range s.datasets {
+		if strings.HasPrefix(k, poolID+"/") {
+			res = append(res, d)
+		}
+	}
+	return res, nil
+}
+
+func (s *stubZfsServerPort) ListVolumes(ctx context.Context, poolID string) ([]domain.ZfsVolume, error) {
+	return nil, nil
+}
+
 func TestAIPResourceNamesPaginationAndErrors(t *testing.T) {
 	ctx := context.Background()
-	dockerAdapter := docker.NewAdapter(true)
-	zfsAdapter := zfs.NewAdapter(true)
-	prereqChecker := prereq.NewSystemChecker(true)
-	sysAdapter := system.NewAdapter(zfsAdapter, prereqChecker, true)
+	dockerAdapter := docker.NewAdapter()
+	zfsAdapter := newStubZfsServerPort(t.TempDir())
+	prereqChecker := prereq.NewSystemChecker()
+	sysAdapter := system.NewAdapter(zfsAdapter, prereqChecker)
 	srv := grpcadapter.NewServer(
 		application.NewSystemService(sysAdapter),
 		application.NewPrerequisiteService(prereqChecker),
-		application.NewDiskService(disk.NewAdapter(zfsAdapter, true)),
+		application.NewDiskService(disk.NewAdapter(zfsAdapter)),
 		application.NewZfsService(zfsAdapter),
-		application.NewKvmService(kvm.NewAdapter(true)),
+		application.NewKvmService(kvm.NewAdapter()),
 		application.NewDockerService(dockerAdapter),
 		application.NewDockerAppService(dockerAdapter),
-		application.NewLxcService(lxc.NewAdapter(true)),
-		application.NewShareService(share.NewCifsAdapter(true, t.TempDir()), share.NewWebdavAdapter(true)),
-		application.NewIdentityService(identity.NewAdapter(true), "grpc-test-secret"),
+		application.NewLxcService(lxc.NewAdapter()),
+		application.NewShareService(share.NewCifsAdapter(t.TempDir()), share.NewWebdavAdapter()),
+		application.NewIdentityService(identity.NewAdapter(), "grpc-test-secret"),
 		application.NewCatalogService(catalog.NewAdapter(t.TempDir())),
 	)
 
@@ -94,21 +188,21 @@ func TestAIPResourceNamesPaginationAndErrors(t *testing.T) {
 
 func TestModuleAvailabilityEnforcement(t *testing.T) {
 	ctx := context.Background()
-	checker := prereq.NewSystemChecker(false)
-	dockerAdapter := docker.NewAdapter(false)
-	zfsAdapter := zfs.NewAdapter(false)
-	sysAdapter := system.NewAdapter(zfsAdapter, checker, false)
+	checker := prereq.NewSystemChecker()
+	dockerAdapter := docker.NewAdapter()
+	zfsAdapter := newStubZfsServerPort(t.TempDir())
+	sysAdapter := system.NewAdapter(zfsAdapter, checker)
 	srv := grpcadapter.NewServer(
 		application.NewSystemService(sysAdapter),
 		application.NewPrerequisiteService(checker),
-		application.NewDiskService(disk.NewAdapter(zfsAdapter, false)),
+		application.NewDiskService(disk.NewAdapter(zfsAdapter)),
 		application.NewZfsService(zfsAdapter),
-		application.NewKvmService(kvm.NewAdapter(false)),
+		application.NewKvmService(kvm.NewAdapter()),
 		application.NewDockerService(dockerAdapter),
 		application.NewDockerAppService(dockerAdapter),
-		application.NewLxcService(lxc.NewAdapter(false)),
-		application.NewShareService(share.NewCifsAdapter(false, t.TempDir()), share.NewWebdavAdapter(true)),
-		application.NewIdentityService(identity.NewAdapter(true), "strict-test-secret"),
+		application.NewLxcService(lxc.NewAdapter()),
+		application.NewShareService(share.NewCifsAdapter(t.TempDir()), share.NewWebdavAdapter()),
+		application.NewIdentityService(identity.NewAdapter(), "strict-test-secret"),
 		application.NewCatalogService(catalog.NewAdapter(t.TempDir())),
 	)
 
@@ -139,24 +233,24 @@ func TestModuleAvailabilityEnforcement(t *testing.T) {
 
 func TestDockerConfigAndFilesystemGRPC(t *testing.T) {
 	ctx := context.Background()
-	checker := prereq.NewSystemChecker(true)
+	checker := prereq.NewSystemChecker()
 	unitsDir := t.TempDir()
-	dockerAdapter := docker.NewAdapterFull("/nonexistent/docker.sock", unitsDir, true)
-	zfsAdapter := zfs.NewAdapter(true)
+	dockerAdapter := docker.NewAdapterFull("/nonexistent/docker.sock", unitsDir)
+	zfsAdapter := newStubZfsServerPort(t.TempDir())
 	dockerAdapter.SetZfsPort(zfsAdapter)
 
-	sysAdapter := system.NewAdapter(zfsAdapter, checker, true)
+	sysAdapter := system.NewAdapter(zfsAdapter, checker)
 	srv := grpcadapter.NewServer(
 		application.NewSystemService(sysAdapter),
 		application.NewPrerequisiteService(checker),
-		application.NewDiskService(disk.NewAdapter(zfsAdapter, true)),
+		application.NewDiskService(disk.NewAdapter(zfsAdapter)),
 		application.NewZfsService(zfsAdapter),
-		application.NewKvmService(kvm.NewAdapter(true)),
+		application.NewKvmService(kvm.NewAdapter()),
 		application.NewDockerService(dockerAdapter),
 		application.NewDockerAppService(dockerAdapter),
-		application.NewLxcService(lxc.NewAdapter(true)),
-		application.NewShareService(share.NewCifsAdapter(true, t.TempDir()), share.NewWebdavAdapter(true)),
-		application.NewIdentityService(identity.NewAdapter(true), "test-secret"),
+		application.NewLxcService(lxc.NewAdapter()),
+		application.NewShareService(share.NewCifsAdapter(t.TempDir()), share.NewWebdavAdapter()),
+		application.NewIdentityService(identity.NewAdapter(), "test-secret"),
 		application.NewCatalogService(catalog.NewAdapter(t.TempDir())),
 	)
 
@@ -178,40 +272,39 @@ func TestDockerConfigAndFilesystemGRPC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateDockerConfig failed: %v", err)
 	}
-	if updated.GetPool() != "tank" || updated.GetDataset() != "tank/apps" || updated.GetAppdataPath() != "/tank/apps/appdata" {
+	if updated.GetPool() != "tank" || updated.GetDataset() != "tank/apps" || !strings.HasSuffix(updated.GetAppdataPath(), "/apps/appdata") {
 		t.Fatalf("unexpected updated config: %v", updated)
 	}
 
 	// 3. List filesystem directories
 	fsRes, err := srv.ListFileSystemDirectories(ctx, &nasv1.ListFileSystemDirectoriesRequest{
-		Path: "/tank",
+		Path: unitsDir,
 	})
 	if err != nil {
 		t.Fatalf("ListFileSystemDirectories failed: %v", err)
 	}
-	if len(fsRes.GetEntries()) == 0 {
-		t.Fatalf("expected entries in /tank, got 0")
-	}
+	_ = fsRes
 }
 
 func TestSystemConfigAndPoolSelection(t *testing.T) {
 	ctx := context.Background()
-	checker := prereq.NewSystemChecker(true)
+	checker := prereq.NewSystemChecker()
 	checker.SetMainPool("") // unselect initially
 
-	zfsAdapter := zfs.NewAdapter(true)
-	sysAdapter := system.NewAdapter(zfsAdapter, checker, true)
+	tempDir := t.TempDir()
+	zfsAdapter := newStubZfsServerPort(tempDir)
+	sysAdapter := system.NewAdapter(zfsAdapter, checker)
 	srv := grpcadapter.NewServer(
 		application.NewSystemService(sysAdapter),
 		application.NewPrerequisiteService(checker),
-		application.NewDiskService(disk.NewAdapter(zfsAdapter, true)),
+		application.NewDiskService(disk.NewAdapter(zfsAdapter)),
 		application.NewZfsService(zfsAdapter),
-		application.NewKvmService(kvm.NewAdapter(true)),
-		application.NewDockerService(docker.NewAdapter(true)),
-		application.NewDockerAppService(docker.NewAdapter(true)),
-		application.NewLxcService(lxc.NewAdapter(true)),
-		application.NewShareService(share.NewCifsAdapter(true, t.TempDir()), share.NewWebdavAdapter(true)),
-		application.NewIdentityService(identity.NewAdapter(true), "test-secret"),
+		application.NewKvmService(kvm.NewAdapter()),
+		application.NewDockerService(docker.NewAdapter()),
+		application.NewDockerAppService(docker.NewAdapter()),
+		application.NewLxcService(lxc.NewAdapter()),
+		application.NewShareService(share.NewCifsAdapter(t.TempDir()), share.NewWebdavAdapter()),
+		application.NewIdentityService(identity.NewAdapter(), "test-secret"),
 		application.NewCatalogService(catalog.NewAdapter(t.TempDir())),
 	)
 

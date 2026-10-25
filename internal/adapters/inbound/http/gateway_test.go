@@ -4,48 +4,222 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sigxcpu/nas"
 	grpcadapter "github.com/sigxcpu/nas/internal/adapters/inbound/grpc"
 	httpadapter "github.com/sigxcpu/nas/internal/adapters/inbound/http"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/catalog"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/disk"
-	"github.com/sigxcpu/nas/internal/adapters/outbound/docker"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/identity"
-	"github.com/sigxcpu/nas/internal/adapters/outbound/kvm"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/lxc"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/prereq"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/share"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/system"
-	"github.com/sigxcpu/nas/internal/adapters/outbound/zfs"
 	"github.com/sigxcpu/nas/internal/application"
+	"github.com/sigxcpu/nas/internal/domain"
+	"github.com/sigxcpu/nas/internal/ports"
 	"golang.org/x/net/websocket"
 )
+
+type stubZfsPort struct {
+	ports.ZfsEnginePort
+	pools    map[string]domain.ZfsPool
+	datasets map[string]domain.ZfsDataset
+}
+
+func (s *stubZfsPort) GetPool(ctx context.Context, id string) (*domain.ZfsPool, error) {
+	p, ok := s.pools[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	return &p, nil
+}
+
+func (s *stubZfsPort) ListPools(ctx context.Context) ([]domain.ZfsPool, error) {
+	var res []domain.ZfsPool
+	for _, p := range s.pools {
+		res = append(res, p)
+	}
+	return res, nil
+}
+
+func (s *stubZfsPort) ScrubPool(ctx context.Context, id string) (*domain.ZfsPool, error) {
+	p, ok := s.pools[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	p.LastScrubStatus = "Scrub completed"
+	s.pools[id] = p
+	return &p, nil
+}
+
+func (s *stubZfsPort) GetDataset(ctx context.Context, poolID, datasetID string) (*domain.ZfsDataset, error) {
+	key := poolID + "/" + datasetID
+	ds, ok := s.datasets[key]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	return &ds, nil
+}
+
+func (s *stubZfsPort) SnapshotDataset(ctx context.Context, poolID, datasetID, snapName string) (*domain.ZfsDataset, error) {
+	key := poolID + "/" + datasetID
+	ds, ok := s.datasets[key]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	ds.SnapshotsCount++
+	s.datasets[key] = ds
+	return &ds, nil
+}
+
+func (s *stubZfsPort) UpdateDataset(ctx context.Context, dataset domain.ZfsDataset, fields []string) (*domain.ZfsDataset, error) {
+	key := dataset.PoolID + "/" + dataset.ID
+	s.datasets[key] = dataset
+	return &dataset, nil
+}
+
+type stubKvmPort struct {
+	ports.KvmHypervisorPort
+	vms      map[string]domain.VirtualMachine
+	sessions map[string]domain.ConsoleSession
+}
+
+func (k *stubKvmPort) OpenConsole(ctx context.Context, id string) (*domain.ConsoleSession, error) {
+	token := "valid-token"
+	sess := domain.ConsoleSession{
+		VMName:       id,
+		Token:        token,
+		WebsocketURL: fmt.Sprintf("/ws/novnc/%s?token=%s", id, token),
+		ExpiresAt:    time.Now().Add(5 * time.Minute).Format(time.RFC3339),
+	}
+	k.sessions[id] = sess
+	return &sess, nil
+}
+
+func (k *stubKvmPort) ValidateConsoleToken(ctx context.Context, vmID, token string) (*domain.VirtualMachine, error) {
+	sess, ok := k.sessions[vmID]
+	if !ok || sess.Token != token {
+		return nil, domain.ErrPermissionDenied
+	}
+	vm, ok := k.vms[vmID]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	return &vm, nil
+}
+
+func (k *stubKvmPort) DialVNC(ctx context.Context, vmID string) (net.Conn, error) {
+	client, server := net.Pipe()
+	go func() {
+		defer server.Close()
+		_, _ = server.Write([]byte("RFB 003.008\n"))
+	}()
+	return client, nil
+}
+
+func (k *stubKvmPort) ListVMs(ctx context.Context) ([]domain.VirtualMachine, error) {
+	var res []domain.VirtualMachine
+	for _, vm := range k.vms {
+		res = append(res, vm)
+	}
+	return res, nil
+}
+
+type stubDockerPort struct {
+	ports.DockerRuntimePort
+	ports.DockerAppPort
+	ports.DockerConfigPort
+	containers map[string]domain.DockerContainer
+	apps       map[string]domain.DockerApp
+	config     domain.DockerConfig
+}
+
+func (d *stubDockerPort) ListContainers(ctx context.Context) ([]domain.DockerContainer, error) {
+	var res []domain.DockerContainer
+	for _, c := range d.containers {
+		res = append(res, c)
+	}
+	return res, nil
+}
+
+func (d *stubDockerPort) CreateApp(ctx context.Context, app domain.DockerApp) (*domain.DockerApp, error) {
+	app.State = "RUNNING"
+	d.apps[app.ID] = app
+	return &app, nil
+}
+
+func (d *stubDockerPort) GetConfig(ctx context.Context) (*domain.DockerConfig, error) {
+	return &d.config, nil
+}
+
+func (d *stubDockerPort) ListDirectories(ctx context.Context, reqPath string) (*domain.DirectoryList, error) {
+	return &domain.DirectoryList{
+		CurrentPath: reqPath,
+		Entries: []domain.DirectoryEntry{
+			{Name: "appdata", Path: reqPath + "/appdata", IsDir: true},
+		},
+	}, nil
+}
 
 func setupTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	ctx := context.Background()
 
-	prereqChecker := prereq.NewSystemChecker(true)
+	prereqChecker := prereq.NewSystemChecker()
 	prereqChecker.SetMainPool("tank")
 	prereqSvc := application.NewPrerequisiteService(prereqChecker)
-	zfsAdapter := zfs.NewAdapter(true)
-	systemSvc := application.NewSystemService(system.NewAdapter(zfsAdapter, prereqChecker, true))
-	zfsSvc := application.NewZfsService(zfsAdapter)
-	diskSvc := application.NewDiskService(disk.NewAdapter(zfsAdapter, true))
-	kvmSvc := application.NewKvmService(kvm.NewAdapter(true))
-	dockerAdapter := docker.NewAdapter(true)
-	dockerSvc := application.NewDockerService(dockerAdapter)
-	dockerAppSvc := application.NewDockerAppService(dockerAdapter)
-	lxcSvc := application.NewLxcService(lxc.NewAdapter(true))
-	webdavAdapter := share.NewWebdavAdapter(true)
-	shareSvc := application.NewShareService(share.NewCifsAdapter(true, t.TempDir()), webdavAdapter)
-	identitySvc := application.NewIdentityService(identity.NewAdapter(true), "test-jwt-secret")
+
+	zfsPort := &stubZfsPort{
+		pools: map[string]domain.ZfsPool{
+			"tank": {ID: "tank", PoolName: "tank", State: "ONLINE", Mountpoint: "/nas/tank"},
+		},
+		datasets: map[string]domain.ZfsDataset{
+			"tank/media": {PoolID: "tank", ID: "media", DatasetPath: "tank/media", Mountpoint: "/nas/tank/media"},
+		},
+	}
+	systemSvc := application.NewSystemService(system.NewAdapter(zfsPort, prereqChecker))
+	zfsSvc := application.NewZfsService(zfsPort)
+	diskSvc := application.NewDiskService(disk.NewAdapter(zfsPort))
+
+	kvmPort := &stubKvmPort{
+		vms: map[string]domain.VirtualMachine{
+			"ubuntu-24-lts": {ID: "ubuntu-24-lts", VMName: "Ubuntu 24.04 LTS", State: "RUNNING"},
+		},
+		sessions: make(map[string]domain.ConsoleSession),
+	}
+	kvmSvc := application.NewKvmService(kvmPort)
+
+	dockerPort := &stubDockerPort{
+		containers: make(map[string]domain.DockerContainer),
+		apps:       make(map[string]domain.DockerApp),
+		config: domain.DockerConfig{
+			Pool:            "tank",
+			Dataset:         "tank/apps",
+			AppdataPath:     "/nas/tank/apps/appdata",
+			DatasetSelected: true,
+		},
+	}
+	dockerSvc := application.NewDockerService(dockerPort)
+	dockerAppSvc := application.NewDockerAppService(dockerPort)
+	lxcSvc := application.NewLxcService(lxc.NewAdapter())
+	webdavAdapter := share.NewWebdavAdapter()
+	webdavDir := t.TempDir()
+	_, _ = webdavAdapter.CreateShare(ctx, domain.WebdavShare{
+		ID:      "documents",
+		Path:    webdavDir,
+		Enabled: true,
+	})
+	shareSvc := application.NewShareService(share.NewCifsAdapter(t.TempDir()), webdavAdapter)
+	identitySvc := application.NewIdentityService(identity.NewAdapter(), "test-jwt-secret")
 	catalogSvc := application.NewCatalogService(catalog.NewAdapter(t.TempDir()))
 
 	grpcSrv := grpcadapter.NewServer(systemSvc, prereqSvc, diskSvc, zfsSvc, kvmSvc, dockerSvc, dockerAppSvc, lxcSvc, shareSvc, identitySvc, catalogSvc)

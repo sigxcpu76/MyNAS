@@ -152,11 +152,7 @@ onMounted(() => {
           class="badge"
           :class="missingCount > 0 ? 'badge-warning' : 'badge-neutral'"
         >
-          Missing / Fallback: {{ missingCount }}
-        </span>
-
-        <span v-if="summary?.hybridFallbackEnabled" class="badge badge-info">
-          Hybrid Stateful Sandbox Fallback Active
+          Missing: {{ missingCount }}
         </span>
       </div>
 

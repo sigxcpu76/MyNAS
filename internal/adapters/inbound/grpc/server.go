@@ -252,7 +252,6 @@ func (s *Server) CheckPrerequisites(ctx context.Context, req *nasv1.CheckPrerequ
 		Prerequisites:          out,
 		InstalledCount:        int32(len(report.Installed)),
 		MissingCount:          int32(len(report.Missing)),
-		HybridFallbackEnabled: report.HybridFallbackActive,
 		LinuxFlavor:            toProtoLinuxFlavor(report.LinuxFlavor),
 		MissingPrerequisites:   missing,
 		InstalledPrerequisites: installed,

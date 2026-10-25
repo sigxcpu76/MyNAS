@@ -211,26 +211,24 @@ var defaultSpecs = []Spec{
 }
 
 type SystemChecker struct {
-	mu             sync.RWMutex
-	hybridFallback bool
-	flavor         domain.LinuxFlavor
-	mainPool       string
-	cached         []domain.Prerequisite
-	moduleSpecMap  map[string][]string
+	mu            sync.RWMutex
+	flavor        domain.LinuxFlavor
+	mainPool      string
+	cached        []domain.Prerequisite
+	moduleSpecMap map[string][]string
 }
 
-func NewSystemChecker(hybridFallback bool) *SystemChecker {
+func NewSystemChecker() *SystemChecker {
 	modMap := make(map[string][]string)
 	for _, s := range defaultSpecs {
 		modMap[s.Module] = append(modMap[s.Module], s.ID)
 	}
 	flavor := DetectLinuxFlavor()
 	c := &SystemChecker{
-		hybridFallback: hybridFallback,
-		flavor:         flavor,
-		moduleSpecMap:  modMap,
+		flavor:        flavor,
+		moduleSpecMap: modMap,
 	}
-	_, _, _ = c.CheckAll(context.Background())
+	_, _ = c.CheckAll(context.Background())
 	return c
 }
 
@@ -253,7 +251,7 @@ func (c *SystemChecker) GetLinuxFlavor() domain.LinuxFlavor {
 }
 
 // IsModuleEnabled returns true if all required underlying binaries and libraries for the module
-// ("zfs", "kvm", "docker", "lxc", "cifs") are installed (or if hybrid fallback mode is active),
+// ("zfs", "kvm", "docker", "lxc", "cifs") are installed on the host,
 // and verifies that a main ZFS storage pool has been selected for modules other than zfs.
 func (c *SystemChecker) IsModuleEnabled(module string) (bool, string) {
 	c.mu.RLock()
@@ -264,10 +262,6 @@ func (c *SystemChecker) IsModuleEnabled(module string) (bool, string) {
 		if c.mainPool == "" {
 			return false, fmt.Sprintf("module %q is paused: no main ZFS pool selected. Please select a main storage pool to initialize system datasets and enable this module", strings.ToUpper(module))
 		}
-	}
-
-	if c.hybridFallback {
-		return true, "hybrid fallback mode active"
 	}
 
 	reqIDs := c.moduleSpecMap[module]
@@ -329,7 +323,7 @@ func (c *SystemChecker) GetPrerequisite(ctx context.Context, id string) (*domain
 	return nil, fmt.Errorf("%w: prerequisite %q", domain.ErrNotFound, id)
 }
 
-func (c *SystemChecker) CheckAll(ctx context.Context) ([]domain.Prerequisite, bool, error) {
+func (c *SystemChecker) CheckAll(ctx context.Context) ([]domain.Prerequisite, error) {
 	now := time.Now().UTC()
 	flavor := DetectLinuxFlavor()
 
@@ -344,7 +338,6 @@ func (c *SystemChecker) CheckAll(ctx context.Context) ([]domain.Prerequisite, bo
 			BinaryOrPath: spec.Target,
 			InstallHint:  FormatInstallHint(spec.ID, flavor),
 			RequiredBy:   spec.RequiredBy,
-			FallbackMode: c.hybridFallback,
 			CheckedTime:  now,
 		}
 
@@ -353,7 +346,6 @@ func (c *SystemChecker) CheckAll(ctx context.Context) ([]domain.Prerequisite, bo
 			p.Version = "embedded-v1.0"
 			p.Details = "Compiled directly into the nasctl binary"
 			p.InstallHint = "Built directly into the single NAS binary"
-			p.FallbackMode = false
 			results = append(results, p)
 			continue
 		}
@@ -381,11 +373,6 @@ func (c *SystemChecker) CheckAll(ctx context.Context) ([]domain.Prerequisite, bo
 				p.Status = domain.StatusInstalled
 				p.Version = "uefi-ovmf"
 				p.Details = fmt.Sprintf("UEFI firmware found at %s", foundPath)
-				p.FallbackMode = false
-			} else if c.hybridFallback {
-				p.Status = domain.StatusFallbackActive
-				p.Version = "hybrid-sandbox"
-				p.Details = fmt.Sprintf("OVMF firmware %s not found; running in hybrid sandbox mode", spec.Target)
 			} else {
 				p.Status = domain.StatusMissing
 				p.Version = "missing"
@@ -406,21 +393,14 @@ func (c *SystemChecker) CheckAll(ctx context.Context) ([]domain.Prerequisite, bo
 				}
 				p.Version = version
 				p.Details = fmt.Sprintf("Kernel module %s is active in /sys/module (%s)", modName, version)
-				p.FallbackMode = false
 			} else if _, err := os.Stat(spec.Target); err == nil {
 				p.Status = domain.StatusInstalled
 				p.Version = "kernel-loaded"
 				p.Details = fmt.Sprintf("Kernel path %s is active on host", spec.Target)
-				p.FallbackMode = false
 			} else if isModuleInProcModules(modName) {
 				p.Status = domain.StatusInstalled
 				p.Version = "kernel-loaded"
 				p.Details = fmt.Sprintf("Kernel module %s is loaded in /proc/modules", modName)
-				p.FallbackMode = false
-			} else if c.hybridFallback {
-				p.Status = domain.StatusFallbackActive
-				p.Version = "hybrid-sandbox"
-				p.Details = fmt.Sprintf("Host path %s not present; hybrid sandbox emulation active", spec.Target)
 			} else {
 				p.Status = domain.StatusMissing
 				p.Version = "not-loaded"
@@ -436,7 +416,6 @@ func (c *SystemChecker) CheckAll(ctx context.Context) ([]domain.Prerequisite, bo
 				p.Status = domain.StatusInstalled
 				p.Version = filepath.Base(libPath)
 				p.Details = fmt.Sprintf("Shared library located at %s", libPath)
-				p.FallbackMode = false
 			} else if spec.ID == "libzfs" && (isModuleInProcModules("zfs") || isDirExists("/sys/module/zfs")) {
 				// OpenZFS kernel module loaded with in-kernel kstat/sysfs API
 				version := readFileTrim("/sys/module/zfs/version")
@@ -446,11 +425,6 @@ func (c *SystemChecker) CheckAll(ctx context.Context) ([]domain.Prerequisite, bo
 				p.Status = domain.StatusInstalled
 				p.Version = version
 				p.Details = fmt.Sprintf("ZFS kernel module active via /sys/module/zfs (%s)", version)
-				p.FallbackMode = false
-			} else if c.hybridFallback {
-				p.Status = domain.StatusFallbackActive
-				p.Version = "hybrid-sandbox"
-				p.Details = fmt.Sprintf("Shared library %q not found on host; running in hybrid sandbox mode", spec.Target)
 			} else {
 				p.Status = domain.StatusMissing
 				p.Version = "missing"
@@ -465,13 +439,8 @@ func (c *SystemChecker) CheckAll(ctx context.Context) ([]domain.Prerequisite, bo
 		if err == nil {
 			p.BinaryOrPath = resolvedPath
 			p.Status = domain.StatusInstalled
-			p.FallbackMode = false
 			p.Version = detectVersion(ctx, resolvedPath, spec.VersionArgs)
 			p.Details = fmt.Sprintf("Found executable at %s", resolvedPath)
-		} else if c.hybridFallback {
-			p.Status = domain.StatusFallbackActive
-			p.Version = "hybrid-sandbox"
-			p.Details = fmt.Sprintf("Binary %q not installed on host; running in hybrid sandbox mode", spec.Target)
 		} else {
 			p.Status = domain.StatusMissing
 			p.Version = "missing"
@@ -484,13 +453,13 @@ func (c *SystemChecker) CheckAll(ctx context.Context) ([]domain.Prerequisite, bo
 	c.cached = results
 	c.flavor = flavor
 	c.mu.Unlock()
-	return results, c.hybridFallback, nil
+	return results, nil
 }
 
 // GetReport compiles a comprehensive status report separating missing and installed prerequisites,
 // along with the host Linux flavor and a copy-pasteable remediation command.
 func (c *SystemChecker) GetReport(ctx context.Context) (domain.PrerequisitesReport, error) {
-	items, hybrid, err := c.CheckAll(ctx)
+	items, err := c.CheckAll(ctx)
 	if err != nil {
 		return domain.PrerequisitesReport{}, err
 	}
@@ -567,13 +536,12 @@ func (c *SystemChecker) GetReport(ctx context.Context) (domain.PrerequisitesRepo
 	remediationScript := strings.Join(cmdParts, " && \\\n  ")
 
 	return domain.PrerequisitesReport{
-		LinuxFlavor:          flavor,
-		Missing:              missing,
-		Installed:            installed,
-		All:                  items,
-		RemediationScript:    remediationScript,
-		IsFullyCompliant:     len(missing) == 0,
-		HybridFallbackActive: hybrid,
+		LinuxFlavor:       flavor,
+		Missing:           missing,
+		Installed:         installed,
+		All:               items,
+		RemediationScript: remediationScript,
+		IsFullyCompliant:  len(missing) == 0,
 	}, nil
 }
 

@@ -36,11 +36,10 @@ type LinuxFlavor struct {
 }
 
 type PrerequisitesReport struct {
-	LinuxFlavor          LinuxFlavor    `json:"linuxFlavor"`
-	Missing              []Prerequisite `json:"missing"`
-	Installed            []Prerequisite `json:"installed"`
-	All                  []Prerequisite `json:"all"`
-	RemediationScript    string         `json:"remediationScript"`
-	IsFullyCompliant     bool           `json:"isFullyCompliant"`
-	HybridFallbackActive bool           `json:"hybridFallbackActive"`
+	LinuxFlavor       LinuxFlavor    `json:"linuxFlavor"`
+	Missing           []Prerequisite `json:"missing"`
+	Installed         []Prerequisite `json:"installed"`
+	All               []Prerequisite `json:"all"`
+	RemediationScript string         `json:"remediationScript"`
+	IsFullyCompliant  bool           `json:"isFullyCompliant"`
 }

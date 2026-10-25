@@ -10,8 +10,8 @@ import (
 
 func TestDiskAdapter(t *testing.T) {
 	ctx := context.Background()
-	zfsAdapter := zfs.NewAdapter(true)
-	adapter := disk.NewAdapter(zfsAdapter, true)
+	zfsAdapter := zfs.NewAdapter()
+	adapter := disk.NewAdapter(zfsAdapter)
 
 	disks, err := adapter.ListDisks(ctx)
 	if err != nil {

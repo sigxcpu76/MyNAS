@@ -880,7 +880,7 @@ message CheckPrerequisitesResponse {
   repeated Prerequisite prerequisites = 1;
   int32 installed_count = 2;
   int32 missing_count = 3;
-  bool hybrid_fallback_enabled = 4;
+  reserved 4;
   LinuxFlavor linux_flavor = 5;
   repeated Prerequisite missing_prerequisites = 6;
   repeated Prerequisite installed_prerequisites = 7;

@@ -74,9 +74,6 @@ func newPrereqCmd(rootOpts *RootOptions) *cobra.Command {
 			fmt.Fprintf(rootOpts.Out, "Compliance Status: ACTION REQUIRED (Installed: %d, Missing: %d)\n",
 				resp.GetInstalledCount(), resp.GetMissingCount())
 		}
-		if resp.GetHybridFallbackEnabled() {
-			fmt.Fprintln(rootOpts.Out, "Notice: Hybrid stateful sandbox fallback mode is active.")
-		}
 		fmt.Fprintln(rootOpts.Out, "================================================================================")
 		fmt.Fprintln(rootOpts.Out)
 

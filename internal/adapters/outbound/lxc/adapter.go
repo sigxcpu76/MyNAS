@@ -14,66 +14,15 @@ import (
 
 type Adapter struct {
 	mu         sync.RWMutex
-	hybrid     bool
 	mainPool   string
 	containers map[string]domain.LxcContainer
 	nextIP     int
 }
 
-func NewAdapter(hybrid bool) *Adapter {
-	a := &Adapter{
-		hybrid:     hybrid,
+func NewAdapter() *Adapter {
+	return &Adapter{
 		containers: make(map[string]domain.LxcContainer),
 		nextIP:     15,
-	}
-	if hybrid {
-		a.seedDefaults()
-	}
-	return a
-}
-
-func (a *Adapter) seedDefaults() {
-	a.containers["pihole-dns"] = domain.LxcContainer{
-		ID:             "pihole-dns",
-		ContainerName:  "pihole-dns",
-		State:          "RUNNING",
-		Distribution:   "debian",
-		Release:        "bookworm",
-		Architecture:   "amd64",
-		IPv4Address:    "10.10.20.10",
-		Autostart:      true,
-		Unprivileged:   true,
-		RootfsPath:     "/var/lib/lxc/pihole-dns/rootfs",
-		MemoryLimitMiB: 512,
-		CPUCores:       1,
-	}
-	a.containers["postgres-cluster"] = domain.LxcContainer{
-		ID:             "postgres-cluster",
-		ContainerName:  "postgres-cluster",
-		State:          "RUNNING",
-		Distribution:   "ubuntu",
-		Release:        "noble",
-		Architecture:   "amd64",
-		IPv4Address:    "10.10.20.12",
-		Autostart:      true,
-		Unprivileged:   true,
-		RootfsPath:     "/var/lib/lxc/postgres-cluster/rootfs",
-		MemoryLimitMiB: 2048,
-		CPUCores:       2,
-	}
-	a.containers["alpine-rsync"] = domain.LxcContainer{
-		ID:             "alpine-rsync",
-		ContainerName:  "alpine-rsync",
-		State:          "STOPPED",
-		Distribution:   "alpine",
-		Release:        "3.20",
-		Architecture:   "amd64",
-		IPv4Address:    "-",
-		Autostart:      false,
-		Unprivileged:   true,
-		RootfsPath:     "/var/lib/lxc/alpine-rsync/rootfs",
-		MemoryLimitMiB: 256,
-		CPUCores:       1,
 	}
 }
 

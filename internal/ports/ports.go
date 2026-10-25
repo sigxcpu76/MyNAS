@@ -15,7 +15,7 @@ import (
 type PrerequisiteCheckerPort interface {
 	ListPrerequisites(ctx context.Context) ([]domain.Prerequisite, error)
 	GetPrerequisite(ctx context.Context, id string) (*domain.Prerequisite, error)
-	CheckAll(ctx context.Context) ([]domain.Prerequisite, bool, error)
+	CheckAll(ctx context.Context) ([]domain.Prerequisite, error)
 	GetReport(ctx context.Context) (domain.PrerequisitesReport, error)
 	GetLinuxFlavor() domain.LinuxFlavor
 	IsModuleEnabled(module string) (bool, string)

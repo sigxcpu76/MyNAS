@@ -69,10 +69,10 @@ func (s *PrerequisiteService) GetPrerequisite(ctx context.Context, id string) (*
 	return s.checker.GetPrerequisite(ctx, id)
 }
 
-func (s *PrerequisiteService) CheckPrerequisites(ctx context.Context) ([]domain.Prerequisite, int32, int32, bool, error) {
-	items, hybrid, err := s.checker.CheckAll(ctx)
+func (s *PrerequisiteService) CheckPrerequisites(ctx context.Context) ([]domain.Prerequisite, int32, int32, error) {
+	items, err := s.checker.CheckAll(ctx)
 	if err != nil {
-		return nil, 0, 0, false, err
+		return nil, 0, 0, err
 	}
 	var installed, missing int32
 	for _, p := range items {
@@ -82,7 +82,7 @@ func (s *PrerequisiteService) CheckPrerequisites(ctx context.Context) ([]domain.
 			missing++
 		}
 	}
-	return items, installed, missing, hybrid, nil
+	return items, installed, missing, nil
 }
 
 func (s *PrerequisiteService) GetReport(ctx context.Context) (domain.PrerequisitesReport, error) {

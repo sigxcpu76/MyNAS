@@ -14,46 +14,15 @@ import (
 
 type WebdavAdapter struct {
 	mu       sync.RWMutex
-	hybrid   bool
 	shares   map[string]domain.WebdavShare
 	handlers map[string]*webdav.Handler
 }
 
-func NewWebdavAdapter(hybrid bool) *WebdavAdapter {
-	a := &WebdavAdapter{
-		hybrid:   hybrid,
+func NewWebdavAdapter() *WebdavAdapter {
+	return &WebdavAdapter{
 		shares:   make(map[string]domain.WebdavShare),
 		handlers: make(map[string]*webdav.Handler),
 	}
-	if hybrid {
-		a.seedDefaults()
-	}
-	return a
-}
-
-func (a *WebdavAdapter) seedDefaults() {
-	_ = a.registerShare(domain.WebdavShare{
-		ID:            "documents",
-		ShareName:     "documents",
-		Path:          "/tmp/nas-webdav-documents",
-		URLPrefix:     "/dav/documents",
-		Description:   "Shared Team Documents & Nextcloud WebDAV Mount",
-		ReadOnly:      false,
-		AllowedUsers:  []string{"sigxcpu"},
-		AllowedGroups: []string{"users"},
-		Enabled:       true,
-	})
-	_ = a.registerShare(domain.WebdavShare{
-		ID:            "isos",
-		ShareName:     "isos",
-		Path:          "/tmp/nas-webdav-isos",
-		URLPrefix:     "/dav/isos",
-		Description:   "Read-only Linux & BSD Installation ISO Repository",
-		ReadOnly:      true,
-		AllowedUsers:  []string{"sigxcpu"},
-		AllowedGroups: []string{"users"},
-		Enabled:       true,
-	})
 }
 
 func (a *WebdavAdapter) registerShare(s domain.WebdavShare) error {

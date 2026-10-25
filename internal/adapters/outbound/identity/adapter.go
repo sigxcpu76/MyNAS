@@ -19,7 +19,6 @@ import (
 
 type Adapter struct {
 	mu           sync.RWMutex
-	hybrid       bool
 	users        map[string]domain.User
 	groups       map[string]domain.Group
 	passwordHash map[string]string
@@ -27,9 +26,8 @@ type Adapter struct {
 	nextGID      int32
 }
 
-func NewAdapter(hybrid bool) *Adapter {
+func NewAdapter() *Adapter {
 	a := &Adapter{
-		hybrid:       hybrid,
 		users:        make(map[string]domain.User),
 		groups:       make(map[string]domain.Group),
 		passwordHash: make(map[string]string),

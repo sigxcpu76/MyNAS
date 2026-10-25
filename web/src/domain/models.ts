@@ -43,7 +43,7 @@ export interface Prerequisite {
   details: string;
   installHint: string;
   requiredBy: string[];
-  fallbackMode: boolean;
+  fallbackMode?: boolean;
   checkedTime?: string;
 }
 
@@ -51,7 +51,6 @@ export interface PrerequisiteSummary {
   prerequisites: Prerequisite[];
   installedCount: number;
   missingCount: number;
-  hybridFallbackEnabled: boolean;
   linuxFlavor?: LinuxFlavor;
   missingPrerequisites?: Prerequisite[];
   installedPrerequisites?: Prerequisite[];

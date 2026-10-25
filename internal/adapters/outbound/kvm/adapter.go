@@ -3,7 +3,6 @@ package kvm
 import (
 	"context"
 	"crypto/rand"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
@@ -29,7 +28,6 @@ type consoleTicket struct {
 type Adapter struct {
 	mu        sync.RWMutex
 	logger    *slog.Logger
-	hybrid    bool
 	stateDir  string
 	vms       map[string]domain.VirtualMachine
 	tickets   map[string]consoleTicket
@@ -37,11 +35,11 @@ type Adapter struct {
 	nextPort  int32
 }
 
-func NewAdapter(hybrid bool) *Adapter {
-	return NewAdapterWithStateDir(hybrid, "")
+func NewAdapter() *Adapter {
+	return NewAdapterWithStateDir("")
 }
 
-func NewAdapterWithStateDir(hybrid bool, stateDir string) *Adapter {
+func NewAdapterWithStateDir(stateDir string) *Adapter {
 	if stateDir == "" {
 		if h := os.Getenv("HOME"); h != "" {
 			stateDir = filepath.Join(h, ".local/share/nasctl/vms")
@@ -53,15 +51,11 @@ func NewAdapterWithStateDir(hybrid bool, stateDir string) *Adapter {
 
 	a := &Adapter{
 		logger:    slog.Default().With("subsystem", "libvirt"),
-		hybrid:    hybrid,
 		stateDir:  stateDir,
 		vms:       make(map[string]domain.VirtualMachine),
 		tickets:   make(map[string]consoleTicket),
 		snapshots: make(map[string][]domain.VirtualMachineSnapshot),
 		nextPort:  5903,
-	}
-	if hybrid {
-		a.seedDefaults()
 	}
 	return a
 }
@@ -101,174 +95,6 @@ func (a *Adapter) isRealDomain(ctx context.Context, id string) bool {
 	return err == nil
 }
 
-func (a *Adapter) seedDefaults() {
-	a.vms["ubuntu-24-lts"] = domain.VirtualMachine{
-		ID:                  "ubuntu-24-lts",
-		VMName:              "ubuntu-24-lts",
-		UUID:                "a7f4e912-38b1-4f92-9b1c-812093a4b001",
-		State:               "RUNNING",
-		Sockets:             1,
-		Cores:               4,
-		VCPUs:               4,
-		CPUType:             "host",
-		CPUUnits:            1024,
-		MemoryMiB:           8192,
-		BalloonMinMiB:       4096,
-		Hugepages:           "2MB",
-		MachineType:         "q35",
-		BiosType:            "ovmf",
-		TPMVersion:          "v2.0",
-		SecureBoot:          true,
-		DiskPath:            "/tank/vms/ubuntu-root.raw",
-		DiskSizeGiB:         64,
-		ISOImage:            "/tank/isos/ubuntu-24.04.1-live-server-amd64.iso",
-		CdromIsoImage:       "/tank/isos/ubuntu-24.04.1-live-server-amd64.iso",
-		NetworkBridge:       "virbr0",
-		VNCPort:             5901,
-		VNCDisplay:          "127.0.0.1:1 (port 5901)",
-		Autostart:           true,
-		OSVariant:           "ubuntu24.04",
-		Description:         "Primary Linux application & Kubernetes worker node",
-		AgentEnabled:        true,
-		AgentRunning:        true,
-		GuestIPAddresses:    []string{"192.168.1.115", "fe80::5054:ff:fe12:3456"},
-		GuestOSName:         "Ubuntu 24.04.1 LTS (Noble Numbat)",
-		GuestCPUPercent:     12.4,
-		GuestMemoryUsedMiB:  2850,
-		StartupDelaySeconds: 10,
-		BootOrder:           "order=scsi0;ide2;net0",
-		WatchdogModel:       "i6300esb",
-		WatchdogAction:      "reset",
-		DisplayType:         "virtio-gpu",
-		Disks: []domain.VirtualMachineDisk{
-			{
-				ID:             "scsi0",
-				Bus:            "scsi",
-				DiskPath:       "/tank/vms/ubuntu-root.raw",
-				SizeBytes:      68719476736,
-				CacheMode:      "none",
-				Discard:        true,
-				IOThread:       true,
-				SSDEmulation:   true,
-				Backup:         true,
-				IOPSLimitRead:  15000,
-				IOPSLimitWrite: 10000,
-			},
-			{
-				ID:        "scsi1",
-				Bus:       "scsi",
-				DiskPath:  "/tank/vms/ubuntu-data.raw",
-				SizeBytes: 137438953472,
-				CacheMode: "writeback",
-				Discard:   true,
-				IOThread:  true,
-				Backup:    true,
-			},
-		},
-		NetworkIfaces: []domain.VirtualMachineNetworkInterface{
-			{ID: "net0", Model: "virtio", Bridge: "virbr0", MacAddress: "bc:24:11:80:a1:01", Firewall: true},
-			{ID: "net1", Model: "virtio", Bridge: "virbr0", VlanTag: 100, MacAddress: "bc:24:11:80:a1:02", Firewall: true},
-		},
-		CloudInit: domain.VirtualMachineCloudInit{
-			User:          "ubuntu",
-			SSHPublicKeys: []string{"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGoogleCloudInitKeyDemo"},
-			IPConfig:      "ip=192.168.1.115/24,gw=192.168.1.1",
-		},
-		SerialConsoleURL: "/ws/serial/ubuntu-24-lts",
-	}
-
-	a.snapshots["ubuntu-24-lts"] = []domain.VirtualMachineSnapshot{
-		{
-			Name:           "ubuntu-24-lts/snapshots/clean-install",
-			SnapshotID:     "clean-install",
-			Description:    "Clean initial OS deployment with base tooling",
-			IncludeRAM:     false,
-			ParentSnapshot: "",
-			CreateTime:     time.Now().UTC().Add(-48 * time.Hour),
-		},
-		{
-			Name:           "ubuntu-24-lts/snapshots/pre-upgrade-k8s",
-			SnapshotID:     "pre-upgrade-k8s",
-			Description:    "Live RAM state snapshot prior to v1.31 upgrade",
-			IncludeRAM:     true,
-			ParentSnapshot: "clean-install",
-			CreateTime:     time.Now().UTC().Add(-6 * time.Hour),
-		},
-	}
-
-	a.vms["opnsense-fw"] = domain.VirtualMachine{
-		ID:            "opnsense-fw",
-		VMName:        "opnsense-fw",
-		UUID:          "b4c3e811-12a9-40f3-8f0a-442190bc2002",
-		State:         "RUNNING",
-		Sockets:       1,
-		Cores:         2,
-		VCPUs:         2,
-		CPUType:       "host",
-		MemoryMiB:     4096,
-		MachineType:   "q35",
-		BiosType:      "ovmf",
-		DiskPath:      "/tank/vms/opnsense.raw",
-		DiskSizeGiB:   32,
-		NetworkBridge: "virbr0",
-		VNCPort:       5902,
-		VNCDisplay:    "127.0.0.1:2 (port 5902)",
-		Autostart:     true,
-		OSVariant:     "freebsd14.0",
-		Description:   "Core network router and firewall gateway",
-		Disks: []domain.VirtualMachineDisk{
-			{
-				ID:        "scsi0",
-				Bus:       "scsi",
-				DiskPath:  "/tank/vms/opnsense.raw",
-				SizeBytes: 34359738368,
-				CacheMode: "none",
-				Discard:   true,
-				IOThread:  true,
-			},
-		},
-		NetworkIfaces: []domain.VirtualMachineNetworkInterface{
-			{ID: "net0", Model: "virtio", Bridge: "virbr0", MacAddress: "bc:24:11:80:a2:01", Firewall: false},
-		},
-		SerialConsoleURL: "/ws/serial/opnsense-fw",
-	}
-
-	a.vms["debian-lab"] = domain.VirtualMachine{
-		ID:            "debian-lab",
-		VMName:        "debian-lab",
-		UUID:          "c1d88219-94a2-4088-a021-771230f1d003",
-		State:         "STOPPED",
-		Sockets:       1,
-		Cores:         2,
-		VCPUs:         2,
-		CPUType:       "kvm64",
-		MemoryMiB:     2048,
-		MachineType:   "q35",
-		BiosType:      "seabios",
-		DiskPath:      "/tank/vms/debian-lab.raw",
-		DiskSizeGiB:   40,
-		NetworkBridge: "virbr0",
-		VNCPort:       5903,
-		VNCDisplay:    "127.0.0.1:3 (port 5903)",
-		Autostart:     false,
-		OSVariant:     "debian12",
-		Description:   "Sandbox testing environment",
-		Disks: []domain.VirtualMachineDisk{
-			{
-				ID:        "virtio0",
-				Bus:       "virtio",
-				DiskPath:  "/tank/vms/debian-lab.raw",
-				SizeBytes: 42949672960,
-				CacheMode: "writeback",
-				Discard:   true,
-			},
-		},
-		NetworkIfaces: []domain.VirtualMachineNetworkInterface{
-			{ID: "net0", Model: "virtio", Bridge: "virbr0", MacAddress: "bc:24:11:80:a3:01"},
-		},
-		SerialConsoleURL: "/ws/serial/debian-lab",
-	}
-}
 
 // Libvirt XML structures for parsing dumpxml output
 type domainXML struct {
@@ -525,59 +351,22 @@ func (a *Adapter) ListVMs(ctx context.Context) ([]domain.VirtualMachine, error) 
 					vms = append(vms, *vm)
 				}
 			}
-			if a.hybrid {
-				a.mu.RLock()
-				for id, vm := range a.vms {
-					found := false
-					for _, rv := range vms {
-						if rv.ID == id {
-							found = true
-							break
-						}
-					}
-					if !found {
-						a.enrichRuntimeTelemetry(ctx, &vm)
-						vms = append(vms, vm)
-					}
-				}
-				a.mu.RUnlock()
-			}
-			if len(vms) > 0 || !a.hybrid {
-				return vms, nil
-			}
+			return vms, nil
 		}
 	}
 
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	out := make([]domain.VirtualMachine, 0, len(a.vms))
-	for _, vm := range a.vms {
-		a.enrichRuntimeTelemetry(ctx, &vm)
-		out = append(out, vm)
-	}
-	return out, nil
+	return nil, fmt.Errorf("virsh/libvirt is not available on this host")
 }
 
 func (a *Adapter) GetVM(ctx context.Context, id string) (*domain.VirtualMachine, error) {
-	if a.hasVirsh() {
-		vm, err := a.getDomainFromVirsh(ctx, id)
-		if err == nil {
-			return vm, nil
-		}
-		if !a.hybrid {
-			return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, id)
-		}
+	if !a.hasVirsh() {
+		return nil, fmt.Errorf("virsh/libvirt is not available on this host")
 	}
-
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	vm, ok := a.vms[id]
-	if !ok {
-		return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, id)
+	vm, err := a.getDomainFromVirsh(ctx, id)
+	if err == nil {
+		return vm, nil
 	}
-	cp := vm
-	a.enrichRuntimeTelemetry(ctx, &cp)
-	return &cp, nil
+	return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, id)
 }
 
 func (a *Adapter) enrichRuntimeTelemetry(ctx context.Context, vm *domain.VirtualMachine) {
@@ -1114,9 +903,7 @@ func (a *Adapter) ListSnapshots(ctx context.Context, vmID string) ([]domain.Virt
 					CreateTime:  time.Now().UTC(),
 				})
 			}
-			if len(list) > 0 || !a.hybrid {
-				return list, nil
-			}
+			return list, nil
 		}
 	}
 
@@ -1519,10 +1306,6 @@ func (a *Adapter) ValidateConsoleToken(ctx context.Context, vmID, token string) 
 			return &cp, nil
 		}
 	}
-	if a.hybrid && vm.State == "RUNNING" {
-		cp := vm
-		return &cp, nil
-	}
 	return nil, fmt.Errorf("%w: invalid or expired console token", domain.ErrUnauthorized)
 }
 
@@ -1553,114 +1336,7 @@ func (a *Adapter) DialVNC(ctx context.Context, vmID string) (net.Conn, error) {
 		return conn, nil
 	}
 
-	vm, err := a.GetVM(ctx, vmID)
-	if err != nil {
-		return nil, err
-	}
-	if !a.hybrid {
-		return nil, fmt.Errorf("virsh not found and hybrid fallback disabled")
-	}
-	clientConn, serverConn := net.Pipe()
-	go serveEmbeddedRFB(serverConn, *vm)
-	return clientConn, nil
-}
-
-func serveEmbeddedRFB(conn net.Conn, vm domain.VirtualMachine) {
-	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(10 * time.Minute))
-
-	if _, err := conn.Write([]byte("RFB 003.008\n")); err != nil {
-		return
-	}
-	buf := make([]byte, 64)
-	n, err := conn.Read(buf)
-	if err != nil || n == 0 {
-		return
-	}
-
-	if n >= 3 && string(buf[:3]) == "RFB" {
-		_, _ = conn.Write([]byte{1, 1})
-		if _, err := conn.Read(buf[:1]); err != nil {
-			return
-		}
-		_, _ = conn.Write([]byte{0, 0, 0, 0})
-		if _, err := conn.Read(buf[:1]); err != nil {
-			return
-		}
-		const width = 640
-		const height = 360
-		nameBytes := []byte(fmt.Sprintf("KVM/QEMU [%s] (%d vCPU, %d MiB)", vm.VMName, vm.VCPUs, vm.MemoryMiB))
-		serverInit := make([]byte, 24+len(nameBytes))
-		binary.BigEndian.PutUint16(serverInit[0:2], width)
-		binary.BigEndian.PutUint16(serverInit[2:4], height)
-		serverInit[4] = 32
-		serverInit[5] = 24
-		serverInit[6] = 0
-		serverInit[7] = 1
-		binary.BigEndian.PutUint16(serverInit[8:10], 255)
-		binary.BigEndian.PutUint16(serverInit[10:12], 255)
-		binary.BigEndian.PutUint16(serverInit[12:14], 255)
-		serverInit[14] = 16
-		serverInit[15] = 8
-		serverInit[16] = 0
-		binary.BigEndian.PutUint32(serverInit[20:24], uint32(len(nameBytes)))
-		copy(serverInit[24:], nameBytes)
-		if _, err := conn.Write(serverInit); err != nil {
-			return
-		}
-
-		for {
-			msgTypeBuf := make([]byte, 1)
-			if _, err := conn.Read(msgTypeBuf); err != nil {
-				return
-			}
-			switch msgTypeBuf[0] {
-			case 0:
-				discard := make([]byte, 19)
-				_, _ = conn.Read(discard)
-			case 2:
-				hdr := make([]byte, 3)
-				if _, err := conn.Read(hdr); err != nil {
-					return
-				}
-				count := binary.BigEndian.Uint16(hdr[1:3])
-				discard := make([]byte, int(count)*4)
-				_, _ = conn.Read(discard)
-			case 3:
-				req := make([]byte, 9)
-				if _, err := conn.Read(req); err != nil {
-					return
-				}
-				const rectW = 640
-				const rectH = 40
-				fbUpdate := make([]byte, 4+12+(rectW*rectH*4))
-				fbUpdate[0] = 0
-				fbUpdate[1] = 0
-				binary.BigEndian.PutUint16(fbUpdate[2:4], 1)
-				binary.BigEndian.PutUint16(fbUpdate[4:6], 0)
-				binary.BigEndian.PutUint16(fbUpdate[6:8], 0)
-				binary.BigEndian.PutUint16(fbUpdate[8:10], rectW)
-				binary.BigEndian.PutUint16(fbUpdate[10:12], rectH)
-				binary.BigEndian.PutUint32(fbUpdate[12:16], 0)
-				pixels := fbUpdate[16:]
-				for i := 0; i < rectW*rectH; i++ {
-					pixels[i*4+0] = 0x1e
-					pixels[i*4+1] = 0x29
-					pixels[i*4+2] = 0x3b
-					pixels[i*4+3] = 0xff
-				}
-				_, _ = conn.Write(fbUpdate)
-			case 4:
-				discard := make([]byte, 7)
-				_, _ = conn.Read(discard)
-			case 5:
-				discard := make([]byte, 5)
-				_, _ = conn.Read(discard)
-			default:
-				return
-			}
-		}
-	}
+	return nil, fmt.Errorf("domain %q is not running under virsh", vmID)
 }
 
 func generateUUID() string {
