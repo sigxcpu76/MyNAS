@@ -1,8 +1,11 @@
-.PHONY: all proto web test build run clean
+.PHONY: all generate proto web test build run clean
 
 export PATH := $(HOME)/go/bin:$(PATH)
 
-all: proto web test build
+all: generate
+
+generate:
+	go run generate.go
 
 proto:
 	buf generate

@@ -1,5 +1,7 @@
 package nas
 
+//go:generate go run generate.go
+
 import (
 	"embed"
 	"io/fs"
