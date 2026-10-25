@@ -164,7 +164,7 @@ var packageMapping = map[string]map[string][]string{
 	},
 	"kvm-dev": {
 		"pacman": {"qemu-base"},
-		"apt":    {"qemu-kvm"},
+		"apt":    {"qemu-system-x86"},
 		"dnf":    {"qemu-kvm"},
 		"zypper": {"qemu-kvm"},
 		"apk":    {"qemu-modules"},
@@ -227,7 +227,7 @@ var packageMapping = map[string]map[string][]string{
 	},
 	"liblxc": {
 		"pacman": {"lxc"},
-		"apt":    {"liblxc1"},
+		"apt":    {"lxc"},
 		"dnf":    {"lxc"},
 		"zypper": {"lxc"},
 		"apk":    {"lxc"},
@@ -270,7 +270,7 @@ func FormatInstallHint(specID string, flavor domain.LinuxFlavor) string {
 		if len(pkgs) > 0 {
 			pkgStr = fmt.Sprintf(flavor.InstallCommandTemplate, strings.Join(pkgs, " ")) + " && "
 		}
-		return pkgStr + "sudo modprobe kvm_intel || sudo modprobe kvm_amd"
+		return pkgStr + "(sudo modprobe kvm_intel 2>/dev/null || sudo modprobe kvm_amd 2>/dev/null || sudo modprobe kvm 2>/dev/null || true)"
 	}
 
 	pkgs := PackagesForPrereq(specID, flavor.PackageManager)

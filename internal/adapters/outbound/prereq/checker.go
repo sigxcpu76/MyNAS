@@ -523,7 +523,7 @@ func (c *SystemChecker) GetReport(ctx context.Context) (domain.PrerequisitesRepo
 		cmdParts = append(cmdParts, fmt.Sprintf(flavor.InstallCommandTemplate, strings.Join(uniquePkgs, " ")))
 	}
 	if needKvmMod {
-		cmdParts = append(cmdParts, "sudo modprobe kvm_intel || sudo modprobe kvm_amd")
+		cmdParts = append(cmdParts, "(sudo modprobe kvm_intel 2>/dev/null || sudo modprobe kvm_amd 2>/dev/null || sudo modprobe kvm 2>/dev/null || true)")
 	}
 	if len(needServices) > 0 {
 		var srvList []string
