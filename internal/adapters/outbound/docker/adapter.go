@@ -1192,17 +1192,12 @@ func (a *Adapter) CreateApp(ctx context.Context, app domain.DockerApp) (*domain.
 	defer a.mu.Unlock()
 
 	appDir := filepath.Join(a.unitsDir, app.ID)
-	if _, err := os.Stat(filepath.Join(appDir, "compose.yaml")); err == nil {
-		return nil, fmt.Errorf("app %q already exists", app.ID)
-	}
-
 	if err := os.MkdirAll(appDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create app directory: %w", err)
 	}
 
 	composeFile := filepath.Join(appDir, "compose.yaml")
 	if err := os.WriteFile(composeFile, []byte(app.ComposeYAML), 0644); err != nil {
-		_ = os.RemoveAll(appDir)
 		return nil, fmt.Errorf("failed to write compose.yaml: %w", err)
 	}
 
@@ -1214,7 +1209,6 @@ func (a *Adapter) CreateApp(ctx context.Context, app domain.DockerApp) (*domain.
 	}
 
 	if err := a.runCompose(ctx, appDir, app.ID, "up", "-d", "--remove-orphans"); err != nil {
-		_ = os.RemoveAll(appDir)
 		return nil, fmt.Errorf("failed to deploy compose app: %w", err)
 	}
 

@@ -109,4 +109,32 @@ volumes:
     expect(reloaded.services[0].name).toBe('web');
     expect(reloaded.services[0].image).toBe('nginx:alpine');
   });
+
+  it('handles nginx-proxy-manager compose YAML correctly', () => {
+    const yaml = `services:
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: nginx-proxy-manager
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "81:81"
+      - "443:443"
+    environment:
+      - DISABLE_IPV6=true
+    volumes:
+      - /tank/appdata/nginx-proxy-manager/data:/data
+      - /tank/appdata/nginx-proxy-manager/letsencrypt:/etc/letsencrypt
+`;
+    const form = composeYamlToForm(yaml, 'nginx-proxy-manager', 'Nginx Proxy Manager');
+    expect(form.appId).toBe('nginx-proxy-manager');
+    expect(form.services).toHaveLength(1);
+    expect(form.services[0].name).toBe('nginx-proxy-manager');
+    expect(form.services[0].image).toBe('jc21/nginx-proxy-manager:latest');
+    expect(form.services[0].ports).toHaveLength(3);
+
+    const out = formToComposeYaml(form);
+    expect(out).toContain('nginx-proxy-manager:');
+    expect(out).toContain('jc21/nginx-proxy-manager:latest');
+  });
 });

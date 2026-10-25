@@ -1214,10 +1214,13 @@ export class HttpDockerAppAdapter implements DockerAppPort {
 
   async createApp(appId: string, composeYaml: string, title?: string): Promise<DockerApp> {
     const payload = {
+      name: `dockerApps/${appId}`,
+      id: appId,
       title: title || appId,
       composeYaml,
     };
     const raw = await this.client.post<any>('dockerApps', payload, {
+      docker_app_id: appId,
       dockerAppId: appId,
     });
     return mapDockerApp(raw);

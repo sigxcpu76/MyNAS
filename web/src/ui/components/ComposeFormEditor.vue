@@ -25,6 +25,7 @@ const props = defineProps<{
   initialTitle?: string;
   initialComposeYaml?: string;
   isEditMode?: boolean;
+  isSaving?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -244,8 +245,22 @@ function removeDevice(svc: ComposeServiceModel, idx: number) {
   svc.devices.splice(idx, 1);
 }
 
+// Local submission state
+const isSubmitting = ref(false);
+
+watch(
+  () => props.isSaving,
+  (val) => {
+    if (!val) {
+      isSubmitting.value = false;
+    }
+  }
+);
+
 // Submission
 function handleSave() {
+  if (isSubmitting.value || props.isSaving) return;
+
   if (!form.appId.trim()) {
     notify('error', 'App ID is required');
     return;
@@ -263,6 +278,7 @@ function handleSave() {
     }
   }
 
+  isSubmitting.value = true;
   const finalYaml = editorMode.value === 'raw' ? rawYaml.value : formToComposeYaml(form);
   emit('save', {
     appId: form.appId.trim(),
@@ -1066,9 +1082,20 @@ function copyYaml() {
 
     <!-- Action Buttons -->
     <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; border-top: 1px solid var(--border-subtle); padding-top: 14px">
-      <button class="btn" @click="emit('cancel')">Cancel</button>
-      <button class="btn btn-primary" @click="handleSave">
-        {{ props.isEditMode ? '💾 Save & Redeploy Stack' : '🚀 Deploy Application' }}
+      <button class="btn" :disabled="props.isSaving || isSubmitting" @click="emit('cancel')">Cancel</button>
+      <button
+        class="btn btn-primary"
+        :disabled="props.isSaving || isSubmitting"
+        @click="handleSave"
+      >
+        <span v-if="props.isSaving || isSubmitting" class="spin-icon" style="margin-right: 6px">⏳</span>
+        <span>
+          {{
+            (props.isSaving || isSubmitting)
+              ? (props.isEditMode ? 'Saving & Redeploying...' : 'Deploying Application (pulling & starting)...')
+              : (props.isEditMode ? '💾 Save & Redeploy Stack' : '🚀 Deploy Application')
+          }}
+        </span>
       </button>
     </div>
 

@@ -407,15 +407,22 @@ function selectCatalogTemplate(tmpl: AppCatalogTemplate | null) {
   installEditorKey.value++;
 }
 
+const isDeployingApp = ref(false);
+
 async function handleDeployApp(data: { appId: string; title: string; composeYaml: string }) {
+  if (isDeployingApp.value) return;
+  isDeployingApp.value = true;
+  const targetId = data.appId.trim() || generateNanosecondId();
+  notify('info', `Deploying "${targetId}"... Pulling container images and starting stack.`);
   try {
-    const targetId = data.appId.trim() || generateNanosecondId();
     await services.apps.createApp(targetId, data.composeYaml, data.title || targetId);
     notify('success', `App "${targetId}" deployed successfully`);
     isInstallModalOpen.value = false;
     await refreshApps();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to deploy Docker App');
+  } finally {
+    isDeployingApp.value = false;
   }
 }
 
@@ -424,6 +431,7 @@ async function handleDeployApp(data: { appId: string; title: string; composeYaml
 // =============================================================================
 const isEditModalOpen = ref(false);
 const editingApp = ref<DockerApp | null>(null);
+const isUpdatingApp = ref(false);
 
 function openEditModal(app: DockerApp) {
   editingApp.value = app;
@@ -431,14 +439,18 @@ function openEditModal(app: DockerApp) {
 }
 
 async function handleSaveAppEdit(data: { appId: string; title: string; composeYaml: string }) {
-  if (!editingApp.value) return;
+  if (!editingApp.value || isUpdatingApp.value) return;
+  isUpdatingApp.value = true;
+  notify('info', `Updating and redeploying "${editingApp.value.appId}"...`);
   try {
     await services.apps.updateApp(editingApp.value.name, data.composeYaml, data.title);
-    notify('success', `App "${data.appId}" updated`);
+    notify('success', `App "${data.appId}" updated and redeployed successfully`);
     isEditModalOpen.value = false;
     await refreshApps();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to update Docker App');
+  } finally {
+    isUpdatingApp.value = false;
   }
 }
 
@@ -1034,6 +1046,7 @@ onUnmounted(() => {
             :initial-title="installTitle"
             :initial-compose-yaml="installComposeYaml"
             :is-edit-mode="false"
+            :is-saving="isDeployingApp"
             @save="handleDeployApp"
             @cancel="isInstallModalOpen = false"
           />
@@ -1068,6 +1081,7 @@ onUnmounted(() => {
             :initial-title="editingApp.title"
             :initial-compose-yaml="editingApp.composeYaml"
             :is-edit-mode="true"
+            :is-saving="isUpdatingApp"
             @save="handleSaveAppEdit"
             @cancel="isEditModalOpen = false"
           />
