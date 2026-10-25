@@ -6,14 +6,15 @@ import {
   mdiCheckCircle,
   mdiChevronDown,
   mdiChevronRight,
-  mdiCrown,
   mdiCubeOutline,
   mdiDatabase,
+  mdiDatabaseCheck,
   mdiFolderNetwork,
   mdiFolderOutline,
   mdiHarddisk,
   mdiLayers,
   mdiLogout,
+  mdiMenuDown,
   mdiMonitor,
   mdiRefresh,
   mdiShieldCheck,
@@ -379,9 +380,9 @@ onMounted(() => {
             title="Designated Main Storage Pool (Root for Apps & LXC, persistent config). Click to change main pool."
             @click="showPoolModal = true"
           >
-            <MdiIcon :path="mdiCrown" size="14" style="color: #fbbf24" />
+            <MdiIcon :path="mdiDatabaseCheck" size="14" style="color: var(--accent-primary)" />
             <span>MAIN POOL: {{ nasState.systemConfig.mainPool }}</span>
-            <span style="font-size: 10px; opacity: 0.75; margin-left: 2px">▼ Change</span>
+            <MdiIcon :path="mdiMenuDown" size="13" style="opacity: 0.75" />
           </button>
           <button
             v-else-if="nasState.initialLoaded && !nasState.systemConfig?.mainPool"

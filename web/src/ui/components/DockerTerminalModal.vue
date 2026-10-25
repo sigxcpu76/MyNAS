@@ -161,7 +161,7 @@ function connect() {
 
   if (term) {
     term.reset();
-    term.writeln(`\x1b[36m⚡ Connecting to container \x1b[1;37m${currentContainer.value?.name || selectedContainerId.value}\x1b[0;36m with \x1b[1;33m${selectedShell.value}\x1b[0;36m...\x1b[0m\r\n`);
+    term.writeln(`\x1b[36mConnecting to container \x1b[1;37m${currentContainer.value?.name || selectedContainerId.value}\x1b[0;36m with \x1b[1;33m${selectedShell.value}\x1b[0;36m...\x1b[0m\r\n`);
   }
 
   const url = getWebSocketUrl(selectedContainerId.value, selectedShell.value);

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
+import { mdiArchiveOutline, mdiDatabaseCheck } from '@mdi/js';
+import MdiIcon from '../components/MdiIcon.vue';
 import { services } from '../../container';
 import { confirmModal, nasState, notify } from '../store';
 import { generateNanosecondId } from '../../domain/id';
@@ -172,8 +174,8 @@ async function handleDelete(name: string) {
       <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; padding: 8px 12px; margin-top: 12px; font-size: 12px; display: flex; align-items: center; justify-content: space-between">
         <div>
           <span style="color: var(--text-secondary)">Rootfs Storage:</span>
-          <span class="badge badge-main-pool" style="margin-left: 6px">
-            👑 MAIN POOL ({{ nasState.systemConfig?.mainPool || 'tank' }})
+          <span class="badge badge-main-pool" style="margin-left: 6px; display: inline-flex; align-items: center; gap: 4px">
+            <MdiIcon :path="mdiDatabaseCheck" size="13" /> MAIN POOL ({{ nasState.systemConfig?.mainPool || 'tank' }})
           </span>
           <span class="mono" style="margin-left: 8px; color: var(--text-muted)">
             /nas/{{ nasState.systemConfig?.mainPool || 'tank' }}/lxc/{{ form.containerId || '&lt;id&gt;' }}/rootfs
@@ -238,8 +240,8 @@ async function handleDelete(name: string) {
             </td>
             <td class="mono" style="font-size: 12px">
               <div style="color: var(--accent-primary)">{{ lx.rootfsPath }}</div>
-              <div v-if="lx.templateArchive" style="font-size: 11px; color: var(--text-muted); margin-top: 2px">
-                📦 {{ lx.templateArchive }}
+              <div v-if="lx.templateArchive" style="font-size: 11px; color: var(--text-muted); margin-top: 2px; display: inline-flex; align-items: center; gap: 4px">
+                <MdiIcon :path="mdiArchiveOutline" size="13" /> {{ lx.templateArchive }}
               </div>
             </td>
             <td class="mono" style="font-size: 12px">

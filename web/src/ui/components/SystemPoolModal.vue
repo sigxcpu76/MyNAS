@@ -5,11 +5,10 @@ import {
   mdiCheck,
   mdiCheckCircle,
   mdiClose,
-  mdiCrown,
   mdiDatabase,
+  mdiDatabaseCheck,
   mdiDownload,
   mdiRefresh,
-  mdiStar,
 } from '@mdi/js';
 import { services } from '../../container';
 import type { DiscoveredPool } from '../../domain/models';
@@ -157,18 +156,17 @@ onMounted(() => {
           >
             <div style="display: flex; align-items: center; gap: 12px">
               <MdiIcon
-                :path="mainPool === p.poolName ? mdiCrown : mdiDatabase"
+                :path="mainPool === p.poolName ? mdiDatabaseCheck : mdiDatabase"
                 size="24"
-                :style="mainPool === p.poolName ? 'color: #fbbf24' : 'color: var(--accent-primary)'"
+                :style="mainPool === p.poolName ? 'color: var(--accent-primary)' : 'color: var(--text-muted)'"
               />
               <div>
                 <div style="display: flex; align-items: center; gap: 8px">
                   <span style="font-weight: 700; font-size: 15px">{{ p.poolName }}</span>
-                  <span v-if="mainPool === p.poolName" class="badge badge-main-pool" style="font-size: 11px">
-                    <MdiIcon :path="mdiCrown" size="12" /> Active Main Pool
+                  <span v-if="mainPool === p.poolName" class="badge badge-success" style="font-size: 11px">
+                    Active Main Pool
                   </span>
-                  <span v-if="p.hasNasSystem" class="badge badge-info" style="font-size: 11px">
-                    <MdiIcon :path="mdiCheck" size="12" />
+                  <span v-else-if="p.hasNasSystem" class="badge badge-info" style="font-size: 11px">
                     Contains .nas-system
                   </span>
                   <span v-if="!p.isImported" class="badge badge-warning" style="font-size: 11px">
@@ -184,11 +182,10 @@ onMounted(() => {
             <div>
               <span
                 v-if="mainPool === p.poolName"
-                class="badge badge-main-pool"
-                style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; font-size: 11.5px"
+                style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #22c55e; font-weight: 600; padding: 4px 8px"
               >
-                <MdiIcon :path="mdiCrown" size="14" />
-                Current Main Pool
+                <MdiIcon :path="mdiCheck" size="16" />
+                Active
               </span>
               <button
                 v-else
@@ -197,8 +194,8 @@ onMounted(() => {
                 style="display: inline-flex; align-items: center; gap: 6px"
                 @click="handleSelectPool(p.poolName)"
               >
-                <MdiIcon :path="p.hasNasSystem ? mdiDownload : mdiCrown" size="15" />
-                {{ p.hasNasSystem ? 'Restore as Main Pool' : (mainPool ? 'Switch to this Main Pool' : 'Select as Main Pool') }}
+                <MdiIcon :path="p.hasNasSystem ? mdiDownload : mdiCheck" size="14" />
+                {{ p.hasNasSystem ? 'Restore as Main Pool' : 'Select as Main Pool' }}
               </button>
             </div>
           </div>

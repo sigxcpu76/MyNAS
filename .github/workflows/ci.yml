@@ -26,6 +26,11 @@ jobs:
           check-latest: true
           cache: true
 
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpam0g-dev
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -49,6 +54,9 @@ jobs:
         run: |
           mkdir -p bin
           go build -v -ldflags="-s -w" -o bin/nasctl ./cmd/nasctl
+
+      - name: Verify Pure-Go Build (CGO_ENABLED=0)
+        run: CGO_ENABLED=0 go build -v -o /dev/null ./cmd/nasctl
 
       - name: Smoke Test CLI Executable
         run: |

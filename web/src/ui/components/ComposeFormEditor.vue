@@ -24,12 +24,17 @@ import {
   mdiAlert,
   mdiAlertCircle,
   mdiCheckCircle,
+  mdiClose,
   mdiContentCopy,
+  mdiContentSave,
+  mdiDiceMultipleOutline,
   mdiDocker,
   mdiHarddisk,
   mdiLanConnect,
+  mdiLoading,
   mdiOpenInNew,
   mdiPlus,
+  mdiRocketLaunchOutline,
   mdiStar,
 } from '@mdi/js';
 
@@ -689,7 +694,7 @@ function copyYaml() {
               title="Remove service"
               @click="removeService(s.id)"
             >
-              ✕
+              <MdiIcon :path="mdiClose" size="13" />
             </button>
           </div>
         </div>
@@ -713,7 +718,8 @@ function copyYaml() {
                 title="Duplicate service"
                 @click="duplicateService(activeService)"
               >
-                ⎘ Duplicate
+                <MdiIcon :path="mdiContentCopy" size="13" style="margin-right: 4px" />
+                Duplicate
               </button>
             </div>
           </div>
@@ -919,7 +925,7 @@ function copyYaml() {
                           title="Pick another random high port (32000+)"
                           @click="p.hostPort = String(generateRandomHighPort())"
                         >
-                          🎲
+                          <MdiIcon :path="mdiDiceMultipleOutline" size="14" />
                         </button>
                       </div>
                       <!-- Preemptive port availability check indicator -->
@@ -983,17 +989,23 @@ function copyYaml() {
                       type="button"
                       class="btn btn-sm"
                       :class="form.managementPort === p.containerPort.trim() && p.containerPort.trim() ? 'btn-primary' : 'btn-ghost'"
-                      style="padding: 2px 8px; font-size: 11px; white-space: nowrap"
+                      style="padding: 2px 8px; font-size: 11px; white-space: nowrap; display: inline-flex; align-items: center"
                       :title="form.managementPort === p.containerPort.trim() ? 'Active Web UI Port' : 'Set as Web UI Management Port'"
                       :disabled="!p.containerPort.trim()"
                       @click="toggleManagementPort(p.containerPort)"
                     >
-                      {{ form.managementPort === p.containerPort.trim() && p.containerPort.trim() ? '★ Primary' : 'Set UI' }}
+                      <MdiIcon
+                        v-if="form.managementPort === p.containerPort.trim() && p.containerPort.trim()"
+                        :path="mdiStar"
+                        size="13"
+                        style="margin-right: 3px"
+                      />
+                      {{ form.managementPort === p.containerPort.trim() && p.containerPort.trim() ? 'Primary' : 'Set UI' }}
                     </button>
                   </td>
                   <td style="padding: 6px 8px; text-align: center; vertical-align: middle">
                     <button class="btn btn-sm btn-danger" style="padding: 2px 6px" @click="removePort(activeService, idx)">
-                      ✕
+                      <MdiIcon :path="mdiClose" size="13" />
                     </button>
                   </td>
                 </tr>
@@ -1052,7 +1064,7 @@ function copyYaml() {
                   </td>
                   <td style="padding: 6px 8px; text-align: center">
                     <button class="btn btn-sm btn-danger" style="padding: 2px 6px" @click="removeEnv(activeService, idx)">
-                      ✕
+                      <MdiIcon :path="mdiClose" size="13" />
                     </button>
                   </td>
                 </tr>
@@ -1108,7 +1120,7 @@ function copyYaml() {
                         }"
                         @click="setMountType(v, 'bind')"
                       >
-                        📁 Host ZFS Dataset / Path
+                        Host ZFS Dataset / Path
                       </button>
                       <button
                         type="button"
@@ -1124,7 +1136,7 @@ function copyYaml() {
                         }"
                         @click="setMountType(v, 'volume')"
                       >
-                        💾 Named Volume
+                        Named Volume
                       </button>
                     </div>
                   </div>
@@ -1140,19 +1152,19 @@ function copyYaml() {
                       <option value="">Choose preset / dataset...</option>
                       <optgroup label="App Data Presets">
                         <option :value="defaultAppdataMount(form.appId, 'data')">
-                          📁 App Data (/nas/{{ appsPoolName }}/apps/appdata/{{ form.appId || 'app' }}/data)
+                          App Data (/nas/{{ appsPoolName }}/apps/appdata/{{ form.appId || 'app' }}/data)
                         </option>
                         <option :value="defaultAppdataMount(form.appId, 'config')">
-                          ⚙️ App Config (/nas/{{ appsPoolName }}/apps/appdata/{{ form.appId || 'app' }}/config)
+                          App Config (/nas/{{ appsPoolName }}/apps/appdata/{{ form.appId || 'app' }}/config)
                         </option>
                       </optgroup>
                       <optgroup label="Shared Media & Downloads">
-                        <option :value="`/nas/${appsPoolName}/media`">🎬 Media (/nas/{{ appsPoolName }}/media)</option>
-                        <option :value="`/nas/${appsPoolName}/downloads`">📥 Downloads (/nas/{{ appsPoolName }}/downloads)</option>
+                        <option :value="`/nas/${appsPoolName}/media`">Media (/nas/{{ appsPoolName }}/media)</option>
+                        <option :value="`/nas/${appsPoolName}/downloads`">Downloads (/nas/{{ appsPoolName }}/downloads)</option>
                       </optgroup>
                       <optgroup v-if="zfsDatasetPaths.length > 0" label="Existing ZFS Datasets">
                         <option v-for="d in zfsDatasetPaths" :key="d" :value="d">
-                          🗄️ {{ d }}
+                          {{ d }}
                         </option>
                       </optgroup>
                     </select>
@@ -1166,7 +1178,7 @@ function copyYaml() {
                     aria-label="Remove Mount"
                     @click="removeVolumeMount(activeService, idx)"
                   >
-                    ✕
+                    <MdiIcon :path="mdiClose" size="13" />
                   </button>
                 </div>
 
@@ -1299,7 +1311,9 @@ function copyYaml() {
                   placeholder="e.g. /dev/dri:/dev/dri (Intel/AMD GPU)"
                   style="font-size: 12px"
                 />
-                <button class="btn btn-sm btn-danger" @click="removeDevice(activeService, idx)">✕</button>
+                <button class="btn btn-sm btn-danger" @click="removeDevice(activeService, idx)">
+                  <MdiIcon :path="mdiClose" size="13" />
+                </button>
               </div>
             </div>
           </div>
@@ -1411,7 +1425,9 @@ function copyYaml() {
                 </label>
               </td>
               <td style="padding: 6px 8px; text-align: center">
-                <button class="btn btn-sm btn-danger" style="padding: 2px 6px" @click="removeTopLevelNetwork(idx)">✕</button>
+                <button class="btn btn-sm btn-danger" style="padding: 2px 6px" @click="removeTopLevelNetwork(idx)">
+                  <MdiIcon :path="mdiClose" size="13" />
+                </button>
               </td>
             </tr>
           </tbody>
@@ -1452,7 +1468,9 @@ function copyYaml() {
                 </label>
               </td>
               <td style="padding: 6px 8px; text-align: center">
-                <button class="btn btn-sm btn-danger" style="padding: 2px 6px" @click="removeTopLevelVolume(idx)">✕</button>
+                <button class="btn btn-sm btn-danger" style="padding: 2px 6px" @click="removeTopLevelVolume(idx)">
+                  <MdiIcon :path="mdiClose" size="13" />
+                </button>
               </td>
             </tr>
           </tbody>
@@ -1497,14 +1515,16 @@ function copyYaml() {
       <button
         class="btn btn-primary"
         :disabled="props.isSaving || isSubmitting"
+        style="display: inline-flex; align-items: center; gap: 6px"
         @click="handleSave"
       >
-        <span v-if="props.isSaving || isSubmitting" class="spin-icon" style="margin-right: 6px">⏳</span>
+        <MdiIcon v-if="props.isSaving || isSubmitting" :path="mdiLoading" class="spin-icon" size="15" />
+        <MdiIcon v-else :path="props.isEditMode ? mdiContentSave : mdiRocketLaunchOutline" size="15" />
         <span>
           {{
             (props.isSaving || isSubmitting)
               ? (props.isEditMode ? 'Saving & Redeploying...' : 'Deploying Application (pulling & starting)...')
-              : (props.isEditMode ? '💾 Save & Redeploy Stack' : '🚀 Deploy Application')
+              : (props.isEditMode ? 'Save & Redeploy Stack' : 'Deploy Application')
           }}
         </span>
       </button>
@@ -1517,7 +1537,9 @@ function copyYaml() {
           <h4 style="font-size: 16px; font-weight: 700; color: var(--text-primary)">
             Bulk Import Environment Variables (.env)
           </h4>
-          <button class="btn btn-sm" @click="showBulkEnv = false">✕</button>
+          <button class="btn btn-sm" @click="showBulkEnv = false">
+            <MdiIcon :path="mdiClose" size="14" />
+          </button>
         </div>
         <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 10px">
           Paste lines in <code>KEY=VALUE</code> format. Lines starting with <code>#</code> are treated as comments.
