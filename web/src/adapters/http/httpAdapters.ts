@@ -645,9 +645,7 @@ export class HttpSystemAdapter implements SystemPort {
   async selectMainPool(poolName: string, autoImportExisting = true): Promise<SystemConfig> {
     const raw = await this.client.customMethod<any>('systemConfig', 'selectMainPool', {
       poolName: poolName,
-      pool_name: poolName,
       autoImportExisting: autoImportExisting,
-      auto_import_existing: autoImportExisting,
     });
     return mapSystemConfig(raw);
   }
@@ -1517,7 +1515,6 @@ export class HttpIdentityAdapter implements IdentityPort {
   async listUsers(includeSystemAccounts = false): Promise<User[]> {
     const res = await this.client.get<any>('users', {
       includeSystemAccounts,
-      include_system_accounts: includeSystemAccounts,
     });
     const items = res.users ?? [];
     return items.map(mapUser);
