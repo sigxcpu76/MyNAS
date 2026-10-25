@@ -75,8 +75,13 @@ func TestKvmAndContainersLifecycle(t *testing.T) {
 	ctx := context.Background()
 	kvmSvc := application.NewKvmService(kvm.NewAdapter(true))
 
+	testVmID := "unit-test-arch-vm"
+	defer func() {
+		_ = kvmSvc.DeleteVM(ctx, testVmID)
+	}()
+
 	vm, err := kvmSvc.CreateVM(ctx, domain.VirtualMachine{
-		ID:        "arch-vm",
+		ID:        testVmID,
 		VCPUs:     4,
 		MemoryMiB: 4096,
 	})

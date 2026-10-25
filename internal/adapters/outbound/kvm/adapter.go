@@ -6,9 +6,12 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +28,7 @@ type consoleTicket struct {
 type Adapter struct {
 	mu        sync.RWMutex
 	hybrid    bool
+	stateDir  string
 	vms       map[string]domain.VirtualMachine
 	tickets   map[string]consoleTicket
 	snapshots map[string][]domain.VirtualMachineSnapshot
@@ -32,8 +36,22 @@ type Adapter struct {
 }
 
 func NewAdapter(hybrid bool) *Adapter {
+	return NewAdapterWithStateDir(hybrid, "")
+}
+
+func NewAdapterWithStateDir(hybrid bool, stateDir string) *Adapter {
+	if stateDir == "" {
+		if h := os.Getenv("HOME"); h != "" {
+			stateDir = filepath.Join(h, ".local/share/nasctl/vms")
+		} else {
+			stateDir = "/tmp/nasctl/vms"
+		}
+	}
+	_ = os.MkdirAll(stateDir, 0755)
+
 	a := &Adapter{
 		hybrid:    hybrid,
+		stateDir:  stateDir,
 		vms:       make(map[string]domain.VirtualMachine),
 		tickets:   make(map[string]consoleTicket),
 		snapshots: make(map[string][]domain.VirtualMachineSnapshot),
@@ -45,8 +63,20 @@ func NewAdapter(hybrid bool) *Adapter {
 	return a
 }
 
+func (a *Adapter) hasVirsh() bool {
+	_, err := exec.LookPath("virsh")
+	return err == nil
+}
+
+func (a *Adapter) isRealDomain(ctx context.Context, id string) bool {
+	if !a.hasVirsh() {
+		return false
+	}
+	_, err := a.getDomainFromVirsh(ctx, id)
+	return err == nil
+}
+
 func (a *Adapter) seedDefaults() {
-	now := time.Now().UTC()
 	a.vms["ubuntu-24-lts"] = domain.VirtualMachine{
 		ID:                  "ubuntu-24-lts",
 		VMName:              "ubuntu-24-lts",
@@ -64,7 +94,7 @@ func (a *Adapter) seedDefaults() {
 		BiosType:            "ovmf",
 		TPMVersion:          "v2.0",
 		SecureBoot:          true,
-		DiskPath:            "/dev/zvol/nvme-fast/vm-ubuntu-root",
+		DiskPath:            "/tank/vms/ubuntu-root.raw",
 		DiskSizeGiB:         64,
 		ISOImage:            "/tank/isos/ubuntu-24.04.1-live-server-amd64.iso",
 		CdromIsoImage:       "/tank/isos/ubuntu-24.04.1-live-server-amd64.iso",
@@ -89,7 +119,7 @@ func (a *Adapter) seedDefaults() {
 			{
 				ID:             "scsi0",
 				Bus:            "scsi",
-				DiskPath:       "/dev/zvol/nvme-fast/vm-ubuntu-root",
+				DiskPath:       "/tank/vms/ubuntu-root.raw",
 				SizeBytes:      68719476736,
 				CacheMode:      "none",
 				Discard:        true,
@@ -102,105 +132,70 @@ func (a *Adapter) seedDefaults() {
 			{
 				ID:        "scsi1",
 				Bus:       "scsi",
-				DiskPath:  "/dev/zvol/nvme-fast/vm-ubuntu-data",
-				SizeBytes: 107374182400,
-				CacheMode: "none",
+				DiskPath:  "/tank/vms/ubuntu-data.raw",
+				SizeBytes: 137438953472,
+				CacheMode: "writeback",
 				Discard:   true,
 				IOThread:  true,
 				Backup:    true,
 			},
 		},
 		NetworkIfaces: []domain.VirtualMachineNetworkInterface{
-			{
-				ID:            "net0",
-				Model:         "virtio",
-				Bridge:        "virbr0",
-				VlanTag:       0,
-				MacAddress:    "bc:24:11:80:a1:01",
-				RateLimitMbps: 1000,
-				Firewall:      true,
-			},
-			{
-				ID:            "net1",
-				Model:         "virtio",
-				Bridge:        "br0",
-				VlanTag:       20,
-				MacAddress:    "bc:24:11:80:a1:02",
-				RateLimitMbps: 1000,
-				Firewall:      true,
-			},
+			{ID: "net0", Model: "virtio", Bridge: "virbr0", MacAddress: "bc:24:11:80:a1:01", Firewall: true},
+			{ID: "net1", Model: "virtio", Bridge: "virbr0", VlanTag: 100, MacAddress: "bc:24:11:80:a1:02", Firewall: true},
 		},
 		CloudInit: domain.VirtualMachineCloudInit{
-			User:          "admin",
-			SSHPublicKeys: []string{"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICa5/w8v03xW9 admin@nas-cluster"},
+			User:          "ubuntu",
+			SSHPublicKeys: []string{"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGoogleCloudInitKeyDemo"},
 			IPConfig:      "ip=192.168.1.115/24,gw=192.168.1.1",
-		},
-		QemuCommandlineArgs: []string{
-			"-global", "ICH9-LPC.disable_s3=1",
-			"-cpu", "+kvm_pv_unhalt,+kvm_pv_eoi",
 		},
 		SerialConsoleURL: "/ws/serial/ubuntu-24-lts",
 	}
 
 	a.snapshots["ubuntu-24-lts"] = []domain.VirtualMachineSnapshot{
 		{
-			Name:           "virtualMachines/ubuntu-24-lts/snapshots/clean-base",
-			SnapshotID:     "clean-base",
-			Description:    "Post-installation baseline with Docker & ZFS tools",
-			CreateTime:     now.Add(-48 * time.Hour),
+			Name:           "ubuntu-24-lts/snapshots/clean-install",
+			SnapshotID:     "clean-install",
+			Description:    "Clean initial OS deployment with base tooling",
 			IncludeRAM:     false,
 			ParentSnapshot: "",
-			VMState:        "STOPPED",
+			CreateTime:     time.Now().UTC().Add(-48 * time.Hour),
 		},
 		{
-			Name:           "virtualMachines/ubuntu-24-lts/snapshots/pre-k8s-upgrade",
-			SnapshotID:     "pre-k8s-upgrade",
-			Description:    "Live snapshot before Kubernetes v1.31 upgrade",
-			CreateTime:     now.Add(-2 * time.Hour),
+			Name:           "ubuntu-24-lts/snapshots/pre-upgrade-k8s",
+			SnapshotID:     "pre-upgrade-k8s",
+			Description:    "Live RAM state snapshot prior to v1.31 upgrade",
 			IncludeRAM:     true,
-			ParentSnapshot: "clean-base",
-			VMState:        "RUNNING",
+			ParentSnapshot: "clean-install",
+			CreateTime:     time.Now().UTC().Add(-6 * time.Hour),
 		},
 	}
 
 	a.vms["opnsense-fw"] = domain.VirtualMachine{
-		ID:                  "opnsense-fw",
-		VMName:              "opnsense-fw",
-		UUID:                "b9c21044-61e0-4410-81c4-990218c1e002",
-		State:               "RUNNING",
-		Sockets:             1,
-		Cores:               2,
-		VCPUs:               2,
-		CPUType:             "host",
-		MemoryMiB:           4096,
-		MachineType:         "q35",
-		BiosType:            "ovmf",
-		DiskPath:            "/dev/zvol/tank/kvm-storage-lun0",
-		DiskSizeGiB:         32,
-		ISOImage:            "/tank/isos/OPNsense-24.7-dvd-amd64.iso",
-		CdromIsoImage:       "/tank/isos/OPNsense-24.7-dvd-amd64.iso",
-		NetworkBridge:       "br0",
-		VNCPort:             5902,
-		VNCDisplay:          "127.0.0.1:2 (port 5902)",
-		Autostart:           true,
-		OSVariant:           "freebsd14.0",
-		Description:         "Virtual router & WireGuard VPN concentrator",
-		AgentEnabled:        true,
-		AgentRunning:        true,
-		GuestIPAddresses:    []string{"192.168.1.1", "10.0.0.1"},
-		GuestOSName:         "OPNsense 24.7 (FreeBSD 14.1-RELEASE)",
-		GuestCPUPercent:     4.2,
-		GuestMemoryUsedMiB:  1420,
-		StartupDelaySeconds: 0,
-		BootOrder:           "order=scsi0;ide2",
-		WatchdogModel:       "i6300esb",
-		WatchdogAction:      "reset",
-		DisplayType:         "virtio-gpu",
+		ID:            "opnsense-fw",
+		VMName:        "opnsense-fw",
+		UUID:          "b4c3e811-12a9-40f3-8f0a-442190bc2002",
+		State:         "RUNNING",
+		Sockets:       1,
+		Cores:         2,
+		VCPUs:         2,
+		CPUType:       "host",
+		MemoryMiB:     4096,
+		MachineType:   "q35",
+		BiosType:      "ovmf",
+		DiskPath:      "/tank/vms/opnsense.raw",
+		DiskSizeGiB:   32,
+		NetworkBridge: "virbr0",
+		VNCPort:       5902,
+		VNCDisplay:    "127.0.0.1:2 (port 5902)",
+		Autostart:     true,
+		OSVariant:     "freebsd14.0",
+		Description:   "Core network router and firewall gateway",
 		Disks: []domain.VirtualMachineDisk{
 			{
 				ID:        "scsi0",
 				Bus:       "scsi",
-				DiskPath:  "/dev/zvol/tank/kvm-storage-lun0",
+				DiskPath:  "/tank/vms/opnsense.raw",
 				SizeBytes: 34359738368,
 				CacheMode: "none",
 				Discard:   true,
@@ -208,8 +203,7 @@ func (a *Adapter) seedDefaults() {
 			},
 		},
 		NetworkIfaces: []domain.VirtualMachineNetworkInterface{
-			{ID: "net0", Model: "virtio", Bridge: "br0", VlanTag: 10, MacAddress: "bc:24:11:80:a2:01", Firewall: false},
-			{ID: "net1", Model: "virtio", Bridge: "br0", VlanTag: 20, MacAddress: "bc:24:11:80:a2:02", Firewall: false},
+			{ID: "net0", Model: "virtio", Bridge: "virbr0", MacAddress: "bc:24:11:80:a2:01", Firewall: false},
 		},
 		SerialConsoleURL: "/ws/serial/opnsense-fw",
 	}
@@ -226,10 +220,8 @@ func (a *Adapter) seedDefaults() {
 		MemoryMiB:     2048,
 		MachineType:   "q35",
 		BiosType:      "seabios",
-		DiskPath:      "/tank/vms/debian-lab.qcow2",
+		DiskPath:      "/tank/vms/debian-lab.raw",
 		DiskSizeGiB:   40,
-		ISOImage:      "/tank/isos/debian-12.7.0-amd64-netinst.iso",
-		CdromIsoImage: "/tank/isos/debian-12.7.0-amd64-netinst.iso",
 		NetworkBridge: "virbr0",
 		VNCPort:       5903,
 		VNCDisplay:    "127.0.0.1:3 (port 5903)",
@@ -240,7 +232,7 @@ func (a *Adapter) seedDefaults() {
 			{
 				ID:        "virtio0",
 				Bus:       "virtio",
-				DiskPath:  "/tank/vms/debian-lab.qcow2",
+				DiskPath:  "/tank/vms/debian-lab.raw",
 				SizeBytes: 42949672960,
 				CacheMode: "writeback",
 				Discard:   true,
@@ -253,7 +245,284 @@ func (a *Adapter) seedDefaults() {
 	}
 }
 
+// Libvirt XML structures for parsing dumpxml output
+type domainXML struct {
+	XMLName       xml.Name  `xml:"domain"`
+	Type          string    `xml:"type,attr"`
+	Name          string    `xml:"name"`
+	UUID          string    `xml:"uuid"`
+	Description   string    `xml:"description"`
+	Memory        memoryXML `xml:"memory"`
+	CurrentMemory memoryXML `xml:"currentMemory"`
+	VCPU          struct {
+		Value int32 `xml:",chardata"`
+	} `xml:"vcpu"`
+	CPU struct {
+		Mode     string `xml:"mode,attr"`
+		Topology struct {
+			Sockets int32 `xml:"sockets,attr"`
+			Cores   int32 `xml:"cores,attr"`
+			Threads int32 `xml:"threads,attr"`
+		} `xml:"topology"`
+		Model string `xml:"model"`
+	} `xml:"cpu"`
+	OS struct {
+		Firmware string `xml:"firmware,attr"`
+		Type     struct {
+			Arch    string `xml:"arch,attr"`
+			Machine string `xml:"machine,attr"`
+			Value   string `xml:",chardata"`
+		} `xml:"type"`
+		Loader struct {
+			Value string `xml:",chardata"`
+		} `xml:"loader"`
+	} `xml:"os"`
+	Devices struct {
+		Disks []struct {
+			Type   string `xml:"type,attr"`
+			Device string `xml:"device,attr"`
+			Driver struct {
+				Name    string `xml:"name,attr"`
+				Type    string `xml:"type,attr"`
+				Cache   string `xml:"cache,attr"`
+				Discard string `xml:"discard,attr"`
+			} `xml:"driver"`
+			Source struct {
+				File string `xml:"file,attr"`
+				Dev  string `xml:"dev,attr"`
+			} `xml:"source"`
+			Target struct {
+				Dev string `xml:"dev,attr"`
+				Bus string `xml:"bus,attr"`
+			} `xml:"target"`
+		} `xml:"disk"`
+		Interfaces []struct {
+			Type   string `xml:"type,attr"`
+			Source struct {
+				Bridge  string `xml:"bridge,attr"`
+				Network string `xml:"network,attr"`
+			} `xml:"source"`
+			Mac struct {
+				Address string `xml:"address,attr"`
+			} `xml:"mac"`
+			Model struct {
+				Type string `xml:"type,attr"`
+			} `xml:"model"`
+			Vlan struct {
+				Tag struct {
+					ID int32 `xml:"id,attr"`
+				} `xml:"tag"`
+			} `xml:"vlan"`
+		} `xml:"interface"`
+		Graphics []struct {
+			Type string `xml:"type,attr"`
+			Port int32  `xml:"port,attr"`
+		} `xml:"graphics"`
+	} `xml:"devices"`
+}
+
+type memoryXML struct {
+	Unit  string `xml:"unit,attr"`
+	Value int64  `xml:",chardata"`
+}
+
+func (m memoryXML) ToMiB() int64 {
+	switch strings.ToLower(m.Unit) {
+	case "bytes", "b":
+		return m.Value / (1024 * 1024)
+	case "kib", "k":
+		return m.Value / 1024
+	case "mib", "m":
+		return m.Value
+	case "gib", "g":
+		return m.Value * 1024
+	default:
+		return m.Value / 1024
+	}
+}
+
+func ensureDiskAllocated(diskPath string, sizeBytes int64) error {
+	if _, err := os.Stat(diskPath); err == nil {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(diskPath), 0755); err != nil {
+		return fmt.Errorf("failed to create directory for disk %s: %w", diskPath, err)
+	}
+	if sizeBytes <= 0 {
+		sizeBytes = 10 * 1024 * 1024 * 1024
+	}
+	if strings.HasSuffix(diskPath, ".qcow2") {
+		if _, err := exec.LookPath("qemu-img"); err == nil {
+			sizeG := sizeBytes / (1024 * 1024 * 1024)
+			if sizeG <= 0 {
+				sizeG = 1
+			}
+			cmd := exec.Command("qemu-img", "create", "-f", "qcow2", diskPath, fmt.Sprintf("%dG", sizeG))
+			if out, err := cmd.CombinedOutput(); err != nil {
+				return fmt.Errorf("qemu-img create failed: %s: %w", strings.TrimSpace(string(out)), err)
+			}
+			return nil
+		}
+	}
+	f, err := os.Create(diskPath)
+	if err != nil {
+		return fmt.Errorf("failed to create disk file %s: %w", diskPath, err)
+	}
+	defer f.Close()
+	if err := f.Truncate(sizeBytes); err != nil {
+		return fmt.Errorf("failed to allocate sparse disk %s (%d bytes): %w", diskPath, sizeBytes, err)
+	}
+	return nil
+}
+
+func (a *Adapter) getDomainFromVirsh(ctx context.Context, name string) (*domain.VirtualMachine, error) {
+	cmd := exec.CommandContext(ctx, "virsh", "dumpxml", name)
+	xmlBytes, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("%w: domain %q: %s", domain.ErrNotFound, name, strings.TrimSpace(string(xmlBytes)))
+	}
+	var doc domainXML
+	if err := xml.Unmarshal(xmlBytes, &doc); err != nil {
+		return nil, fmt.Errorf("failed to parse domain XML for %q: %w", name, err)
+	}
+
+	vm := domain.VirtualMachine{
+		ID:               doc.Name,
+		VMName:           doc.Name,
+		UUID:             doc.UUID,
+		Description:      doc.Description,
+		MemoryMiB:        doc.Memory.ToMiB(),
+		BalloonMinMiB:    doc.CurrentMemory.ToMiB(),
+		VCPUs:            doc.VCPU.Value,
+		Sockets:          doc.CPU.Topology.Sockets,
+		Cores:            doc.CPU.Topology.Cores,
+		CPUType:          doc.CPU.Model,
+		MachineType:      doc.OS.Type.Machine,
+		SerialConsoleURL: fmt.Sprintf("/ws/serial/%s", doc.Name),
+	}
+	if vm.Sockets <= 0 {
+		vm.Sockets = 1
+	}
+	if vm.Cores <= 0 {
+		vm.Cores = vm.VCPUs
+	}
+	if doc.OS.Firmware == "efi" || strings.Contains(doc.OS.Loader.Value, "OVMF") || strings.Contains(doc.OS.Loader.Value, "edk2") {
+		vm.BiosType = "ovmf"
+	} else {
+		vm.BiosType = "seabios"
+	}
+
+	for _, d := range doc.Devices.Disks {
+		path := d.Source.File
+		if path == "" {
+			path = d.Source.Dev
+		}
+		if d.Device == "cdrom" {
+			vm.CdromIsoImage = path
+			continue
+		}
+		disk := domain.VirtualMachineDisk{
+			ID:        d.Target.Dev,
+			Bus:       d.Target.Bus,
+			DiskPath:  path,
+			CacheMode: d.Driver.Cache,
+			Discard:   d.Driver.Discard == "unmap",
+		}
+		if fi, err := os.Stat(path); err == nil {
+			disk.SizeBytes = fi.Size()
+		}
+		vm.Disks = append(vm.Disks, disk)
+	}
+
+	for idx, iface := range doc.Devices.Interfaces {
+		nic := domain.VirtualMachineNetworkInterface{
+			ID:         fmt.Sprintf("net%d", idx),
+			Model:      iface.Model.Type,
+			Bridge:     iface.Source.Bridge,
+			MacAddress: iface.Mac.Address,
+			VlanTag:    iface.Vlan.Tag.ID,
+			Firewall:   true,
+		}
+		vm.NetworkIfaces = append(vm.NetworkIfaces, nic)
+	}
+
+	stateOut, _ := exec.CommandContext(ctx, "virsh", "domstate", name).Output()
+	st := strings.TrimSpace(string(stateOut))
+	switch st {
+	case "running":
+		vm.State = "RUNNING"
+	case "paused", "pmsuspended":
+		vm.State = "PAUSED"
+	default:
+		vm.State = "STOPPED"
+	}
+
+	if vm.State == "RUNNING" {
+		vncOut, _ := exec.CommandContext(ctx, "virsh", "vncdisplay", name).Output()
+		vncStr := strings.TrimSpace(string(vncOut))
+		if strings.Contains(vncStr, ":") {
+			parts := strings.Split(vncStr, ":")
+			var dispNum int
+			fmt.Sscanf(parts[len(parts)-1], "%d", &dispNum)
+			port := int32(5900 + dispNum)
+			vm.VNCPort = port
+			vm.VNCDisplay = fmt.Sprintf("127.0.0.1:%d (port %d)", dispNum, port)
+		}
+		a.enrichRuntimeTelemetry(ctx, &vm)
+	}
+
+	infoOut, _ := exec.CommandContext(ctx, "virsh", "dominfo", name).Output()
+	if strings.Contains(string(infoOut), "Autostart:      enable") {
+		vm.Autostart = true
+	}
+
+	a.mu.Lock()
+	a.vms[name] = vm
+	a.mu.Unlock()
+
+	return &vm, nil
+}
+
 func (a *Adapter) ListVMs(ctx context.Context) ([]domain.VirtualMachine, error) {
+	if a.hasVirsh() {
+		cmd := exec.CommandContext(ctx, "virsh", "list", "--all", "--name")
+		out, err := cmd.Output()
+		if err == nil {
+			lines := strings.Split(string(out), "\n")
+			var vms []domain.VirtualMachine
+			for _, line := range lines {
+				name := strings.TrimSpace(line)
+				if name == "" {
+					continue
+				}
+				vm, err := a.getDomainFromVirsh(ctx, name)
+				if err == nil && vm != nil {
+					vms = append(vms, *vm)
+				}
+			}
+			if a.hybrid {
+				a.mu.RLock()
+				for id, vm := range a.vms {
+					found := false
+					for _, rv := range vms {
+						if rv.ID == id {
+							found = true
+							break
+						}
+					}
+					if !found {
+						a.enrichRuntimeTelemetry(ctx, &vm)
+						vms = append(vms, vm)
+					}
+				}
+				a.mu.RUnlock()
+			}
+			if len(vms) > 0 || !a.hybrid {
+				return vms, nil
+			}
+		}
+	}
+
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	out := make([]domain.VirtualMachine, 0, len(a.vms))
@@ -265,6 +534,16 @@ func (a *Adapter) ListVMs(ctx context.Context) ([]domain.VirtualMachine, error) 
 }
 
 func (a *Adapter) GetVM(ctx context.Context, id string) (*domain.VirtualMachine, error) {
+	if a.hasVirsh() {
+		vm, err := a.getDomainFromVirsh(ctx, id)
+		if err == nil {
+			return vm, nil
+		}
+		if !a.hybrid {
+			return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, id)
+		}
+	}
+
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	vm, ok := a.vms[id]
@@ -280,8 +559,7 @@ func (a *Adapter) enrichRuntimeTelemetry(ctx context.Context, vm *domain.Virtual
 	if vm.State != "RUNNING" {
 		return
 	}
-	// Try QEMU guest agent if virsh is installed
-	if _, err := exec.LookPath("virsh"); err == nil {
+	if a.hasVirsh() {
 		tctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 		defer cancel()
 		cmd := exec.CommandContext(tctx, "virsh", "qemu-agent-command", vm.ID, `{"execute":"guest-network-get-interfaces"}`)
@@ -289,11 +567,11 @@ func (a *Adapter) enrichRuntimeTelemetry(ctx context.Context, vm *domain.Virtual
 		if err == nil && len(out) > 0 {
 			var resp struct {
 				Return []struct {
-					Name       string `json:"name"`
+					Name        string `json:"name"`
 					IPAddresses []struct {
-						IPType  string `json:"ip-address-type"`
-						IPAddr  string `json:"ip-address"`
-						Prefix  int    `json:"prefix"`
+						IPType string `json:"ip-address-type"`
+						IPAddr string `json:"ip-address"`
+						Prefix int    `json:"prefix"`
 					} `json:"ip-addresses"`
 				} `json:"return"`
 			}
@@ -319,13 +597,89 @@ func (a *Adapter) enrichRuntimeTelemetry(ctx context.Context, vm *domain.Virtual
 }
 
 func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*domain.VirtualMachine, error) {
+	if err := vm.Validate(); err != nil {
+		return nil, err
+	}
+
+	if a.hasVirsh() {
+		if _, err := a.getDomainFromVirsh(ctx, vm.ID); err == nil {
+			return nil, fmt.Errorf("%w: virtual machine %q already exists in libvirt", domain.ErrAlreadyExists, vm.ID)
+		}
+
+		if len(vm.Disks) == 0 {
+			diskDir := filepath.Join(a.stateDir, "disks")
+			_ = os.MkdirAll(diskDir, 0755)
+			diskPath := filepath.Join(diskDir, fmt.Sprintf("%s-disk0.raw", vm.ID))
+			sizeB := int64(vm.DiskSizeGiB) * 1024 * 1024 * 1024
+			if sizeB <= 0 {
+				sizeB = 32 * 1024 * 1024 * 1024
+			}
+			vm.Disks = []domain.VirtualMachineDisk{
+				{
+					ID:        "sda",
+					Bus:       "scsi",
+					DiskPath:  diskPath,
+					SizeBytes: sizeB,
+					CacheMode: "none",
+					Discard:   true,
+					IOThread:  true,
+				},
+			}
+		}
+
+		for i := range vm.Disks {
+			d := &vm.Disks[i]
+			if d.DiskPath == "" {
+				diskDir := filepath.Join(a.stateDir, "disks")
+				_ = os.MkdirAll(diskDir, 0755)
+				d.DiskPath = filepath.Join(diskDir, fmt.Sprintf("%s-disk%d.raw", vm.ID, i))
+			}
+			if err := ensureDiskAllocated(d.DiskPath, d.SizeBytes); err != nil {
+				return nil, fmt.Errorf("failed to allocate disk %s: %w", d.DiskPath, err)
+			}
+		}
+
+		if len(vm.NetworkIfaces) == 0 {
+			vm.NetworkIfaces = []domain.VirtualMachineNetworkInterface{
+				{
+					ID:         "net0",
+					Model:      "virtio",
+					Bridge:     "virbr0",
+					MacAddress: generateMAC(),
+					Firewall:   true,
+				},
+			}
+		}
+
+		xmlStr := buildDomainXML(vm)
+		cmd := exec.CommandContext(ctx, "virsh", "define", "/dev/stdin")
+		cmd.Stdin = strings.NewReader(xmlStr)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("libvirt define failed: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+
+		if vm.Autostart {
+			_ = exec.CommandContext(ctx, "virsh", "autostart", vm.ID).Run()
+		}
+
+		startCmd := exec.CommandContext(ctx, "virsh", "start", vm.ID)
+		startOut, err := startCmd.CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("libvirt start failed: %s: %w", strings.TrimSpace(string(startOut)), err)
+		}
+
+		created, err := a.getDomainFromVirsh(ctx, vm.ID)
+		if err != nil {
+			return nil, err
+		}
+		return created, nil
+	}
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if _, exists := a.vms[vm.ID]; exists {
 		return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrAlreadyExists, vm.ID)
-	}
-	if err := vm.Validate(); err != nil {
-		return nil, err
 	}
 
 	a.nextPort++
@@ -337,11 +691,10 @@ func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*doma
 	vm.State = "RUNNING"
 	vm.SerialConsoleURL = fmt.Sprintf("/ws/serial/%s", vm.ID)
 
-	// If disks list is empty, initialize default
 	if len(vm.Disks) == 0 {
 		diskPath := vm.DiskPath
 		if diskPath == "" {
-			diskPath = fmt.Sprintf("/tank/vms/%s.qcow2", vm.ID)
+			diskPath = fmt.Sprintf("/tank/vms/%s.raw", vm.ID)
 		}
 		sizeGiB := vm.DiskSizeGiB
 		if sizeGiB <= 0 {
@@ -360,7 +713,6 @@ func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*doma
 		}
 	}
 
-	// If network interfaces list is empty, initialize default
 	if len(vm.NetworkIfaces) == 0 {
 		bridge := vm.NetworkBridge
 		if bridge == "" {
@@ -375,15 +727,6 @@ func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*doma
 				Firewall:   true,
 			},
 		}
-	}
-
-	// Try virsh define if available on host
-	if _, err := exec.LookPath("virsh"); err == nil {
-		xml := buildDomainXML(vm)
-		cmd := exec.CommandContext(ctx, "virsh", "define", "/dev/stdin")
-		cmd.Stdin = strings.NewReader(xml)
-		_ = cmd.Run()
-		_ = exec.CommandContext(ctx, "virsh", "start", vm.ID).Run()
 	}
 
 	a.vms[vm.ID] = vm
@@ -448,27 +791,11 @@ func (a *Adapter) UpdateVM(ctx context.Context, vm domain.VirtualMachine, fields
 	if vm.Description != "" {
 		existing.Description = vm.Description
 	}
-	if vm.BootOrder != "" {
-		existing.BootOrder = vm.BootOrder
-	}
-	if vm.WatchdogModel != "" {
-		existing.WatchdogModel = vm.WatchdogModel
-	}
-	if vm.WatchdogAction != "" {
-		existing.WatchdogAction = vm.WatchdogAction
-	}
-	if vm.DisplayType != "" {
-		existing.DisplayType = vm.DisplayType
-	}
-	existing.Autostart = vm.Autostart
-	if len(vm.QemuCommandlineArgs) > 0 {
-		existing.QemuCommandlineArgs = vm.QemuCommandlineArgs
-	}
 
-	if _, err := exec.LookPath("virsh"); err == nil {
-		xml := buildDomainXML(existing)
+	if a.hasVirsh() {
+		xmlStr := buildDomainXML(existing)
 		cmd := exec.CommandContext(ctx, "virsh", "define", "/dev/stdin")
-		cmd.Stdin = strings.NewReader(xml)
+		cmd.Stdin = strings.NewReader(xmlStr)
 		_ = cmd.Run()
 	}
 
@@ -478,29 +805,35 @@ func (a *Adapter) UpdateVM(ctx context.Context, vm domain.VirtualMachine, fields
 }
 
 func (a *Adapter) DeleteVM(ctx context.Context, id string) error {
+	if a.isRealDomain(ctx, id) {
+		_ = exec.CommandContext(ctx, "virsh", "destroy", id).Run()
+		out, err := exec.CommandContext(ctx, "virsh", "undefine", "--nvram", "--snapshots-metadata", id).CombinedOutput()
+		if err != nil && !strings.Contains(string(out), "Domain not found") {
+			return fmt.Errorf("virsh undefine failed: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+	}
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if _, exists := a.vms[id]; !exists {
-		return fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, id)
-	}
-	if _, err := exec.LookPath("virsh"); err == nil {
-		_ = exec.CommandContext(ctx, "virsh", "destroy", id).Run()
-		_ = exec.CommandContext(ctx, "virsh", "undefine", id, "--nvram", "--remove-all-storage").Run()
-	}
 	delete(a.vms, id)
 	delete(a.snapshots, id)
 	return nil
 }
 
 func (a *Adapter) StartVM(ctx context.Context, id string) (*domain.VirtualMachine, error) {
+	if a.isRealDomain(ctx, id) {
+		out, err := exec.CommandContext(ctx, "virsh", "start", id).CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("virsh start failed: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+		return a.getDomainFromVirsh(ctx, id)
+	}
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	vm, ok := a.vms[id]
 	if !ok {
 		return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, id)
-	}
-	if _, err := exec.LookPath("virsh"); err == nil {
-		_ = exec.CommandContext(ctx, "virsh", "start", id).Run()
 	}
 	vm.State = "RUNNING"
 	a.vms[id] = vm
@@ -509,18 +842,23 @@ func (a *Adapter) StartVM(ctx context.Context, id string) (*domain.VirtualMachin
 }
 
 func (a *Adapter) StopVM(ctx context.Context, id string, force bool) (*domain.VirtualMachine, error) {
+	if a.isRealDomain(ctx, id) {
+		verb := "shutdown"
+		if force {
+			verb = "destroy"
+		}
+		out, err := exec.CommandContext(ctx, "virsh", verb, id).CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("virsh %s failed: %s: %w", verb, strings.TrimSpace(string(out)), err)
+		}
+		return a.getDomainFromVirsh(ctx, id)
+	}
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	vm, ok := a.vms[id]
 	if !ok {
 		return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, id)
-	}
-	if _, err := exec.LookPath("virsh"); err == nil {
-		verb := "shutdown"
-		if force {
-			verb = "destroy"
-		}
-		_ = exec.CommandContext(ctx, "virsh", verb, id).Run()
 	}
 	vm.State = "STOPPED"
 	a.vms[id] = vm
@@ -529,14 +867,19 @@ func (a *Adapter) StopVM(ctx context.Context, id string, force bool) (*domain.Vi
 }
 
 func (a *Adapter) RebootVM(ctx context.Context, id string) (*domain.VirtualMachine, error) {
+	if a.isRealDomain(ctx, id) {
+		out, err := exec.CommandContext(ctx, "virsh", "reboot", id).CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("virsh reboot failed: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+		return a.getDomainFromVirsh(ctx, id)
+	}
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	vm, ok := a.vms[id]
 	if !ok {
 		return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, id)
-	}
-	if _, err := exec.LookPath("virsh"); err == nil {
-		_ = exec.CommandContext(ctx, "virsh", "reboot", id).Run()
 	}
 	vm.State = "RUNNING"
 	a.vms[id] = vm
@@ -545,14 +888,19 @@ func (a *Adapter) RebootVM(ctx context.Context, id string) (*domain.VirtualMachi
 }
 
 func (a *Adapter) ResetVM(ctx context.Context, id string) (*domain.VirtualMachine, error) {
+	if a.isRealDomain(ctx, id) {
+		out, err := exec.CommandContext(ctx, "virsh", "reset", id).CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("virsh reset failed: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+		return a.getDomainFromVirsh(ctx, id)
+	}
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	vm, ok := a.vms[id]
 	if !ok {
 		return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, id)
-	}
-	if _, err := exec.LookPath("virsh"); err == nil {
-		_ = exec.CommandContext(ctx, "virsh", "reset", id).Run()
 	}
 	vm.State = "RUNNING"
 	a.vms[id] = vm
@@ -561,14 +909,19 @@ func (a *Adapter) ResetVM(ctx context.Context, id string) (*domain.VirtualMachin
 }
 
 func (a *Adapter) PauseVM(ctx context.Context, id string) (*domain.VirtualMachine, error) {
+	if a.isRealDomain(ctx, id) {
+		out, err := exec.CommandContext(ctx, "virsh", "suspend", id).CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("virsh suspend failed: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+		return a.getDomainFromVirsh(ctx, id)
+	}
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	vm, ok := a.vms[id]
 	if !ok {
 		return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, id)
-	}
-	if _, err := exec.LookPath("virsh"); err == nil {
-		_ = exec.CommandContext(ctx, "virsh", "suspend", id).Run()
 	}
 	vm.State = "PAUSED"
 	a.vms[id] = vm
@@ -577,14 +930,19 @@ func (a *Adapter) PauseVM(ctx context.Context, id string) (*domain.VirtualMachin
 }
 
 func (a *Adapter) ResumeVM(ctx context.Context, id string) (*domain.VirtualMachine, error) {
+	if a.isRealDomain(ctx, id) {
+		out, err := exec.CommandContext(ctx, "virsh", "resume", id).CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("virsh resume failed: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+		return a.getDomainFromVirsh(ctx, id)
+	}
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	vm, ok := a.vms[id]
 	if !ok {
 		return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, id)
-	}
-	if _, err := exec.LookPath("virsh"); err == nil {
-		_ = exec.CommandContext(ctx, "virsh", "resume", id).Run()
 	}
 	vm.State = "RUNNING"
 	a.vms[id] = vm
@@ -593,180 +951,215 @@ func (a *Adapter) ResumeVM(ctx context.Context, id string) (*domain.VirtualMachi
 }
 
 func (a *Adapter) CloneVM(ctx context.Context, id, newID, newName, targetPool string, linkedClone bool) (*domain.VirtualMachine, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	source, ok := a.vms[id]
-	if !ok {
+	source, err := a.GetVM(ctx, id)
+	if err != nil {
 		return nil, fmt.Errorf("%w: source virtual machine %q", domain.ErrNotFound, id)
 	}
-	if _, exists := a.vms[newID]; exists {
-		return nil, fmt.Errorf("%w: virtual machine %q already exists", domain.ErrAlreadyExists, newID)
+
+	targetName := newName
+	if targetName == "" {
+		targetName = newID
 	}
 
-	a.nextPort++
-	cloned := source
+	cloned := *source
 	cloned.ID = newID
-	if newName != "" {
-		cloned.VMName = newName
-	} else {
-		cloned.VMName = newID
-	}
+	cloned.VMName = targetName
 	cloned.UUID = generateUUID()
 	cloned.State = "STOPPED"
-	cloned.VNCPort = a.nextPort
-	cloned.VNCDisplay = fmt.Sprintf("127.0.0.1:%d (port %d)", cloned.VNCPort-5900, cloned.VNCPort)
 	cloned.SerialConsoleURL = fmt.Sprintf("/ws/serial/%s", newID)
 
-	// Clone disks
-	var clonedDisks []domain.VirtualMachineDisk
+	clonedDisks := make([]domain.VirtualMachineDisk, 0, len(source.Disks))
 	for i, d := range source.Disks {
-		cd := d
-		cd.ID = fmt.Sprintf("scsi%d", i)
-		if strings.HasPrefix(d.DiskPath, "/dev/zvol/") {
-			pool := targetPool
-			if pool == "" {
-				parts := strings.Split(strings.TrimPrefix(d.DiskPath, "/dev/zvol/"), "/")
-				if len(parts) > 0 {
-					pool = parts[0]
-				} else {
-					pool = "tank"
-				}
-			}
-			cd.DiskPath = fmt.Sprintf("/dev/zvol/%s/vm-%s-disk%d", pool, newID, i)
-		} else {
-			cd.DiskPath = fmt.Sprintf("/tank/vms/%s-disk%d.qcow2", newID, i)
-		}
-		clonedDisks = append(clonedDisks, cd)
+		cDisk := d
+		cDisk.ID = fmt.Sprintf("sd%c", 'a'+i)
+		diskDir := filepath.Join(a.stateDir, "disks")
+		_ = os.MkdirAll(diskDir, 0755)
+		cDisk.DiskPath = filepath.Join(diskDir, fmt.Sprintf("%s-disk%d.raw", newID, i))
+		_ = ensureDiskAllocated(cDisk.DiskPath, cDisk.SizeBytes)
+		clonedDisks = append(clonedDisks, cDisk)
 	}
 	cloned.Disks = clonedDisks
 
-	// Refresh network MAC addresses
-	var clonedIfaces []domain.VirtualMachineNetworkInterface
-	for _, iface := range source.NetworkIfaces {
-		cif := iface
-		cif.MacAddress = generateMAC()
-		clonedIfaces = append(clonedIfaces, cif)
+	clonedNics := make([]domain.VirtualMachineNetworkInterface, 0, len(source.NetworkIfaces))
+	for i, nic := range source.NetworkIfaces {
+		cNic := nic
+		cNic.ID = fmt.Sprintf("net%d", i)
+		cNic.MacAddress = generateMAC()
+		clonedNics = append(clonedNics, cNic)
 	}
-	cloned.NetworkIfaces = clonedIfaces
+	cloned.NetworkIfaces = clonedNics
 
+	if a.isRealDomain(ctx, id) {
+		xmlStr := buildDomainXML(cloned)
+		cmd := exec.CommandContext(ctx, "virsh", "define", "/dev/stdin")
+		cmd.Stdin = strings.NewReader(xmlStr)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return nil, fmt.Errorf("virsh define clone failed: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+		return a.getDomainFromVirsh(ctx, newID)
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.vms[newID] = cloned
 	cp := cloned
 	return &cp, nil
 }
 
-func (a *Adapter) AttachMedia(ctx context.Context, id, deviceID, isoPath string) (*domain.VirtualMachine, error) {
+func (a *Adapter) AttachMedia(ctx context.Context, id, deviceTarget, isoPath string) (*domain.VirtualMachine, error) {
+	if a.isRealDomain(ctx, id) {
+		dev := deviceTarget
+		if dev == "" {
+			dev = "sda"
+		}
+		out, err := exec.CommandContext(ctx, "virsh", "change-media", id, dev, isoPath, "--insert").CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("virsh change-media failed: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+		return a.getDomainFromVirsh(ctx, id)
+	}
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	vm, ok := a.vms[id]
 	if !ok {
 		return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, id)
 	}
-	if deviceID == "" {
-		deviceID = "hdc"
-	}
-	if _, err := exec.LookPath("virsh"); err == nil {
-		_ = exec.CommandContext(ctx, "virsh", "change-media", id, deviceID, isoPath, "--insert").Run()
-	}
 	vm.CdromIsoImage = isoPath
-	vm.ISOImage = isoPath
 	a.vms[id] = vm
 	cp := vm
 	return &cp, nil
 }
 
-func (a *Adapter) EjectMedia(ctx context.Context, id, deviceID string) (*domain.VirtualMachine, error) {
+func (a *Adapter) EjectMedia(ctx context.Context, id, deviceTarget string) (*domain.VirtualMachine, error) {
+	if a.isRealDomain(ctx, id) {
+		dev := deviceTarget
+		if dev == "" {
+			dev = "sda"
+		}
+		out, err := exec.CommandContext(ctx, "virsh", "change-media", id, dev, "--eject").CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("virsh change-media eject failed: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+		return a.getDomainFromVirsh(ctx, id)
+	}
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	vm, ok := a.vms[id]
 	if !ok {
 		return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, id)
 	}
-	if deviceID == "" {
-		deviceID = "hdc"
-	}
-	if _, err := exec.LookPath("virsh"); err == nil {
-		_ = exec.CommandContext(ctx, "virsh", "change-media", id, deviceID, "--eject").Run()
-	}
 	vm.CdromIsoImage = ""
-	vm.ISOImage = ""
 	a.vms[id] = vm
 	cp := vm
 	return &cp, nil
 }
 
 func (a *Adapter) ListSnapshots(ctx context.Context, vmID string) ([]domain.VirtualMachineSnapshot, error) {
+	if a.isRealDomain(ctx, vmID) {
+		out, err := exec.CommandContext(ctx, "virsh", "snapshot-list", vmID, "--name").Output()
+		if err == nil {
+			lines := strings.Split(string(out), "\n")
+			var list []domain.VirtualMachineSnapshot
+			for _, line := range lines {
+				sName := strings.TrimSpace(line)
+				if sName == "" {
+					continue
+				}
+				list = append(list, domain.VirtualMachineSnapshot{
+					Name:        fmt.Sprintf("%s/snapshots/%s", vmID, sName),
+					SnapshotID:  sName,
+					Description: sName,
+					CreateTime:  time.Now().UTC(),
+				})
+			}
+			if len(list) > 0 || !a.hybrid {
+				return list, nil
+			}
+		}
+	}
+
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-	if _, ok := a.vms[vmID]; !ok {
-		return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, vmID)
-	}
-	snaps := a.snapshots[vmID]
-	if snaps == nil {
-		snaps = []domain.VirtualMachineSnapshot{}
+	snaps, ok := a.snapshots[vmID]
+	if !ok {
+		return []domain.VirtualMachineSnapshot{}, nil
 	}
 	out := make([]domain.VirtualMachineSnapshot, len(snaps))
 	copy(out, snaps)
 	return out, nil
 }
 
-func (a *Adapter) CreateSnapshot(ctx context.Context, vmID string, snap domain.VirtualMachineSnapshot) (*domain.VirtualMachineSnapshot, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	vm, ok := a.vms[vmID]
-	if !ok {
-		return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, vmID)
+func (a *Adapter) CreateSnapshot(ctx context.Context, vmID string, snapshot domain.VirtualMachineSnapshot) (*domain.VirtualMachineSnapshot, error) {
+	if snapshot.SnapshotID == "" {
+		return nil, fmt.Errorf("snapshot_id is required")
 	}
-	if snap.SnapshotID == "" {
-		snap.SnapshotID = fmt.Sprintf("snap-%d", time.Now().Unix())
-	}
-	snap.Name = fmt.Sprintf("virtualMachines/%s/snapshots/%s", vmID, snap.SnapshotID)
-	snap.CreateTime = time.Now().UTC()
-	snap.VMState = vm.State
 
-	// Call virsh snapshot-create-as if available
-	if _, err := exec.LookPath("virsh"); err == nil {
-		args := []string{"snapshot-create-as", vmID, snap.SnapshotID, snap.Description}
-		if !snap.IncludeRAM {
+	if a.isRealDomain(ctx, vmID) {
+		args := []string{"snapshot-create-as", vmID, snapshot.SnapshotID, snapshot.Description}
+		if !snapshot.IncludeRAM {
 			args = append(args, "--disk-only")
 		}
-		_ = exec.CommandContext(ctx, "virsh", args...).Run()
+		out, err := exec.CommandContext(ctx, "virsh", args...).CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("virsh snapshot-create-as failed: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+		snap := domain.VirtualMachineSnapshot{
+			Name:        fmt.Sprintf("%s/snapshots/%s", vmID, snapshot.SnapshotID),
+			SnapshotID:  snapshot.SnapshotID,
+			Description: snapshot.Description,
+			IncludeRAM:  snapshot.IncludeRAM,
+			CreateTime:  time.Now().UTC(),
+		}
+		a.mu.Lock()
+		a.snapshots[vmID] = append(a.snapshots[vmID], snap)
+		a.mu.Unlock()
+		return &snap, nil
 	}
 
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	snap := domain.VirtualMachineSnapshot{
+		Name:        fmt.Sprintf("%s/snapshots/%s", vmID, snapshot.SnapshotID),
+		SnapshotID:  snapshot.SnapshotID,
+		Description: snapshot.Description,
+		IncludeRAM:  snapshot.IncludeRAM,
+		CreateTime:  time.Now().UTC(),
+	}
 	a.snapshots[vmID] = append(a.snapshots[vmID], snap)
-	cp := snap
-	return &cp, nil
+	return &snap, nil
 }
 
 func (a *Adapter) RollbackSnapshot(ctx context.Context, vmID, snapID string) (*domain.VirtualMachine, error) {
+	if a.isRealDomain(ctx, vmID) {
+		out, err := exec.CommandContext(ctx, "virsh", "snapshot-revert", vmID, snapID).CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("virsh snapshot-revert failed: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+		return a.getDomainFromVirsh(ctx, vmID)
+	}
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	vm, ok := a.vms[vmID]
 	if !ok {
 		return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, vmID)
-	}
-	found := false
-	for _, s := range a.snapshots[vmID] {
-		if s.SnapshotID == snapID || s.Name == snapID {
-			found = true
-			break
-		}
-	}
-	if !found {
-		return nil, fmt.Errorf("%w: snapshot %q for vm %q", domain.ErrNotFound, snapID, vmID)
-	}
-	if _, err := exec.LookPath("virsh"); err == nil {
-		_ = exec.CommandContext(ctx, "virsh", "snapshot-revert", vmID, snapID).Run()
 	}
 	cp := vm
 	return &cp, nil
 }
 
 func (a *Adapter) DeleteSnapshot(ctx context.Context, vmID, snapID string) error {
+	if a.isRealDomain(ctx, vmID) {
+		out, err := exec.CommandContext(ctx, "virsh", "snapshot-delete", vmID, snapID).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("virsh snapshot-delete failed: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+	}
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if _, ok := a.vms[vmID]; !ok {
-		return fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, vmID)
-	}
 	snaps := a.snapshots[vmID]
 	idx := -1
 	for i, s := range snaps {
@@ -775,24 +1168,32 @@ func (a *Adapter) DeleteSnapshot(ctx context.Context, vmID, snapID string) error
 			break
 		}
 	}
-	if idx < 0 {
-		return fmt.Errorf("%w: snapshot %q for vm %q", domain.ErrNotFound, snapID, vmID)
+	if idx >= 0 {
+		a.snapshots[vmID] = append(snaps[:idx], snaps[idx+1:]...)
 	}
-	if _, err := exec.LookPath("virsh"); err == nil {
-		_ = exec.CommandContext(ctx, "virsh", "snapshot-delete", vmID, snapID).Run()
-	}
-	a.snapshots[vmID] = append(snaps[:idx], snaps[idx+1:]...)
 	return nil
 }
 
 func buildDomainXML(vm domain.VirtualMachine) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf(`<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
+	domainType := "kvm"
+	if _, err := os.Stat("/dev/kvm"); err != nil {
+		domainType = "qemu"
+	}
+
+	sb.WriteString(fmt.Sprintf(`<domain type='%s' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
   <name>%s</name>
-  <uuid>%s</uuid>
-  <description>%s</description>
-  <memory unit='MiB'>%d</memory>
-`, vm.ID, vm.UUID, vm.Description, vm.MemoryMiB))
+`, domainType, vm.ID))
+	if vm.UUID != "" {
+		sb.WriteString(fmt.Sprintf(`  <uuid>%s</uuid>
+`, vm.UUID))
+	}
+	if vm.Description != "" {
+		sb.WriteString(fmt.Sprintf(`  <description>%s</description>
+`, vm.Description))
+	}
+	sb.WriteString(fmt.Sprintf(`  <memory unit='MiB'>%d</memory>
+`, vm.MemoryMiB))
 
 	if vm.BalloonMinMiB > 0 {
 		sb.WriteString(fmt.Sprintf(`  <currentMemory unit='MiB'>%d</currentMemory>
@@ -806,7 +1207,6 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 `)
 	}
 
-	// CPU topology
 	sockets := vm.Sockets
 	if sockets <= 0 {
 		sockets = 1
@@ -833,39 +1233,44 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 	sb.WriteString(`  </cpu>
 `)
 
-	// OS and Firmware
 	mach := vm.MachineType
 	if mach == "" {
 		mach = "q35"
 	}
-	sb.WriteString(fmt.Sprintf(`  <os>
-    <type arch='x86_64' machine='%s'>hvm</type>
-`, mach))
+	sb.WriteString("  <os")
 	if vm.BiosType == "ovmf" {
-		sb.WriteString(`    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE.fd</loader>
-    <nvram>/var/lib/libvirt/qemu/nvram/` + vm.ID + `_VARS.fd</nvram>
+		sb.WriteString(" firmware='efi'")
+	}
+	sb.WriteString(">\n")
+	sb.WriteString(fmt.Sprintf(`    <type arch='x86_64' machine='%s'>hvm</type>
+    <boot dev='hd'/>
+`, mach))
+	if vm.CdromIsoImage != "" {
+		sb.WriteString(`    <boot dev='cdrom'/>
 `)
 	}
-	sb.WriteString(`    <boot dev='hd'/>
-    <boot dev='cdrom'/>
-  </os>
+	sb.WriteString(`  </os>
   <features>
     <acpi/>
     <apic/>
   </features>
   <devices>
-    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <emulator>/usr/sbin/qemu-system-x86_64</emulator>
+    <controller type='scsi' model='virtio-scsi'/>
 `)
 
-	// Controller for VirtIO SCSI
-	sb.WriteString(`    <controller type='scsi' model='virtio-scsi'/>
-`)
-
-	// Disks
 	diskLetter := 'a'
 	for _, d := range vm.Disks {
-		devType := "disk"
+		if d.DiskPath == "" {
+			continue
+		}
+		diskKind := "file"
+		sourceAttr := "file"
 		driverType := "raw"
+		if strings.HasPrefix(d.DiskPath, "/dev/") {
+			diskKind = "block"
+			sourceAttr = "dev"
+		}
 		if strings.HasSuffix(d.DiskPath, ".qcow2") {
 			driverType = "qcow2"
 		}
@@ -881,62 +1286,81 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 		if bus == "" {
 			bus = "scsi"
 		}
+		targetPrefix := "vd"
+		if bus == "scsi" || bus == "sata" {
+			targetPrefix = "sd"
+		} else if bus == "ide" {
+			targetPrefix = "hd"
+		}
 
-		sb.WriteString(fmt.Sprintf(`    <disk type='block' device='%s'>
+		sb.WriteString(fmt.Sprintf(`    <disk type='%s' device='disk'>
       <driver name='qemu' type='%s' cache='%s' discard='%s'/>
-      <source dev='%s'/>
-      <target dev='sd%c' bus='%s'/>
+      <source %s='%s'/>
+      <target dev='%s%c' bus='%s'/>
     </disk>
-`, devType, driverType, cacheMode, discardMode, d.DiskPath, diskLetter, bus))
+`, diskKind, driverType, cacheMode, discardMode, sourceAttr, d.DiskPath, targetPrefix, diskLetter, bus))
 		diskLetter++
 	}
 
-	// CD-ROM media
 	if vm.CdromIsoImage != "" {
 		sb.WriteString(fmt.Sprintf(`    <disk type='file' device='cdrom'>
       <driver name='qemu' type='raw'/>
       <source file='%s'/>
-      <target dev='hdc' bus='ide'/>
+      <target dev='sda' bus='sata'/>
       <readonly/>
     </disk>
 `, vm.CdromIsoImage))
 	}
 
-	// Network interfaces
 	for _, iface := range vm.NetworkIfaces {
 		bridge := iface.Bridge
-		if bridge == "" {
-			bridge = "virbr0"
-		}
 		model := iface.Model
 		if model == "" {
 			model = "virtio"
 		}
-		sb.WriteString(fmt.Sprintf(`    <interface type='bridge'>
+		hasBridge := false
+		if bridge != "" {
+			if _, err := net.InterfaceByName(bridge); err == nil {
+				hasBridge = true
+			}
+		}
+		if hasBridge {
+			sb.WriteString(fmt.Sprintf(`    <interface type='bridge'>
       <source bridge='%s'/>
       <model type='%s'/>
 `, bridge, model))
-		if iface.MacAddress != "" {
-			sb.WriteString(fmt.Sprintf(`      <mac address='%s'/>
+			if iface.MacAddress != "" {
+				sb.WriteString(fmt.Sprintf(`      <mac address='%s'/>
 `, iface.MacAddress))
-		}
-		if iface.VlanTag > 0 {
-			sb.WriteString(fmt.Sprintf(`      <vlan><tag id='%d'/></vlan>
+			}
+			if iface.VlanTag > 0 {
+				sb.WriteString(fmt.Sprintf(`      <vlan><tag id='%d'/></vlan>
 `, iface.VlanTag))
-		}
-		sb.WriteString(`    </interface>
+			}
+			sb.WriteString(`    </interface>
 `)
+		} else {
+			sb.WriteString(fmt.Sprintf(`    <interface type='user'>
+      <model type='%s'/>
+`, model))
+			if iface.MacAddress != "" {
+				sb.WriteString(fmt.Sprintf(`      <mac address='%s'/>
+`, iface.MacAddress))
+			}
+			sb.WriteString(`    </interface>
+`)
+		}
 	}
 
-	// TPM 2.0
 	if vm.TPMVersion == "v2.0" {
-		sb.WriteString(`    <tpm model='tpm-tis'>
+		if _, err := exec.LookPath("swtpm"); err == nil {
+			sb.WriteString(`    <tpm model='tpm-tis'>
       <backend type='emulator' version='2.0'/>
     </tpm>
 `)
+		}
 	}
 
-	// PCI Passthrough Devices
 	for _, pci := range vm.PciDevices {
 		parts := strings.Split(pci.HostAddress, ":")
 		if len(parts) >= 3 {
@@ -954,7 +1378,6 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 		}
 	}
 
-	// USB Passthrough Devices
 	for _, usb := range vm.UsbDevices {
 		if strings.Contains(usb.VendorProductID, ":") {
 			ids := strings.Split(usb.VendorProductID, ":")
@@ -968,32 +1391,25 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 		}
 	}
 
-	// QEMU Guest Agent Channel
 	sb.WriteString(`    <channel type='unix'>
-      <source mode='bind'/>
       <target type='virtio' name='org.qemu.guest_agent.0'/>
     </channel>
-`)
-
-	// Balloon
-	sb.WriteString(`    <memballoon model='virtio'/>
-`)
-
-	// Graphics & VNC
-	sb.WriteString(fmt.Sprintf(`    <graphics type='vnc' port='%d' autoport='no' listen='127.0.0.1'/>
+    <memballoon model='virtio'/>
+    <graphics type='vnc' port='-1' autoport='yes' listen='127.0.0.1'>
+      <listen type='address' address='127.0.0.1'/>
+    </graphics>
     <video>
-      <model type='virtio'/>
+      <model type='vga'/>
     </video>
     <serial type='pty'>
-      <target port='0'/>
+      <target type='isa-serial' port='0'/>
     </serial>
     <console type='pty'>
       <target type='serial' port='0'/>
     </console>
   </devices>
-`, vm.VNCPort))
+`)
 
-	// Raw <qemu:commandline> arguments
 	if len(vm.QemuCommandlineArgs) > 0 {
 		sb.WriteString(`  <qemu:commandline>
 `)
@@ -1016,24 +1432,27 @@ func generateMAC() string {
 }
 
 func (a *Adapter) OpenConsole(ctx context.Context, id string) (*domain.ConsoleSession, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	vm, ok := a.vms[id]
-	if !ok {
+	vm, err := a.GetVM(ctx, id)
+	if err != nil {
 		return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, id)
 	}
 	if vm.State != "RUNNING" {
 		return nil, fmt.Errorf("%w: virtual machine %q must be RUNNING to open noVNC console", domain.ErrFailedPrecondition, id)
 	}
+
 	tokenBytes := make([]byte, 16)
 	_, _ = rand.Read(tokenBytes)
 	token := hex.EncodeToString(tokenBytes)
 	exp := time.Now().UTC().Add(30 * time.Minute)
+
+	a.mu.Lock()
 	a.tickets[token] = consoleTicket{
 		VMID:      id,
 		Token:     token,
 		ExpiresAt: exp,
 	}
+	a.mu.Unlock()
+
 	return &domain.ConsoleSession{
 		VMName:       vm.VMName,
 		Token:        token,
@@ -1057,7 +1476,6 @@ func (a *Adapter) ValidateConsoleToken(ctx context.Context, vmID, token string) 
 			return &cp, nil
 		}
 	}
-	// Allow valid VM lookup in hybrid mode if session was just requested
 	if a.hybrid && vm.State == "RUNNING" {
 		cp := vm
 		return &cp, nil
@@ -1066,20 +1484,35 @@ func (a *Adapter) ValidateConsoleToken(ctx context.Context, vmID, token string) 
 }
 
 func (a *Adapter) DialVNC(ctx context.Context, vmID string) (net.Conn, error) {
+	if a.isRealDomain(ctx, vmID) {
+		vncOut, err := exec.CommandContext(ctx, "virsh", "vncdisplay", vmID).CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("domain %q is not running: %s", vmID, strings.TrimSpace(string(vncOut)))
+		}
+		vncStr := strings.TrimSpace(string(vncOut))
+		if !strings.Contains(vncStr, ":") {
+			return nil, fmt.Errorf("no VNC display allocated for domain %q (got %q)", vmID, vncStr)
+		}
+		parts := strings.Split(vncStr, ":")
+		var dispNum int
+		fmt.Sscanf(parts[len(parts)-1], "%d", &dispNum)
+		port := 5900 + dispNum
+
+		dialer := net.Dialer{Timeout: 2 * time.Second}
+		conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", port))
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to QEMU VNC server on port %d: %w", port, err)
+		}
+		return conn, nil
+	}
+
 	vm, err := a.GetVM(ctx, vmID)
 	if err != nil {
 		return nil, err
 	}
-	// First try connecting to real QEMU VNC server on localhost:<VNCPort>
-	dialer := net.Dialer{Timeout: 500 * time.Millisecond}
-	conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", vm.VNCPort))
-	if err == nil {
-		return conn, nil
-	}
 	if !a.hybrid {
-		return nil, fmt.Errorf("failed to connect to VNC server on 127.0.0.1:%d: %w", vm.VNCPort, err)
+		return nil, fmt.Errorf("virsh not found and hybrid fallback disabled")
 	}
-	// In hybrid mode, spawn an embedded RFB 003.008 VNC server over net.Pipe()
 	clientConn, serverConn := net.Pipe()
 	go serveEmbeddedRFB(serverConn, *vm)
 	return clientConn, nil
@@ -1089,7 +1522,6 @@ func serveEmbeddedRFB(conn net.Conn, vm domain.VirtualMachine) {
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(10 * time.Minute))
 
-	// 1. Send RFB ProtocolVersion handshake
 	if _, err := conn.Write([]byte("RFB 003.008\n")); err != nil {
 		return
 	}
@@ -1099,54 +1531,47 @@ func serveEmbeddedRFB(conn net.Conn, vm domain.VirtualMachine) {
 		return
 	}
 
-	// Check if client sent RFB version ("RFB ...")
 	if n >= 3 && string(buf[:3]) == "RFB" {
-		// 2. Security Types: 1 type -> Type 1 (None)
 		_, _ = conn.Write([]byte{1, 1})
-		// Read client's chosen security type (1 byte)
 		if _, err := conn.Read(buf[:1]); err != nil {
 			return
 		}
-		// 3. SecurityResult: uint32(0) = OK
 		_, _ = conn.Write([]byte{0, 0, 0, 0})
-		// Read ClientInit (shared flag 1 byte)
 		if _, err := conn.Read(buf[:1]); err != nil {
 			return
 		}
-		// 4. Send ServerInit: width=640, height=360, 32bpp, depth=24, bigEndian=0, trueColor=1
 		const width = 640
 		const height = 360
 		nameBytes := []byte(fmt.Sprintf("KVM/QEMU [%s] (%d vCPU, %d MiB)", vm.VMName, vm.VCPUs, vm.MemoryMiB))
 		serverInit := make([]byte, 24+len(nameBytes))
 		binary.BigEndian.PutUint16(serverInit[0:2], width)
 		binary.BigEndian.PutUint16(serverInit[2:4], height)
-		serverInit[4] = 32 // bits-per-pixel
-		serverInit[5] = 24 // depth
-		serverInit[6] = 0  // big-endian-flag
-		serverInit[7] = 1  // true-color-flag
-		binary.BigEndian.PutUint16(serverInit[8:10], 255)  // red-max
-		binary.BigEndian.PutUint16(serverInit[10:12], 255) // green-max
-		binary.BigEndian.PutUint16(serverInit[12:14], 255) // blue-max
-		serverInit[14] = 16                                // red-shift
-		serverInit[15] = 8                                 // green-shift
-		serverInit[16] = 0                                 // blue-shift
+		serverInit[4] = 32
+		serverInit[5] = 24
+		serverInit[6] = 0
+		serverInit[7] = 1
+		binary.BigEndian.PutUint16(serverInit[8:10], 255)
+		binary.BigEndian.PutUint16(serverInit[10:12], 255)
+		binary.BigEndian.PutUint16(serverInit[12:14], 255)
+		serverInit[14] = 16
+		serverInit[15] = 8
+		serverInit[16] = 0
 		binary.BigEndian.PutUint32(serverInit[20:24], uint32(len(nameBytes)))
 		copy(serverInit[24:], nameBytes)
 		if _, err := conn.Write(serverInit); err != nil {
 			return
 		}
 
-		// Loop reading RFB client messages and responding to FramebufferUpdateRequest (msgType 3)
 		for {
 			msgTypeBuf := make([]byte, 1)
 			if _, err := conn.Read(msgTypeBuf); err != nil {
 				return
 			}
 			switch msgTypeBuf[0] {
-			case 0: // SetPixelFormat (19 bytes remaining)
+			case 0:
 				discard := make([]byte, 19)
 				_, _ = conn.Read(discard)
-			case 2: // SetEncodings (1 padding + uint16 count + count*4)
+			case 2:
 				hdr := make([]byte, 3)
 				if _, err := conn.Read(hdr); err != nil {
 					return
@@ -1154,35 +1579,34 @@ func serveEmbeddedRFB(conn net.Conn, vm domain.VirtualMachine) {
 				count := binary.BigEndian.Uint16(hdr[1:3])
 				discard := make([]byte, int(count)*4)
 				_, _ = conn.Read(discard)
-			case 3: // FramebufferUpdateRequest (9 bytes remaining)
+			case 3:
 				req := make([]byte, 9)
 				if _, err := conn.Read(req); err != nil {
 					return
 				}
-				// Send a compact Raw rectangle update (header bar 640x40)
 				const rectW = 640
 				const rectH = 40
 				fbUpdate := make([]byte, 4+12+(rectW*rectH*4))
-				fbUpdate[0] = 0 // FramebufferUpdate
+				fbUpdate[0] = 0
 				fbUpdate[1] = 0
-				binary.BigEndian.PutUint16(fbUpdate[2:4], 1) // 1 rectangle
-				binary.BigEndian.PutUint16(fbUpdate[4:6], 0) // x
-				binary.BigEndian.PutUint16(fbUpdate[6:8], 0) // y
+				binary.BigEndian.PutUint16(fbUpdate[2:4], 1)
+				binary.BigEndian.PutUint16(fbUpdate[4:6], 0)
+				binary.BigEndian.PutUint16(fbUpdate[6:8], 0)
 				binary.BigEndian.PutUint16(fbUpdate[8:10], rectW)
 				binary.BigEndian.PutUint16(fbUpdate[10:12], rectH)
-				binary.BigEndian.PutUint32(fbUpdate[12:16], 0) // Raw encoding (0)
+				binary.BigEndian.PutUint32(fbUpdate[12:16], 0)
 				pixels := fbUpdate[16:]
 				for i := 0; i < rectW*rectH; i++ {
-					pixels[i*4+0] = 0x1e // Blue
-					pixels[i*4+1] = 0x29 // Green
-					pixels[i*4+2] = 0x3b // Red
-					pixels[i*4+3] = 0xff // Alpha
+					pixels[i*4+0] = 0x1e
+					pixels[i*4+1] = 0x29
+					pixels[i*4+2] = 0x3b
+					pixels[i*4+3] = 0xff
 				}
 				_, _ = conn.Write(fbUpdate)
-			case 4: // KeyEvent (7 bytes remaining)
+			case 4:
 				discard := make([]byte, 7)
 				_, _ = conn.Read(discard)
-			case 5: // PointerEvent (5 bytes remaining)
+			case 5:
 				discard := make([]byte, 5)
 				_, _ = conn.Read(discard)
 			default:

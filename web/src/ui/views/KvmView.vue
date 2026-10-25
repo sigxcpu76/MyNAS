@@ -363,7 +363,7 @@ async function handleAddDisk() {
   if (!inspectingVm.value) return;
   const currentDisks = inspectingVm.value.disks ? [...inspectingVm.value.disks] : [];
   const nextId = `${diskForm.bus}${currentDisks.length}`;
-  const diskPath = diskForm.diskPath || `/dev/zvol/tank/vm-${inspectingVm.value.vmName}-disk${currentDisks.length}`;
+  const diskPath = diskForm.diskPath.trim();
 
   const newDisk: VirtualMachineDisk = {
     id: nextId,
@@ -472,7 +472,7 @@ async function handleWizardSubmit() {
   }
 
   const vcpus = wizardForm.sockets * wizardForm.cores;
-  const diskPath = wizardForm.diskPath || `/dev/zvol/tank/vm-${wizardForm.vmId.trim()}-disk0`;
+  const diskPath = wizardForm.diskPath.trim();
   const primaryDisk: VirtualMachineDisk = {
     id: `${wizardForm.diskBus}0`,
     bus: wizardForm.diskBus,
@@ -1536,12 +1536,12 @@ async function handleWizardSubmit() {
               <input v-model.number="wizardForm.diskSizeGib" type="number" min="1" class="input mono" required />
             </div>
             <div class="form-group" style="grid-column: span 2">
-              <label>Backing Storage Path (ZFS ZVol or QCOW2)</label>
+              <label>Backing Storage Path (Raw image, QCOW2 or ZFS ZVol)</label>
               <input
                 v-model="wizardForm.diskPath"
                 list="zvol-list-wiz"
                 class="input mono"
-                placeholder="/dev/zvol/tank/vm-root (Leave empty to auto-allocate)"
+                placeholder="Leave empty to auto-allocate disk image"
               />
               <datalist id="zvol-list-wiz">
                 <option v-for="zpath in availableZvols" :key="zpath" :value="zpath" />

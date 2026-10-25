@@ -146,7 +146,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	cifsHybrid := !cifsHasHost
 
 	zfsAdapter := zfs.NewAdapter(zfsHybrid)
-	kvmAdapter := kvm.NewAdapter(kvmHybrid)
+	kvmAdapter := kvm.NewAdapterWithStateDir(kvmHybrid, vmUnitsDir)
 	dockerAdapter := docker.NewAdapterWithStateDir(dockerHybrid, dockerUnitsDir)
 	lxcAdapter := lxc.NewAdapter(lxcHybrid)
 	cifsAdapter := share.NewCifsAdapter(cifsHybrid, sharesDir)
