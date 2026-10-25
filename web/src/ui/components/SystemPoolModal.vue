@@ -21,15 +21,44 @@ const emit = defineEmits<{
 
 const loading = ref(false);
 const selecting = ref(false);
+const manualPoolName = ref('');
 const discoveredPools = ref<DiscoveredPool[]>([]);
 
 const mainPool = computed(() => nasState.systemConfig?.mainPool || '');
 
+const allPools = computed(() => {
+  const map = new Map<string, DiscoveredPool>();
+  for (const p of discoveredPools.value) {
+    map.set(p.poolName, p);
+  }
+  for (const p of nasState.pools) {
+    const name = p.poolName || p.name.replace(/^zfsPools\//, '');
+    if (name && !map.has(name)) {
+      map.set(name, {
+        poolName: name,
+        hasNasSystem: false,
+        configVersion: '1.0',
+        lastModified: '',
+        isImported: true,
+        datasetPath: `${name}/.nas-system`,
+        mountpoint: `/${name}/.nas-system`,
+      });
+    }
+  }
+  return Array.from(map.values());
+});
+
 async function loadDiscoveredPools() {
   loading.value = true;
   try {
-    const list = await services.system.discoverPools();
+    const [list, zfsPools] = await Promise.all([
+      services.system.discoverPools().catch(() => []),
+      services.zfs.listPools().catch(() => []),
+    ]);
     discoveredPools.value = list;
+    if (zfsPools.length > 0) {
+      nasState.pools = zfsPools;
+    }
   } catch (err: any) {
     notify('error', err?.message || 'Failed to discover pools');
   } finally {
@@ -38,11 +67,13 @@ async function loadDiscoveredPools() {
 }
 
 async function handleSelectPool(poolName: string) {
+  const clean = poolName.trim();
+  if (!clean) return;
   selecting.value = true;
   try {
-    const updated = await services.system.selectMainPool(poolName, true);
+    const updated = await services.system.selectMainPool(clean, true);
     nasState.systemConfig = updated;
-    notify('success', `Configured "${poolName}" as Main Storage Pool. Modules enabled!`);
+    notify('success', `Configured "${clean}" as Main Storage Pool. Modules enabled!`);
     await refreshAllData();
     emit('close');
   } catch (err: any) {
@@ -87,7 +118,7 @@ onMounted(() => {
 
         <div style="display: flex; justify-content: space-between; align-items: center; margin: 16px 0 10px 0">
           <span style="font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted)">
-            Available Storage Pools ({{ discoveredPools.length }})
+            Available Storage Pools ({{ allPools.length }})
           </span>
           <button class="btn btn-sm btn-secondary" :disabled="loading" @click="loadDiscoveredPools">
             <MdiIcon :path="mdiRefresh" size="14" :class="{ 'spin-icon': loading }" />
@@ -95,7 +126,7 @@ onMounted(() => {
           </button>
         </div>
 
-        <div v-if="discoveredPools.length === 0" style="text-align: center; padding: 32px 16px; background: rgba(0,0,0,0.2); border-radius: 8px">
+        <div v-if="allPools.length === 0" style="text-align: center; padding: 32px 16px; background: rgba(0,0,0,0.2); border-radius: 8px">
           <MdiIcon :path="mdiDatabase" size="36" style="color: var(--text-muted); margin-bottom: 8px" />
           <div style="font-weight: 600; font-size: 14px">No ZFS pools found</div>
           <p style="font-size: 12.5px; color: var(--text-secondary); margin-top: 4px">
@@ -105,7 +136,7 @@ onMounted(() => {
 
         <div v-else class="pool-list">
           <div
-            v-for="p in discoveredPools"
+            v-for="p in allPools"
             :key="p.poolName"
             class="pool-item"
             :class="{ active: mainPool === p.poolName }"
@@ -157,6 +188,29 @@ onMounted(() => {
                 {{ p.hasNasSystem ? 'Restore from Pool' : 'Select as Main Pool' }}
               </button>
             </div>
+          </div>
+        </div>
+
+        <!-- Manual Pool Name Input -->
+        <div style="margin-top: 16px; padding: 12px 14px; background: rgba(0,0,0,0.15); border: 1px dashed var(--border-subtle); border-radius: 8px">
+          <div style="font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px">
+            Or specify pool name directly:
+          </div>
+          <div style="display: flex; gap: 8px">
+            <input
+              v-model="manualPoolName"
+              class="input mono"
+              style="flex: 1"
+              placeholder="e.g. mypool"
+              @keydown.enter.prevent="handleSelectPool(manualPoolName)"
+            />
+            <button
+              class="btn btn-sm btn-primary"
+              :disabled="selecting || !manualPoolName.trim()"
+              @click="handleSelectPool(manualPoolName)"
+            >
+              Select Pool
+            </button>
           </div>
         </div>
       </div>

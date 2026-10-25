@@ -855,16 +855,59 @@ func (a *Adapter) listHostDatasets(ctx context.Context, poolID string) ([]domain
 	return datasets, nil
 }
 
+func (a *Adapter) resolveDatasetPath(cleanPool, datasetID string) string {
+	cleanDS := strings.TrimPrefix(datasetID, "datasets/")
+	if cleanDS == cleanPool || cleanDS == "root" || cleanDS == "" {
+		return cleanPool
+	}
+	if strings.HasPrefix(cleanDS, cleanPool+"/") {
+		return cleanDS
+	}
+	exact := fmt.Sprintf("%s/%s", cleanPool, cleanDS)
+	if a.canUseHostZfs() {
+		cmd := exec.Command("zfs", "list", "-H", "-o", "name", exact)
+		if err := cmd.Run(); err == nil {
+			return exact
+		}
+		if strings.Contains(cleanDS, "-") {
+			slashed := fmt.Sprintf("%s/%s", cleanPool, strings.ReplaceAll(cleanDS, "-", "/"))
+			cmdSlashed := exec.Command("zfs", "list", "-H", "-o", "name", slashed)
+			if err := cmdSlashed.Run(); err == nil {
+				return slashed
+			}
+		}
+	}
+	return exact
+}
+
+func (a *Adapter) resolveVolumePath(cleanPool, volumeID string) string {
+	cleanVol := strings.TrimPrefix(volumeID, "volumes/")
+	if strings.HasPrefix(cleanVol, cleanPool+"/") {
+		return cleanVol
+	}
+	exact := fmt.Sprintf("%s/%s", cleanPool, cleanVol)
+	if a.canUseHostZfs() {
+		cmd := exec.Command("zfs", "list", "-H", "-o", "name", exact)
+		if err := cmd.Run(); err == nil {
+			return exact
+		}
+		if strings.Contains(cleanVol, "-") {
+			slashed := fmt.Sprintf("%s/%s", cleanPool, strings.ReplaceAll(cleanVol, "-", "/"))
+			cmdSlashed := exec.Command("zfs", "list", "-H", "-o", "name", slashed)
+			if err := cmdSlashed.Run(); err == nil {
+				return slashed
+			}
+		}
+	}
+	return exact
+}
+
 func (a *Adapter) GetDataset(ctx context.Context, poolID, datasetID string) (*domain.ZfsDataset, error) {
 	cleanPool := strings.TrimPrefix(poolID, "zfsPools/")
 	cleanDS := strings.TrimPrefix(datasetID, "datasets/")
-	cleanDS = strings.ReplaceAll(cleanDS, "-", "/")
 
 	if a.canUseHostZfs() {
-		targetPath := fmt.Sprintf("%s/%s", cleanPool, cleanDS)
-		if cleanDS == cleanPool || cleanDS == "root" {
-			targetPath = cleanPool
-		}
+		targetPath := a.resolveDatasetPath(cleanPool, cleanDS)
 		cmd := exec.CommandContext(ctx, "zfs", "list", "-j", "-p", "-o",
 			"name,type,used,available,referenced,mountpoint,compression,readonly,atime,recordsize,quota,sync,reservation,dedup", targetPath)
 		if out, err := cmd.Output(); err == nil {
@@ -881,7 +924,7 @@ func (a *Adapter) GetDataset(ctx context.Context, poolID, datasetID string) (*do
 
 					return &domain.ZfsDataset{
 						PoolID:           cleanPool,
-						ID:               strings.ReplaceAll(cleanDS, "/", "-"),
+						ID:               cleanDS,
 						DatasetPath:      targetPath,
 						Mountpoint:       item.Properties["mountpoint"].Value,
 						UsedBytes:        used,
@@ -912,6 +955,9 @@ func (a *Adapter) GetDataset(ctx context.Context, poolID, datasetID string) (*do
 	ds, ok := dsMap[cleanDS]
 	if !ok {
 		ds, ok = dsMap[strings.ReplaceAll(cleanDS, "/", "-")]
+	}
+	if !ok {
+		ds, ok = dsMap[strings.ReplaceAll(cleanDS, "-", "/")]
 	}
 	if !ok {
 		return nil, fmt.Errorf("%w: zfs dataset %s/%s", domain.ErrNotFound, cleanPool, cleanDS)
@@ -1099,8 +1145,7 @@ func (a *Adapter) UpdateDataset(ctx context.Context, dataset domain.ZfsDataset, 
 func (a *Adapter) DeleteDataset(ctx context.Context, poolID, datasetID string, recursive bool) error {
 	cleanPool := strings.TrimPrefix(poolID, "zfsPools/")
 	cleanDS := strings.TrimPrefix(datasetID, "datasets/")
-	cleanDS = strings.ReplaceAll(cleanDS, "-", "/")
-	targetPath := fmt.Sprintf("%s/%s", cleanPool, cleanDS)
+	targetPath := a.resolveDatasetPath(cleanPool, cleanDS)
 
 	if cleanDS == cleanPool || cleanDS == "" || cleanDS == "root" {
 		return fmt.Errorf("cannot delete root dataset of pool %q; delete the pool instead", cleanPool)
@@ -1122,6 +1167,7 @@ func (a *Adapter) DeleteDataset(ctx context.Context, poolID, datasetID string, r
 	if dsMap, ok := a.datasets[cleanPool]; ok {
 		delete(dsMap, cleanDS)
 		delete(dsMap, strings.ReplaceAll(cleanDS, "/", "-"))
+		delete(dsMap, strings.ReplaceAll(cleanDS, "-", "/"))
 	}
 	return nil
 }
@@ -1129,8 +1175,7 @@ func (a *Adapter) DeleteDataset(ctx context.Context, poolID, datasetID string, r
 func (a *Adapter) SnapshotDataset(ctx context.Context, poolID, datasetID, snapName string) (*domain.ZfsDataset, error) {
 	cleanPool := strings.TrimPrefix(poolID, "zfsPools/")
 	cleanDS := strings.TrimPrefix(datasetID, "datasets/")
-	cleanDS = strings.ReplaceAll(cleanDS, "-", "/")
-	targetPath := fmt.Sprintf("%s/%s", cleanPool, cleanDS)
+	targetPath := a.resolveDatasetPath(cleanPool, cleanDS)
 
 	if a.canUseHostZfs() {
 		snapTarget := fmt.Sprintf("%s@%s", targetPath, snapName)
@@ -1149,6 +1194,9 @@ func (a *Adapter) SnapshotDataset(ctx context.Context, poolID, datasetID, snapNa
 	ds, ok := dsMap[cleanDS]
 	if !ok {
 		ds, ok = dsMap[strings.ReplaceAll(cleanDS, "/", "-")]
+	}
+	if !ok {
+		ds, ok = dsMap[strings.ReplaceAll(cleanDS, "-", "/")]
 	}
 	if !ok {
 		return nil, fmt.Errorf("%w: zfs dataset %s/%s", domain.ErrNotFound, cleanPool, cleanDS)
@@ -1253,10 +1301,9 @@ func (a *Adapter) listHostVolumes(ctx context.Context, poolID string) ([]domain.
 func (a *Adapter) GetVolume(ctx context.Context, poolID, volumeID string) (*domain.ZfsVolume, error) {
 	cleanPool := strings.TrimPrefix(poolID, "zfsPools/")
 	cleanVol := strings.TrimPrefix(volumeID, "volumes/")
-	cleanVol = strings.ReplaceAll(cleanVol, "-", "/")
-	targetPath := fmt.Sprintf("%s/%s", cleanPool, cleanVol)
 
 	if a.canUseHostZfs() {
+		targetPath := a.resolveVolumePath(cleanPool, cleanVol)
 		cmd := exec.CommandContext(ctx, "zfs", "list", "-j", "-p", "-o",
 			"name,type,used,available,volsize,volblocksize,compression,refreservation,sync,readonly,dedup", targetPath)
 		if out, err := cmd.Output(); err == nil {
@@ -1270,7 +1317,7 @@ func (a *Adapter) GetVolume(ctx context.Context, poolID, volumeID string) (*doma
 
 					return &domain.ZfsVolume{
 						PoolID:          cleanPool,
-						ID:              strings.ReplaceAll(cleanVol, "/", "-"),
+						ID:              cleanVol,
 						VolumePath:      targetPath,
 						DevicePath:      fmt.Sprintf("/dev/zvol/%s", targetPath),
 						SizeBytes:       volSize,
@@ -1296,6 +1343,9 @@ func (a *Adapter) GetVolume(ctx context.Context, poolID, volumeID string) (*doma
 	vol, ok := volMap[cleanVol]
 	if !ok {
 		vol, ok = volMap[strings.ReplaceAll(cleanVol, "/", "-")]
+	}
+	if !ok {
+		vol, ok = volMap[strings.ReplaceAll(cleanVol, "-", "/")]
 	}
 	if !ok {
 		return nil, fmt.Errorf("%w: zfs volume %s/%s", domain.ErrNotFound, cleanPool, cleanVol)
@@ -1465,8 +1515,7 @@ func (a *Adapter) UpdateVolume(ctx context.Context, volume domain.ZfsVolume, fie
 func (a *Adapter) DeleteVolume(ctx context.Context, poolID, volumeID string) error {
 	cleanPool := strings.TrimPrefix(poolID, "zfsPools/")
 	cleanVol := strings.TrimPrefix(volumeID, "volumes/")
-	cleanVol = strings.ReplaceAll(cleanVol, "-", "/")
-	targetPath := fmt.Sprintf("%s/%s", cleanPool, cleanVol)
+	targetPath := a.resolveVolumePath(cleanPool, cleanVol)
 
 	if a.canUseHostZfs() {
 		if out, err := exec.CommandContext(ctx, "zfs", "destroy", targetPath).CombinedOutput(); err != nil {
@@ -1479,6 +1528,7 @@ func (a *Adapter) DeleteVolume(ctx context.Context, poolID, volumeID string) err
 	if volMap, ok := a.volumes[cleanPool]; ok {
 		delete(volMap, cleanVol)
 		delete(volMap, strings.ReplaceAll(cleanVol, "/", "-"))
+		delete(volMap, strings.ReplaceAll(cleanVol, "-", "/"))
 	}
 	return nil
 }

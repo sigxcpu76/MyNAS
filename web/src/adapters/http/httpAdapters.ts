@@ -644,14 +644,16 @@ export class HttpSystemAdapter implements SystemPort {
 
   async selectMainPool(poolName: string, autoImportExisting = true): Promise<SystemConfig> {
     const raw = await this.client.customMethod<any>('systemConfig', 'selectMainPool', {
+      poolName: poolName,
       pool_name: poolName,
+      autoImportExisting: autoImportExisting,
       auto_import_existing: autoImportExisting,
     });
     return mapSystemConfig(raw);
   }
 
   async discoverPools(): Promise<DiscoveredPool[]> {
-    const raw = await this.client.customMethod<any>('systemConfig', 'discoverPools', {});
+    const raw = await this.client.get<any>('systemConfig:discoverPools');
     return (raw?.pools ?? []).map(mapDiscoveredPool);
   }
 }
