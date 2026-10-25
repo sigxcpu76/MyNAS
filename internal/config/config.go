@@ -18,8 +18,8 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	HTTPAddr   string `mapstructure:"http_addr" json:"http_addr" yaml:"http_addr"`
-	GRPCAddr   string `mapstructure:"grpc_addr" json:"grpc_addr" yaml:"grpc_addr"`
+	HTTPPort   int    `mapstructure:"http_port" json:"http_port" yaml:"http_port"`
+	GRPCPort   int    `mapstructure:"grpc_port" json:"grpc_port" yaml:"grpc_port"`
 	HybridMode bool   `mapstructure:"hybrid" json:"hybrid" yaml:"hybrid"`
 	StateDir   string `mapstructure:"state_dir" json:"state_dir" yaml:"state_dir"`
 	JWTSecret  string `mapstructure:"jwt_secret" json:"jwt_secret" yaml:"jwt_secret"`
@@ -54,8 +54,8 @@ func DefaultConfig() *Config {
 
 	return &Config{
 		Server: ServerConfig{
-			HTTPAddr:   ":8080",
-			GRPCAddr:   ":9090",
+			HTTPPort:   8080,
+			GRPCPort:   9090,
 			HybridMode: false,
 			StateDir:   stateDir,
 			JWTSecret:  "nas-production-secret-2026",
@@ -92,8 +92,8 @@ func Load(explicitPath string) (*Config, string, error) {
 
 	// Set defaults in viper
 	def := DefaultConfig()
-	v.SetDefault("server.http_addr", def.Server.HTTPAddr)
-	v.SetDefault("server.grpc_addr", def.Server.GRPCAddr)
+	v.SetDefault("server.http_port", def.Server.HTTPPort)
+	v.SetDefault("server.grpc_port", def.Server.GRPCPort)
 	v.SetDefault("server.hybrid", def.Server.HybridMode)
 	v.SetDefault("server.state_dir", def.Server.StateDir)
 	v.SetDefault("server.jwt_secret", def.Server.JWTSecret)

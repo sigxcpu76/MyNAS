@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -34,8 +35,8 @@ import (
 )
 
 type StartOptions struct {
-	HTTPAddr   string
-	GRPCAddr   string
+	HTTPPort   int
+	GRPCPort   int
 	HybridMode bool
 	StateDir   string
 	JWTSecret  string
@@ -43,8 +44,8 @@ type StartOptions struct {
 
 func newStartCmd(rootOpts *RootOptions) *cobra.Command {
 	opts := &StartOptions{
-		HTTPAddr:   ":8080",
-		GRPCAddr:   ":9090",
+		HTTPPort:   8080,
+		GRPCPort:   9090,
 		HybridMode: false,
 		StateDir:   "/tmp/nas-state",
 		JWTSecret:  "nas-production-secret-2026",
@@ -58,8 +59,8 @@ func newStartCmd(rootOpts *RootOptions) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&opts.HTTPAddr, "http-addr", opts.HTTPAddr, "HTTP/WebUI/gRPC-Gateway/WebDAV/noVNC listen address")
-	cmd.Flags().StringVar(&opts.GRPCAddr, "grpc-addr", opts.GRPCAddr, "Native gRPC API server listen address")
+	cmd.Flags().IntVar(&opts.HTTPPort, "http-port", opts.HTTPPort, "HTTP/WebUI/gRPC-Gateway/WebDAV/noVNC listen port")
+	cmd.Flags().IntVar(&opts.GRPCPort, "grpc-port", opts.GRPCPort, "Native gRPC API server listen port")
 	cmd.Flags().BoolVar(&opts.HybridMode, "hybrid", opts.HybridMode, "Enable hybrid sandbox fallback when host tools or libraries are missing")
 	cmd.Flags().StringVar(&opts.StateDir, "state-dir", opts.StateDir, "Directory for NAS share & config state")
 	cmd.Flags().StringVar(&opts.JWTSecret, "jwt-secret", opts.JWTSecret, "HMAC secret for JWT issuance")
@@ -99,11 +100,11 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	}
 
 	// Override with CLI flags if explicitly provided
-	if opts.HTTPAddr != ":8080" || cfg.Server.HTTPAddr == "" {
-		cfg.Server.HTTPAddr = opts.HTTPAddr
+	if opts.HTTPPort != 8080 || cfg.Server.HTTPPort == 0 {
+		cfg.Server.HTTPPort = opts.HTTPPort
 	}
-	if opts.GRPCAddr != ":9090" || cfg.Server.GRPCAddr == "" {
-		cfg.Server.GRPCAddr = opts.GRPCAddr
+	if opts.GRPCPort != 9090 || cfg.Server.GRPCPort == 0 {
+		cfg.Server.GRPCPort = opts.GRPCPort
 	}
 	if opts.HybridMode {
 		cfg.Server.HybridMode = true
@@ -276,13 +277,14 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 		return err
 	}
 
-	if opts.GRPCAddr != "" {
-		lis, err := net.Listen("tcp", opts.GRPCAddr)
+	if cfg.Server.GRPCPort > 0 {
+		grpcAddr := fmt.Sprintf(":%d", cfg.Server.GRPCPort)
+		lis, err := net.Listen("tcp", grpcAddr)
 		if err != nil {
-			logger.Warn("could not bind gRPC address", "grpc_addr", opts.GRPCAddr, "error", err)
+			logger.Warn("could not bind gRPC port", "grpc_port", cfg.Server.GRPCPort, "error", err)
 		} else {
 			go func() {
-				logger.Info("gRPC API server listening", "grpc_addr", opts.GRPCAddr)
+				logger.Info("gRPC API server listening", "grpc_port", cfg.Server.GRPCPort, "addr", grpcAddr)
 				if err := rawGRPCServer.Serve(lis); err != nil {
 					logger.Debug("gRPC server stopped", "error", err)
 				}
@@ -290,8 +292,9 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 		}
 	}
 
+	httpAddr := fmt.Sprintf(":%d", cfg.Server.HTTPPort)
 	httpServer := &http.Server{
-		Addr:              opts.HTTPAddr,
+		Addr:              httpAddr,
 		Handler:           gateway,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -299,8 +302,8 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	errCh := make(chan error, 1)
 	go func() {
 		logger.Info("nasctl server started",
-			"http_addr", opts.HTTPAddr,
-			"grpc_addr", opts.GRPCAddr,
+			"http_port", cfg.Server.HTTPPort,
+			"grpc_port", cfg.Server.GRPCPort,
 			"hybrid_fallback", opts.HybridMode,
 			"tty_mode", logging.IsTTY(rootOpts.ErrOut),
 		)

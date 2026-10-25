@@ -228,8 +228,8 @@ Run `nasctl start` to start the embedded management interface:
 ```bash
 # Run with root privileges to manage ZFS, disks, and system users
 sudo ./bin/nasctl start \
-  --http-addr :8080 \
-  --grpc-addr :9090 \
+  --http-port 8080 \
+  --grpc-port 9090 \
   --jwt-secret "your-production-secret-token"
 ```
 

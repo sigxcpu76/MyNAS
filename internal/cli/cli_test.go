@@ -100,3 +100,28 @@ func TestNasctlCobraSubcommands(t *testing.T) {
 		}
 	}
 }
+
+func TestStartCmdFlags(t *testing.T) {
+	cmd := cli.NewRootCmd()
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetArgs([]string{"start", "--help"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("failed to execute start --help: %v", err)
+	}
+
+	helpOutput := outBuf.String()
+	if !strings.Contains(helpOutput, "--http-port") {
+		t.Errorf("expected help to contain '--http-port', got:\n%s", helpOutput)
+	}
+	if !strings.Contains(helpOutput, "--grpc-port") {
+		t.Errorf("expected help to contain '--grpc-port', got:\n%s", helpOutput)
+	}
+	if strings.Contains(helpOutput, "--http-addr") {
+		t.Errorf("expected help NOT to contain deprecated '--http-addr', got:\n%s", helpOutput)
+	}
+	if strings.Contains(helpOutput, "--grpc-addr") {
+		t.Errorf("expected help NOT to contain deprecated '--grpc-addr', got:\n%s", helpOutput)
+	}
+}

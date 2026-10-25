@@ -18,7 +18,7 @@ build: web
 	go build -o bin/nasctl ./cmd/nasctl
 
 run: build
-	./bin/nasctl start --http-addr :8080 --grpc-addr :9090
+	./bin/nasctl start --http-port 8080 --grpc-port 9090
 
 clean:
 	rm -rf bin/ web/dist

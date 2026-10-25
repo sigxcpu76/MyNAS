@@ -21,6 +21,12 @@ func TestConfigLoadAndSave(t *testing.T) {
 	if cfg.System.MainPool != "" {
 		t.Errorf("expected initial MainPool to be empty, got %q", cfg.System.MainPool)
 	}
+	if cfg.Server.HTTPPort != 8080 {
+		t.Errorf("expected initial HTTPPort to be 8080, got %d", cfg.Server.HTTPPort)
+	}
+	if cfg.Server.GRPCPort != 9090 {
+		t.Errorf("expected initial GRPCPort to be 9090, got %d", cfg.Server.GRPCPort)
+	}
 	if !cfg.Modules.ZFS {
 		t.Errorf("expected ZFS to always be enabled")
 	}
@@ -35,6 +41,8 @@ func TestConfigLoadAndSave(t *testing.T) {
 
 	// 2. Modify and Save
 	cfg.System.MainPool = "tank"
+	cfg.Server.HTTPPort = 8088
+	cfg.Server.GRPCPort = 9099
 	if err := config.Save(cfg, configFile); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
@@ -46,5 +54,11 @@ func TestConfigLoadAndSave(t *testing.T) {
 	}
 	if reloaded.System.MainPool != "tank" {
 		t.Fatalf("expected reloaded MainPool to be 'tank', got %q", reloaded.System.MainPool)
+	}
+	if reloaded.Server.HTTPPort != 8088 {
+		t.Fatalf("expected reloaded HTTPPort to be 8088, got %d", reloaded.Server.HTTPPort)
+	}
+	if reloaded.Server.GRPCPort != 9099 {
+		t.Fatalf("expected reloaded GRPCPort to be 9099, got %d", reloaded.Server.GRPCPort)
 	}
 }
