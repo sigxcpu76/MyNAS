@@ -13,6 +13,7 @@ import {
 import { nasState, notify } from '../store';
 import NoVncModal from '../components/NoVncModal.vue';
 import MdiIcon from '../components/MdiIcon.vue';
+import { generateNanosecondId, generateVMDiskName, generateZvolDiskPath } from '../../domain/id';
 import {
   mdiClose,
   mdiCog,
@@ -189,6 +190,66 @@ const availablePools = computed(() => {
   return nasState.pools.map((p) => p.poolName || p.name.split('/').pop() || 'tank');
 });
 
+const mainPool = computed(() => nasState.systemConfig?.mainPool || 'tank');
+
+const suggestedDiskName = computed(() => {
+  return generateVMDiskName(wizardForm.vmId || 'vm', 0);
+});
+
+const suggestedDiskPath = computed(() => {
+  return generateZvolDiskPath(mainPool.value, wizardForm.vmId || 'vm', 0);
+});
+
+function openCreateWizard() {
+  wizardForm.vmId = generateNanosecondId();
+  wizardForm.vmName = `vm-${wizardForm.vmId}`;
+  wizardForm.osVariant = 'debian12';
+  wizardForm.description = '';
+  wizardForm.autostart = true;
+  wizardForm.startupDelaySeconds = 0;
+  wizardForm.machineType = 'q35';
+  wizardForm.biosType = 'ovmf';
+  wizardForm.tpmVersion = 'v2.0';
+  wizardForm.secureBoot = true;
+  wizardForm.diskBus = 'scsi';
+  wizardForm.diskPath = suggestedDiskPath.value;
+  wizardForm.diskSizeGib = 32;
+  wizardForm.diskCache = 'none';
+  wizardForm.diskDiscard = true;
+  wizardForm.diskIothread = true;
+  wizardForm.sockets = 1;
+  wizardForm.cores = 2;
+  wizardForm.cpuType = 'host';
+  wizardForm.numa = false;
+  wizardForm.memoryMib = 4096;
+  wizardForm.balloonMinMib = 2048;
+  wizardForm.hugepages = 'off';
+  wizardForm.netModel = 'virtio';
+  wizardForm.netBridge = 'virbr0';
+  wizardForm.vlanTag = 0;
+  wizardForm.firewall = true;
+  wizardStep.value = 1;
+  showCreateWizard.value = true;
+}
+
+function openTakeSnapshotModal() {
+  snapshotForm.snapshotId = generateNanosecondId();
+  snapshotForm.description = '';
+  snapshotForm.includeRam = false;
+  showTakeSnapshotModal.value = true;
+}
+
+function openAddDiskModal() {
+  const currentDisksCount = inspectingVm.value?.disks?.length || 0;
+  diskForm.bus = 'scsi';
+  diskForm.diskPath = generateZvolDiskPath(mainPool.value, inspectingVm.value?.name || 'vm', currentDisksCount);
+  diskForm.sizeGib = 32;
+  diskForm.cacheMode = 'none';
+  diskForm.discard = true;
+  diskForm.iothread = true;
+  showAddDiskModal.value = true;
+}
+
 // Lifecycle
 onMounted(async () => {
   await refreshVms();
@@ -309,9 +370,9 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
 // Clone VM
 function openCloneModal(vm: VirtualMachine) {
   cloningVm.value = vm;
-  cloneForm.newId = `${vm.vmName}-clone`;
+  cloneForm.newId = generateNanosecondId();
   cloneForm.newName = `${vm.vmName} (Clone)`;
-  cloneForm.targetPool = 'tank';
+  cloneForm.targetPool = mainPool.value || 'tank';
   cloneForm.linkedClone = true;
 }
 
@@ -620,7 +681,7 @@ async function handleWizardSubmit() {
             <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" /> Refresh
           </button>
 
-          <button class="btn btn-sm btn-primary" @click="showCreateWizard = true">
+          <button class="btn btn-sm btn-primary" @click="openCreateWizard">
             <MdiIcon :path="mdiPlus" size="15" style="margin-right: 4px" /> Create VM
           </button>
         </div>
@@ -984,7 +1045,7 @@ async function handleWizardSubmit() {
                 Hardware Configuration
               </div>
               <div style="display: flex; gap: 8px">
-                <button class="btn btn-xs" @click="showAddDiskModal = true">
+                <button class="btn btn-xs" @click="openAddDiskModal">
                   <MdiIcon :path="mdiPlus" size="13" /> Add Hard Disk
                 </button>
                 <button class="btn btn-xs" @click="showAddNicModal = true">
@@ -1164,7 +1225,7 @@ async function handleWizardSubmit() {
               <div style="font-weight: 600; font-size: 14px">
                 Virtual Machine Snapshots
               </div>
-              <button class="btn btn-sm btn-primary" @click="showTakeSnapshotModal = true">
+              <button class="btn btn-sm btn-primary" @click="openTakeSnapshotModal">
                 <MdiIcon :path="mdiPlus" size="14" style="margin-right: 4px" /> Take Snapshot
               </button>
             </div>
@@ -1461,7 +1522,8 @@ async function handleWizardSubmit() {
           <div v-if="wizardStep === 1" class="form-grid">
             <div class="form-group">
               <label>VM Domain ID (`virtual_machine_id`)</label>
-              <input v-model="wizardForm.vmId" class="input mono" placeholder="vm-ubuntu-prod" required />
+              <input v-model="wizardForm.vmId" class="input mono" placeholder="1761411800123456789" required />
+              <small style="color: var(--text-muted); font-size: 11px">Unique nanosecond timestamp ID</small>
             </div>
             <div class="form-group">
               <label>Display Name</label>
@@ -1541,11 +1603,12 @@ async function handleWizardSubmit() {
                 v-model="wizardForm.diskPath"
                 list="zvol-list-wiz"
                 class="input mono"
-                placeholder="Leave empty to auto-allocate disk image"
+                :placeholder="suggestedDiskPath"
               />
               <datalist id="zvol-list-wiz">
                 <option v-for="zpath in availableZvols" :key="zpath" :value="zpath" />
               </datalist>
+              <small style="color: var(--text-muted); font-size: 11px">Standard disk naming: <code class="mono">{{ suggestedDiskName }}</code></small>
             </div>
             <div class="form-group">
               <label style="display: flex; align-items: center; gap: 8px; font-size: 13px">

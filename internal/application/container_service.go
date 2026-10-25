@@ -27,7 +27,12 @@ func (s *DockerService) GetContainer(ctx context.Context, id string) (*domain.Do
 }
 
 func (s *DockerService) CreateContainer(ctx context.Context, c domain.DockerContainer) (*domain.DockerContainer, error) {
-	c.ContainerName = c.ID
+	if c.ID == "" {
+		c.ID = domain.GenerateNanosecondID()
+	}
+	if c.ContainerName == "" {
+		c.ContainerName = c.ID
+	}
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
@@ -109,7 +114,12 @@ func (s *LxcService) GetContainer(ctx context.Context, id string) (*domain.LxcCo
 }
 
 func (s *LxcService) CreateContainer(ctx context.Context, c domain.LxcContainer) (*domain.LxcContainer, error) {
-	c.ContainerName = c.ID
+	if c.ID == "" {
+		c.ID = domain.GenerateNanosecondID()
+	}
+	if c.ContainerName == "" {
+		c.ContainerName = c.ID
+	}
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}

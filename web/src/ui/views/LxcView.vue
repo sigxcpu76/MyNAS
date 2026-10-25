@@ -2,6 +2,7 @@
 import { reactive, ref } from 'vue';
 import { services } from '../../container';
 import { nasState, notify } from '../store';
+import { generateNanosecondId } from '../../domain/id';
 
 const showCreate = ref(false);
 const form = reactive({
@@ -15,6 +16,23 @@ const form = reactive({
   autostart: true,
   templateArchive: '',
 });
+
+function toggleCreate() {
+  if (showCreate.value) {
+    showCreate.value = false;
+  } else {
+    form.containerId = generateNanosecondId();
+    form.distribution = 'debian';
+    form.release = 'bookworm';
+    form.architecture = 'amd64';
+    form.memoryLimitMib = 1024;
+    form.cpuCores = 2;
+    form.unprivileged = true;
+    form.autostart = true;
+    form.templateArchive = '';
+    showCreate.value = true;
+  }
+}
 
 async function refreshLxc() {
   nasState.lxcContainers = await services.lxc.listContainers();
@@ -78,7 +96,7 @@ async function handleDelete(name: string) {
         </p>
       </div>
 
-      <button class="btn btn-primary" @click="showCreate = !showCreate">
+      <button class="btn btn-primary" @click="toggleCreate">
         {{ showCreate ? 'Cancel' : '+ Create LXC Container' }}
       </button>
     </div>
@@ -97,7 +115,8 @@ async function handleDelete(name: string) {
       <div class="form-grid">
         <div class="form-group">
           <label>Container Name (`lxc_container_id`)</label>
-          <input v-model="form.containerId" class="input mono" placeholder="wireguard-gw" required />
+          <input v-model="form.containerId" class="input mono" placeholder="1761411800123456789" required />
+          <small style="color: var(--text-muted); font-size: 11px">Unique nanosecond timestamp ID</small>
         </div>
         <div class="form-group">
           <label>Distribution</label>
@@ -147,7 +166,7 @@ async function handleDelete(name: string) {
             👑 MAIN POOL ({{ nasState.systemConfig?.mainPool || 'tank' }})
           </span>
           <span class="mono" style="margin-left: 8px; color: var(--text-muted)">
-            /{{ nasState.systemConfig?.mainPool || 'tank' }}/lxc/{{ form.containerId || '&lt;id&gt;' }}/rootfs
+            /nas/{{ nasState.systemConfig?.mainPool || 'tank' }}/lxc/{{ form.containerId || '&lt;id&gt;' }}/rootfs
           </span>
         </div>
       </div>

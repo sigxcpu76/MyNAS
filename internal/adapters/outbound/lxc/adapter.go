@@ -119,7 +119,7 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 
 	if mainPool != "" {
 		if c.RootfsPath == "" {
-			c.RootfsPath = fmt.Sprintf("/nas/%s/lxc/%s/rootfs", mainPool, c.ID)
+			c.RootfsPath = domain.GenerateLxcRootfsPath(mainPool, c.ID)
 		} else {
 			cleaned := filepath.Clean(c.RootfsPath)
 			hasNasPrefix := cleaned == "/nas/"+mainPool || strings.HasPrefix(cleaned, "/nas/"+mainPool+"/")

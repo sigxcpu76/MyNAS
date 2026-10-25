@@ -28,7 +28,12 @@ func (s *KvmService) GetVM(ctx context.Context, id string) (*domain.VirtualMachi
 }
 
 func (s *KvmService) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*domain.VirtualMachine, error) {
-	vm.VMName = vm.ID
+	if vm.ID == "" {
+		vm.ID = domain.GenerateNanosecondID()
+	}
+	if vm.VMName == "" {
+		vm.VMName = vm.ID
+	}
 	if err := vm.Validate(); err != nil {
 		return nil, err
 	}
@@ -95,6 +100,12 @@ func (s *KvmService) CloneVM(ctx context.Context, id, newID, newName, targetPool
 	if err := domain.ValidateResourceID(id, "virtual_machine"); err != nil {
 		return nil, err
 	}
+	if newID == "" {
+		newID = domain.GenerateNanosecondID()
+	}
+	if newName == "" {
+		newName = newID
+	}
 	if err := domain.ValidateResourceID(newID, "virtual_machine_id"); err != nil {
 		return nil, err
 	}
@@ -125,6 +136,9 @@ func (s *KvmService) ListSnapshots(ctx context.Context, vmID string) ([]domain.V
 func (s *KvmService) CreateSnapshot(ctx context.Context, vmID string, snap domain.VirtualMachineSnapshot) (*domain.VirtualMachineSnapshot, error) {
 	if err := domain.ValidateResourceID(vmID, "virtual_machine"); err != nil {
 		return nil, err
+	}
+	if snap.SnapshotID == "" {
+		snap.SnapshotID = domain.GenerateNanosecondID()
 	}
 	return s.hypervisor.CreateSnapshot(ctx, vmID, snap)
 }

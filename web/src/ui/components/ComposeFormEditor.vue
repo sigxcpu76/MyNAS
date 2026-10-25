@@ -14,6 +14,7 @@ import {
   generateUid,
 } from '../../domain/composeModel';
 import { nasState, notify } from '../store';
+import { generateNanosecondId } from '../../domain/id';
 import CodeMirrorEditor from './CodeMirrorEditor.vue';
 import MdiIcon from './MdiIcon.vue';
 import PathSelector from './PathSelector.vue';
@@ -83,7 +84,7 @@ const zfsDatasetPaths = computed(() => {
       if (d.mountpoint && d.mountpoint !== 'none' && d.mountpoint !== 'legacy') {
         paths.push(d.mountpoint);
       } else {
-        paths.push(`/${cleanPool}/${d.name.split('/').pop()}`);
+        paths.push(`/nas/${cleanPool}/${d.name.split('/').pop()}`);
       }
     }
   }
@@ -92,11 +93,11 @@ const zfsDatasetPaths = computed(() => {
 
 const appsPoolName = computed(() => nasState.dockerConfig?.pool || 'tank');
 const appsPoolAppdataDir = computed(
-  () => nasState.dockerConfig?.appdataDataset || `/${appsPoolName.value}/appdata`
+  () => nasState.dockerConfig?.appdataDataset || `/nas/${appsPoolName.value}/apps/appdata`
 );
 
 function defaultAppdataMount(appId: string, subfolder = 'data'): string {
-  const cleanId = appId.trim() || 'app';
+  const cleanId = appId.trim() || generateNanosecondId();
   return `${appsPoolAppdataDir.value}/${cleanId}/${subfolder}`;
 }
 

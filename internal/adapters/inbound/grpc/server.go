@@ -817,10 +817,17 @@ func (s *Server) CreateVirtualMachine(ctx context.Context, req *nasv1.CreateVirt
 	if id == "" && in != nil {
 		id = strings.TrimPrefix(in.GetName(), "virtualMachines/")
 	}
+	if id == "" {
+		id = domain.GenerateNanosecondID()
+	}
 
 	var disks []domain.VirtualMachineDisk
-	for _, d := range in.GetDisks() {
-		disks = append(disks, fromProtoVMDisk(d))
+	for i, d := range in.GetDisks() {
+		vd := fromProtoVMDisk(d)
+		if vd.ID == "" {
+			vd.ID = domain.GenerateVMDiskName(id, i)
+		}
+		disks = append(disks, vd)
 	}
 	var ifaces []domain.VirtualMachineNetworkInterface
 	for _, iface := range in.GetNetworkInterfaces() {
@@ -1069,7 +1076,11 @@ func (s *Server) CloneVirtualMachine(ctx context.Context, req *nasv1.CloneVirtua
 	if err != nil {
 		return nil, err
 	}
-	vm, err := s.kvm.CloneVM(ctx, id, req.GetNewVirtualMachineId(), req.GetNewName(), req.GetTargetPool(), req.GetLinkedClone())
+	newID := req.GetNewVirtualMachineId()
+	if newID == "" {
+		newID = domain.GenerateNanosecondID()
+	}
+	vm, err := s.kvm.CloneVM(ctx, id, newID, req.GetNewName(), req.GetTargetPool(), req.GetLinkedClone())
 	if err != nil {
 		return nil, ToGRPCError(err)
 	}
@@ -1142,8 +1153,12 @@ func (s *Server) CreateVirtualMachineSnapshot(ctx context.Context, req *nasv1.Cr
 		return nil, err
 	}
 	in := req.GetSnapshot()
+	snapID := req.GetSnapshotId()
+	if snapID == "" {
+		snapID = domain.GenerateNanosecondID()
+	}
 	created, err := s.kvm.CreateSnapshot(ctx, vmID, domain.VirtualMachineSnapshot{
-		SnapshotID:  req.GetSnapshotId(),
+		SnapshotID:  snapID,
 		Description: in.GetDescription(),
 		IncludeRAM:  in.GetIncludeRam(),
 	})
@@ -1233,6 +1248,9 @@ func (s *Server) CreateDockerContainer(ctx context.Context, req *nasv1.CreateDoc
 	in := req.GetDockerContainer()
 	if id == "" && in != nil {
 		id = strings.TrimPrefix(in.GetName(), "dockerContainers/")
+	}
+	if id == "" {
+		id = domain.GenerateNanosecondID()
 	}
 	created, err := s.docker.CreateContainer(ctx, domain.DockerContainer{
 		ID:             id,
@@ -1460,6 +1478,9 @@ func (s *Server) CreateDockerApp(ctx context.Context, req *nasv1.CreateDockerApp
 	in := req.GetDockerApp()
 	if id == "" && in != nil {
 		id = strings.TrimPrefix(in.GetName(), "dockerApps/")
+	}
+	if id == "" {
+		id = domain.GenerateNanosecondID()
 	}
 	if in == nil {
 		return nil, status.Error(codes.InvalidArgument, "docker_app is required")
@@ -1730,6 +1751,9 @@ func (s *Server) CreateLxcContainer(ctx context.Context, req *nasv1.CreateLxcCon
 	in := req.GetLxcContainer()
 	if id == "" && in != nil {
 		id = strings.TrimPrefix(in.GetName(), "lxcContainers/")
+	}
+	if id == "" {
+		id = domain.GenerateNanosecondID()
 	}
 	created, err := s.lxc.CreateContainer(ctx, domain.LxcContainer{
 		ID:              id,

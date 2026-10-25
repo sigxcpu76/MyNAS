@@ -25,6 +25,7 @@ import {
   mdiStorefrontOutline,
 } from '@mdi/js';
 import { services } from '../../container';
+import { generateNanosecondId } from '../../domain/id';
 import {
   APP_CATALOG_TEMPLATES,
   type AppCatalogTemplate,
@@ -391,8 +392,9 @@ function selectCatalogTemplate(tmpl: AppCatalogTemplate | null) {
     installTitle.value = tmpl.name;
     installComposeYaml.value = tmpl.composeYaml;
   } else {
-    installAppId.value = '';
-    installTitle.value = '';
+    const nanoId = generateNanosecondId();
+    installAppId.value = nanoId;
+    installTitle.value = `custom-app-${nanoId}`;
     installComposeYaml.value = `services:
   web:
     image: nginx:alpine
@@ -406,8 +408,9 @@ function selectCatalogTemplate(tmpl: AppCatalogTemplate | null) {
 
 async function handleDeployApp(data: { appId: string; title: string; composeYaml: string }) {
   try {
-    await services.apps.createApp(data.appId, data.composeYaml, data.title);
-    notify('success', `App "${data.appId}" deployed successfully`);
+    const targetId = data.appId.trim() || generateNanosecondId();
+    await services.apps.createApp(targetId, data.composeYaml, data.title || targetId);
+    notify('success', `App "${targetId}" deployed successfully`);
     isInstallModalOpen.value = false;
     await refreshApps();
   } catch (err: any) {

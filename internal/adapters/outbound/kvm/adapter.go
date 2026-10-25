@@ -634,14 +634,14 @@ func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*doma
 		if len(vm.Disks) == 0 {
 			diskDir := filepath.Join(a.stateDir, "disks")
 			_ = os.MkdirAll(diskDir, 0755)
-			diskPath := filepath.Join(diskDir, fmt.Sprintf("%s-disk0.raw", vm.ID))
+			diskPath := filepath.Join(diskDir, fmt.Sprintf("%s.raw", domain.GenerateVMDiskName(vm.ID, 0)))
 			sizeB := int64(vm.DiskSizeGiB) * 1024 * 1024 * 1024
 			if sizeB <= 0 {
 				sizeB = 32 * 1024 * 1024 * 1024
 			}
 			vm.Disks = []domain.VirtualMachineDisk{
 				{
-					ID:        "sda",
+					ID:        domain.GenerateVMDiskName(vm.ID, 0),
 					Bus:       "scsi",
 					DiskPath:  diskPath,
 					SizeBytes: sizeB,
@@ -654,10 +654,13 @@ func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*doma
 
 		for i := range vm.Disks {
 			d := &vm.Disks[i]
+			if d.ID == "" {
+				d.ID = domain.GenerateVMDiskName(vm.ID, i)
+			}
 			if d.DiskPath == "" {
 				diskDir := filepath.Join(a.stateDir, "disks")
 				_ = os.MkdirAll(diskDir, 0755)
-				d.DiskPath = filepath.Join(diskDir, fmt.Sprintf("%s-disk%d.raw", vm.ID, i))
+				d.DiskPath = filepath.Join(diskDir, fmt.Sprintf("%s.raw", domain.GenerateVMDiskName(vm.ID, i)))
 			}
 			if err := ensureDiskAllocated(d.DiskPath, d.SizeBytes); err != nil {
 				return nil, fmt.Errorf("failed to allocate disk %s: %w", d.DiskPath, err)
@@ -721,7 +724,7 @@ func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*doma
 	if len(vm.Disks) == 0 {
 		diskPath := vm.DiskPath
 		if diskPath == "" {
-			diskPath = fmt.Sprintf("/tank/vms/%s.raw", vm.ID)
+			diskPath = fmt.Sprintf("/nas/tank/vms/%s.raw", domain.GenerateVMDiskName(vm.ID, 0))
 		}
 		sizeGiB := vm.DiskSizeGiB
 		if sizeGiB <= 0 {
@@ -729,7 +732,7 @@ func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*doma
 		}
 		vm.Disks = []domain.VirtualMachineDisk{
 			{
-				ID:        "scsi0",
+				ID:        domain.GenerateVMDiskName(vm.ID, 0),
 				Bus:       "scsi",
 				DiskPath:  diskPath,
 				SizeBytes: sizeGiB * 1024 * 1024 * 1024,
@@ -1005,10 +1008,10 @@ func (a *Adapter) CloneVM(ctx context.Context, id, newID, newName, targetPool st
 	clonedDisks := make([]domain.VirtualMachineDisk, 0, len(source.Disks))
 	for i, d := range source.Disks {
 		cDisk := d
-		cDisk.ID = fmt.Sprintf("sd%c", 'a'+i)
+		cDisk.ID = domain.GenerateVMDiskName(newID, i)
 		diskDir := filepath.Join(a.stateDir, "disks")
 		_ = os.MkdirAll(diskDir, 0755)
-		cDisk.DiskPath = filepath.Join(diskDir, fmt.Sprintf("%s-disk%d.raw", newID, i))
+		cDisk.DiskPath = filepath.Join(diskDir, fmt.Sprintf("%s.raw", domain.GenerateVMDiskName(newID, i)))
 		_ = ensureDiskAllocated(cDisk.DiskPath, cDisk.SizeBytes)
 		clonedDisks = append(clonedDisks, cDisk)
 	}
@@ -1130,7 +1133,7 @@ func (a *Adapter) ListSnapshots(ctx context.Context, vmID string) ([]domain.Virt
 
 func (a *Adapter) CreateSnapshot(ctx context.Context, vmID string, snapshot domain.VirtualMachineSnapshot) (*domain.VirtualMachineSnapshot, error) {
 	if snapshot.SnapshotID == "" {
-		return nil, fmt.Errorf("snapshot_id is required")
+		snapshot.SnapshotID = domain.GenerateNanosecondID()
 	}
 
 	if a.isRealDomain(ctx, vmID) {

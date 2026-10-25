@@ -88,6 +88,9 @@ func (s *DockerAppService) CreateApp(ctx context.Context, appID string, app doma
 	if appID == "" {
 		appID = app.ID
 	}
+	if appID == "" {
+		appID = domain.GenerateNanosecondID()
+	}
 	app.ID = appID
 	if app.Name == "" {
 		app.Name = domain.DockerAppName(app.ID)

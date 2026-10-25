@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/sigxcpu/nas/internal/adapters/outbound/docker"
@@ -185,5 +186,91 @@ func TestIdentityAndPrerequisites(t *testing.T) {
 	})
 	if err != nil || cifsShare.ShareName != "projects" {
 		t.Fatalf("CreateCifsShare failed: %v", err)
+	}
+}
+
+func TestNanosecondIDLifecycle(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. VM with auto-generated nanosecond ID and disk naming
+	kvmSvc := application.NewKvmService(kvm.NewAdapter(true))
+	vm, err := kvmSvc.CreateVM(ctx, domain.VirtualMachine{
+		VCPUs:     2,
+		MemoryMiB: 2048,
+	})
+	if err != nil {
+		t.Fatalf("CreateVM with auto ID failed: %v", err)
+	}
+	defer func() {
+		_ = kvmSvc.DeleteVM(ctx, vm.ID)
+	}()
+	if vm.ID == "" || len(vm.ID) < 16 {
+		t.Fatalf("expected nanosecond timestamp ID for VM, got: %s", vm.ID)
+	}
+	if len(vm.Disks) == 0 {
+		t.Fatalf("expected auto-allocated disk on VM")
+	}
+	expectedDiskID := domain.GenerateVMDiskName(vm.ID, 0)
+	if !strings.Contains(vm.Disks[0].DiskPath, expectedDiskID) {
+		t.Fatalf("expected disk path to contain %q, got: %q", expectedDiskID, vm.Disks[0].DiskPath)
+	}
+
+	// Snapshot with auto-generated nanosecond ID
+	snap, err := kvmSvc.CreateSnapshot(ctx, vm.ID, domain.VirtualMachineSnapshot{
+		Description: "auto-id-snapshot",
+	})
+	if err != nil {
+		t.Fatalf("CreateSnapshot with auto ID failed: %v", err)
+	}
+	if snap.SnapshotID == "" || len(snap.SnapshotID) < 16 {
+		t.Fatalf("expected nanosecond timestamp ID for snapshot, got: %s", snap.SnapshotID)
+	}
+
+	// 2. Docker container with auto-generated nanosecond ID
+	dockerAdapter := docker.NewAdapterFull("/nonexistent/docker.sock", t.TempDir(), true)
+	dockerSvc := application.NewDockerService(dockerAdapter)
+	dc, err := dockerSvc.CreateContainer(ctx, domain.DockerContainer{
+		Image: "alpine:latest",
+	})
+	if err != nil {
+		t.Fatalf("CreateContainer (Docker) with auto ID failed: %v", err)
+	}
+	if dc.ID == "" || len(dc.ID) < 16 {
+		t.Fatalf("expected nanosecond timestamp ID for docker container, got: %s", dc.ID)
+	}
+
+	// 3. Docker App with auto-generated nanosecond ID
+	appSvc := application.NewDockerAppService(dockerAdapter)
+	app, err := appSvc.CreateApp(ctx, "", domain.DockerApp{
+		Title: "Nano App",
+		ComposeYAML: `services:
+  web:
+    image: nginx:alpine
+`,
+	})
+	if err != nil {
+		t.Fatalf("CreateApp with auto ID failed: %v", err)
+	}
+	if app.ID == "" || len(app.ID) < 16 {
+		t.Fatalf("expected nanosecond timestamp ID for docker app, got: %s", app.ID)
+	}
+
+	// 4. LXC container with auto-generated nanosecond ID
+	lxcAdapter := lxc.NewAdapter(true)
+	lxcAdapter.SetMainPool("mypool")
+	lxcSvc := application.NewLxcService(lxcAdapter)
+	lc, err := lxcSvc.CreateContainer(ctx, domain.LxcContainer{
+		Distribution: "debian",
+		Release:      "bookworm",
+	})
+	if err != nil {
+		t.Fatalf("CreateContainer (LXC) with auto ID failed: %v", err)
+	}
+	if lc.ID == "" || len(lc.ID) < 16 {
+		t.Fatalf("expected nanosecond timestamp ID for lxc container, got: %s", lc.ID)
+	}
+	expectedRootfs := domain.GenerateLxcRootfsPath("mypool", lc.ID)
+	if lc.RootfsPath != expectedRootfs {
+		t.Fatalf("expected rootfs path %q, got: %q", expectedRootfs, lc.RootfsPath)
 	}
 }
