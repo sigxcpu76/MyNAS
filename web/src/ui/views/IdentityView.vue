@@ -2,7 +2,7 @@
 import { reactive, ref } from 'vue';
 import { services } from '../../container';
 import type { Group, User } from '../../domain/models';
-import { nasState, notify } from '../store';
+import { askModal, confirmModal, nasState, notify } from '../store';
 
 const showCreateUser = ref(false);
 const userForm = reactive({
@@ -152,9 +152,26 @@ async function handleSaveUserEdit() {
 }
 
 async function handleDeleteUser(name: string) {
+  const shortName = name.replace(/^users\//, '');
+  const res = await askModal({
+    title: 'Delete Linux User',
+    tone: 'danger',
+    message: `Are you sure you want to delete user "${shortName}"?`,
+    details: 'The user account will be permanently removed from Linux PAM and /etc/passwd.',
+    confirmText: 'Delete User',
+    checkbox: {
+      label: 'Also permanently remove user home directory and files',
+      checked: true,
+      hint: 'If unchecked, files belonging to this UID will remain on the filesystem.',
+    },
+  });
+  if (!res.confirmed) return;
+
+  const removeHome = !!res.checkboxChecked;
+
   try {
-    await services.identity.deleteUser(name, true);
-    notify('info', `Deleted user ${name}`);
+    await services.identity.deleteUser(name, removeHome);
+    notify('info', `Deleted user ${shortName}`);
     await refreshIdentity();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to delete user');
@@ -202,9 +219,19 @@ async function handleSaveGroupEdit() {
 }
 
 async function handleDeleteGroup(name: string) {
+  const shortName = name.replace(/^groups\//, '');
+  const confirmed = await confirmModal({
+    title: 'Delete Linux Group',
+    tone: 'danger',
+    message: `Are you sure you want to delete group "${shortName}"?`,
+    details: 'The group will be removed from /etc/group on the Linux host.',
+    confirmText: 'Delete Group',
+  });
+  if (!confirmed) return;
+
   try {
     await services.identity.deleteGroup(name);
-    notify('info', `Deleted group ${name}`);
+    notify('info', `Deleted group ${shortName}`);
     await refreshIdentity();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to delete group');

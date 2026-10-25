@@ -35,7 +35,7 @@ import {
 import ComposeFormEditor from '../components/ComposeFormEditor.vue';
 import CodeMirrorEditor from '../components/CodeMirrorEditor.vue';
 import MdiIcon from '../components/MdiIcon.vue';
-import { nasState, notify } from '../store';
+import { askModal, nasState, notify } from '../store';
 
 // =============================================================================
 // Filters & Search
@@ -526,14 +526,21 @@ async function restartApp(app: DockerApp) {
 }
 
 async function deleteApp(app: DockerApp) {
-  const deleteConfirmed = confirm(
-    `Are you sure you want to delete App "${app.appId}"?\n\nClick OK to confirm deletion.`
-  );
-  if (!deleteConfirmed) return;
+  const res = await askModal({
+    title: 'Delete Docker Application',
+    tone: 'danger',
+    message: `Are you sure you want to delete App "${app.title || app.appId}"?`,
+    details: 'This will stop and remove all associated containers and compose project configurations.',
+    confirmText: 'Delete App',
+    checkbox: {
+      label: 'Purge persistent data volumes on disk (`docker compose down -v`)',
+      checked: false,
+      hint: 'If unchecked, your application data and config volumes will remain safely preserved on disk.',
+    },
+  });
+  if (!res.confirmed) return;
 
-  const removeVols = confirm(
-    `Do you also want to purge persistent volumes associated with "${app.appId}"?\n\nOK = Remove volumes (down -v)\nCancel = Keep volume data on disk`
-  );
+  const removeVols = !!res.checkboxChecked;
 
   try {
     notify('info', `Tearing down app "${app.appId}"...`);
@@ -614,9 +621,9 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Apps Storage Dataset Warning Banner if unconfigured -->
+    <!-- Apps Storage Dataset Warning Banner if unconfigured and no Main Pool exists -->
     <div
-      v-if="nasState.dockerConfig && !(nasState.dockerConfig.datasetSelected ?? nasState.dockerConfig.poolSelected)"
+      v-if="!nasState.systemConfig?.mainPool && nasState.dockerConfig && !(nasState.dockerConfig.datasetSelected ?? nasState.dockerConfig.poolSelected)"
       class="card"
       style="
         background: rgba(245, 158, 11, 0.1);

@@ -14,7 +14,7 @@ import {
 import { services } from '../../container';
 import type { DiscoveredPool } from '../../domain/models';
 import MdiIcon from './MdiIcon.vue';
-import { nasState, notify, refreshAllData } from '../store';
+import { confirmModal, nasState, notify, refreshAllData } from '../store';
 
 const emit = defineEmits<{
   (e: 'close'): void;
@@ -73,8 +73,14 @@ async function handleSelectPool(poolName: string) {
 
   const current = mainPool.value;
   if (current && current !== clean) {
-    const confirmMsg = `Switch Main Storage Pool from "${current}" to "${clean}"?\n\nConfiguration, apps root, and LXC root will now reside on "${clean}".`;
-    if (!confirm(confirmMsg)) return;
+    const confirmed = await confirmModal({
+      title: 'Switch Main Storage Pool',
+      tone: 'warning',
+      message: `Switch Main Storage Pool from "${current}" to "${clean}"?`,
+      details: `System configuration, Docker appdata root, and LXC container root will now reside on "${clean}".`,
+      confirmText: 'Switch Main Pool',
+    });
+    if (!confirmed) return;
   }
 
   selecting.value = true;

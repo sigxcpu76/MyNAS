@@ -342,3 +342,6 @@ export async function initSession(): Promise<void> {
     // ignore until login
   }
 }
+
+export { activeModal, askModal, confirmModal, alertModal, closeActiveModal } from './modal';
+export type { ModalOptions, ModalResult, ModalTone } from './modal';

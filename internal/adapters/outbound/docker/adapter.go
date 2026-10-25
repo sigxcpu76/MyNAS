@@ -51,7 +51,6 @@ type Adapter struct {
 	mainPool     string
 	// fallback memory store when docker socket is unavailable
 	containers   map[string]domain.DockerContainer
-	mockApps     map[string]domain.DockerApp
 	statsCacheMu sync.RWMutex
 	statsCache   map[string]containerStatsRecord
 }
@@ -148,7 +147,6 @@ func NewAdapterFull(socketPath string, unitsDir string) *Adapter {
 		hasCompose:   hasCompose,
 		composeCmd:   composeCmd,
 		containers:   make(map[string]domain.DockerContainer),
-		mockApps:     make(map[string]domain.DockerApp),
 		statsCache:   make(map[string]containerStatsRecord),
 	}
 
@@ -169,30 +167,39 @@ func NewAdapterWithClient(client *http.Client, baseEndpoint string) *Adapter {
 		hasSocket:    true,
 		hasCompose:   false,
 		containers:   make(map[string]domain.DockerContainer),
-		mockApps:     make(map[string]domain.DockerApp),
 		statsCache:   make(map[string]containerStatsRecord),
 	}
 }
 
 
 // loadPersistedUnits scans the units filesystem directory and loads existing compose.yaml files.
+// It automatically purges legacy mock templates (e.g. jellyfin, nextcloud) that were pre-seeded in older builds
+// and do not correspond to any active containers on the Docker host.
 func (a *Adapter) loadPersistedUnits() {
 	if a.unitsDir == "" {
 		return
 	}
-	entries, err := os.ReadDir(a.unitsDir)
-	if err != nil {
-		return
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		id := entry.Name()
-		composeFile := filepath.Join(a.unitsDir, id, "compose.yaml")
-		_, err := os.ReadFile(composeFile)
-		if err != nil {
-			continue
+	legacyMocks := []string{"jellyfin", "nextcloud"}
+	for _, mockID := range legacyMocks {
+		dir := filepath.Join(a.unitsDir, mockID)
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			hasActive := false
+			if a.hasSocket {
+				live := a.fetchLiveContainers(context.Background())
+				for _, c := range live {
+					if c.Labels["com.docker.compose.project"] == mockID ||
+						containsString(c.Names, "/"+mockID) ||
+						containsString(c.Names, "/"+mockID+"-app") ||
+						containsString(c.Names, "/"+mockID+"-media") {
+						hasActive = true
+						break
+					}
+				}
+			}
+			if !hasActive {
+				a.logger.Info("purging uninstalled legacy mock app directory", "app", mockID, "path", dir)
+				_ = os.RemoveAll(dir)
+			}
 		}
 	}
 }
@@ -1102,10 +1109,28 @@ func (a *Adapter) ListApps(ctx context.Context) ([]domain.DockerApp, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
+	liveContainers := a.fetchLiveContainers(ctx)
+
 	appIDs := make(map[string]bool)
 	if entries, err := os.ReadDir(a.unitsDir); err == nil {
 		for _, e := range entries {
 			if e.IsDir() {
+				// Don't list legacy mock units unless they actually have live containers
+				if e.Name() == "jellyfin" || e.Name() == "nextcloud" {
+					hasLive := false
+					for _, c := range liveContainers {
+						if c.Labels["com.docker.compose.project"] == e.Name() ||
+							containsString(c.Names, "/"+e.Name()) ||
+							containsString(c.Names, "/"+e.Name()+"-app") ||
+							containsString(c.Names, "/"+e.Name()+"-media") {
+							hasLive = true
+							break
+						}
+					}
+					if !hasLive {
+						continue
+					}
+				}
 				composePath := filepath.Join(a.unitsDir, e.Name(), "compose.yaml")
 				if _, err := os.Stat(composePath); err == nil {
 					appIDs[e.Name()] = true
@@ -1113,11 +1138,13 @@ func (a *Adapter) ListApps(ctx context.Context) ([]domain.DockerApp, error) {
 			}
 		}
 	}
-	for id := range a.mockApps {
-		appIDs[id] = true
-	}
 
-	liveContainers := a.fetchLiveContainers(ctx)
+	// Also discover any compose projects running on host docker
+	for _, c := range liveContainers {
+		if proj := c.Labels["com.docker.compose.project"]; proj != "" {
+			appIDs[proj] = true
+		}
+	}
 
 	var apps []domain.DockerApp
 	for appID := range appIDs {
@@ -1140,10 +1167,19 @@ func (a *Adapter) GetApp(ctx context.Context, id string) (*domain.DockerApp, err
 	defer a.mu.RUnlock()
 
 	composePath := filepath.Join(a.unitsDir, id, "compose.yaml")
-	_, statErr := os.Stat(composePath)
-	_, inMock := a.mockApps[id]
-	if statErr != nil && !inMock {
-		return nil, fmt.Errorf("app %q not found", id)
+	if _, err := os.Stat(composePath); err != nil {
+		// Check if it's running on host docker
+		liveContainers := a.fetchLiveContainers(ctx)
+		found := false
+		for _, c := range liveContainers {
+			if c.Labels["com.docker.compose.project"] == id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("app %q not found", id)
+		}
 	}
 
 	liveContainers := a.fetchLiveContainers(ctx)
@@ -1157,9 +1193,6 @@ func (a *Adapter) CreateApp(ctx context.Context, app domain.DockerApp) (*domain.
 
 	appDir := filepath.Join(a.unitsDir, app.ID)
 	if _, err := os.Stat(filepath.Join(appDir, "compose.yaml")); err == nil {
-		return nil, fmt.Errorf("app %q already exists", app.ID)
-	}
-	if _, ok := a.mockApps[app.ID]; ok {
 		return nil, fmt.Errorf("app %q already exists", app.ID)
 	}
 
@@ -1324,18 +1357,6 @@ func (a *Adapter) GetAppLogs(ctx context.Context, id string, tail int, serviceNa
 		}
 	}
 
-	if mock, ok := a.mockApps[id]; ok {
-		var sb strings.Builder
-		for _, c := range mock.Containers {
-			if serviceName == "" || c.ServiceName == serviceName {
-				sb.WriteString(fmt.Sprintf("%s | Starting %s (%s)...\n", c.Name, c.ServiceName, c.Image))
-				sb.WriteString(fmt.Sprintf("%s | Initializing database connection pool\n", c.Name))
-				sb.WriteString(fmt.Sprintf("%s | Service ready for incoming HTTP/TCP traffic\n", c.Name))
-			}
-		}
-		return sb.String(), nil
-	}
-
 	return "", fmt.Errorf("no logs available for app %q", id)
 }
 
@@ -1456,8 +1477,6 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 	var composeYAML string
 	if data, err := os.ReadFile(composePath); err == nil {
 		composeYAML = string(data)
-	} else if mock, ok := a.mockApps[appID]; ok {
-		composeYAML = mock.ComposeYAML
 	}
 
 	services, parsedPorts, parsedVols, _ := parseComposeYAML(composeYAML)
@@ -1556,27 +1575,16 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 	}
 
 	if len(appContainers) == 0 {
-		if mock, ok := a.mockApps[appID]; ok && len(mock.Containers) > 0 {
-			appContainers = mock.Containers
-			for _, mc := range appContainers {
-				if mc.State == "RUNNING" {
-					runningCount++
-				}
-				totalCPU += mc.CPUPercent
-				totalMem += mc.MemoryMiB
-			}
-		} else {
-			for _, svc := range services {
-				appContainers = append(appContainers, domain.DockerAppContainer{
-					ID:          "app-" + appID + "-" + svc,
-					Name:        fmt.Sprintf("%s-%s", appID, svc),
-					ServiceName: svc,
-					Image:       "compose:" + svc,
-					State:       "STOPPED",
-					Status:      "Defined in compose",
-					CreatedAt:   time.Now().UTC(),
-				})
-			}
+		for _, svc := range services {
+			appContainers = append(appContainers, domain.DockerAppContainer{
+				ID:          "app-" + appID + "-" + svc,
+				Name:        fmt.Sprintf("%s-%s", appID, svc),
+				ServiceName: svc,
+				Image:       "compose:" + svc,
+				State:       "STOPPED",
+				Status:      "Defined in compose",
+				CreatedAt:   time.Now().UTC(),
+			})
 		}
 	}
 
@@ -1620,9 +1628,6 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 	title := strings.ReplaceAll(appID, "-", " ")
 	if len(title) > 0 {
 		title = strings.ToUpper(title[:1]) + title[1:]
-	}
-	if mock, ok := a.mockApps[appID]; ok && mock.Title != "" {
-		title = mock.Title
 	}
 
 	return &domain.DockerApp{
@@ -1831,14 +1836,20 @@ func (a *Adapter) GetConfig(ctx context.Context) (*domain.DockerConfig, error) {
 		availableDatasets = []string{fmt.Sprintf("%s/apps", availablePools[0])}
 	}
 
+	hasMainPool := (mainPool != "")
+
 	configFile := filepath.Join(a.unitsDir, "docker_config.json")
 	if data, err := os.ReadFile(configFile); err == nil {
 		var cfg domain.DockerConfig
 		if json.Unmarshal(data, &cfg) == nil && (cfg.Dataset != "" || cfg.Pool != "") {
 			// If a main pool is configured, enforce that docker config belongs to main pool
-			if mainPool != "" && cfg.Pool != "" && cfg.Pool != mainPool {
+			if mainPool != "" {
 				cfg.Pool = mainPool
-				cfg.Dataset = fmt.Sprintf("%s/apps", mainPool)
+				if !strings.HasPrefix(cfg.Dataset, mainPool+"/") && cfg.Dataset != mainPool {
+					cfg.Dataset = fmt.Sprintf("%s/apps", mainPool)
+				}
+				cfg.DatasetSelected = true
+				cfg.PoolSelected = true
 			}
 			cfg.AvailablePools = availablePools
 			cfg.AvailableDatasets = availableDatasets
@@ -1859,7 +1870,12 @@ func (a *Adapter) GetConfig(ctx context.Context) (*domain.DockerConfig, error) {
 				cfg.DockerDataRoot = filepath.Join(cfg.Mountpoint, "docker")
 			}
 			cfg.AppdataDataset = cfg.AppdataPath
-			cfg.PoolSelected = cfg.DatasetSelected
+			if hasMainPool {
+				cfg.DatasetSelected = true
+				cfg.PoolSelected = true
+			} else {
+				cfg.PoolSelected = cfg.DatasetSelected
+			}
 			return &cfg, nil
 		}
 	}
@@ -1882,9 +1898,9 @@ func (a *Adapter) GetConfig(ctx context.Context) (*domain.DockerConfig, error) {
 		DockerDataRoot:    filepath.Join(defaultMountpoint, "docker"),
 		AvailableDatasets: availableDatasets,
 		AvailablePools:    availablePools,
-		DatasetSelected:   false,
+		DatasetSelected:   hasMainPool,
 		AppdataDataset:    filepath.Join(defaultMountpoint, "appdata"),
-		PoolSelected:      false,
+		PoolSelected:      hasMainPool,
 	}, nil
 }
 

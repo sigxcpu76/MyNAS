@@ -1291,7 +1291,6 @@ export class HttpDockerAppAdapter implements DockerAppPort {
     const targetPool = pool || (dataset.includes('/') ? dataset.split('/')[0] : 'tank');
     const raw = await this.client.patch<any>('dockerConfig', {
       dockerConfig: { dataset, pool: targetPool },
-      docker_config: { dataset, pool: targetPool },
     });
     const resDataset = raw?.dataset || dataset;
     const resPool = raw?.pool || targetPool;

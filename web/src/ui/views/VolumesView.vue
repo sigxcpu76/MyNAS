@@ -18,7 +18,7 @@ import {
   type ZfsVolume,
 } from '../../domain/models';
 import MdiIcon from '../components/MdiIcon.vue';
-import { nasState, notify, refreshAllData, refreshZfsSubresources } from '../store';
+import { confirmModal, nasState, notify, refreshAllData, refreshZfsSubresources } from '../store';
 
 const selectedPool = ref<string>('all');
 const searchQuery = ref('');
@@ -149,12 +149,19 @@ async function handleSaveEditVolume() {
 }
 
 async function handleDeleteVolume(name: string) {
-  if (!confirm(`Are you sure you want to delete volume "${name}"? ALL DATA ON THIS BLOCK DEVICE WILL BE LOST.`)) {
-    return;
-  }
+  const shortName = name.replace(/^zfsPools\/[^/]+\/volumes\//, '');
+  const confirmed = await confirmModal({
+    title: 'Delete ZVol Block Device',
+    tone: 'danger',
+    message: `Are you sure you want to delete volume "${shortName}"?`,
+    details: 'ALL DATA ON THIS BLOCK DEVICE WILL BE PERMANENTLY DESTROYED.',
+    confirmText: 'Delete Volume',
+  });
+  if (!confirmed) return;
+
   try {
     await services.zfs.deleteVolume(name);
-    notify('info', `Deleted volume`);
+    notify('info', `Deleted volume ${shortName}`);
     const poolPrefix = name.split('/volumes/')[0];
     await refreshZfsSubresources(poolPrefix);
   } catch (err: any) {

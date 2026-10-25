@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
 import { services } from '../../container';
-import { nasState, notify } from '../store';
+import { confirmModal, nasState, notify } from '../store';
 import { generateNanosecondId } from '../../domain/id';
 
 const showCreate = ref(false);
@@ -73,9 +73,19 @@ async function handleAction(name: string, verb: 'start' | 'stop' | 'freeze') {
 }
 
 async function handleDelete(name: string) {
+  const shortName = name.replace(/^lxcContainers\//, '');
+  const confirmed = await confirmModal({
+    title: 'Delete LXC Container',
+    tone: 'danger',
+    message: `Are you sure you want to permanently delete container "${shortName}"?`,
+    details: 'The container will be stopped, and its rootfs and container configuration will be deleted.',
+    confirmText: 'Delete Container',
+  });
+  if (!confirmed) return;
+
   try {
     await services.lxc.deleteContainer(name, true);
-    notify('info', `Deleted LXC container ${name}`);
+    notify('info', `Deleted LXC container ${shortName}`);
     await refreshLxc();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to delete LXC container');

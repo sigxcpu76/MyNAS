@@ -28,7 +28,7 @@ import {
   type ZfsVdev,
 } from '../../domain/models';
 import MdiIcon from '../components/MdiIcon.vue';
-import { nasState, notify, refreshAllData } from '../store';
+import { confirmModal, nasState, notify, refreshAllData } from '../store';
 import { navigateTo } from '../router';
 
 onMounted(() => {
@@ -384,13 +384,22 @@ async function handleCreatePool() {
 
 async function handleExportPool(poolName: string) {
   const shortName = poolName.replace(/^zfsPools\//, '');
-  if (
-    !confirm(
-      `Export ZFS pool "${shortName}"?\n\nThe pool will be safely unmounted and detached from the system without deleting any data. It can be re-imported at any time.`
-    )
-  ) {
-    return;
-  }
+  const currentMain = nasState.systemConfig?.mainPool;
+  const isMain = shortName === currentMain;
+
+  const confirmed = await confirmModal({
+    title: isMain ? 'Export Main Storage Pool' : 'Export ZFS Pool',
+    tone: isMain ? 'danger' : 'warning',
+    message: isMain
+      ? `WARNING: "${shortName}" is currently designated as the MAIN POOL!`
+      : `Export ZFS storage pool "${shortName}"?`,
+    details: isMain
+      ? 'Exporting the main pool will immediately disconnect persistent storage for Docker Apps and LXC containers. The pool will be safely unmounted and detached.'
+      : 'The pool will be safely unmounted and detached from the system without deleting any data. It can be re-imported at any time.',
+    confirmText: 'Export Pool',
+  });
+  if (!confirmed) return;
+
   try {
     await services.zfs.exportPool(poolName, false);
     notify('info', `Successfully exported ZFS pool "${shortName}"`);
@@ -413,9 +422,15 @@ async function handleScrubPool(poolName: string) {
 
 async function handleDeletePool(poolName: string) {
   const shortName = poolName.replace(/^zfsPools\//, '');
-  if (!confirm(`Are you sure you want to destroy pool "${shortName}"? ALL DATA WILL BE PERMANENTLY LOST.`)) {
-    return;
-  }
+  const confirmed = await confirmModal({
+    title: 'Destroy ZFS Storage Pool',
+    tone: 'danger',
+    message: `Are you sure you want to permanently destroy pool "${shortName}"?`,
+    details: 'ALL DATA, datasets, snapshots, and block volumes in this pool will be PERMANENTLY DESTROYED. This action cannot be undone.',
+    confirmText: 'Destroy Pool',
+  });
+  if (!confirmed) return;
+
   try {
     await services.zfs.deletePool(poolName, true);
     notify('info', `Destroyed ZFS pool "${shortName}"`);
@@ -430,11 +445,18 @@ async function handleSetMainPool(poolName: string) {
   const current = nasState.systemConfig?.mainPool;
   if (current === cleanName) return;
 
-  const confirmMsg = current
-    ? `Change Main Storage Pool from "${current}" to "${cleanName}"?\n\nConfiguration, apps root, and LXC root will now reside on "${cleanName}".`
-    : `Designate "${cleanName}" as the Main Storage Pool?\n\nThis will initialize .nas-system datasets and enable all paused services.`;
-
-  if (!confirm(confirmMsg)) return;
+  const confirmed = await confirmModal({
+    title: current ? 'Switch Main Storage Pool' : 'Set Main Storage Pool',
+    tone: current ? 'warning' : 'primary',
+    message: current
+      ? `Change Main Storage Pool from "${current}" to "${cleanName}"?`
+      : `Designate "${cleanName}" as the Main Storage Pool?`,
+    details: current
+      ? `Configuration, Docker appdata root, and LXC containers will now reside on "${cleanName}".`
+      : `This will initialize .nas-system datasets and enable all paused services.`,
+    confirmText: current ? 'Switch Main Pool' : 'Set Main Pool',
+  });
+  if (!confirmed) return;
 
   try {
     const updated = await services.system.selectMainPool(cleanName, true);

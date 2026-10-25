@@ -23,7 +23,7 @@ import {
   type ZfsDataset,
 } from '../../domain/models';
 import MdiIcon from '../components/MdiIcon.vue';
-import { nasState, notify, refreshAllData, refreshZfsSubresources } from '../store';
+import { confirmModal, nasState, notify, refreshAllData, refreshZfsSubresources } from '../store';
 
 const selectedPool = ref<string>('all');
 const searchQuery = ref('');
@@ -380,12 +380,19 @@ async function handleTakeSnapshot() {
 }
 
 async function handleDeleteDataset(name: string) {
-  if (!confirm(`Are you sure you want to delete dataset "${name}"? ALL DATA AND SNAPSHOTS WILL BE DESTROYED.`)) {
-    return;
-  }
+  const shortName = name.replace(/^zfsPools\/[^/]+\/datasets\//, '');
+  const confirmed = await confirmModal({
+    title: 'Delete ZFS Dataset',
+    tone: 'danger',
+    message: `Are you sure you want to delete dataset "${shortName}"?`,
+    details: 'ALL DATA, child datasets, and snapshots under this dataset will be PERMANENTLY DESTROYED.',
+    confirmText: 'Delete Dataset',
+  });
+  if (!confirmed) return;
+
   try {
     await services.zfs.deleteDataset(name, true);
-    notify('info', `Deleted dataset`);
+    notify('info', `Deleted dataset ${shortName}`);
     const poolPrefix = name.split('/datasets/')[0];
     await refreshZfsSubresources(poolPrefix);
   } catch (err: any) {

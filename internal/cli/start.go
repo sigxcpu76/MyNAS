@@ -186,6 +186,14 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	_ = os.MkdirAll(vmUnitsDir, 0755)
 	_ = os.MkdirAll(sharesDir, 0755)
 
+	// Clean up any legacy seeded mock units from older hybrid mode runs
+	for _, legacyApp := range []string{"jellyfin", "nextcloud"} {
+		legacyPath := filepath.Join(dockerUnitsDir, legacyApp)
+		if info, err := os.Stat(legacyPath); err == nil && info.IsDir() {
+			_ = os.RemoveAll(legacyPath)
+		}
+	}
+
 	logger.Info("filesystem unit state store initialized", "path", stateDir)
 
 	kvmAdapter := kvm.NewAdapterWithStateDir(vmUnitsDir)

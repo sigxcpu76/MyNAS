@@ -34,6 +34,7 @@ import {
 import { navigateTo, getPathFromTab } from './router';
 import LoginModal from './components/LoginModal.vue';
 import SystemPoolModal from './components/SystemPoolModal.vue';
+import ConfirmModal from './components/ConfirmModal.vue';
 import MdiIcon from './components/MdiIcon.vue';
 import OverviewView from './views/OverviewView.vue';
 import PrerequisitesView from './views/PrerequisitesView.vue';
@@ -496,6 +497,9 @@ onMounted(() => {
 
     <!-- System Storage Pool Configuration Modal -->
     <SystemPoolModal v-if="showPoolModal" @close="showPoolModal = false" />
+
+    <!-- Confirmation / Question / Alert Modal -->
+    <ConfirmModal />
 
     <!-- Toast Notifications -->
     <div class="toast-stack">

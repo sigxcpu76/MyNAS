@@ -2,7 +2,7 @@
 import { computed, reactive, ref } from 'vue';
 import { services } from '../../container';
 import type { CifsShare, WebdavShare } from '../../domain/models';
-import { getModuleAvailability, nasState, notify } from '../store';
+import { confirmModal, getModuleAvailability, nasState, notify } from '../store';
 
 const cifsModuleStatus = computed(() => getModuleAvailability('cifs'));
 
@@ -139,9 +139,19 @@ async function handleSaveCifsEdit() {
 }
 
 async function handleDeleteCifs(name: string) {
+  const shortName = name.replace(/^cifsShares\//, '');
+  const confirmed = await confirmModal({
+    title: 'Delete CIFS / Samba Share',
+    tone: 'danger',
+    message: `Are you sure you want to delete CIFS share "${shortName}"?`,
+    details: 'The SMB network export will be detached and removed from smb.conf. Underlying files in the filesystem will remain intact.',
+    confirmText: 'Delete Share',
+  });
+  if (!confirmed) return;
+
   try {
     await services.shares.deleteCifsShare(name);
-    notify('info', `Deleted CIFS share ${name}`);
+    notify('info', `Deleted CIFS share ${shortName}`);
     await refreshShares();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to delete CIFS share');
@@ -219,9 +229,19 @@ async function handleSaveWebdavEdit() {
 }
 
 async function handleDeleteWebdav(name: string) {
+  const shortName = name.replace(/^webdavShares\//, '');
+  const confirmed = await confirmModal({
+    title: 'Delete WebDAV Share',
+    tone: 'danger',
+    message: `Are you sure you want to delete WebDAV share "${shortName}"?`,
+    details: 'The WebDAV HTTP endpoint will be detached and removed.',
+    confirmText: 'Delete Share',
+  });
+  if (!confirmed) return;
+
   try {
     await services.shares.deleteWebdavShare(name);
-    notify('info', `Deleted WebDAV share ${name}`);
+    notify('info', `Deleted WebDAV share ${shortName}`);
     await refreshShares();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to delete WebDAV share');

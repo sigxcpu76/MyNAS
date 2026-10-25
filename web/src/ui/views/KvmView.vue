@@ -10,7 +10,7 @@ import {
   type VirtualMachineNetworkInterface,
   type VirtualMachineSnapshot,
 } from '../../domain/models';
-import { nasState, notify } from '../store';
+import { confirmModal, nasState, notify } from '../store';
 import NoVncModal from '../components/NoVncModal.vue';
 import MdiIcon from '../components/MdiIcon.vue';
 import { generateNanosecondId, generateVMDiskName, generateZvolDiskPath } from '../../domain/id';
@@ -343,9 +343,15 @@ async function handleTakeSnapshot() {
 
 async function handleRollbackSnapshot(snap: VirtualMachineSnapshot) {
   if (!inspectingVm.value) return;
-  if (!confirm(`Are you sure you want to rollback ${inspectingVm.value.vmName} to snapshot "${snap.snapshotId}"? Current unsaved state will be lost.`)) {
-    return;
-  }
+  const confirmed = await confirmModal({
+    title: 'Rollback Virtual Machine Snapshot',
+    tone: 'warning',
+    message: `Rollback VM "${inspectingVm.value.vmName}" to snapshot "${snap.snapshotId}"?`,
+    details: 'Current unsaved memory state and any disk writes since the snapshot was taken will be lost.',
+    confirmText: 'Rollback Snapshot',
+  });
+  if (!confirmed) return;
+
   try {
     await services.kvm.rollbackSnapshot(snap.name);
     notify('success', `Rolled back to snapshot "${snap.snapshotId}"`);
@@ -357,7 +363,15 @@ async function handleRollbackSnapshot(snap: VirtualMachineSnapshot) {
 
 async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
   if (!inspectingVm.value) return;
-  if (!confirm(`Delete snapshot "${snap.snapshotId}"?`)) return;
+  const confirmed = await confirmModal({
+    title: 'Delete VM Snapshot',
+    tone: 'danger',
+    message: `Are you sure you want to delete snapshot "${snap.snapshotId}"?`,
+    details: 'This snapshot differential will be removed from the virtual machine storage volume.',
+    confirmText: 'Delete Snapshot',
+  });
+  if (!confirmed) return;
+
   try {
     await services.kvm.deleteSnapshot(snap.name);
     notify('info', `Deleted snapshot "${snap.snapshotId}"`);
@@ -510,9 +524,15 @@ async function handleSaveCloudInit() {
 
 // Delete VM
 async function handleDeleteVm(vm: VirtualMachine) {
-  if (!confirm(`Are you sure you want to delete virtual machine "${vm.vmName}"? This will remove all associated configurations and NVRAM.`)) {
-    return;
-  }
+  const confirmed = await confirmModal({
+    title: 'Delete Virtual Machine',
+    tone: 'danger',
+    message: `Are you sure you want to delete virtual machine "${vm.vmName}"?`,
+    details: 'This will undefine the QEMU/KVM domain and remove all associated XML configurations, disks mappings, and NVRAM state.',
+    confirmText: 'Delete VM',
+  });
+  if (!confirmed) return;
+
   try {
     await services.kvm.deleteVirtualMachine(vm.name);
     notify('info', `Deleted virtual machine ${vm.vmName}`);
