@@ -483,6 +483,7 @@ export interface LxcContainer {
   rootfsPath: string;
   memoryLimitMib: number;
   cpuCores: number;
+  templateArchive?: string;
 }
 
 // ---------------------------------------------------------------------------

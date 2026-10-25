@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sigxcpu/nas/internal/config"
 	"github.com/sigxcpu/nas/internal/domain"
 	"github.com/sigxcpu/nas/internal/ports"
 	"gopkg.in/yaml.v3"
@@ -48,6 +49,7 @@ type Adapter struct {
 	composeCmd   []string
 	hybrid       bool
 	zfsPort      ports.ZfsEnginePort
+	mainPool     string
 	// fallback memory store when docker socket is unavailable
 	containers   map[string]domain.DockerContainer
 	mockApps     map[string]domain.DockerApp
@@ -2090,17 +2092,42 @@ func (a *Adapter) SetZfsPort(p ports.ZfsEnginePort) {
 	a.zfsPort = p
 }
 
+// SetMainPool enforces that the main storage pool is the only choice for apps roots.
+func (a *Adapter) SetMainPool(pool string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.mainPool = strings.TrimPrefix(strings.TrimSpace(pool), "zfsPools/")
+}
+
 // GetConfig returns the Docker storage & pool configuration.
+// The main storage pool is the only permitted choice for apps roots.
 func (a *Adapter) GetConfig(ctx context.Context) (*domain.DockerConfig, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
+	mainPool := a.mainPool
+	if mainPool == "" {
+		mainPool = config.GetGlobal().System.MainPool
+	}
+
 	var availablePools []string
 	var availableDatasets []string
-	if a.zfsPort != nil {
+
+	if mainPool != "" {
+		// Main pool is the ONLY choice for roots for apps
+		availablePools = []string{mainPool}
+		if a.zfsPort != nil {
+			if datasets, err := a.zfsPort.ListDatasets(ctx, mainPool); err == nil {
+				for _, d := range datasets {
+					availableDatasets = append(availableDatasets, d.DatasetPath)
+				}
+			}
+		}
+	} else if a.zfsPort != nil {
 		if pools, err := a.zfsPort.ListPools(ctx); err == nil && len(pools) > 0 {
 			for _, p := range pools {
-				availablePools = append(availablePools, p.ID)
+				cleanID := strings.TrimPrefix(p.ID, "zfsPools/")
+				availablePools = append(availablePools, cleanID)
 				if datasets, err := a.zfsPort.ListDatasets(ctx, p.ID); err == nil {
 					for _, d := range datasets {
 						availableDatasets = append(availableDatasets, d.DatasetPath)
@@ -2113,13 +2140,18 @@ func (a *Adapter) GetConfig(ctx context.Context) (*domain.DockerConfig, error) {
 		availablePools = []string{"tank"}
 	}
 	if len(availableDatasets) == 0 {
-		availableDatasets = []string{"tank/apps", "tank/media", "tank/backups"}
+		availableDatasets = []string{fmt.Sprintf("%s/apps", availablePools[0])}
 	}
 
 	configFile := filepath.Join(a.unitsDir, "docker_config.json")
 	if data, err := os.ReadFile(configFile); err == nil {
 		var cfg domain.DockerConfig
 		if json.Unmarshal(data, &cfg) == nil && (cfg.Dataset != "" || cfg.Pool != "") {
+			// If a main pool is configured, enforce that docker config belongs to main pool
+			if mainPool != "" && cfg.Pool != "" && cfg.Pool != mainPool {
+				cfg.Pool = mainPool
+				cfg.Dataset = fmt.Sprintf("%s/apps", mainPool)
+			}
 			cfg.AvailablePools = availablePools
 			cfg.AvailableDatasets = availableDatasets
 			if cfg.Dataset == "" && cfg.Pool != "" {
@@ -2144,7 +2176,7 @@ func (a *Adapter) GetConfig(ctx context.Context) (*domain.DockerConfig, error) {
 		}
 	}
 
-	// Default to first pool, not explicitly selected yet
+	// Default to main pool (or first pool if unconfigured)
 	defaultPool := availablePools[0]
 	defaultDataset := fmt.Sprintf("%s/apps", defaultPool)
 	defaultMountpoint := "/" + defaultDataset
@@ -2167,6 +2199,11 @@ func (a *Adapter) UpdateConfig(ctx context.Context, cfg domain.DockerConfig) (*d
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	mainPool := a.mainPool
+	if mainPool == "" {
+		mainPool = config.GetGlobal().System.MainPool
+	}
+
 	rawDataset := strings.TrimSpace(cfg.Dataset)
 	if rawDataset == "" && cfg.Pool != "" {
 		rawDataset = fmt.Sprintf("%s/apps", strings.TrimPrefix(cfg.Pool, "zfsPools/"))
@@ -2180,6 +2217,9 @@ func (a *Adapter) UpdateConfig(ctx context.Context, cfg domain.DockerConfig) (*d
 
 	parts := strings.Split(cleanDataset, "/")
 	pool := parts[0]
+	if mainPool != "" && pool != mainPool {
+		return nil, fmt.Errorf("%w: apps root must reside on the main pool (%s); pool %q is not permitted", domain.ErrInvalidArgument, mainPool, pool)
+	}
 	datasetID := "apps"
 	if len(parts) > 1 {
 		datasetID = strings.Join(parts[1:], "/")

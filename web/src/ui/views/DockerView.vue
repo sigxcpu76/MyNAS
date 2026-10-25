@@ -318,25 +318,21 @@ const selectedDatasetToSave = ref('tank/apps');
 const isSavingDataset = ref(false);
 
 const availableDatasetNames = computed(() => {
+  const mainPool = nasState.systemConfig?.mainPool || (nasState.dockerConfig?.availablePools?.[0] || 'tank');
   if (nasState.dockerConfig?.availableDatasets && nasState.dockerConfig.availableDatasets.length > 0) {
-    return nasState.dockerConfig.availableDatasets;
+    return nasState.dockerConfig.availableDatasets.filter(d => d.startsWith(`${mainPool}/`) || d === mainPool);
   }
   const list: string[] = [];
-  if (nasState.pools && nasState.pools.length > 0) {
-    for (const p of nasState.pools) {
-      const pName = p.poolName || p.name.replace(/^zfsPools\//, '');
-      const poolDatasets = nasState.datasetsByPool[pName];
-      if (poolDatasets && poolDatasets.length > 0) {
-        for (const d of poolDatasets) {
-          const dName = d.name.replace(/^zfsPools\/[^/]+\/datasets\//, '');
-          list.push(`${pName}/${dName}`);
-        }
-      } else {
-        list.push(`${pName}/apps`);
-      }
+  const poolDatasets = nasState.datasetsByPool[mainPool];
+  if (poolDatasets && poolDatasets.length > 0) {
+    for (const d of poolDatasets) {
+      const dName = d.name.replace(/^zfsPools\/[^/]+\/datasets\//, '');
+      list.push(`${mainPool}/${dName}`);
     }
+  } else {
+    list.push(`${mainPool}/apps`);
   }
-  return list.length > 0 ? list : ['tank/apps'];
+  return list.length > 0 ? list : [`${mainPool}/apps`];
 });
 
 async function fetchDockerConfig() {
@@ -1619,13 +1615,13 @@ onUnmounted(() => {
         </div>
 
         <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5">
-          Select or specify the ZFS dataset owned by Docker (e.g. <span class="mono" style="color: var(--accent-primary)">tank/apps</span>). Docker will store container images and persistent application volumes inside this dataset without taking over the entire pool.
+          Select or specify the ZFS dataset owned by Docker on the main pool (<span class="mono" style="color: var(--accent-primary)">{{ nasState.systemConfig?.mainPool || 'tank' }}</span>). Apps root is restricted to the main storage pool. Docker will store container images and persistent application volumes inside this dataset without taking over the entire pool.
         </p>
 
         <!-- Dataset Selector Form -->
         <div class="form-group" style="margin-bottom: 16px">
           <label style="display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase">
-            Available ZFS Datasets
+            Available Datasets on Main Pool ({{ nasState.systemConfig?.mainPool || 'tank' }})
           </label>
           <select v-model="selectedDatasetToSave" class="form-input" style="width: 100%; margin-bottom: 10px">
             <option v-for="d in availableDatasetNames" :key="d" :value="d">
@@ -1634,14 +1630,14 @@ onUnmounted(() => {
           </select>
 
           <label style="display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase">
-            Or Custom Dataset Path (e.g. pool/dataset)
+            Or Custom Dataset Path ({{ nasState.systemConfig?.mainPool || 'tank' }}/dataset)
           </label>
           <input
             v-model="selectedDatasetToSave"
             type="text"
             class="form-input"
             style="width: 100%"
-            placeholder="e.g. tank/apps"
+            :placeholder="`e.g. ${nasState.systemConfig?.mainPool || 'tank'}/apps`"
           />
         </div>
 

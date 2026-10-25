@@ -1732,15 +1732,16 @@ func (s *Server) CreateLxcContainer(ctx context.Context, req *nasv1.CreateLxcCon
 		id = strings.TrimPrefix(in.GetName(), "lxcContainers/")
 	}
 	created, err := s.lxc.CreateContainer(ctx, domain.LxcContainer{
-		ID:             id,
-		Distribution:   in.GetDistribution(),
-		Release:        in.GetRelease(),
-		Architecture:   in.GetArchitecture(),
-		Autostart:      in.GetAutostart(),
-		Unprivileged:   in.GetUnprivileged(),
-		RootfsPath:     in.GetRootfsPath(),
-		MemoryLimitMiB: in.GetMemoryLimitMib(),
-		CPUCores:       in.GetCpuCores(),
+		ID:              id,
+		Distribution:    in.GetDistribution(),
+		Release:         in.GetRelease(),
+		Architecture:    in.GetArchitecture(),
+		Autostart:       in.GetAutostart(),
+		Unprivileged:    in.GetUnprivileged(),
+		RootfsPath:      in.GetRootfsPath(),
+		MemoryLimitMiB:  in.GetMemoryLimitMib(),
+		CPUCores:        in.GetCpuCores(),
+		TemplateArchive: in.GetTemplateArchive(),
 	})
 	if err != nil {
 		return nil, ToGRPCError(err)
@@ -2553,6 +2554,7 @@ func toProtoLxc(c domain.LxcContainer) *nasv1.LxcContainer {
 		RootfsPath:     c.RootfsPath,
 		MemoryLimitMib: c.MemoryLimitMiB,
 		CpuCores:       c.CPUCores,
+		TemplateArchive: c.TemplateArchive,
 	}
 }
 

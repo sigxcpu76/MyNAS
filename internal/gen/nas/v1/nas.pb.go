@@ -7296,21 +7296,22 @@ func (x *ListFileSystemDirectoriesResponse) GetEntries() []*DirectoryEntry {
 }
 
 type LxcContainer struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ContainerName  string                 `protobuf:"bytes,2,opt,name=container_name,json=containerName,proto3" json:"container_name,omitempty"`
-	State          string                 `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`               // RUNNING, STOPPED, FROZEN
-	Distribution   string                 `protobuf:"bytes,4,opt,name=distribution,proto3" json:"distribution,omitempty"` // debian, ubuntu, alpine, archlinux
-	Release        string                 `protobuf:"bytes,5,opt,name=release,proto3" json:"release,omitempty"`           // bookworm, noble, 3.20, current
-	Architecture   string                 `protobuf:"bytes,6,opt,name=architecture,proto3" json:"architecture,omitempty"` // amd64, arm64
-	Ipv4Address    string                 `protobuf:"bytes,7,opt,name=ipv4_address,json=ipv4Address,proto3" json:"ipv4_address,omitempty"`
-	Autostart      bool                   `protobuf:"varint,8,opt,name=autostart,proto3" json:"autostart,omitempty"`
-	Unprivileged   bool                   `protobuf:"varint,9,opt,name=unprivileged,proto3" json:"unprivileged,omitempty"`
-	RootfsPath     string                 `protobuf:"bytes,10,opt,name=rootfs_path,json=rootfsPath,proto3" json:"rootfs_path,omitempty"`
-	MemoryLimitMib int64                  `protobuf:"varint,11,opt,name=memory_limit_mib,json=memoryLimitMib,proto3" json:"memory_limit_mib,omitempty"`
-	CpuCores       int32                  `protobuf:"varint,12,opt,name=cpu_cores,json=cpuCores,proto3" json:"cpu_cores,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	ContainerName   string                 `protobuf:"bytes,2,opt,name=container_name,json=containerName,proto3" json:"container_name,omitempty"`
+	State           string                 `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`               // RUNNING, STOPPED, FROZEN
+	Distribution    string                 `protobuf:"bytes,4,opt,name=distribution,proto3" json:"distribution,omitempty"` // debian, ubuntu, alpine, archlinux
+	Release         string                 `protobuf:"bytes,5,opt,name=release,proto3" json:"release,omitempty"`           // bookworm, noble, 3.20, current
+	Architecture    string                 `protobuf:"bytes,6,opt,name=architecture,proto3" json:"architecture,omitempty"` // amd64, arm64
+	Ipv4Address     string                 `protobuf:"bytes,7,opt,name=ipv4_address,json=ipv4Address,proto3" json:"ipv4_address,omitempty"`
+	Autostart       bool                   `protobuf:"varint,8,opt,name=autostart,proto3" json:"autostart,omitempty"`
+	Unprivileged    bool                   `protobuf:"varint,9,opt,name=unprivileged,proto3" json:"unprivileged,omitempty"`
+	RootfsPath      string                 `protobuf:"bytes,10,opt,name=rootfs_path,json=rootfsPath,proto3" json:"rootfs_path,omitempty"`
+	MemoryLimitMib  int64                  `protobuf:"varint,11,opt,name=memory_limit_mib,json=memoryLimitMib,proto3" json:"memory_limit_mib,omitempty"`
+	CpuCores        int32                  `protobuf:"varint,12,opt,name=cpu_cores,json=cpuCores,proto3" json:"cpu_cores,omitempty"`
+	TemplateArchive string                 `protobuf:"bytes,13,opt,name=template_archive,json=templateArchive,proto3" json:"template_archive,omitempty"` // Template archive (.tar.gz / .tar.xz) in this pool or another pool
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *LxcContainer) Reset() {
@@ -7425,6 +7426,13 @@ func (x *LxcContainer) GetCpuCores() int32 {
 		return x.CpuCores
 	}
 	return 0
+}
+
+func (x *LxcContainer) GetTemplateArchive() string {
+	if x != nil {
+		return x.TemplateArchive
+	}
+	return ""
 }
 
 type ListLxcContainersRequest struct {
@@ -11138,7 +11146,7 @@ const file_nas_v1_nas_proto_rawDesc = "" +
 	"\fcurrent_path\x18\x01 \x01(\tR\vcurrentPath\x12\x1f\n" +
 	"\vparent_path\x18\x02 \x01(\tR\n" +
 	"parentPath\x120\n" +
-	"\aentries\x18\x03 \x03(\v2\x16.nas.v1.DirectoryEntryR\aentries\"\x84\x04\n" +
+	"\aentries\x18\x03 \x03(\v2\x16.nas.v1.DirectoryEntryR\aentries\"\xaf\x04\n" +
 	"\fLxcContainer\x12\x18\n" +
 	"\x04name\x18\x01 \x01(\tB\x04\xe2A\x01\bR\x04name\x12+\n" +
 	"\x0econtainer_name\x18\x02 \x01(\tB\x04\xe2A\x01\x03R\rcontainerName\x12\x1a\n" +
@@ -11153,7 +11161,8 @@ const file_nas_v1_nas_proto_rawDesc = "" +
 	" \x01(\tR\n" +
 	"rootfsPath\x12(\n" +
 	"\x10memory_limit_mib\x18\v \x01(\x03R\x0ememoryLimitMib\x12\x1b\n" +
-	"\tcpu_cores\x18\f \x01(\x05R\bcpuCores:\\\xeaAY\n" +
+	"\tcpu_cores\x18\f \x01(\x05R\bcpuCores\x12)\n" +
+	"\x10template_archive\x18\r \x01(\tR\x0ftemplateArchive:\\\xeaAY\n" +
 	"\x1bnas.sigxcpu.io/LxcContainer\x12\x1dlxcContainers/{lxc_container}*\rlxcContainers2\flxcContainer\"n\n" +
 	"\x18ListLxcContainersRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +

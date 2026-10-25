@@ -1808,6 +1808,7 @@ message LxcContainer {
   string rootfs_path = 10;
   int64 memory_limit_mib = 11;
   int32 cpu_cores = 12;
+  string template_archive = 13; // Template archive (.tar.gz / .tar.xz) in this pool or another pool
 }
 
 message ListLxcContainersRequest {

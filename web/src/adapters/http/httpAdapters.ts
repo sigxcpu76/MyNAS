@@ -544,6 +544,7 @@ export function mapLxcContainer(raw: any): LxcContainer {
     rootfsPath: raw?.rootfsPath ?? raw?.rootfs_path ?? '',
     memoryLimitMib: normalizeInt64(raw?.memoryLimitMib ?? raw?.memory_limit_mib),
     cpuCores: Number(raw?.cpuCores ?? raw?.cpu_cores ?? 1),
+    templateArchive: raw?.templateArchive ?? raw?.template_archive ?? undefined,
   };
 }
 
@@ -1357,6 +1358,7 @@ export class HttpLxcAdapter implements LxcPort {
       rootfsPath: container.rootfsPath,
       memoryLimitMib: container.memoryLimitMib,
       cpuCores: container.cpuCores,
+      templateArchive: container.templateArchive,
     };
     const raw = await this.client.post<any>('lxcContainers', payload, {
       lxcContainerId: containerId,

@@ -52,6 +52,7 @@ type LxcContainer struct {
 	RootfsPath     string
 	MemoryLimitMiB int64
 	CPUCores       int32
+	TemplateArchive string
 }
 
 func (c *LxcContainer) Validate() error {

@@ -13,6 +13,7 @@ const form = reactive({
   cpuCores: 2,
   unprivileged: true,
   autostart: true,
+  templateArchive: '',
 });
 
 async function refreshLxc() {
@@ -29,9 +30,11 @@ async function handleCreate() {
       cpuCores: form.cpuCores,
       unprivileged: form.unprivileged,
       autostart: form.autostart,
+      templateArchive: form.templateArchive.trim() || undefined,
     });
     notify('success', `Created LXC system container ${created.containerName}`);
     form.containerId = '';
+    form.templateArchive = '';
     showCreate.value = false;
     await refreshLxc();
   } catch (err: any) {
@@ -124,9 +127,32 @@ async function handleDelete(name: string) {
           <label>Memory Limit (MiB)</label>
           <input v-model.number="form.memoryLimitMib" type="number" min="128" step="128" class="input mono" />
         </div>
+        <div class="form-group" style="grid-column: span 2">
+          <label>Template Archive (.tar.gz / .tar.xz) — Any Storage Pool (Optional)</label>
+          <input
+            v-model="form.templateArchive"
+            class="input mono"
+            placeholder="/fastpool/archives/ubuntu-24.04.tar.xz or /tank/templates/alpine.tar.gz"
+          />
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px">
+            Template archives may reside on the main pool or any secondary pool.
+          </div>
+        </div>
       </div>
 
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px">
+      <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; padding: 8px 12px; margin-top: 12px; font-size: 12px; display: flex; align-items: center; justify-content: space-between">
+        <div>
+          <span style="color: var(--text-secondary)">Rootfs Storage:</span>
+          <span class="badge badge-info" style="margin-left: 6px">
+            Main Pool Only ({{ nasState.systemConfig?.mainPool || 'tank' }})
+          </span>
+          <span class="mono" style="margin-left: 8px; color: var(--text-muted)">
+            /{{ nasState.systemConfig?.mainPool || 'tank' }}/lxc/{{ form.containerId || '&lt;id&gt;' }}/rootfs
+          </span>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px">
         <div style="display: flex; gap: 16px; font-size: 12.5px">
           <label style="display: flex; align-items: center; gap: 6px">
             <input v-model="form.unprivileged" type="checkbox" /> Unprivileged UID Mapping
@@ -181,8 +207,11 @@ async function handleDelete(name: string) {
             <td class="mono" style="color: #34d399">
               {{ lx.ipv4Address || '—' }}
             </td>
-            <td class="mono" style="font-size: 12px; color: var(--accent-primary)">
-              {{ lx.rootfsPath }}
+            <td class="mono" style="font-size: 12px">
+              <div style="color: var(--accent-primary)">{{ lx.rootfsPath }}</div>
+              <div v-if="lx.templateArchive" style="font-size: 11px; color: var(--text-muted); margin-top: 2px">
+                📦 {{ lx.templateArchive }}
+              </div>
             </td>
             <td class="mono" style="font-size: 12px">
               {{ lx.cpuCores }} Cores · {{ lx.memoryLimitMib }} MiB

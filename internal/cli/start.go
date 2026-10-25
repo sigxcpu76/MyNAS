@@ -217,6 +217,10 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	catalogAdapter := catalog.NewAdapter(catalogCacheDir)
 
 	dockerAdapter.SetZfsPort(zfsAdapter)
+	if activeMainPool != "" {
+		dockerAdapter.SetMainPool(activeMainPool)
+		lxcAdapter.SetMainPool(activeMainPool)
+	}
 	if cfg, err := dockerAdapter.GetConfig(ctx); err == nil && cfg != nil && cfg.Pool != "" {
 		catalogAdapter.SetAppsPool(cfg.Pool)
 	}

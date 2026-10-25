@@ -4,14 +4,18 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 
+	"github.com/sigxcpu/nas/internal/config"
 	"github.com/sigxcpu/nas/internal/domain"
 )
 
 type Adapter struct {
 	mu         sync.RWMutex
 	hybrid     bool
+	mainPool   string
 	containers map[string]domain.LxcContainer
 	nextIP     int
 }
@@ -94,18 +98,43 @@ func (a *Adapter) GetContainer(ctx context.Context, id string) (*domain.LxcConta
 	return &cp, nil
 }
 
+// SetMainPool enforces that the main storage pool is the only choice for LXC rootfs.
+func (a *Adapter) SetMainPool(pool string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.mainPool = strings.TrimPrefix(strings.TrimSpace(pool), "zfsPools/")
+}
+
 func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*domain.LxcContainer, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if _, exists := a.containers[c.ID]; exists {
 		return nil, fmt.Errorf("%w: lxc container %q", domain.ErrAlreadyExists, c.ID)
 	}
+
+	mainPool := a.mainPool
+	if mainPool == "" {
+		mainPool = config.GetGlobal().System.MainPool
+	}
+
+	if mainPool != "" {
+		if c.RootfsPath == "" {
+			c.RootfsPath = fmt.Sprintf("/%s/lxc/%s/rootfs", mainPool, c.ID)
+		} else {
+			cleaned := filepath.Clean(c.RootfsPath)
+			expectedPrefix := "/" + mainPool
+			if cleaned != expectedPrefix && !strings.HasPrefix(cleaned, expectedPrefix+"/") &&
+				cleaned != mainPool && !strings.HasPrefix(cleaned, mainPool+"/") {
+				return nil, fmt.Errorf("%w: lxc rootfs must reside on the main pool (%s); path %q is not permitted", domain.ErrInvalidArgument, mainPool, c.RootfsPath)
+			}
+		}
+	} else if c.RootfsPath == "" {
+		c.RootfsPath = fmt.Sprintf("/var/lib/lxc/%s/rootfs", c.ID)
+	}
+
 	a.nextIP++
 	c.State = "RUNNING"
 	c.IPv4Address = fmt.Sprintf("10.10.20.%d", a.nextIP)
-	if c.RootfsPath == "" {
-		c.RootfsPath = fmt.Sprintf("/var/lib/lxc/%s/rootfs", c.ID)
-	}
 	a.containers[c.ID] = c
 	cp := c
 	return &cp, nil

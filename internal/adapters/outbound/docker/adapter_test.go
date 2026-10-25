@@ -531,3 +531,37 @@ func TestDockerConfigAndDirectoryListing(t *testing.T) {
 		t.Fatalf("expected 'appdata' directory in /tank entries, got %v", dirs.Entries)
 	}
 }
+
+func TestDockerAdapter_MainPoolEnforcement(t *testing.T) {
+	ctx := context.Background()
+	unitsDir := t.TempDir()
+	adapter := docker.NewAdapterFull("/nonexistent/docker.sock", unitsDir, true)
+	adapter.SetMainPool("tank")
+
+	cfg, err := adapter.GetConfig(ctx)
+	if err != nil {
+		t.Fatalf("GetConfig failed: %v", err)
+	}
+	if len(cfg.AvailablePools) != 1 || cfg.AvailablePools[0] != "tank" {
+		t.Fatalf("expected AvailablePools to contain only ['tank'], got %v", cfg.AvailablePools)
+	}
+
+	// Permitted: dataset on main pool
+	updated, err := adapter.UpdateConfig(ctx, domain.DockerConfig{
+		Dataset: "tank/apps",
+	})
+	if err != nil {
+		t.Fatalf("expected success with main pool tank, got: %v", err)
+	}
+	if updated.Pool != "tank" {
+		t.Fatalf("expected pool tank, got %s", updated.Pool)
+	}
+
+	// Rejected: dataset on another pool
+	_, err = adapter.UpdateConfig(ctx, domain.DockerConfig{
+		Dataset: "otherpool/apps",
+	})
+	if err == nil {
+		t.Fatalf("expected error when trying to use otherpool for apps root, got nil")
+	}
+}
