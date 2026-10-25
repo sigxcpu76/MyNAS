@@ -274,6 +274,31 @@ code, pre, .mono {
   border: 1px solid rgba(148, 163, 184, 0.25);
 }
 
+.badge-main-pool {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.22) 0%, rgba(217, 119, 6, 0.15) 100%);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.65);
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.22);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.badge-main-pool.interactive {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.badge-main-pool.interactive:hover {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.35) 0%, rgba(217, 119, 6, 0.28) 100%);
+  border-color: #fbbf24;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.4);
+  transform: translateY(-1px);
+}
+
 /* Buttons */
 .btn {
   display: inline-flex;

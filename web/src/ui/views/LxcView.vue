@@ -140,11 +140,11 @@ async function handleDelete(name: string) {
         </div>
       </div>
 
-      <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; padding: 8px 12px; margin-top: 12px; font-size: 12px; display: flex; align-items: center; justify-content: space-between">
+      <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; padding: 8px 12px; margin-top: 12px; font-size: 12px; display: flex; align-items: center; justify-content: space-between">
         <div>
           <span style="color: var(--text-secondary)">Rootfs Storage:</span>
-          <span class="badge badge-info" style="margin-left: 6px">
-            Main Pool Only ({{ nasState.systemConfig?.mainPool || 'tank' }})
+          <span class="badge badge-main-pool" style="margin-left: 6px">
+            👑 MAIN POOL ({{ nasState.systemConfig?.mainPool || 'tank' }})
           </span>
           <span class="mono" style="margin-left: 8px; color: var(--text-muted)">
             /{{ nasState.systemConfig?.mainPool || 'tank' }}/lxc/{{ form.containerId || '&lt;id&gt;' }}/rootfs

@@ -3,6 +3,7 @@ import { reactive, ref } from 'vue';
 import {
   mdiClose,
   mdiCogOutline,
+  mdiCrown,
   mdiDatabase,
   mdiDelete,
   mdiFlash,
@@ -10,6 +11,7 @@ import {
   mdiPlus,
   mdiRefresh,
   mdiShieldCheckOutline,
+  mdiStarOutline,
 } from '@mdi/js';
 import { services } from '../../container';
 import {
@@ -73,6 +75,27 @@ async function handleDeletePool(poolName: string) {
     await refreshAllData();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to delete pool');
+  }
+}
+
+async function handleSetMainPool(poolName: string) {
+  const cleanName = poolName.replace(/^zfsPools\//, '');
+  const current = nasState.systemConfig?.mainPool;
+  if (current === cleanName) return;
+
+  const confirmMsg = current
+    ? `Change Main Storage Pool from "${current}" to "${cleanName}"?\n\nConfiguration, apps root, and LXC root will now reside on "${cleanName}".`
+    : `Designate "${cleanName}" as the Main Storage Pool?\n\nThis will initialize .nas-system datasets and enable all paused services.`;
+
+  if (!confirm(confirmMsg)) return;
+
+  try {
+    const updated = await services.system.selectMainPool(cleanName, true);
+    nasState.systemConfig = updated;
+    notify('success', `"${cleanName}" is now the Main Storage Pool!`);
+    await refreshAllData();
+  } catch (err: any) {
+    notify('error', err?.message || `Failed to set ${cleanName} as main pool`);
   }
 }
 
@@ -212,8 +235,18 @@ function viewPoolDatasets(poolName: string) {
                 <div style="display: flex; align-items: center; gap: 8px">
                   <MdiIcon :path="mdiDatabase" size="18" style="color: var(--accent-primary)" />
                   <div>
-                    <div class="mono" style="font-weight: 700; font-size: 14px; color: var(--text-primary)">
-                      {{ p.poolName || p.name.replace(/^zfsPools\//, '') }}
+                    <div style="display: flex; align-items: center; gap: 6px">
+                      <span class="mono" style="font-weight: 700; font-size: 14px; color: var(--text-primary)">
+                        {{ p.poolName || p.name.replace(/^zfsPools\//, '') }}
+                      </span>
+                      <span
+                        v-if="(p.poolName || p.name.replace(/^zfsPools\//, '')) === nasState.systemConfig?.mainPool"
+                        class="badge badge-main-pool"
+                        style="font-size: 10px; padding: 1px 7px"
+                        title="Active Main Storage Pool"
+                      >
+                        <MdiIcon :path="mdiCrown" size="12" /> MAIN POOL
+                      </span>
                     </div>
                     <div class="mono" style="font-size: 11px; color: var(--text-secondary)">
                       {{ p.mountpoint || `/${p.poolName || p.name.replace(/^zfsPools\//, '')}` }}
@@ -310,6 +343,15 @@ function viewPoolDatasets(poolName: string) {
               <!-- Actions -->
               <td style="text-align: right">
                 <div style="display: inline-flex; gap: 6px; justify-content: flex-end">
+                  <button
+                    v-if="(p.poolName || p.name.replace(/^zfsPools\//, '')) !== nasState.systemConfig?.mainPool"
+                    class="btn btn-sm btn-primary-outline"
+                    title="Designate as Main Storage Pool"
+                    @click="handleSetMainPool(p.poolName || p.name.replace(/^zfsPools\//, ''))"
+                  >
+                    <MdiIcon :path="mdiCrown" size="14" style="margin-right: 3px; color: #fbbf24" />
+                    Set Main
+                  </button>
                   <button
                     class="btn btn-sm"
                     title="View Child Datasets in this pool"

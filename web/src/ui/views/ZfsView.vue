@@ -7,6 +7,7 @@ import {
   mdiChevronRight,
   mdiClose,
   mdiCogOutline,
+  mdiCrown,
   mdiDatabase,
   mdiDelete,
   mdiFlash,
@@ -116,6 +117,27 @@ async function handleDeletePool(poolName: string) {
     await refreshAllData();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to delete pool');
+  }
+}
+
+async function handleSetMainPool(poolName: string) {
+  const cleanName = poolName.replace(/^zfsPools\//, '');
+  const current = nasState.systemConfig?.mainPool;
+  if (current === cleanName) return;
+
+  const confirmMsg = current
+    ? `Change Main Storage Pool from "${current}" to "${cleanName}"?\n\nConfiguration, apps root, and LXC root will now reside on "${cleanName}".`
+    : `Designate "${cleanName}" as the Main Storage Pool?\n\nThis will initialize .nas-system datasets and enable all paused services.`;
+
+  if (!confirm(confirmMsg)) return;
+
+  try {
+    const updated = await services.system.selectMainPool(cleanName, true);
+    nasState.systemConfig = updated;
+    notify('success', `"${cleanName}" is now the Main Storage Pool!`);
+    await refreshAllData();
+  } catch (err: any) {
+    notify('error', err?.message || `Failed to set ${cleanName} as main pool`);
   }
 }
 
@@ -794,6 +816,13 @@ async function handleDeleteVolume(volName: string) {
             </div>
 
             <div class="pool-badges">
+              <span
+                v-if="(pool.poolName || pool.name.replace(/^zfsPools\//, '')) === nasState.systemConfig?.mainPool"
+                class="badge badge-main-pool"
+                title="Active Main Storage Pool (Root for Apps & LXC)"
+              >
+                <MdiIcon :path="mdiCrown" size="13" /> MAIN POOL
+              </span>
               <span class="badge badge-neutral layout-badge">
                 {{ pool.vdevLayout.toUpperCase() }}
               </span>
@@ -880,6 +909,15 @@ async function handleDeleteVolume(volName: string) {
             </div>
 
             <div class="card-action-btns">
+              <button
+                v-if="(pool.poolName || pool.name.replace(/^zfsPools\//, '')) !== nasState.systemConfig?.mainPool"
+                class="btn btn-sm btn-primary-outline"
+                title="Designate as Main Storage Pool"
+                @click="handleSetMainPool(pool.poolName || pool.name.replace(/^zfsPools\//, ''))"
+              >
+                <MdiIcon :path="mdiCrown" size="14" style="margin-right: 4px; color: #fbbf24" />
+                Set Main
+              </button>
               <button
                 class="btn btn-sm btn-primary-outline"
                 title="Configure pool settings and storage tiers"

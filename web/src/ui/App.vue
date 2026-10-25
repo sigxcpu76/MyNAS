@@ -6,6 +6,7 @@ import {
   mdiCheckCircle,
   mdiChevronDown,
   mdiChevronRight,
+  mdiCrown,
   mdiCubeOutline,
   mdiDatabase,
   mdiFolderNetwork,
@@ -366,13 +367,24 @@ onMounted(() => {
           </span>
 
           <button
-            class="badge"
-            :class="nasState.systemConfig?.mainPool ? 'badge-success' : 'badge-warning'"
-            style="cursor: pointer; display: inline-flex; align-items: center; gap: 5px; border: none; padding: 4px 10px; font-weight: 600"
+            v-if="nasState.systemConfig?.mainPool"
+            class="badge badge-main-pool interactive"
+            title="Designated Main Storage Pool (Root for Apps & LXC, persistent config). Click to change main pool."
             @click="showPoolModal = true"
           >
-            <MdiIcon :path="nasState.systemConfig?.mainPool ? mdiDatabase : mdiAlertCircle" size="14" />
-            {{ nasState.systemConfig?.mainPool ? `Main Pool: ${nasState.systemConfig.mainPool}` : 'No Main Pool (Setup Required)' }}
+            <MdiIcon :path="mdiCrown" size="14" style="color: #fbbf24" />
+            <span>MAIN POOL: {{ nasState.systemConfig.mainPool }}</span>
+            <span style="font-size: 10px; opacity: 0.75; margin-left: 2px">▼ Change</span>
+          </button>
+          <button
+            v-else
+            class="badge badge-warning interactive"
+            style="cursor: pointer; display: inline-flex; align-items: center; gap: 5px; border: none; padding: 4px 10px; font-weight: 600"
+            title="No main pool selected. Non-ZFS modules are paused. Click to select main pool."
+            @click="showPoolModal = true"
+          >
+            <MdiIcon :path="mdiAlertCircle" size="14" />
+            No Main Pool (Setup Required)
           </button>
         </div>
 

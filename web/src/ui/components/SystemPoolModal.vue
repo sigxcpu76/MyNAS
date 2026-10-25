@@ -5,6 +5,7 @@ import {
   mdiCheck,
   mdiCheckCircle,
   mdiClose,
+  mdiCrown,
   mdiDatabase,
   mdiDownload,
   mdiRefresh,
@@ -69,6 +70,13 @@ async function loadDiscoveredPools() {
 async function handleSelectPool(poolName: string) {
   const clean = poolName.trim();
   if (!clean) return;
+
+  const current = mainPool.value;
+  if (current && current !== clean) {
+    const confirmMsg = `Switch Main Storage Pool from "${current}" to "${clean}"?\n\nConfiguration, apps root, and LXC root will now reside on "${clean}".`;
+    if (!confirm(confirmMsg)) return;
+  }
+
   selecting.value = true;
   try {
     const updated = await services.system.selectMainPool(clean, true);
@@ -143,15 +151,15 @@ onMounted(() => {
           >
             <div style="display: flex; align-items: center; gap: 12px">
               <MdiIcon
-                :path="mainPool === p.poolName ? mdiStar : mdiDatabase"
-                size="22"
+                :path="mainPool === p.poolName ? mdiCrown : mdiDatabase"
+                size="24"
                 :style="mainPool === p.poolName ? 'color: #fbbf24' : 'color: var(--accent-primary)'"
               />
               <div>
                 <div style="display: flex; align-items: center; gap: 8px">
                   <span style="font-weight: 700; font-size: 15px">{{ p.poolName }}</span>
-                  <span v-if="mainPool === p.poolName" class="badge badge-success" style="font-size: 11px">
-                    Active Main Pool
+                  <span v-if="mainPool === p.poolName" class="badge badge-main-pool" style="font-size: 11px">
+                    <MdiIcon :path="mdiCrown" size="12" /> Active Main Pool
                   </span>
                   <span v-if="p.hasNasSystem" class="badge badge-info" style="font-size: 11px">
                     <MdiIcon :path="mdiCheck" size="12" />
@@ -168,15 +176,14 @@ onMounted(() => {
             </div>
 
             <div>
-              <button
+              <span
                 v-if="mainPool === p.poolName"
-                class="btn btn-sm btn-success"
-                disabled
-                style="display: inline-flex; align-items: center; gap: 6px"
+                class="badge badge-main-pool"
+                style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; font-size: 11.5px"
               >
-                <MdiIcon :path="mdiCheckCircle" size="15" />
-                Selected
-              </button>
+                <MdiIcon :path="mdiCrown" size="14" />
+                Current Main Pool
+              </span>
               <button
                 v-else
                 class="btn btn-sm btn-primary"
@@ -184,8 +191,8 @@ onMounted(() => {
                 style="display: inline-flex; align-items: center; gap: 6px"
                 @click="handleSelectPool(p.poolName)"
               >
-                <MdiIcon :path="p.hasNasSystem ? mdiDownload : mdiCheck" size="15" />
-                {{ p.hasNasSystem ? 'Restore from Pool' : 'Select as Main Pool' }}
+                <MdiIcon :path="p.hasNasSystem ? mdiDownload : mdiCrown" size="15" />
+                {{ p.hasNasSystem ? 'Restore as Main Pool' : (mainPool ? 'Switch to this Main Pool' : 'Select as Main Pool') }}
               </button>
             </div>
           </div>
