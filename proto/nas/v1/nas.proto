@@ -2132,6 +2132,8 @@ message CatalogApp {
   repeated string screenshots = 12;
   string compose_yaml = 13;
   int32 default_port = 14;
+  repeated string sources = 15;
+  string container_image = 16;
 }
 
 message ListCatalogAppsRequest {

@@ -296,9 +296,10 @@ async function importFromCatalog(app: CatalogApp) {
     const detailed = await services.catalog.getApp(app.appId, app.train);
     installAppId.value = detailed.appId;
     installTitle.value = detailed.title || detailed.appId;
+    const resolvedImg = detailed.containerImage || `${detailed.appId}:latest`;
     installComposeYaml.value =
       detailed.composeYaml ||
-      `services:\n  ${detailed.appId}:\n    image: ${detailed.appId}:latest\n`;
+      `services:\n  ${detailed.appId}:\n    image: ${resolvedImg}\n`;
     activeInstallTemplate.value = null;
     installEditorKey.value++;
     isCatalogModalOpen.value = false;

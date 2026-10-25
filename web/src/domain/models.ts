@@ -459,6 +459,8 @@ export interface CatalogApp {
   appVersion?: string;
   tags?: string[];
   screenshots?: string[];
+  sources?: string[];
+  containerImage?: string;
   composeYaml?: string;
   defaultPort?: number;
 }

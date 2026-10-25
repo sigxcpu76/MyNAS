@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -127,36 +128,47 @@ func (a *Adapter) ListApps(ctx context.Context, train, category, query string) (
 
 func (a *Adapter) GetApp(ctx context.Context, train, appID string) (*domain.CatalogApp, error) {
 	a.mu.RLock()
-	defer a.mu.RUnlock()
+	var foundApp *domain.CatalogApp
 
 	// Try exact train/app_id
 	if train != "" {
 		key := fmt.Sprintf("%s/%s", train, appID)
 		if app, ok := a.apps[key]; ok {
-			res := a.ensureComposeYAML(app)
-			return &res, nil
+			cp := app
+			foundApp = &cp
 		}
 	}
 
-	// Try stable first, then any
-	if app, ok := a.apps["stable/"+appID]; ok {
-		res := a.ensureComposeYAML(app)
-		return &res, nil
-	}
-	if app, ok := a.apps["community/"+appID]; ok {
-		res := a.ensureComposeYAML(app)
-		return &res, nil
+	// Try stable first, then community
+	if foundApp == nil {
+		if app, ok := a.apps["stable/"+appID]; ok {
+			cp := app
+			foundApp = &cp
+		} else if app, ok := a.apps["community/"+appID]; ok {
+			cp := app
+			foundApp = &cp
+		}
 	}
 
 	// Scan by AppID
-	for _, app := range a.apps {
-		if app.AppID == appID {
-			res := a.ensureComposeYAML(app)
-			return &res, nil
+	if foundApp == nil {
+		for _, app := range a.apps {
+			if app.AppID == appID {
+				cp := app
+				foundApp = &cp
+				break
+			}
 		}
 	}
+	a.mu.RUnlock()
 
-	return nil, fmt.Errorf("app %q not found in catalog", appID)
+	if foundApp == nil {
+		return nil, fmt.Errorf("app %q not found in catalog", appID)
+	}
+
+	res := a.ensureComposeYAML(*foundApp)
+	a.enrichFromIXValues(ctx, &res)
+	return &res, nil
 }
 
 func (a *Adapter) SyncCatalog(ctx context.Context, force bool) (int, time.Time, error) {
@@ -217,21 +229,28 @@ func (a *Adapter) SyncCatalog(ctx context.Context, force bool) (int, time.Time, 
 				defaultPort = existing.DefaultPort
 			}
 
+			image := resolveContainerImage(appID, item.Sources, item.Home)
+			if image == "" && existing.ContainerImage != "" {
+				image = existing.ContainerImage
+			}
+
 			a.apps[key] = domain.CatalogApp{
-				AppID:       appID,
-				Title:       title,
-				Description: cleanDescription(item.Description),
-				Category:    cat,
-				Categories:  item.Categories,
-				IconURL:     item.IconURL,
-				Home:        item.Home,
-				Train:       trainName,
-				Version:     item.LatestVer,
-				AppVersion:  item.LatestAppV,
-				Tags:        item.Tags,
-				Screenshots: item.Screenshots,
-				ComposeYAML: compose,
-				DefaultPort: defaultPort,
+				AppID:          appID,
+				Title:          title,
+				Description:    cleanDescription(item.Description),
+				Category:       cat,
+				Categories:     item.Categories,
+				IconURL:        item.IconURL,
+				Home:           item.Home,
+				Train:          trainName,
+				Version:        item.LatestVer,
+				AppVersion:     item.LatestAppV,
+				Tags:           item.Tags,
+				Screenshots:    item.Screenshots,
+				Sources:        item.Sources,
+				ContainerImage: image,
+				ComposeYAML:    compose,
+				DefaultPort:    defaultPort,
 			}
 			count++
 		}
@@ -296,6 +315,9 @@ func (a *Adapter) getAppdataPath() string {
 }
 
 func (a *Adapter) ensureComposeYAML(app domain.CatalogApp) domain.CatalogApp {
+	if app.ContainerImage == "" {
+		app.ContainerImage = resolveContainerImage(app.AppID, app.Sources, app.Home)
+	}
 	if app.ComposeYAML == "" {
 		app.ComposeYAML, app.DefaultPort = generateResolvedCompose(app)
 	}
@@ -359,21 +381,28 @@ func (a *Adapter) loadCacheFromDisk() {
 				defaultPort = existing.DefaultPort
 			}
 
+			image := resolveContainerImage(appID, item.Sources, item.Home)
+			if image == "" && existing.ContainerImage != "" {
+				image = existing.ContainerImage
+			}
+
 			a.apps[key] = domain.CatalogApp{
-				AppID:       appID,
-				Title:       title,
-				Description: cleanDescription(item.Description),
-				Category:    cat,
-				Categories:  item.Categories,
-				IconURL:     item.IconURL,
-				Home:        item.Home,
-				Train:       trainName,
-				Version:     item.LatestVer,
-				AppVersion:  item.LatestAppV,
-				Tags:        item.Tags,
-				Screenshots: item.Screenshots,
-				ComposeYAML: compose,
-				DefaultPort: defaultPort,
+				AppID:          appID,
+				Title:          title,
+				Description:    cleanDescription(item.Description),
+				Category:       cat,
+				Categories:     item.Categories,
+				IconURL:        item.IconURL,
+				Home:           item.Home,
+				Train:          trainName,
+				Version:        item.LatestVer,
+				AppVersion:     item.LatestAppV,
+				Tags:           item.Tags,
+				Screenshots:    item.Screenshots,
+				Sources:        item.Sources,
+				ContainerImage: image,
+				ComposeYAML:    compose,
+				DefaultPort:    defaultPort,
 			}
 		}
 	}
@@ -381,6 +410,228 @@ func (a *Adapter) loadCacheFromDisk() {
 	if fi, err := os.Stat(cacheFile); err == nil {
 		a.lastSync = fi.ModTime().UTC()
 	}
+}
+
+var (
+	reDockerHubRepo = regexp.MustCompile(`hub\.docker\.com/r/([^/\s\"'\?]+/[^/\s\"'\?]+)`)
+	reDockerHubLib  = regexp.MustCompile(`hub\.docker\.com/_/([^/\s\"'\?]+)`)
+	reGHCR          = regexp.MustCompile(`ghcr\.io/([^/\s\"'\?]+/[^/\s\"'\?]+)`)
+	reQuayRepo      = regexp.MustCompile(`quay\.io/repository/([^/\s\"'\?]+/[^/\s\"'\?]+)`)
+	reQuayDirect    = regexp.MustCompile(`quay\.io/([^/\s\"'\?]+/[^/\s\"'\?]+)`)
+	reLscr          = regexp.MustCompile(`lscr\.io/([^/\s\"'\?]+/[^/\s\"'\?]+)`)
+	reLscrGH        = regexp.MustCompile(`github\.com/linuxserver/docker-([^/\s\"'\?]+)`)
+	reHomeOps       = regexp.MustCompile(`github\.com/home-operations/containers/tree/main/apps/([^/\s\"'\?]+)`)
+	reTrueNASCont1  = regexp.MustCompile(`github\.com/truenas/containers/pkgs/container/containers%2F([^/\s\"'\?]+)`)
+	reTrueNASCont2  = regexp.MustCompile(`github\.com/truenas/containers/tree/master/apps/([^/\s\"'\?]+)`)
+	reGHPkgs        = regexp.MustCompile(`github\.com/([^/\s\"'\?]+)/([^/\s\"'\?]+)/pkgs/container/([^/\s\"'\?]+)`)
+	reRepo          = regexp.MustCompile(`(?m)^\s*repository:\s*["']?([^"'\s#]+)["']?`)
+	reTag           = regexp.MustCompile(`(?m)^\s*tag:\s*["']?([^"'\s#@]+)`)
+)
+
+func resolveContainerImage(appID string, sources []string, home string) string {
+	// 1. Curated images
+	switch appID {
+	case "nginx-proxy-manager":
+		return "jc21/nginx-proxy-manager:latest"
+	case "syncthing":
+		return "ghcr.io/syncthing/syncthing:latest"
+	case "wg-easy":
+		return "ghcr.io/wg-easy/wg-easy:latest"
+	case "ollama":
+		return "ollama/ollama:latest"
+	case "uptime-kuma":
+		return "louislam/uptime-kuma:latest"
+	case "vaultwarden":
+		return "vaultwarden/server:latest"
+	case "pihole":
+		return "pihole/pihole:latest"
+	case "plex":
+		return "lscr.io/linuxserver/plex:latest"
+	case "home-assistant":
+		return "ghcr.io/home-assistant/home-assistant:stable"
+	case "adguard-home":
+		return "adguard/adguardhome:latest"
+	case "actual-budget":
+		return "ghcr.io/actualbudget/actual-server:latest"
+	case "qbittorrent":
+		return "lscr.io/linuxserver/qbittorrent:latest"
+	case "transmission":
+		return "lscr.io/linuxserver/transmission:latest"
+	case "sabnzbd":
+		return "lscr.io/linuxserver/sabnzbd:latest"
+	case "radarr":
+		return "lscr.io/linuxserver/radarr:latest"
+	case "sonarr":
+		return "lscr.io/linuxserver/sonarr:latest"
+	case "lidarr":
+		return "lscr.io/linuxserver/lidarr:latest"
+	case "readarr":
+		return "lscr.io/linuxserver/readarr:latest"
+	case "prowlarr":
+		return "lscr.io/linuxserver/prowlarr:latest"
+	case "bazarr":
+		return "lscr.io/linuxserver/bazarr:latest"
+	case "audiobookshelf":
+		return "ghcr.io/advplyr/audiobookshelf:latest"
+	case "navidrome":
+		return "deluan/navidrome:latest"
+	case "paperless-ngx":
+		return "ghcr.io/paperless-ngx/paperless-ngx:latest"
+	case "dockge":
+		return "louislam/dockge:latest"
+	case "portainer":
+		return "portainer/portainer-ce:latest"
+	case "tailscale":
+		return "tailscale/tailscale:latest"
+	case "photoprism":
+		return "photoprism/photoprism:latest"
+	case "immich":
+		return "ghcr.io/immich-app/immich-server:release"
+	case "calibre-web":
+		return "lscr.io/linuxserver/calibre-web:latest"
+	case "mealie":
+		return "ghcr.io/mealie-recipes/mealie:latest"
+	case "duplicati":
+		return "duplicati/duplicati:latest"
+	case "kavita":
+		return "kareadita/kavita:latest"
+	case "komga":
+		return "gotson/komga:latest"
+	case "flaresolverr":
+		return "flaresolverr/flaresolverr:latest"
+	case "grafana":
+		return "grafana/grafana:latest"
+	case "prometheus":
+		return "prom/prometheus:latest"
+	case "netdata":
+		return "netdata/netdata:latest"
+	case "redis":
+		return "redis:alpine"
+	case "postgres":
+		return "postgres:16-alpine"
+	case "mariadb":
+		return "mariadb:11"
+	}
+
+	// 2. Extract from Sources or Home
+	if img := extractImageFromSources(appID, sources, home); img != "" {
+		return img
+	}
+
+	// 3. Fallback
+	return fmt.Sprintf("%s:latest", appID)
+}
+
+func extractImageFromSources(appID string, sources []string, home string) string {
+	candidates := make([]string, 0, len(sources)+1)
+	candidates = append(candidates, sources...)
+	if home != "" {
+		candidates = append(candidates, home)
+	}
+
+	for _, s := range candidates {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if m := reDockerHubRepo.FindStringSubmatch(s); len(m) > 1 {
+			return strings.TrimRight(m[1], "/") + ":latest"
+		}
+		if m := reDockerHubLib.FindStringSubmatch(s); len(m) > 1 {
+			return strings.TrimRight(m[1], "/") + ":latest"
+		}
+		if m := reGHCR.FindStringSubmatch(s); len(m) > 1 {
+			return "ghcr.io/" + strings.TrimRight(m[1], "/") + ":latest"
+		}
+		if m := reQuayRepo.FindStringSubmatch(s); len(m) > 1 {
+			return "quay.io/" + strings.TrimRight(m[1], "/") + ":latest"
+		}
+		if m := reQuayDirect.FindStringSubmatch(s); len(m) > 1 {
+			return "quay.io/" + strings.TrimRight(m[1], "/") + ":latest"
+		}
+		if m := reLscr.FindStringSubmatch(s); len(m) > 1 {
+			return "lscr.io/" + strings.TrimRight(m[1], "/") + ":latest"
+		}
+		if m := reLscrGH.FindStringSubmatch(s); len(m) > 1 {
+			return "lscr.io/linuxserver/" + strings.TrimRight(m[1], "/") + ":latest"
+		}
+		if m := reHomeOps.FindStringSubmatch(s); len(m) > 1 {
+			return "ghcr.io/home-operations/" + strings.TrimRight(m[1], "/") + ":latest"
+		}
+		if m := reTrueNASCont1.FindStringSubmatch(s); len(m) > 1 {
+			return "ghcr.io/truenas/containers/" + strings.TrimRight(m[1], "/") + ":latest"
+		}
+		if m := reTrueNASCont2.FindStringSubmatch(s); len(m) > 1 {
+			return "ghcr.io/truenas/containers/" + strings.TrimRight(m[1], "/") + ":latest"
+		}
+		if m := reGHPkgs.FindStringSubmatch(s); len(m) > 3 {
+			return fmt.Sprintf("ghcr.io/%s/%s:latest", m[1], strings.TrimRight(m[3], "/"))
+		}
+	}
+	return ""
+}
+
+func (a *Adapter) enrichFromIXValues(ctx context.Context, app *domain.CatalogApp) {
+	if app.Version == "" || app.Train == "" {
+		return
+	}
+
+	valuesCacheDir := filepath.Join(a.cacheDir, "values", app.Train)
+	_ = os.MkdirAll(valuesCacheDir, 0755)
+	cacheFile := filepath.Join(valuesCacheDir, fmt.Sprintf("%s-%s.yaml", app.AppID, app.Version))
+
+	var data []byte
+	if fileBytes, err := os.ReadFile(cacheFile); err == nil && len(fileBytes) > 0 {
+		data = fileBytes
+	} else {
+		url := fmt.Sprintf("https://raw.githubusercontent.com/truenas/apps/master/trains/%s/%s/%s/ix_values.yaml",
+			app.Train, app.AppID, app.Version)
+		reqCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
+		if err != nil {
+			return
+		}
+		resp, err := a.httpClient.Do(req)
+		if err != nil {
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return
+		}
+		data, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return
+		}
+		_ = os.WriteFile(cacheFile, data, 0644)
+	}
+
+	repo, tag := extractIXImageAndTag(string(data))
+	if repo != "" {
+		if tag != "" {
+			app.ContainerImage = fmt.Sprintf("%s:%s", repo, tag)
+		} else {
+			app.ContainerImage = fmt.Sprintf("%s:latest", repo)
+		}
+		// Regenerate compose if using fallback template
+		app.ComposeYAML, app.DefaultPort = generateResolvedCompose(*app)
+	}
+}
+
+func extractIXImageAndTag(yamlContent string) (string, string) {
+	var repo, tag string
+	if m := reRepo.FindStringSubmatch(yamlContent); len(m) > 1 {
+		repo = strings.TrimSpace(m[1])
+	}
+	if m := reTag.FindStringSubmatch(yamlContent); len(m) > 1 {
+		tag = strings.TrimSpace(m[1])
+		if idx := strings.Index(tag, "@"); idx != -1 {
+			tag = tag[:idx]
+		}
+	}
+	return repo, tag
 }
 
 func cleanDescription(s string) string {
@@ -573,9 +824,184 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
     volumes:
       - /tank/appdata/%s:/data
 `, image, appID, port, appID), port
+
+	case "nginx-proxy-manager":
+		image = "jc21/nginx-proxy-manager:latest"
+		port = 81
+		return fmt.Sprintf(`services:
+  nginx-proxy-manager:
+    image: %s
+    container_name: %s
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "%d:81"
+      - "443:443"
+    environment:
+      - DISABLE_IPV6=true
+    volumes:
+      - /tank/appdata/%s/data:/data
+      - /tank/appdata/%s/letsencrypt:/etc/letsencrypt
+`, image, appID, port, appID, appID), port
+
+	case "qbittorrent":
+		image = "lscr.io/linuxserver/qbittorrent:latest"
+		port = 8080
+		return fmt.Sprintf(`services:
+  qbittorrent:
+    image: %s
+    container_name: %s
+    restart: unless-stopped
+    ports:
+      - "%d:8080"
+      - "6881:6881/tcp"
+      - "6881:6881/udp"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - WEBUI_PORT=8080
+    volumes:
+      - /tank/appdata/%s/config:/config
+      - /tank/media/downloads:/downloads
+`, image, appID, port, appID), port
+
+	case "transmission":
+		image = "lscr.io/linuxserver/transmission:latest"
+		port = 9091
+		return fmt.Sprintf(`services:
+  transmission:
+    image: %s
+    container_name: %s
+    restart: unless-stopped
+    ports:
+      - "%d:9091"
+      - "51413:51413/tcp"
+      - "51413:51413/udp"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+    volumes:
+      - /tank/appdata/%s/config:/config
+      - /tank/media/downloads:/downloads
+`, image, appID, port, appID), port
+
+	case "radarr":
+		image = "lscr.io/linuxserver/radarr:latest"
+		port = 7878
+		return fmt.Sprintf(`services:
+  radarr:
+    image: %s
+    container_name: %s
+    restart: unless-stopped
+    ports:
+      - "%d:7878"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+    volumes:
+      - /tank/appdata/%s/config:/config
+      - /tank/media:/media
+`, image, appID, port, appID), port
+
+	case "sonarr":
+		image = "lscr.io/linuxserver/sonarr:latest"
+		port = 8989
+		return fmt.Sprintf(`services:
+  sonarr:
+    image: %s
+    container_name: %s
+    restart: unless-stopped
+    ports:
+      - "%d:8989"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+    volumes:
+      - /tank/appdata/%s/config:/config
+      - /tank/media:/media
+`, image, appID, port, appID), port
+
+	case "dockge":
+		image = "louislam/dockge:latest"
+		port = 5001
+		return fmt.Sprintf(`services:
+  dockge:
+    image: %s
+    container_name: %s
+    restart: unless-stopped
+    ports:
+      - "%d:5001"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tank/appdata/%s/data:/app/data
+      - /tank/appdata/stacks:/opt/stacks
+`, image, appID, port, appID), port
+
+	case "portainer":
+		image = "portainer/portainer-ce:latest"
+		port = 9443
+		return fmt.Sprintf(`services:
+  portainer:
+    image: %s
+    container_name: %s
+    restart: unless-stopped
+    ports:
+      - "%d:9443"
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tank/appdata/%s/data:/data
+`, image, appID, port, appID), port
+
+	case "audiobookshelf":
+		image = "ghcr.io/advplyr/audiobookshelf:latest"
+		port = 13378
+		return fmt.Sprintf(`services:
+  audiobookshelf:
+    image: %s
+    container_name: %s
+    restart: unless-stopped
+    ports:
+      - "%d:80"
+    environment:
+      - AUDIOBOOKSHELF_UID=1000
+      - AUDIOBOOKSHELF_GID=1000
+    volumes:
+      - /tank/appdata/%s/config:/config
+      - /tank/appdata/%s/metadata:/metadata
+      - /tank/media/audiobooks:/audiobooks
+`, image, appID, port, appID, appID), port
+
+	case "paperless-ngx":
+		image = "ghcr.io/paperless-ngx/paperless-ngx:latest"
+		port = 8000
+		return fmt.Sprintf(`services:
+  paperless-ngx:
+    image: %s
+    container_name: %s
+    restart: unless-stopped
+    ports:
+      - "%d:8000"
+    environment:
+      - USERMAP_UID=1000
+      - USERMAP_GID=1000
+    volumes:
+      - /tank/appdata/%s/data:/usr/src/paperless/data
+      - /tank/appdata/%s/media:/usr/src/paperless/media
+      - /tank/appdata/%s/consume:/usr/src/paperless/consume
+`, image, appID, port, appID, appID, appID), port
 	}
 
 	// Default template generator for any other TrueNAS app
+	if app.ContainerImage != "" {
+		image = app.ContainerImage
+	} else {
+		image = resolveContainerImage(appID, app.Sources, app.Home)
+	}
 	return fmt.Sprintf(`services:
   %s:
     image: %s
@@ -737,6 +1163,36 @@ func (a *Adapter) seedDefaultApps() {
 			Train:       "stable",
 			Version:     "1.41.0",
 			DefaultPort: 32400,
+		},
+		{
+			AppID:          "nginx-proxy-manager",
+			Title:          "Nginx Proxy Manager",
+			Description:    "Expose your web services easily and securely with SSL certificates, access lists, and proxy hosts.",
+			Category:       "networking",
+			Categories:     []string{"networking", "security"},
+			IconURL:        "https://media.sys.truenas.net/apps/nginx-proxy-manager/icons/icon.svg",
+			Home:           "https://nginxproxymanager.com/",
+			Train:          "community",
+			Version:        "1.3.14",
+			AppVersion:     "2.16.0",
+			DefaultPort:    81,
+			Sources:        []string{"https://apps.truenas.com/catalog/nginx-proxy-manager_community/", "https://hub.docker.com/r/jc21/nginx-proxy-manager", "https://nginxproxymanager.com/"},
+			ContainerImage: "jc21/nginx-proxy-manager:latest",
+			ComposeYAML: `services:
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: nginx-proxy-manager
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "81:81"
+      - "443:443"
+    environment:
+      - DISABLE_IPV6=true
+    volumes:
+      - /tank/appdata/nginx-proxy-manager/data:/data
+      - /tank/appdata/nginx-proxy-manager/letsencrypt:/etc/letsencrypt
+`,
 		},
 		{
 			AppID:       "home-assistant",

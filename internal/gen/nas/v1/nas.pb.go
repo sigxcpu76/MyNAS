@@ -9600,23 +9600,25 @@ func (x *DeleteGroupRequest) GetName() string {
 }
 
 type CatalogApp struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AppId         string                 `protobuf:"bytes,1,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
-	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	Category      string                 `protobuf:"bytes,4,opt,name=category,proto3" json:"category,omitempty"`
-	Categories    []string               `protobuf:"bytes,5,rep,name=categories,proto3" json:"categories,omitempty"`
-	IconUrl       string                 `protobuf:"bytes,6,opt,name=icon_url,json=iconUrl,proto3" json:"icon_url,omitempty"`
-	Home          string                 `protobuf:"bytes,7,opt,name=home,proto3" json:"home,omitempty"`
-	Train         string                 `protobuf:"bytes,8,opt,name=train,proto3" json:"train,omitempty"`
-	Version       string                 `protobuf:"bytes,9,opt,name=version,proto3" json:"version,omitempty"`
-	AppVersion    string                 `protobuf:"bytes,10,opt,name=app_version,json=appVersion,proto3" json:"app_version,omitempty"`
-	Tags          []string               `protobuf:"bytes,11,rep,name=tags,proto3" json:"tags,omitempty"`
-	Screenshots   []string               `protobuf:"bytes,12,rep,name=screenshots,proto3" json:"screenshots,omitempty"`
-	ComposeYaml   string                 `protobuf:"bytes,13,opt,name=compose_yaml,json=composeYaml,proto3" json:"compose_yaml,omitempty"`
-	DefaultPort   int32                  `protobuf:"varint,14,opt,name=default_port,json=defaultPort,proto3" json:"default_port,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	AppId          string                 `protobuf:"bytes,1,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
+	Title          string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Description    string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Category       string                 `protobuf:"bytes,4,opt,name=category,proto3" json:"category,omitempty"`
+	Categories     []string               `protobuf:"bytes,5,rep,name=categories,proto3" json:"categories,omitempty"`
+	IconUrl        string                 `protobuf:"bytes,6,opt,name=icon_url,json=iconUrl,proto3" json:"icon_url,omitempty"`
+	Home           string                 `protobuf:"bytes,7,opt,name=home,proto3" json:"home,omitempty"`
+	Train          string                 `protobuf:"bytes,8,opt,name=train,proto3" json:"train,omitempty"`
+	Version        string                 `protobuf:"bytes,9,opt,name=version,proto3" json:"version,omitempty"`
+	AppVersion     string                 `protobuf:"bytes,10,opt,name=app_version,json=appVersion,proto3" json:"app_version,omitempty"`
+	Tags           []string               `protobuf:"bytes,11,rep,name=tags,proto3" json:"tags,omitempty"`
+	Screenshots    []string               `protobuf:"bytes,12,rep,name=screenshots,proto3" json:"screenshots,omitempty"`
+	ComposeYaml    string                 `protobuf:"bytes,13,opt,name=compose_yaml,json=composeYaml,proto3" json:"compose_yaml,omitempty"`
+	DefaultPort    int32                  `protobuf:"varint,14,opt,name=default_port,json=defaultPort,proto3" json:"default_port,omitempty"`
+	Sources        []string               `protobuf:"bytes,15,rep,name=sources,proto3" json:"sources,omitempty"`
+	ContainerImage string                 `protobuf:"bytes,16,opt,name=container_image,json=containerImage,proto3" json:"container_image,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *CatalogApp) Reset() {
@@ -9745,6 +9747,20 @@ func (x *CatalogApp) GetDefaultPort() int32 {
 		return x.DefaultPort
 	}
 	return 0
+}
+
+func (x *CatalogApp) GetSources() []string {
+	if x != nil {
+		return x.Sources
+	}
+	return nil
+}
+
+func (x *CatalogApp) GetContainerImage() string {
+	if x != nil {
+		return x.ContainerImage
+	}
+	return ""
 }
 
 type ListCatalogAppsRequest struct {
@@ -11397,7 +11413,7 @@ const file_nas_v1_nas_proto_rawDesc = "" +
 	"updateMask\"G\n" +
 	"\x12DeleteGroupRequest\x121\n" +
 	"\x04name\x18\x01 \x01(\tB\x1d\xe2A\x01\x02\xfaA\x16\n" +
-	"\x14nas.sigxcpu.io/GroupR\x04name\"\x93\x03\n" +
+	"\x14nas.sigxcpu.io/GroupR\x04name\"\xd6\x03\n" +
 	"\n" +
 	"CatalogApp\x12\x15\n" +
 	"\x06app_id\x18\x01 \x01(\tR\x05appId\x12\x14\n" +
@@ -11417,7 +11433,9 @@ const file_nas_v1_nas_proto_rawDesc = "" +
 	"\x04tags\x18\v \x03(\tR\x04tags\x12 \n" +
 	"\vscreenshots\x18\f \x03(\tR\vscreenshots\x12!\n" +
 	"\fcompose_yaml\x18\r \x01(\tR\vcomposeYaml\x12!\n" +
-	"\fdefault_port\x18\x0e \x01(\x05R\vdefaultPort\"\x9c\x01\n" +
+	"\fdefault_port\x18\x0e \x01(\x05R\vdefaultPort\x12\x18\n" +
+	"\asources\x18\x0f \x03(\tR\asources\x12'\n" +
+	"\x0fcontainer_image\x18\x10 \x01(\tR\x0econtainerImage\"\x9c\x01\n" +
 	"\x16ListCatalogAppsRequest\x12\x14\n" +
 	"\x05train\x18\x01 \x01(\tR\x05train\x12\x1a\n" +
 	"\bcategory\x18\x02 \x01(\tR\bcategory\x12\x14\n" +

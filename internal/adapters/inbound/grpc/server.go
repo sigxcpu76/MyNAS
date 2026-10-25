@@ -2773,8 +2773,10 @@ func domainCatalogAppToPB(a domain.CatalogApp) *nasv1.CatalogApp {
 		Version:     a.Version,
 		AppVersion:  a.AppVersion,
 		Tags:        a.Tags,
-		Screenshots: a.Screenshots,
-		ComposeYaml: a.ComposeYAML,
-		DefaultPort: int32(a.DefaultPort),
+		Screenshots:    a.Screenshots,
+		ComposeYaml:    a.ComposeYAML,
+		DefaultPort:    int32(a.DefaultPort),
+		Sources:        a.Sources,
+		ContainerImage: a.ContainerImage,
 	}
 }

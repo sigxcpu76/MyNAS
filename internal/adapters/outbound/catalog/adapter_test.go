@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/sigxcpu/nas/internal/adapters/outbound/catalog"
@@ -108,5 +109,89 @@ func TestCatalogAdapter_LiveSyncMock(t *testing.T) {
 	}
 	if app.Title != "Custom Cloud App" {
 		t.Errorf("expected 'Custom Cloud App', got %q", app.Title)
+	}
+}
+
+func TestCatalogAdapter_NginxProxyManagerAndImageResolution(t *testing.T) {
+	tempDir := t.TempDir()
+	adapter := catalog.NewAdapter(tempDir)
+	ctx := context.Background()
+
+	// 1. Verify nginx-proxy-manager has correct image, ports, and volumes
+	npm, err := adapter.GetApp(ctx, "community", "nginx-proxy-manager")
+	if err != nil {
+		t.Fatalf("GetApp nginx-proxy-manager failed: %v", err)
+	}
+	if !strings.HasPrefix(npm.ContainerImage, "jc21/nginx-proxy-manager") {
+		t.Errorf("expected container image starting with 'jc21/nginx-proxy-manager', got %q", npm.ContainerImage)
+	}
+	if npm.DefaultPort != 81 {
+		t.Errorf("expected default port 81, got %d", npm.DefaultPort)
+	}
+	if !strings.Contains(npm.ComposeYAML, "jc21/nginx-proxy-manager") {
+		t.Errorf("compose YAML does not contain correct image: %s", npm.ComposeYAML)
+	}
+	if !strings.Contains(npm.ComposeYAML, "81:81") || !strings.Contains(npm.ComposeYAML, "80:80") {
+		t.Errorf("compose YAML does not contain web and proxy ports: %s", npm.ComposeYAML)
+	}
+
+	// 2. Mock TrueNAS catalog with sources and verify image resolution
+	mockCatalog := map[string]map[string]any{
+		"community": {
+			"source-app-1": map[string]any{
+				"name":        "source-app-1",
+				"title":       "Docker Hub Source App",
+				"description": "App with docker hub source",
+				"sources":     []string{"https://hub.docker.com/r/myorg/myapp"},
+			},
+			"source-app-2": map[string]any{
+				"name":        "source-app-2",
+				"title":       "GHCR Source App",
+				"description": "App with GHCR source",
+				"sources":     []string{"https://ghcr.io/orgname/myrepo"},
+			},
+			"source-app-3": map[string]any{
+				"name":        "source-app-3",
+				"title":       "LinuxServer Source App",
+				"description": "App with Linuxserver github source",
+				"sources":     []string{"https://github.com/linuxserver/docker-myapp"},
+			},
+		},
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(mockCatalog)
+	}))
+	defer ts.Close()
+
+	adapter.SetCatalogURLForTest(ts.URL)
+	_, _, err = adapter.SyncCatalog(ctx, true)
+	if err != nil {
+		t.Fatalf("SyncCatalog failed: %v", err)
+	}
+
+	app1, err := adapter.GetApp(ctx, "community", "source-app-1")
+	if err != nil {
+		t.Fatalf("GetApp source-app-1 failed: %v", err)
+	}
+	if app1.ContainerImage != "myorg/myapp:latest" {
+		t.Errorf("expected 'myorg/myapp:latest', got %q", app1.ContainerImage)
+	}
+
+	app2, err := adapter.GetApp(ctx, "community", "source-app-2")
+	if err != nil {
+		t.Fatalf("GetApp source-app-2 failed: %v", err)
+	}
+	if app2.ContainerImage != "ghcr.io/orgname/myrepo:latest" {
+		t.Errorf("expected 'ghcr.io/orgname/myrepo:latest', got %q", app2.ContainerImage)
+	}
+
+	app3, err := adapter.GetApp(ctx, "community", "source-app-3")
+	if err != nil {
+		t.Fatalf("GetApp source-app-3 failed: %v", err)
+	}
+	if app3.ContainerImage != "lscr.io/linuxserver/myapp:latest" {
+		t.Errorf("expected 'lscr.io/linuxserver/myapp:latest', got %q", app3.ContainerImage)
 	}
 }

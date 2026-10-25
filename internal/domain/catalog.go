@@ -15,9 +15,11 @@ type CatalogApp struct {
 	Version     string   `json:"version"`
 	AppVersion  string   `json:"appVersion"`
 	Tags        []string `json:"tags"`
-	Screenshots []string `json:"screenshots"`
-	ComposeYAML string   `json:"composeYaml"`
-	DefaultPort int      `json:"defaultPort"`
+	Screenshots    []string `json:"screenshots"`
+	Sources        []string `json:"sources"`
+	ContainerImage string   `json:"containerImage"`
+	ComposeYAML    string   `json:"composeYaml"`
+	DefaultPort    int      `json:"defaultPort"`
 }
 
 // CatalogSyncSummary provides metrics on catalog synchronization.

@@ -1636,6 +1636,8 @@ function mapCatalogApp(raw: any): CatalogApp {
     appVersion: raw?.appVersion ?? raw?.app_version ?? '',
     tags: raw?.tags ?? [],
     screenshots: raw?.screenshots ?? [],
+    sources: raw?.sources ?? [],
+    containerImage: raw?.containerImage ?? raw?.container_image ?? '',
     composeYaml: raw?.composeYaml ?? raw?.compose_yaml ?? '',
     defaultPort: Number(raw?.defaultPort ?? raw?.default_port ?? 0),
   };
