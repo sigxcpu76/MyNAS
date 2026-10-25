@@ -211,11 +211,12 @@ var defaultSpecs = []Spec{
 }
 
 type SystemChecker struct {
-	mu            sync.RWMutex
-	flavor        domain.LinuxFlavor
-	mainPool      string
-	cached        []domain.Prerequisite
-	moduleSpecMap map[string][]string
+	mu               sync.RWMutex
+	flavor           domain.LinuxFlavor
+	mainPool         string
+	cached           []domain.Prerequisite
+	moduleSpecMap    map[string][]string
+	testAllInstalled bool
 }
 
 func NewSystemChecker() *SystemChecker {
@@ -256,9 +257,10 @@ func (c *SystemChecker) GetLinuxFlavor() domain.LinuxFlavor {
 func (c *SystemChecker) SetAllModulesInstalledForTest() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.testAllInstalled = true
 	for i := range c.cached {
 		c.cached[i].Status = domain.StatusInstalled
-		if c.cached[i].Version == "" || c.cached[i].Version == "not-found" {
+		if c.cached[i].Version == "" || c.cached[i].Version == "not-found" || c.cached[i].Version == "missing" || c.cached[i].Version == "not-loaded" {
 			c.cached[i].Version = "test-mock-v1.0"
 		}
 	}
@@ -464,6 +466,14 @@ func (c *SystemChecker) CheckAll(ctx context.Context) ([]domain.Prerequisite, er
 	}
 
 	c.mu.Lock()
+	if c.testAllInstalled {
+		for i := range results {
+			results[i].Status = domain.StatusInstalled
+			if results[i].Version == "" || results[i].Version == "missing" || results[i].Version == "not-loaded" {
+				results[i].Version = "test-mock-v1.0"
+			}
+		}
+	}
 	c.cached = results
 	c.flavor = flavor
 	c.mu.Unlock()
