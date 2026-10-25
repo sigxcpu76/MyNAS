@@ -1220,7 +1220,6 @@ export class HttpDockerAppAdapter implements DockerAppPort {
       composeYaml,
     };
     const raw = await this.client.post<any>('dockerApps', payload, {
-      docker_app_id: appId,
       dockerAppId: appId,
     });
     return mapDockerApp(raw);
