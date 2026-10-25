@@ -76,3 +76,11 @@ func (s *PrerequisiteService) CheckPrerequisites(ctx context.Context) ([]domain.
 	}
 	return items, installed, missing, hybrid, nil
 }
+
+func (s *PrerequisiteService) GetReport(ctx context.Context) (domain.PrerequisitesReport, error) {
+	return s.checker.GetReport(ctx)
+}
+
+func (s *PrerequisiteService) GetLinuxFlavor() domain.LinuxFlavor {
+	return s.checker.GetLinuxFlavor()
+}

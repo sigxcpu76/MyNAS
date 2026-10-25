@@ -57,7 +57,8 @@ func TestNasctlCobraSubcommands(t *testing.T) {
 		contains string
 	}{
 		{[]string{"-s", addr, "prereq", "list"}, "prerequisites/zpool"},
-		{[]string{"-s", addr, "prereq", "check"}, "Installed:"},
+		{[]string{"-s", addr, "prereq", "check"}, "PREREQUISITES STATUS REPORT"},
+		{[]string{"-s", addr, "prereq", "report"}, "PAGE 1: MISSING PREREQUISITES"},
 		{[]string{"-s", addr, "zfs", "pools"}, "zfsPools/tank"},
 		{[]string{"-s", addr, "zfs", "datasets", "tank"}, "zfsPools/tank/datasets/media"},
 		{[]string{"-s", addr, "zfs", "volumes", "tank"}, "zfsPools/tank/volumes/kvm-storage-lun0"},

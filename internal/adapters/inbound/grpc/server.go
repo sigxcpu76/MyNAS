@@ -112,10 +112,20 @@ func (s *Server) GetCurrentUser(ctx context.Context, req *nasv1.GetCurrentUserRe
 // =============================================================================
 
 func (s *Server) ListPrerequisites(ctx context.Context, req *nasv1.ListPrerequisitesRequest) (*nasv1.ListPrerequisitesResponse, error) {
-	items, err := s.prereq.ListPrerequisites(ctx, req.GetFilter())
+	report, err := s.prereq.GetReport(ctx)
 	if err != nil {
 		return nil, ToGRPCError(err)
 	}
+
+	items := report.All
+	if req.GetFilter() != "" {
+		filtered, err := s.prereq.ListPrerequisites(ctx, req.GetFilter())
+		if err != nil {
+			return nil, ToGRPCError(err)
+		}
+		items = filtered
+	}
+
 	paged, nextToken, total, err := PaginateSlice(items, req.GetPageSize(), req.GetPageToken())
 	if err != nil {
 		return nil, err
@@ -124,10 +134,25 @@ func (s *Server) ListPrerequisites(ctx context.Context, req *nasv1.ListPrerequis
 	for _, p := range paged {
 		out = append(out, toProtoPrerequisite(p))
 	}
+
+	missing := make([]*nasv1.Prerequisite, 0, len(report.Missing))
+	for _, p := range report.Missing {
+		missing = append(missing, toProtoPrerequisite(p))
+	}
+	installed := make([]*nasv1.Prerequisite, 0, len(report.Installed))
+	for _, p := range report.Installed {
+		installed = append(installed, toProtoPrerequisite(p))
+	}
+
 	return &nasv1.ListPrerequisitesResponse{
-		Prerequisites: out,
-		NextPageToken: nextToken,
-		TotalSize:     total,
+		Prerequisites:          out,
+		NextPageToken:          nextToken,
+		TotalSize:              total,
+		LinuxFlavor:            toProtoLinuxFlavor(report.LinuxFlavor),
+		MissingPrerequisites:   missing,
+		InstalledPrerequisites: installed,
+		RemediationScript:      report.RemediationScript,
+		IsFullyCompliant:       report.IsFullyCompliant,
 	}, nil
 }
 
@@ -144,19 +169,32 @@ func (s *Server) GetPrerequisite(ctx context.Context, req *nasv1.GetPrerequisite
 }
 
 func (s *Server) CheckPrerequisites(ctx context.Context, req *nasv1.CheckPrerequisitesRequest) (*nasv1.CheckPrerequisitesResponse, error) {
-	items, installed, missing, hybrid, err := s.prereq.CheckPrerequisites(ctx)
+	report, err := s.prereq.GetReport(ctx)
 	if err != nil {
 		return nil, ToGRPCError(err)
 	}
-	out := make([]*nasv1.Prerequisite, 0, len(items))
-	for _, p := range items {
+	out := make([]*nasv1.Prerequisite, 0, len(report.All))
+	for _, p := range report.All {
 		out = append(out, toProtoPrerequisite(p))
 	}
+	missing := make([]*nasv1.Prerequisite, 0, len(report.Missing))
+	for _, p := range report.Missing {
+		missing = append(missing, toProtoPrerequisite(p))
+	}
+	installed := make([]*nasv1.Prerequisite, 0, len(report.Installed))
+	for _, p := range report.Installed {
+		installed = append(installed, toProtoPrerequisite(p))
+	}
 	return &nasv1.CheckPrerequisitesResponse{
-		Prerequisites:         out,
-		InstalledCount:        installed,
-		MissingCount:          missing,
-		HybridFallbackEnabled: hybrid,
+		Prerequisites:          out,
+		InstalledCount:        int32(len(report.Installed)),
+		MissingCount:          int32(len(report.Missing)),
+		HybridFallbackEnabled: report.HybridFallbackActive,
+		LinuxFlavor:            toProtoLinuxFlavor(report.LinuxFlavor),
+		MissingPrerequisites:   missing,
+		InstalledPrerequisites: installed,
+		RemediationScript:      report.RemediationScript,
+		IsFullyCompliant:       report.IsFullyCompliant,
 	}, nil
 }
 
@@ -2087,6 +2125,17 @@ func (s *Server) DeleteGroup(ctx context.Context, req *nasv1.DeleteGroupRequest)
 // =============================================================================
 // Domain -> Protobuf Mappers (using go.einride.tech/aip/resourcename.Sprint)
 // =============================================================================
+
+func toProtoLinuxFlavor(f domain.LinuxFlavor) *nasv1.LinuxFlavor {
+	return &nasv1.LinuxFlavor{
+		Id:                     f.ID,
+		Name:                   f.Name,
+		PrettyName:             f.PrettyName,
+		VersionId:              f.VersionID,
+		PackageManager:         f.PackageManager,
+		InstallCommandTemplate: f.InstallCommandTemplate,
+	}
+}
 
 func toProtoPrerequisite(p domain.Prerequisite) *nasv1.Prerequisite {
 	return &nasv1.Prerequisite{

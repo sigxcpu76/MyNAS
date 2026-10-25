@@ -33,3 +33,50 @@ func TestPrereqChecker(t *testing.T) {
 
 	_ = fallback
 }
+
+func TestPrerequisitesReport(t *testing.T) {
+	ctx := context.Background()
+	checker := prereq.NewSystemChecker(false)
+
+	report, err := checker.GetReport(ctx)
+	if err != nil {
+		t.Fatalf("GetReport failed: %v", err)
+	}
+
+	if report.LinuxFlavor.ID == "" {
+		t.Fatalf("expected detected Linux flavor ID to be non-empty")
+	}
+	if report.LinuxFlavor.PackageManager == "" {
+		t.Fatalf("expected detected package manager to be non-empty")
+	}
+
+	t.Logf("Detected Linux Flavor: %s (ID: %s, PM: %s)",
+		report.LinuxFlavor.PrettyName, report.LinuxFlavor.ID, report.LinuxFlavor.PackageManager)
+
+	t.Logf("Installed: %d, Missing: %d, Fully Compliant: %v",
+		len(report.Installed), len(report.Missing), report.IsFullyCompliant)
+
+	if len(report.Missing) > 0 {
+		if report.RemediationScript == "" {
+			t.Fatalf("expected remediation script when missing prerequisites exist")
+		}
+		t.Logf("Remediation script:\n%s", report.RemediationScript)
+	}
+
+	// Verify all installed items have status == INSTALLED
+	for _, p := range report.Installed {
+		if p.Status != domain.StatusInstalled {
+			t.Errorf("expected installed prereq %s to have StatusInstalled, got %s", p.ID, p.Status)
+		}
+	}
+
+	// Verify all missing items have status != INSTALLED
+	for _, p := range report.Missing {
+		if p.Status == domain.StatusInstalled {
+			t.Errorf("expected missing prereq %s to not have StatusInstalled", p.ID)
+		}
+		if p.InstallHint == "" {
+			t.Errorf("expected install hint for missing prereq %s", p.ID)
+		}
+	}
+}

@@ -802,6 +802,15 @@ message Prerequisite {
   google.protobuf.Timestamp checked_time = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
+message LinuxFlavor {
+  string id = 1;                     // e.g. "arch", "ubuntu", "debian", "fedora", "alpine"
+  string name = 2;                   // e.g. "Arch Linux", "Ubuntu"
+  string pretty_name = 3;             // e.g. "Arch Linux", "Ubuntu 24.04.1 LTS"
+  string version_id = 4;              // e.g. "24.04"
+  string package_manager = 5;         // e.g. "pacman", "apt", "dnf", "zypper", "apk"
+  string install_command_template = 6; // e.g. "sudo pacman -S --needed %s"
+}
+
 message ListPrerequisitesRequest {
   int32 page_size = 1;
   string page_token = 2;
@@ -812,6 +821,11 @@ message ListPrerequisitesResponse {
   repeated Prerequisite prerequisites = 1;
   string next_page_token = 2;
   int32 total_size = 3;
+  LinuxFlavor linux_flavor = 4;
+  repeated Prerequisite missing_prerequisites = 5;
+  repeated Prerequisite installed_prerequisites = 6;
+  string remediation_script = 7;
+  bool is_fully_compliant = 8;
 }
 
 message GetPrerequisiteRequest {
@@ -828,6 +842,11 @@ message CheckPrerequisitesResponse {
   int32 installed_count = 2;
   int32 missing_count = 3;
   bool hybrid_fallback_enabled = 4;
+  LinuxFlavor linux_flavor = 5;
+  repeated Prerequisite missing_prerequisites = 6;
+  repeated Prerequisite installed_prerequisites = 7;
+  string remediation_script = 8;
+  bool is_fully_compliant = 9;
 }
 
 // =============================================================================

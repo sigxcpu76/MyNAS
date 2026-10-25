@@ -21,7 +21,16 @@ export interface AuthSession {
 
 export type PrerequisiteStatus = 'INSTALLED' | 'MISSING' | 'DEGRADED' | 'FALLBACK_ACTIVE';
 export type PrerequisiteCategory = 'STORAGE' | 'VIRTUALIZATION' | 'CONTAINERS' | 'SHARING' | 'SECURITY';
-export type PrerequisiteKind = 'BINARY' | 'LIBRARY' | 'KERNEL_MODULE' | 'DAEMON';
+export type PrerequisiteKind = 'BINARY' | 'LIBRARY' | 'KERNEL_MODULE' | 'DAEMON' | 'FIRMWARE';
+
+export interface LinuxFlavor {
+  id: string;
+  name: string;
+  prettyName: string;
+  versionId: string;
+  packageManager: string;
+  installCommandTemplate: string;
+}
 
 export interface Prerequisite {
   name: string; // prerequisites/{prerequisite}
@@ -43,6 +52,11 @@ export interface PrerequisiteSummary {
   installedCount: number;
   missingCount: number;
   hybridFallbackEnabled: boolean;
+  linuxFlavor?: LinuxFlavor;
+  missingPrerequisites?: Prerequisite[];
+  installedPrerequisites?: Prerequisite[];
+  remediationScript?: string;
+  isFullyCompliant?: boolean;
 }
 
 // ---------------------------------------------------------------------------

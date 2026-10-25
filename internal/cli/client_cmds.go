@@ -45,9 +45,88 @@ func newPrereqCmd(rootOpts *RootOptions) *cobra.Command {
 	}
 
 
+	printReport := func(resp *nasv1.CheckPrerequisitesResponse) error {
+		if rootOpts.JSONOutput {
+			return rootOpts.printJSON(resp)
+		}
+
+		flavor := resp.GetLinuxFlavor()
+		flavorName := "Unknown Linux"
+		pkgMgr := "unknown"
+		if flavor != nil {
+			if flavor.GetPrettyName() != "" {
+				flavorName = flavor.GetPrettyName()
+			} else if flavor.GetName() != "" {
+				flavorName = flavor.GetName()
+			}
+			if flavor.GetPackageManager() != "" {
+				pkgMgr = flavor.GetPackageManager()
+			}
+		}
+
+		fmt.Fprintln(rootOpts.Out, "================================================================================")
+		fmt.Fprintln(rootOpts.Out, "PREREQUISITES STATUS REPORT")
+		fmt.Fprintf(rootOpts.Out, "Host Linux Flavor: %s (package manager: %s)\n", flavorName, pkgMgr)
+		if resp.GetIsFullyCompliant() {
+			fmt.Fprintf(rootOpts.Out, "Compliance Status: FULLY COMPLIANT (Installed: %d, Missing: %d)\n",
+				resp.GetInstalledCount(), resp.GetMissingCount())
+		} else {
+			fmt.Fprintf(rootOpts.Out, "Compliance Status: ACTION REQUIRED (Installed: %d, Missing: %d)\n",
+				resp.GetInstalledCount(), resp.GetMissingCount())
+		}
+		if resp.GetHybridFallbackEnabled() {
+			fmt.Fprintln(rootOpts.Out, "Notice: Hybrid stateful sandbox fallback mode is active.")
+		}
+		fmt.Fprintln(rootOpts.Out, "================================================================================")
+		fmt.Fprintln(rootOpts.Out)
+
+		// Page 1: MISSING PREREQUISITES
+		fmt.Fprintln(rootOpts.Out, "[PAGE 1: MISSING PREREQUISITES]")
+		fmt.Fprintln(rootOpts.Out, "--------------------------------------------------------------------------------")
+		missing := resp.GetMissingPrerequisites()
+		if len(missing) == 0 {
+			fmt.Fprintln(rootOpts.Out, "No missing prerequisites! System is 100% compliant with all NAS features.")
+			fmt.Fprintln(rootOpts.Out)
+		} else {
+			tw := tabwriter.NewWriter(rootOpts.Out, 0, 4, 2, ' ', 0)
+			fmt.Fprintln(tw, "NAME\tCATEGORY\tKIND\tTARGET\tREQUIRED BY\tINSTALL INSTRUCTION")
+			for _, p := range missing {
+				reqBy := strings.Join(p.GetRequiredBy(), ", ")
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
+					p.GetName(), p.GetCategory(), p.GetKind(), p.GetBinaryOrPath(), reqBy, p.GetInstallHint())
+			}
+			tw.Flush()
+
+			if script := resp.GetRemediationScript(); script != "" {
+				fmt.Fprintln(rootOpts.Out)
+				fmt.Fprintf(rootOpts.Out, ">>> EXACT REMEDIATION COMMAND FOR %s:\n", strings.ToUpper(flavorName))
+				fmt.Fprintln(rootOpts.Out, script)
+			}
+			fmt.Fprintln(rootOpts.Out)
+		}
+
+		// Page 2: INSTALLED PREREQUISITES
+		fmt.Fprintln(rootOpts.Out, "[PAGE 2: INSTALLED PREREQUISITES]")
+		fmt.Fprintln(rootOpts.Out, "--------------------------------------------------------------------------------")
+		installed := resp.GetInstalledPrerequisites()
+		if len(installed) == 0 {
+			fmt.Fprintln(rootOpts.Out, "No native prerequisites found.")
+		} else {
+			tw := tabwriter.NewWriter(rootOpts.Out, 0, 4, 2, ' ', 0)
+			fmt.Fprintln(tw, "NAME\tCATEGORY\tKIND\tVERSION\tRESOLVED TARGET\tDETAILS")
+			for _, p := range installed {
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
+					p.GetName(), p.GetCategory(), p.GetKind(), p.GetVersion(), p.GetBinaryOrPath(), p.GetDetails())
+			}
+			tw.Flush()
+		}
+		fmt.Fprintln(rootOpts.Out)
+		return nil
+	}
+
 	checkCmd := &cobra.Command{
 		Use:   "check",
-		Short: "Trigger a live re-verification of all system prerequisites (:check)",
+		Short: "Trigger a live re-verification of all system prerequisites and display status report",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, conn, err := rootOpts.dialClient(cmd.Context())
 			if err != nil {
@@ -58,16 +137,28 @@ func newPrereqCmd(rootOpts *RootOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if rootOpts.JSONOutput {
-				return rootOpts.printJSON(resp)
-			}
-			fmt.Fprintf(rootOpts.Out, "Installed: %d | Missing/Fallback: %d | Hybrid Fallback: %v\n",
-				resp.GetInstalledCount(), resp.GetMissingCount(), resp.GetHybridFallbackEnabled())
-			return nil
+			return printReport(resp)
 		},
 	}
 
-	cmd.AddCommand(listCmd, checkCmd)
+	reportCmd := &cobra.Command{
+		Use:   "report",
+		Short: "Display compliance status report with missing list first and exact Linux flavor remediation instructions",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			resp, err := client.CheckPrerequisites(cmd.Context(), &nasv1.CheckPrerequisitesRequest{})
+			if err != nil {
+				return err
+			}
+			return printReport(resp)
+		},
+	}
+
+	cmd.AddCommand(listCmd, checkCmd, reportCmd)
 	return cmd
 }
 

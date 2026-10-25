@@ -15,13 +15,12 @@ import (
 
 type Spec struct {
 	ID          string
-	Module      string // zfs, kvm, docker, lxc, cifs, webdav, ssh
+	Module      string // zfs, kvm, docker, lxc, cifs, webdav, ssh, storage
 	DisplayName string
 	Category    string
-	Kind        string // BINARY, LIBRARY, KERNEL_MODULE, DAEMON
+	Kind        string // BINARY, LIBRARY, KERNEL_MODULE, DAEMON, FIRMWARE
 	Target      string
 	VersionArgs []string
-	InstallHint string
 	RequiredBy  []string
 }
 
@@ -34,7 +33,6 @@ var defaultSpecs = []Spec{
 		Kind:        "BINARY",
 		Target:      "zpool",
 		VersionArgs: []string{"--version"},
-		InstallHint: "apt install zfsutils-linux  # or: pacman -S zfs-utils",
 		RequiredBy:  []string{"ZFS Pools", "Pool Scrubbing"},
 	},
 	{
@@ -45,7 +43,6 @@ var defaultSpecs = []Spec{
 		Kind:        "BINARY",
 		Target:      "zfs",
 		VersionArgs: []string{"--version"},
-		InstallHint: "apt install zfsutils-linux  # or: pacman -S zfs-utils",
 		RequiredBy:  []string{"ZFS Datasets", "ZFS Volumes (ZVols)", "ZFS Snapshots"},
 	},
 	{
@@ -55,7 +52,6 @@ var defaultSpecs = []Spec{
 		Category:    "STORAGE",
 		Kind:        "LIBRARY",
 		Target:      "libzfs.so",
-		InstallHint: "apt install libzfs4linux  # or: pacman -S zfs-utils",
 		RequiredBy:  []string{"ZFS Pools", "ZFS Datasets", "ZFS Volumes"},
 	},
 	{
@@ -66,7 +62,6 @@ var defaultSpecs = []Spec{
 		Kind:        "BINARY",
 		Target:      "smartctl",
 		VersionArgs: []string{"--version"},
-		InstallHint: "apt install smartmontools  # or: pacman -S smartmontools",
 		RequiredBy:  []string{"Physical Disk Telemetry", "S.M.A.R.T. Drive Health & Temperature"},
 	},
 	{
@@ -77,7 +72,6 @@ var defaultSpecs = []Spec{
 		Kind:        "BINARY",
 		Target:      "nvme",
 		VersionArgs: []string{"version"},
-		InstallHint: "apt install nvme-cli  # or: pacman -S nvme-cli",
 		RequiredBy:  []string{"NVMe Health Log", "NVMe Temperature & Endurance Telemetry"},
 	},
 	{
@@ -87,7 +81,6 @@ var defaultSpecs = []Spec{
 		Category:    "VIRTUALIZATION",
 		Kind:        "KERNEL_MODULE",
 		Target:      "/dev/kvm",
-		InstallHint: "modprobe kvm_intel || modprobe kvm_amd",
 		RequiredBy:  []string{"KVM Virtual Machines"},
 	},
 	{
@@ -98,8 +91,36 @@ var defaultSpecs = []Spec{
 		Kind:        "BINARY",
 		Target:      "qemu-system-x86_64",
 		VersionArgs: []string{"--version"},
-		InstallHint: "apt install qemu-system-x86  # or: pacman -S qemu-full",
 		RequiredBy:  []string{"KVM Virtual Machines", "VNC Display Server"},
+	},
+	{
+		ID:          "qemu-img",
+		Module:      "kvm",
+		DisplayName: "QEMU Disk Image Utility (qemu-img)",
+		Category:    "VIRTUALIZATION",
+		Kind:        "BINARY",
+		Target:      "qemu-img",
+		VersionArgs: []string{"--version"},
+		RequiredBy:  []string{"KVM Virtual Disks", "QCOW2 Image Management"},
+	},
+	{
+		ID:          "swtpm",
+		Module:      "kvm",
+		DisplayName: "Software TPM 2.0 Emulator (swtpm)",
+		Category:    "VIRTUALIZATION",
+		Kind:        "BINARY",
+		Target:      "swtpm",
+		VersionArgs: []string{"--version"},
+		RequiredBy:  []string{"KVM Virtual Machines", "Virtual TPM 2.0 (vTPM)"},
+	},
+	{
+		ID:          "edk2-ovmf",
+		Module:      "kvm",
+		DisplayName: "OVMF UEFI BIOS Firmware (edk2-ovmf)",
+		Category:    "VIRTUALIZATION",
+		Kind:        "FIRMWARE",
+		Target:      "/usr/share/edk2-ovmf",
+		RequiredBy:  []string{"KVM Virtual Machines", "UEFI Secure Boot Firmware"},
 	},
 	{
 		ID:          "libvirt",
@@ -108,7 +129,6 @@ var defaultSpecs = []Spec{
 		Category:    "VIRTUALIZATION",
 		Kind:        "LIBRARY",
 		Target:      "libvirt.so",
-		InstallHint: "apt install libvirt0 libvirt-daemon-system  # or: pacman -S libvirt",
 		RequiredBy:  []string{"KVM Virtual Machines", "noVNC Consoles"},
 	},
 	{
@@ -119,7 +139,6 @@ var defaultSpecs = []Spec{
 		Kind:        "BINARY",
 		Target:      "virsh",
 		VersionArgs: []string{"--version"},
-		InstallHint: "apt install libvirt-clients  # or: pacman -S libvirt",
 		RequiredBy:  []string{"KVM Virtual Machines", "noVNC Consoles"},
 	},
 	{
@@ -130,7 +149,6 @@ var defaultSpecs = []Spec{
 		Kind:        "BINARY",
 		Target:      "docker",
 		VersionArgs: []string{"--version"},
-		InstallHint: "apt install docker.io  # or: pacman -S docker",
 		RequiredBy:  []string{"Docker Containers"},
 	},
 	{
@@ -141,7 +159,6 @@ var defaultSpecs = []Spec{
 		Kind:        "BINARY",
 		Target:      "lxc-ls",
 		VersionArgs: []string{"--version"},
-		InstallHint: "apt install lxc lxc-templates  # or: pacman -S lxc",
 		RequiredBy:  []string{"LXC Containers"},
 	},
 	{
@@ -151,7 +168,6 @@ var defaultSpecs = []Spec{
 		Category:    "CONTAINERS",
 		Kind:        "LIBRARY",
 		Target:      "liblxc.so",
-		InstallHint: "apt install liblxc1  # or: pacman -S lxc",
 		RequiredBy:  []string{"LXC Containers"},
 	},
 	{
@@ -162,7 +178,6 @@ var defaultSpecs = []Spec{
 		Kind:        "DAEMON",
 		Target:      "smbd",
 		VersionArgs: []string{"--version"},
-		InstallHint: "apt install samba  # or: pacman -S samba",
 		RequiredBy:  []string{"CIFS / SMB Folder Sharing"},
 	},
 	{
@@ -172,7 +187,6 @@ var defaultSpecs = []Spec{
 		Category:    "SHARING",
 		Kind:        "LIBRARY",
 		Target:      "builtin:golang.org/x/net/webdav",
-		InstallHint: "Built directly into the single NAS binary",
 		RequiredBy:  []string{"WebDAV Folder Sharing"},
 	},
 	{
@@ -182,7 +196,6 @@ var defaultSpecs = []Spec{
 		Category:    "VIRTUALIZATION",
 		Kind:        "LIBRARY",
 		Target:      "builtin:rfb-websocket-bridge",
-		InstallHint: "Built directly into the single NAS binary",
 		RequiredBy:  []string{"KVM noVNC Browser Consoles"},
 	},
 	{
@@ -193,7 +206,6 @@ var defaultSpecs = []Spec{
 		Kind:        "DAEMON",
 		Target:      "sshd",
 		VersionArgs: []string{"-V"},
-		InstallHint: "apt install openssh-server  # or: pacman -S openssh",
 		RequiredBy:  []string{"User SSH Password & Public Key Access"},
 	},
 }
@@ -201,6 +213,7 @@ var defaultSpecs = []Spec{
 type SystemChecker struct {
 	mu             sync.RWMutex
 	hybridFallback bool
+	flavor         domain.LinuxFlavor
 	cached         []domain.Prerequisite
 	moduleSpecMap  map[string][]string
 }
@@ -210,12 +223,20 @@ func NewSystemChecker(hybridFallback bool) *SystemChecker {
 	for _, s := range defaultSpecs {
 		modMap[s.Module] = append(modMap[s.Module], s.ID)
 	}
+	flavor := DetectLinuxFlavor()
 	c := &SystemChecker{
 		hybridFallback: hybridFallback,
+		flavor:         flavor,
 		moduleSpecMap:  modMap,
 	}
 	_, _, _ = c.CheckAll(context.Background())
 	return c
+}
+
+func (c *SystemChecker) GetLinuxFlavor() domain.LinuxFlavor {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.flavor
 }
 
 // IsModuleEnabled returns true if all required underlying binaries and libraries for the module
@@ -289,6 +310,8 @@ func (c *SystemChecker) GetPrerequisite(ctx context.Context, id string) (*domain
 
 func (c *SystemChecker) CheckAll(ctx context.Context) ([]domain.Prerequisite, bool, error) {
 	now := time.Now().UTC()
+	flavor := DetectLinuxFlavor()
+
 	results := make([]domain.Prerequisite, 0, len(defaultSpecs))
 
 	for _, spec := range defaultSpecs {
@@ -298,7 +321,7 @@ func (c *SystemChecker) CheckAll(ctx context.Context) ([]domain.Prerequisite, bo
 			Category:     spec.Category,
 			Kind:         spec.Kind,
 			BinaryOrPath: spec.Target,
-			InstallHint:  spec.InstallHint,
+			InstallHint:  FormatInstallHint(spec.ID, flavor),
 			RequiredBy:   spec.RequiredBy,
 			FallbackMode: c.hybridFallback,
 			CheckedTime:  now,
@@ -308,7 +331,45 @@ func (c *SystemChecker) CheckAll(ctx context.Context) ([]domain.Prerequisite, bo
 			p.Status = domain.StatusInstalled
 			p.Version = "embedded-v1.0"
 			p.Details = "Compiled directly into the nasctl binary"
+			p.InstallHint = "Built directly into the single NAS binary"
 			p.FallbackMode = false
+			results = append(results, p)
+			continue
+		}
+
+		if spec.Kind == "FIRMWARE" {
+			paths := []string{
+				spec.Target,
+				"/usr/share/OVMF",
+				"/usr/share/edk2",
+				"/usr/share/edk2-ovmf",
+				"/usr/share/qemu/edk2-x86_64-code.fd",
+				"/usr/share/edk2/x64/OVMF_CODE.fd",
+				"/usr/share/OVMF/OVMF_CODE.fd",
+			}
+			foundPath := ""
+			for _, pth := range paths {
+				if info, err := os.Stat(pth); err == nil {
+					foundPath = pth
+					_ = info
+					break
+				}
+			}
+			if foundPath != "" {
+				p.BinaryOrPath = foundPath
+				p.Status = domain.StatusInstalled
+				p.Version = "uefi-ovmf"
+				p.Details = fmt.Sprintf("UEFI firmware found at %s", foundPath)
+				p.FallbackMode = false
+			} else if c.hybridFallback {
+				p.Status = domain.StatusFallbackActive
+				p.Version = "hybrid-sandbox"
+				p.Details = fmt.Sprintf("OVMF firmware %s not found; running in hybrid sandbox mode", spec.Target)
+			} else {
+				p.Status = domain.StatusMissing
+				p.Version = "missing"
+				p.Details = fmt.Sprintf("OVMF UEFI firmware not found in standard paths (%s)", spec.Target)
+			}
 			results = append(results, p)
 			continue
 		}
@@ -400,8 +461,99 @@ func (c *SystemChecker) CheckAll(ctx context.Context) ([]domain.Prerequisite, bo
 
 	c.mu.Lock()
 	c.cached = results
+	c.flavor = flavor
 	c.mu.Unlock()
 	return results, c.hybridFallback, nil
+}
+
+// GetReport compiles a comprehensive status report separating missing and installed prerequisites,
+// along with the host Linux flavor and a copy-pasteable remediation command.
+func (c *SystemChecker) GetReport(ctx context.Context) (domain.PrerequisitesReport, error) {
+	items, hybrid, err := c.CheckAll(ctx)
+	if err != nil {
+		return domain.PrerequisitesReport{}, err
+	}
+
+	c.mu.RLock()
+	flavor := c.flavor
+	c.mu.RUnlock()
+
+	var missing []domain.Prerequisite
+	var installed []domain.Prerequisite
+	pkgSet := make(map[string]struct{})
+	var uniquePkgs []string
+
+	needKvmMod := false
+	needServices := make(map[string]struct{})
+
+	for _, item := range items {
+		if item.Status == domain.StatusInstalled {
+			installed = append(installed, item)
+		} else {
+			missing = append(missing, item)
+
+			// Collect package requirements
+			pkgs := PackagesForPrereq(item.ID, flavor.PackageManager)
+			for _, pkg := range pkgs {
+				if _, seen := pkgSet[pkg]; !seen {
+					pkgSet[pkg] = struct{}{}
+					uniquePkgs = append(uniquePkgs, pkg)
+				}
+			}
+
+			if item.ID == "kvm-dev" {
+				needKvmMod = true
+			}
+			if item.ID == "libvirt" || item.ID == "virsh" {
+				needServices["libvirtd"] = struct{}{}
+			}
+			if item.ID == "docker" {
+				needServices["docker"] = struct{}{}
+			}
+			if item.ID == "smbd" {
+				if flavor.PackageManager == "pacman" {
+					needServices["smb"] = struct{}{}
+				} else {
+					needServices["smbd"] = struct{}{}
+				}
+			}
+			if item.ID == "sshd" {
+				if flavor.PackageManager == "apt" {
+					needServices["ssh"] = struct{}{}
+				} else {
+					needServices["sshd"] = struct{}{}
+				}
+			}
+		}
+	}
+
+	// Build remediation script
+	var cmdParts []string
+	if len(uniquePkgs) > 0 {
+		cmdParts = append(cmdParts, fmt.Sprintf(flavor.InstallCommandTemplate, strings.Join(uniquePkgs, " ")))
+	}
+	if needKvmMod {
+		cmdParts = append(cmdParts, "sudo modprobe kvm_intel || sudo modprobe kvm_amd")
+	}
+	if len(needServices) > 0 {
+		var srvList []string
+		for srv := range needServices {
+			srvList = append(srvList, srv)
+		}
+		cmdParts = append(cmdParts, fmt.Sprintf("sudo systemctl enable --now %s", strings.Join(srvList, " ")))
+	}
+
+	remediationScript := strings.Join(cmdParts, " && \\\n  ")
+
+	return domain.PrerequisitesReport{
+		LinuxFlavor:          flavor,
+		Missing:              missing,
+		Installed:            installed,
+		All:                  items,
+		RemediationScript:    remediationScript,
+		IsFullyCompliant:     len(missing) == 0,
+		HybridFallbackActive: hybrid,
+	}, nil
 }
 
 func findSharedLibrary(libPrefix string) (string, bool) {

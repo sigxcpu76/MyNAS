@@ -25,3 +25,22 @@ type Prerequisite struct {
 	FallbackMode bool
 	CheckedTime  time.Time
 }
+
+type LinuxFlavor struct {
+	ID                     string `json:"id"`
+	Name                   string `json:"name"`
+	PrettyName             string `json:"prettyName"`
+	VersionID              string `json:"versionId"`
+	PackageManager         string `json:"packageManager"`
+	InstallCommandTemplate string `json:"installCommandTemplate"`
+}
+
+type PrerequisitesReport struct {
+	LinuxFlavor          LinuxFlavor    `json:"linuxFlavor"`
+	Missing              []Prerequisite `json:"missing"`
+	Installed            []Prerequisite `json:"installed"`
+	All                  []Prerequisite `json:"all"`
+	RemediationScript    string         `json:"remediationScript"`
+	IsFullyCompliant     bool           `json:"isFullyCompliant"`
+	HybridFallbackActive bool           `json:"hybridFallbackActive"`
+}

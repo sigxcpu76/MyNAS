@@ -17,6 +17,7 @@ import type {
   DockerConfig,
   DockerContainer,
   Group,
+  LinuxFlavor,
   LxcContainer,
   Prerequisite,
   PrerequisiteSummary,
@@ -122,6 +123,18 @@ export function mapPrerequisite(raw: any): Prerequisite {
       : [],
     fallbackMode: Boolean(raw?.fallbackMode ?? raw?.fallback_mode ?? false),
     checkedTime: raw?.checkedTime ?? raw?.checked_time ?? undefined,
+  };
+}
+
+export function mapLinuxFlavor(raw: any): LinuxFlavor | undefined {
+  if (!raw) return undefined;
+  return {
+    id: raw.id ?? '',
+    name: raw.name ?? '',
+    prettyName: raw.prettyName ?? raw.pretty_name ?? raw.name ?? '',
+    versionId: raw.versionId ?? raw.version_id ?? '',
+    packageManager: raw.packageManager ?? raw.package_manager ?? '',
+    installCommandTemplate: raw.installCommandTemplate ?? raw.install_command_template ?? '',
   };
 }
 
@@ -601,13 +614,20 @@ export class HttpPrerequisiteAdapter implements PrerequisitePort {
   async checkPrerequisites(): Promise<PrerequisiteSummary> {
     const raw = await this.client.customMethod<any>('prerequisites', 'check', {});
     const items = (raw.prerequisites ?? []).map(mapPrerequisite);
+    const missingItems = (raw.missingPrerequisites ?? raw.missing_prerequisites ?? []).map(mapPrerequisite);
+    const installedItems = (raw.installedPrerequisites ?? raw.installed_prerequisites ?? []).map(mapPrerequisite);
     return {
       prerequisites: items,
-      installedCount: Number(raw.installedCount ?? raw.installed_count ?? 0),
-      missingCount: Number(raw.missingCount ?? raw.missing_count ?? 0),
+      installedCount: Number(raw.installedCount ?? raw.installed_count ?? installedItems.length),
+      missingCount: Number(raw.missingCount ?? raw.missing_count ?? missingItems.length),
       hybridFallbackEnabled: Boolean(
         raw.hybridFallbackEnabled ?? raw.hybrid_fallback_enabled ?? false
       ),
+      linuxFlavor: mapLinuxFlavor(raw.linuxFlavor ?? raw.linux_flavor),
+      missingPrerequisites: missingItems.length > 0 ? missingItems : items.filter((p: Prerequisite) => p.status !== 'INSTALLED'),
+      installedPrerequisites: installedItems.length > 0 ? installedItems : items.filter((p: Prerequisite) => p.status === 'INSTALLED'),
+      remediationScript: raw.remediationScript ?? raw.remediation_script ?? '',
+      isFullyCompliant: Boolean(raw.isFullyCompliant ?? raw.is_fully_compliant ?? (missingItems.length === 0 && items.length > 0)),
     };
   }
 }
