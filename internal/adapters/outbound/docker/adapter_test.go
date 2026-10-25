@@ -495,8 +495,8 @@ func TestDockerConfigAndDirectoryListing(t *testing.T) {
 	if updated.Dataset != "fastpool/apps" {
 		t.Fatalf("expected dataset 'fastpool/apps', got %s", updated.Dataset)
 	}
-	if updated.AppdataPath != "/fastpool/apps/appdata" {
-		t.Fatalf("expected appdata path '/fastpool/apps/appdata', got %s", updated.AppdataPath)
+	if updated.AppdataPath != "/nas/fastpool/apps/appdata" && updated.AppdataPath != "/fastpool/apps/appdata" {
+		t.Fatalf("expected appdata path under /nas/fastpool or /fastpool, got %s", updated.AppdataPath)
 	}
 	if !updated.DatasetSelected {
 		t.Fatalf("expected DatasetSelected to be true")

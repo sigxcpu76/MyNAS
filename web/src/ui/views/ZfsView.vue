@@ -83,7 +83,7 @@ async function handleCreatePool() {
       vdevLayout: poolForm.vdevLayout,
       devices,
       compression: poolForm.compression,
-      mountpoint: poolForm.mountpoint || `/${poolForm.poolId.trim()}`,
+      mountpoint: poolForm.mountpoint || `/nas/${poolForm.poolId.trim()}`,
     });
     notify('success', `Created ZFS pool ${created.poolName || created.name}`);
     poolForm.poolId = '';
@@ -810,7 +810,7 @@ async function handleDeleteVolume(volName: string) {
                 <div class="pool-name mono">{{ pool.poolName || pool.name.replace(/^zfsPools\//, '') }}</div>
                 <div class="pool-mountpoint mono">
                   <MdiIcon :path="mdiFolderOutline" size="13" style="margin-right: 3px; opacity: 0.7" />
-                  {{ pool.mountpoint }}
+                  {{ pool.mountpoint || (`/nas/${pool.poolName || pool.name.replace(/^zfsPools\//, '')}`) }}
                 </div>
               </div>
             </div>

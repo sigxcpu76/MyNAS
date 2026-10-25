@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"sort"
 	"strconv"
@@ -515,7 +516,11 @@ func (a *Adapter) CreatePool(ctx context.Context, pool domain.ZfsPool) (*domain.
 	if _, exists := a.pools[pool.ID]; exists {
 		return nil, fmt.Errorf("%w: zfs pool %q", domain.ErrAlreadyExists, pool.ID)
 	}
+	if pool.Mountpoint == "" {
+		pool.Mountpoint = fmt.Sprintf("/nas/%s", pool.ID)
+	}
 	if a.canUseHostZfs() {
+		_ = os.MkdirAll("/nas", 0755)
 		args := []string{"create", "-m", pool.Mountpoint, pool.ID}
 		if pool.VdevLayout != "" && pool.VdevLayout != "stripe" {
 			args = append(args, pool.VdevLayout)

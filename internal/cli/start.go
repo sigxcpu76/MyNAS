@@ -146,10 +146,16 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	activeMainPool := prereqAdapter.GetMainPool()
 	stateDir := resolveStateDir(cfg.Server.StateDir)
 	if activeMainPool != "" {
-		poolSysDir := filepath.Join("/" + activeMainPool, cfg.System.SystemDataset)
-		if info, sErr := os.Stat(poolSysDir); sErr == nil && info.IsDir() {
-			stateDir = poolSysDir
-			logger.Info("using persistent ZFS system dataset for all unit state stores", "path", stateDir, "main_pool", activeMainPool)
+		candidates := []string{
+			filepath.Join("/nas", activeMainPool, cfg.System.SystemDataset),
+			filepath.Join("/" + activeMainPool, cfg.System.SystemDataset),
+		}
+		for _, poolSysDir := range candidates {
+			if info, sErr := os.Stat(poolSysDir); sErr == nil && info.IsDir() {
+				stateDir = poolSysDir
+				logger.Info("using persistent ZFS system dataset for all unit state stores", "path", stateDir, "main_pool", activeMainPool)
+				break
+			}
 		}
 	}
 

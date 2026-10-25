@@ -261,7 +261,7 @@ func (a *Adapter) SetAppsPool(pool string) {
 	pool = strings.TrimSpace(strings.TrimPrefix(pool, "zfsPools/"))
 	if pool != "" {
 		a.appsPool = pool
-		a.appdataPath = fmt.Sprintf("/%s/appdata", pool)
+		a.appdataPath = fmt.Sprintf("/nas/%s/appdata", pool)
 	}
 }
 
@@ -290,9 +290,9 @@ func (a *Adapter) getAppdataPath() string {
 		return a.appdataPath
 	}
 	if a.appsPool != "" {
-		return fmt.Sprintf("/%s/appdata", a.appsPool)
+		return fmt.Sprintf("/nas/%s/appdata", a.appsPool)
 	}
-	return "/tank/appdata"
+	return "/nas/tank/appdata"
 }
 
 func (a *Adapter) ensureComposeYAML(app domain.CatalogApp) domain.CatalogApp {
@@ -300,12 +300,14 @@ func (a *Adapter) ensureComposeYAML(app domain.CatalogApp) domain.CatalogApp {
 		app.ComposeYAML, app.DefaultPort = generateResolvedCompose(app)
 	}
 	appdataPath := a.getAppdataPath()
-	if appdataPath != "/tank/appdata" {
+	if appdataPath != "/nas/tank/appdata" && appdataPath != "/tank/appdata" {
 		app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/tank/appdata", appdataPath)
+		app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/nas/tank/appdata", appdataPath)
 	}
 	pool := a.getAppsPool()
 	if pool != "tank" {
-		app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/tank/media", fmt.Sprintf("/%s/media", pool))
+		app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/tank/media", fmt.Sprintf("/nas/%s/media", pool))
+		app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/nas/tank/media", fmt.Sprintf("/nas/%s/media", pool))
 	}
 	return app
 }

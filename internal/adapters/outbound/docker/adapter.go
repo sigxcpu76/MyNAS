@@ -2179,7 +2179,13 @@ func (a *Adapter) GetConfig(ctx context.Context) (*domain.DockerConfig, error) {
 	// Default to main pool (or first pool if unconfigured)
 	defaultPool := availablePools[0]
 	defaultDataset := fmt.Sprintf("%s/apps", defaultPool)
-	defaultMountpoint := "/" + defaultDataset
+	poolMount := fmt.Sprintf("/nas/%s", defaultPool)
+	if a.zfsPort != nil {
+		if p, err := a.zfsPort.GetPool(ctx, defaultPool); err == nil && p != nil && p.Mountpoint != "" && p.Mountpoint != "none" {
+			poolMount = p.Mountpoint
+		}
+	}
+	defaultMountpoint := fmt.Sprintf("%s/apps", strings.TrimRight(poolMount, "/"))
 	return &domain.DockerConfig{
 		Dataset:           defaultDataset,
 		Pool:              defaultPool,
@@ -2225,7 +2231,13 @@ func (a *Adapter) UpdateConfig(ctx context.Context, cfg domain.DockerConfig) (*d
 		datasetID = strings.Join(parts[1:], "/")
 	}
 
-	mountpoint := "/" + cleanDataset
+	poolMount := fmt.Sprintf("/nas/%s", pool)
+	if a.zfsPort != nil {
+		if p, err := a.zfsPort.GetPool(ctx, pool); err == nil && p != nil && p.Mountpoint != "" && p.Mountpoint != "none" {
+			poolMount = p.Mountpoint
+		}
+	}
+	mountpoint := fmt.Sprintf("%s/%s", strings.TrimRight(poolMount, "/"), datasetID)
 	appdataDir := filepath.Join(mountpoint, "appdata")
 	dockerDataDir := filepath.Join(mountpoint, "docker")
 

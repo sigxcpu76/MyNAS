@@ -24,7 +24,7 @@ func TestLxcAdapter_MainPoolEnforcement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateContainer failed: %v", err)
 	}
-	expectedRootfs := "/tank/lxc/ct-default/rootfs"
+	expectedRootfs := "/nas/tank/lxc/ct-default/rootfs"
 	if c1.RootfsPath != expectedRootfs {
 		t.Fatalf("expected RootfsPath %q, got %q", expectedRootfs, c1.RootfsPath)
 	}

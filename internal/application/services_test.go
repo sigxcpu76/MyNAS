@@ -33,8 +33,8 @@ func TestZfsServiceLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreatePool failed: %v", err)
 	}
-	if createdPool.Mountpoint != "/archive" {
-		t.Fatalf("expected mountpoint /archive, got %s", createdPool.Mountpoint)
+	if createdPool.Mountpoint != "/nas/archive" {
+		t.Fatalf("expected mountpoint /nas/archive, got %s", createdPool.Mountpoint)
 	}
 
 	scrubbed, err := svc.ScrubPool(ctx, "archive")

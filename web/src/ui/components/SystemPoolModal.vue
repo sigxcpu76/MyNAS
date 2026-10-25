@@ -170,7 +170,7 @@ onMounted(() => {
                   </span>
                 </div>
                 <div class="mono" style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px">
-                  Dataset: {{ p.datasetPath }} · Mountpoint: {{ p.mountpoint || 'Default' }}
+                  Dataset: {{ p.datasetPath }} · Mountpoint: {{ p.mountpoint || (`/nas/${p.poolName}/.nas-system`) }}
                 </div>
               </div>
             </div>

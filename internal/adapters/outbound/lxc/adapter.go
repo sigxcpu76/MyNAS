@@ -119,12 +119,13 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 
 	if mainPool != "" {
 		if c.RootfsPath == "" {
-			c.RootfsPath = fmt.Sprintf("/%s/lxc/%s/rootfs", mainPool, c.ID)
+			c.RootfsPath = fmt.Sprintf("/nas/%s/lxc/%s/rootfs", mainPool, c.ID)
 		} else {
 			cleaned := filepath.Clean(c.RootfsPath)
-			expectedPrefix := "/" + mainPool
-			if cleaned != expectedPrefix && !strings.HasPrefix(cleaned, expectedPrefix+"/") &&
-				cleaned != mainPool && !strings.HasPrefix(cleaned, mainPool+"/") {
+			hasNasPrefix := cleaned == "/nas/"+mainPool || strings.HasPrefix(cleaned, "/nas/"+mainPool+"/")
+			hasDirectPrefix := cleaned == "/"+mainPool || strings.HasPrefix(cleaned, "/"+mainPool+"/")
+			hasDatasetPrefix := cleaned == mainPool || strings.HasPrefix(cleaned, mainPool+"/")
+			if !hasNasPrefix && !hasDirectPrefix && !hasDatasetPrefix {
 				return nil, fmt.Errorf("%w: lxc rootfs must reside on the main pool (%s); path %q is not permitted", domain.ErrInvalidArgument, mainPool, c.RootfsPath)
 			}
 		}

@@ -42,7 +42,7 @@ async function handleCreatePool() {
       vdevLayout: poolForm.vdevLayout,
       devices,
       compression: poolForm.compression,
-      mountpoint: poolForm.mountpoint || `/${poolForm.poolId.trim()}`,
+      mountpoint: poolForm.mountpoint || `/nas/${poolForm.poolId.trim()}`,
     });
     notify('success', `Created ZFS pool ${created.poolName || created.name}`);
     poolForm.poolId = '';
@@ -249,7 +249,7 @@ function viewPoolDatasets(poolName: string) {
                       </span>
                     </div>
                     <div class="mono" style="font-size: 11px; color: var(--text-secondary)">
-                      {{ p.mountpoint || `/${p.poolName || p.name.replace(/^zfsPools\//, '')}` }}
+                      {{ p.mountpoint || `/nas/${p.poolName || p.name.replace(/^zfsPools\//, '')}` }}
                     </div>
                   </div>
                 </div>

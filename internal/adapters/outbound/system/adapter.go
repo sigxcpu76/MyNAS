@@ -53,7 +53,11 @@ func (a *Adapter) GetConfig(ctx context.Context) (*domain.SystemConfig, error) {
 
 	if mainPool != "" {
 		systemDataset = fmt.Sprintf("%s/%s", mainPool, cfg.System.SystemDataset)
-		systemMountpoint = fmt.Sprintf("/%s/%s", mainPool, cfg.System.SystemDataset)
+		poolMount := fmt.Sprintf("/nas/%s", mainPool)
+		if p, pErr := a.zfsPort.GetPool(ctx, mainPool); pErr == nil && p != nil && p.Mountpoint != "" && p.Mountpoint != "none" {
+			poolMount = p.Mountpoint
+		}
+		systemMountpoint = fmt.Sprintf("%s/%s", strings.TrimRight(poolMount, "/"), cfg.System.SystemDataset)
 		// Check if dataset exists
 		if ds, err := a.zfsPort.GetDataset(ctx, mainPool, cfg.System.SystemDataset); err == nil && ds != nil {
 			isInit = true
@@ -93,7 +97,7 @@ func (a *Adapter) SelectMainPool(ctx context.Context, poolName string, autoImpor
 	}
 
 	// Verify pool exists in ZFS
-	_, err := a.zfsPort.GetPool(ctx, cleanPool)
+	p, err := a.zfsPort.GetPool(ctx, cleanPool)
 	if err != nil {
 		return nil, fmt.Errorf("%w: pool %q does not exist or is not imported", domain.ErrNotFound, cleanPool)
 	}
@@ -105,7 +109,11 @@ func (a *Adapter) SelectMainPool(ctx context.Context, poolName string, autoImpor
 	}
 
 	datasetPath := fmt.Sprintf("%s/%s", cleanPool, dsName)
-	mountpoint := fmt.Sprintf("/%s/%s", cleanPool, dsName)
+	poolMount := fmt.Sprintf("/nas/%s", cleanPool)
+	if p != nil && p.Mountpoint != "" && p.Mountpoint != "none" && p.Mountpoint != "legacy" {
+		poolMount = p.Mountpoint
+	}
+	mountpoint := fmt.Sprintf("%s/%s", strings.TrimRight(poolMount, "/"), dsName)
 
 	// Check if the system dataset already exists (re-installation / recovery case)
 	existingDs, err := a.zfsPort.GetDataset(ctx, cleanPool, dsName)
@@ -180,7 +188,11 @@ func (a *Adapter) DiscoverPools(ctx context.Context) ([]domain.DiscoveredPool, e
 	for _, p := range pools {
 		cleanID := strings.TrimPrefix(p.ID, "zfsPools/")
 		hasSys := false
-		mp := fmt.Sprintf("/%s/%s", cleanID, dsName)
+		poolMount := fmt.Sprintf("/nas/%s", cleanID)
+		if p.Mountpoint != "" && p.Mountpoint != "none" && p.Mountpoint != "legacy" {
+			poolMount = p.Mountpoint
+		}
+		mp := fmt.Sprintf("%s/%s", strings.TrimRight(poolMount, "/"), dsName)
 		lastMod := time.Now().UTC().Format(time.RFC3339)
 
 		// Check if dataset exists
