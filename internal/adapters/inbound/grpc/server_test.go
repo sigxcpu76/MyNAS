@@ -2,6 +2,7 @@ package grpcadapter_test
 
 import (
 	"context"
+	osuser "os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -167,13 +168,18 @@ func TestAIPResourceNamesPaginationAndErrors(t *testing.T) {
 	}
 
 	// 4. Test AIP-134 Update with FieldMask
+	testUsername := "root"
+	if curr, err := osuser.Current(); err == nil && curr.Username != "" {
+		testUsername = curr.Username
+	}
+
 	updatedUser, err := srv.UpdateUser(ctx, &nasv1.UpdateUserRequest{
 		User: &nasv1.User{
-			Name:              "users/sigxcpu",
+			Name:              "users/" + testUsername,
 			FullName:          "Updated Linux User",
 			SshEnabled:        true,
 			SshPasswordAuth:   false,
-			SshAuthorizedKeys: []string{"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIUpdatedKey sigxcpu@nas"},
+			SshAuthorizedKeys: []string{"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIUpdatedKey key@nas"},
 		},
 		UpdateMask: &fieldmaskpb.FieldMask{
 			Paths: []string{"full_name", "ssh_enabled", "ssh_password_auth", "ssh_authorized_keys"},
