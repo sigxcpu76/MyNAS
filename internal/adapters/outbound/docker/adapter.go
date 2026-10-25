@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"net"
 	"net/http"
@@ -37,6 +38,7 @@ type containerStatsRecord struct {
 
 type Adapter struct {
 	mu           sync.RWMutex
+	logger       *slog.Logger
 	client       *http.Client
 	socketPath   string
 	baseEndpoint string
@@ -51,6 +53,28 @@ type Adapter struct {
 	mockApps     map[string]domain.DockerApp
 	statsCacheMu sync.RWMutex
 	statsCache   map[string]containerStatsRecord
+}
+
+func (a *Adapter) SetLogger(l *slog.Logger) {
+	if l != nil {
+		a.logger = l
+	}
+}
+
+func (a *Adapter) logError(op string, resource string, err error, details string) {
+	if err == nil {
+		return
+	}
+	l := a.logger
+	if l == nil {
+		l = slog.Default()
+	}
+	details = strings.TrimSpace(details)
+	if details != "" {
+		l.Error("docker operation failed", "subsystem", "docker", "operation", op, "resource", resource, "error", err, "details", details)
+	} else {
+		l.Error("docker operation failed", "subsystem", "docker", "operation", op, "resource", resource, "error", err)
+	}
 }
 
 func (a *Adapter) baseURL() string {
@@ -111,6 +135,7 @@ func NewAdapterFull(socketPath string, unitsDir string, hybrid bool) *Adapter {
 	}
 
 	a := &Adapter{
+		logger: slog.Default().With("subsystem", "docker"),
 		client: &http.Client{
 			Transport: transport,
 			Timeout:   30 * time.Second,
@@ -143,6 +168,7 @@ func NewAdapterWithClient(client *http.Client, baseEndpoint string) *Adapter {
 	_ = os.MkdirAll(unitsDir, 0755)
 
 	return &Adapter{
+		logger:       slog.Default().With("subsystem", "docker"),
 		client:       client,
 		baseEndpoint: baseEndpoint,
 		unitsDir:     unitsDir,
@@ -366,7 +392,9 @@ func (a *Adapter) runCompose(ctx context.Context, unitDir string, projectName st
 	cmd.Stdout = io.Discard
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("docker compose %s failed: %w (details: %s)", strings.Join(args, " "), err, strings.TrimSpace(errBuf.String()))
+		details := strings.TrimSpace(errBuf.String())
+		a.logError("compose_"+strings.Join(args, "_"), projectName, err, details)
+		return fmt.Errorf("docker compose %s failed: %w (details: %s)", strings.Join(args, " "), err, details)
 	}
 	return nil
 }
@@ -741,16 +769,21 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.DockerContainer)
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := a.client.Do(req)
 		if err != nil {
+			a.logError("create_request", c.ID, err, "")
 			return nil, err
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode == http.StatusConflict {
-			return nil, fmt.Errorf("%w: container %q already exists in docker engine", domain.ErrAlreadyExists, c.ID)
+			err := fmt.Errorf("%w: container %q already exists in docker engine", domain.ErrAlreadyExists, c.ID)
+			a.logError("create", c.ID, err, "")
+			return nil, err
 		}
 		if resp.StatusCode != http.StatusCreated {
 			body, _ := io.ReadAll(resp.Body)
-			return nil, fmt.Errorf("docker create failed (%d): %s", resp.StatusCode, string(body))
+			err := fmt.Errorf("docker create failed (%d): %s", resp.StatusCode, string(body))
+			a.logError("create", c.ID, err, string(body))
+			return nil, err
 		}
 
 		var createResp struct {
@@ -760,8 +793,14 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.DockerContainer)
 
 		startReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/containers/%s/start", a.baseURL(), createResp.ID), nil)
 		startResp, startErr := a.client.Do(startReq)
-		if startErr == nil {
-			_ = startResp.Body.Close()
+		if startErr != nil {
+			a.logError("start_after_create", c.ID, startErr, "")
+		} else {
+			defer startResp.Body.Close()
+			if startResp.StatusCode >= 400 {
+				body, _ := io.ReadAll(startResp.Body)
+				a.logError("start_after_create", c.ID, fmt.Errorf("http %d", startResp.StatusCode), string(body))
+			}
 		}
 
 		res, err := a.GetContainer(ctx, c.ID)
@@ -940,12 +979,15 @@ func (a *Adapter) StartContainer(ctx context.Context, id string) (*domain.Docker
 		}
 		resp, err := a.client.Do(req)
 		if err != nil {
+			a.logError("start", id, err, "")
 			return nil, err
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotModified {
 			body, _ := io.ReadAll(resp.Body)
-			return nil, fmt.Errorf("docker start failed (%d): %s", resp.StatusCode, string(body))
+			err := fmt.Errorf("docker start failed (%d): %s", resp.StatusCode, string(body))
+			a.logError("start", id, err, string(body))
+			return nil, err
 		}
 		return a.GetContainer(ctx, id)
 	}
@@ -979,12 +1021,15 @@ func (a *Adapter) StopContainer(ctx context.Context, id string) (*domain.DockerC
 		}
 		resp, err := a.client.Do(req)
 		if err != nil {
+			a.logError("stop", id, err, "")
 			return nil, err
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotModified {
 			body, _ := io.ReadAll(resp.Body)
-			return nil, fmt.Errorf("docker stop failed (%d): %s", resp.StatusCode, string(body))
+			err := fmt.Errorf("docker stop failed (%d): %s", resp.StatusCode, string(body))
+			a.logError("stop", id, err, string(body))
+			return nil, err
 		}
 		return a.GetContainer(ctx, id)
 	}
@@ -1020,12 +1065,15 @@ func (a *Adapter) RestartContainer(ctx context.Context, id string) (*domain.Dock
 		}
 		resp, err := a.client.Do(req)
 		if err != nil {
+			a.logError("restart", id, err, "")
 			return nil, err
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 			body, _ := io.ReadAll(resp.Body)
-			return nil, fmt.Errorf("docker restart failed (%d): %s", resp.StatusCode, string(body))
+			err := fmt.Errorf("docker restart failed (%d): %s", resp.StatusCode, string(body))
+			a.logError("restart", id, err, string(body))
+			return nil, err
 		}
 		return a.GetContainer(ctx, id)
 	}
@@ -1060,6 +1108,7 @@ func (a *Adapter) DeleteContainer(ctx context.Context, id string, force bool) er
 		}
 		resp, err := a.client.Do(req)
 		if err != nil {
+			a.logError("delete", id, err, "")
 			return err
 		}
 		defer resp.Body.Close()
@@ -1072,7 +1121,9 @@ func (a *Adapter) DeleteContainer(ctx context.Context, id string, force bool) er
 		}
 		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 			body, _ := io.ReadAll(resp.Body)
-			return fmt.Errorf("docker delete failed (%d): %s", resp.StatusCode, string(body))
+			err := fmt.Errorf("docker delete failed (%d): %s", resp.StatusCode, string(body))
+			a.logError("delete", id, err, string(body))
+			return err
 		}
 	}
 
@@ -1091,6 +1142,7 @@ func (a *Adapter) GetContainerLogs(ctx context.Context, id string, tail int) (st
 		}
 		resp, err := a.client.Do(req)
 		if err != nil {
+			a.logError("logs", id, err, "")
 			return "", err
 		}
 		defer resp.Body.Close()
@@ -1100,7 +1152,9 @@ func (a *Adapter) GetContainerLogs(ctx context.Context, id string, tail int) (st
 		}
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
-			return "", fmt.Errorf("docker logs failed (%d): %s", resp.StatusCode, string(body))
+			err := fmt.Errorf("docker logs failed (%d): %s", resp.StatusCode, string(body))
+			a.logError("logs", id, err, string(body))
+			return "", err
 		}
 
 		data, err := io.ReadAll(resp.Body)

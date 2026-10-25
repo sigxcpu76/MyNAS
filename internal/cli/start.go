@@ -147,7 +147,9 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 
 	zfsAdapter := zfs.NewAdapter(zfsHybrid)
 	kvmAdapter := kvm.NewAdapterWithStateDir(kvmHybrid, vmUnitsDir)
+	kvmAdapter.SetLogger(logger.With("subsystem", "libvirt"))
 	dockerAdapter := docker.NewAdapterWithStateDir(dockerHybrid, dockerUnitsDir)
+	dockerAdapter.SetLogger(logger.With("subsystem", "docker"))
 	lxcAdapter := lxc.NewAdapter(lxcHybrid)
 	cifsAdapter := share.NewCifsAdapter(cifsHybrid, sharesDir)
 	webdavAdapter := share.NewWebdavAdapter(true)
@@ -183,7 +185,15 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	// 3. Inbound Adapters (Driving Ports: gRPC + gRPC-Gateway + noVNC WS + WebDAV + Embedded Vue UI + SSE Events)
 	nasGRPC := grpcadapter.NewServer(prereqSvc, diskSvc, zfsSvc, kvmSvc, dockerSvc, dockerAppSvc, lxcSvc, shareSvc, identitySvc, catalogSvc)
 
-	rawGRPCServer := grpc.NewServer()
+	rawGRPCServer := grpc.NewServer(
+		grpc.UnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
+			resp, err = handler(ctx, req)
+			if err != nil {
+				logger.Error("grpc request error", "method", info.FullMethod, "error", err)
+			}
+			return resp, err
+		}),
+	)
 	nasv1.RegisterNasServiceServer(rawGRPCServer, nasGRPC)
 	reflection.Register(rawGRPCServer)
 

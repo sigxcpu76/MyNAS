@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -27,6 +28,7 @@ type consoleTicket struct {
 
 type Adapter struct {
 	mu        sync.RWMutex
+	logger    *slog.Logger
 	hybrid    bool
 	stateDir  string
 	vms       map[string]domain.VirtualMachine
@@ -50,6 +52,7 @@ func NewAdapterWithStateDir(hybrid bool, stateDir string) *Adapter {
 	_ = os.MkdirAll(stateDir, 0755)
 
 	a := &Adapter{
+		logger:    slog.Default().With("subsystem", "libvirt"),
 		hybrid:    hybrid,
 		stateDir:  stateDir,
 		vms:       make(map[string]domain.VirtualMachine),
@@ -61,6 +64,28 @@ func NewAdapterWithStateDir(hybrid bool, stateDir string) *Adapter {
 		a.seedDefaults()
 	}
 	return a
+}
+
+func (a *Adapter) SetLogger(l *slog.Logger) {
+	if l != nil {
+		a.logger = l
+	}
+}
+
+func (a *Adapter) logError(op string, vmID string, err error, output []byte) {
+	if err == nil {
+		return
+	}
+	l := a.logger
+	if l == nil {
+		l = slog.Default()
+	}
+	outStr := strings.TrimSpace(string(output))
+	if outStr != "" {
+		l.Error("libvirt operation failed", "subsystem", "libvirt", "operation", op, "vm_id", vmID, "error", err, "details", outStr)
+	} else {
+		l.Error("libvirt operation failed", "subsystem", "libvirt", "operation", op, "vm_id", vmID, "error", err)
+	}
 }
 
 func (a *Adapter) hasVirsh() bool {
@@ -656,6 +681,7 @@ func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*doma
 		cmd.Stdin = strings.NewReader(xmlStr)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
+			a.logError("define", vm.ID, err, out)
 			return nil, fmt.Errorf("libvirt define failed: %s: %w", strings.TrimSpace(string(out)), err)
 		}
 
@@ -666,6 +692,7 @@ func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*doma
 		startCmd := exec.CommandContext(ctx, "virsh", "start", vm.ID)
 		startOut, err := startCmd.CombinedOutput()
 		if err != nil {
+			a.logError("start", vm.ID, err, startOut)
 			return nil, fmt.Errorf("libvirt start failed: %s: %w", strings.TrimSpace(string(startOut)), err)
 		}
 
@@ -809,6 +836,7 @@ func (a *Adapter) DeleteVM(ctx context.Context, id string) error {
 		_ = exec.CommandContext(ctx, "virsh", "destroy", id).Run()
 		out, err := exec.CommandContext(ctx, "virsh", "undefine", "--nvram", "--snapshots-metadata", id).CombinedOutput()
 		if err != nil && !strings.Contains(string(out), "Domain not found") {
+			a.logError("undefine", id, err, out)
 			return fmt.Errorf("virsh undefine failed: %s: %w", strings.TrimSpace(string(out)), err)
 		}
 	}
@@ -824,6 +852,7 @@ func (a *Adapter) StartVM(ctx context.Context, id string) (*domain.VirtualMachin
 	if a.isRealDomain(ctx, id) {
 		out, err := exec.CommandContext(ctx, "virsh", "start", id).CombinedOutput()
 		if err != nil {
+			a.logError("start", id, err, out)
 			return nil, fmt.Errorf("virsh start failed: %s: %w", strings.TrimSpace(string(out)), err)
 		}
 		return a.getDomainFromVirsh(ctx, id)
@@ -849,6 +878,7 @@ func (a *Adapter) StopVM(ctx context.Context, id string, force bool) (*domain.Vi
 		}
 		out, err := exec.CommandContext(ctx, "virsh", verb, id).CombinedOutput()
 		if err != nil {
+			a.logError(verb, id, err, out)
 			return nil, fmt.Errorf("virsh %s failed: %s: %w", verb, strings.TrimSpace(string(out)), err)
 		}
 		return a.getDomainFromVirsh(ctx, id)
@@ -870,6 +900,7 @@ func (a *Adapter) RebootVM(ctx context.Context, id string) (*domain.VirtualMachi
 	if a.isRealDomain(ctx, id) {
 		out, err := exec.CommandContext(ctx, "virsh", "reboot", id).CombinedOutput()
 		if err != nil {
+			a.logError("reboot", id, err, out)
 			return nil, fmt.Errorf("virsh reboot failed: %s: %w", strings.TrimSpace(string(out)), err)
 		}
 		return a.getDomainFromVirsh(ctx, id)
@@ -891,6 +922,7 @@ func (a *Adapter) ResetVM(ctx context.Context, id string) (*domain.VirtualMachin
 	if a.isRealDomain(ctx, id) {
 		out, err := exec.CommandContext(ctx, "virsh", "reset", id).CombinedOutput()
 		if err != nil {
+			a.logError("reset", id, err, out)
 			return nil, fmt.Errorf("virsh reset failed: %s: %w", strings.TrimSpace(string(out)), err)
 		}
 		return a.getDomainFromVirsh(ctx, id)
@@ -912,6 +944,7 @@ func (a *Adapter) PauseVM(ctx context.Context, id string) (*domain.VirtualMachin
 	if a.isRealDomain(ctx, id) {
 		out, err := exec.CommandContext(ctx, "virsh", "suspend", id).CombinedOutput()
 		if err != nil {
+			a.logError("suspend", id, err, out)
 			return nil, fmt.Errorf("virsh suspend failed: %s: %w", strings.TrimSpace(string(out)), err)
 		}
 		return a.getDomainFromVirsh(ctx, id)
@@ -933,6 +966,7 @@ func (a *Adapter) ResumeVM(ctx context.Context, id string) (*domain.VirtualMachi
 	if a.isRealDomain(ctx, id) {
 		out, err := exec.CommandContext(ctx, "virsh", "resume", id).CombinedOutput()
 		if err != nil {
+			a.logError("resume", id, err, out)
 			return nil, fmt.Errorf("virsh resume failed: %s: %w", strings.TrimSpace(string(out)), err)
 		}
 		return a.getDomainFromVirsh(ctx, id)
@@ -994,6 +1028,7 @@ func (a *Adapter) CloneVM(ctx context.Context, id, newID, newName, targetPool st
 		cmd := exec.CommandContext(ctx, "virsh", "define", "/dev/stdin")
 		cmd.Stdin = strings.NewReader(xmlStr)
 		if out, err := cmd.CombinedOutput(); err != nil {
+			a.logError("clone_define", newID, err, out)
 			return nil, fmt.Errorf("virsh define clone failed: %s: %w", strings.TrimSpace(string(out)), err)
 		}
 		return a.getDomainFromVirsh(ctx, newID)
@@ -1014,6 +1049,7 @@ func (a *Adapter) AttachMedia(ctx context.Context, id, deviceTarget, isoPath str
 		}
 		out, err := exec.CommandContext(ctx, "virsh", "change-media", id, dev, isoPath, "--insert").CombinedOutput()
 		if err != nil {
+			a.logError("change_media_insert", id, err, out)
 			return nil, fmt.Errorf("virsh change-media failed: %s: %w", strings.TrimSpace(string(out)), err)
 		}
 		return a.getDomainFromVirsh(ctx, id)
@@ -1039,6 +1075,7 @@ func (a *Adapter) EjectMedia(ctx context.Context, id, deviceTarget string) (*dom
 		}
 		out, err := exec.CommandContext(ctx, "virsh", "change-media", id, dev, "--eject").CombinedOutput()
 		if err != nil {
+			a.logError("change_media_eject", id, err, out)
 			return nil, fmt.Errorf("virsh change-media eject failed: %s: %w", strings.TrimSpace(string(out)), err)
 		}
 		return a.getDomainFromVirsh(ctx, id)
@@ -1103,6 +1140,7 @@ func (a *Adapter) CreateSnapshot(ctx context.Context, vmID string, snapshot doma
 		}
 		out, err := exec.CommandContext(ctx, "virsh", args...).CombinedOutput()
 		if err != nil {
+			a.logError("snapshot_create", vmID, err, out)
 			return nil, fmt.Errorf("virsh snapshot-create-as failed: %s: %w", strings.TrimSpace(string(out)), err)
 		}
 		snap := domain.VirtualMachineSnapshot{
@@ -1135,6 +1173,7 @@ func (a *Adapter) RollbackSnapshot(ctx context.Context, vmID, snapID string) (*d
 	if a.isRealDomain(ctx, vmID) {
 		out, err := exec.CommandContext(ctx, "virsh", "snapshot-revert", vmID, snapID).CombinedOutput()
 		if err != nil {
+			a.logError("snapshot_revert", vmID, err, out)
 			return nil, fmt.Errorf("virsh snapshot-revert failed: %s: %w", strings.TrimSpace(string(out)), err)
 		}
 		return a.getDomainFromVirsh(ctx, vmID)
@@ -1154,6 +1193,7 @@ func (a *Adapter) DeleteSnapshot(ctx context.Context, vmID, snapID string) error
 	if a.isRealDomain(ctx, vmID) {
 		out, err := exec.CommandContext(ctx, "virsh", "snapshot-delete", vmID, snapID).CombinedOutput()
 		if err != nil {
+			a.logError("snapshot_delete", vmID, err, out)
 			return fmt.Errorf("virsh snapshot-delete failed: %s: %w", strings.TrimSpace(string(out)), err)
 		}
 	}
@@ -1487,11 +1527,14 @@ func (a *Adapter) DialVNC(ctx context.Context, vmID string) (net.Conn, error) {
 	if a.isRealDomain(ctx, vmID) {
 		vncOut, err := exec.CommandContext(ctx, "virsh", "vncdisplay", vmID).CombinedOutput()
 		if err != nil {
+			a.logError("vnc_lookup", vmID, err, vncOut)
 			return nil, fmt.Errorf("domain %q is not running: %s", vmID, strings.TrimSpace(string(vncOut)))
 		}
 		vncStr := strings.TrimSpace(string(vncOut))
 		if !strings.Contains(vncStr, ":") {
-			return nil, fmt.Errorf("no VNC display allocated for domain %q (got %q)", vmID, vncStr)
+			err := fmt.Errorf("no VNC display allocated for domain %q (got %q)", vmID, vncStr)
+			a.logError("vnc_display_missing", vmID, err, []byte(vncStr))
+			return nil, err
 		}
 		parts := strings.Split(vncStr, ":")
 		var dispNum int
@@ -1501,6 +1544,7 @@ func (a *Adapter) DialVNC(ctx context.Context, vmID string) (net.Conn, error) {
 		dialer := net.Dialer{Timeout: 2 * time.Second}
 		conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", port))
 		if err != nil {
+			a.logError("vnc_dial", vmID, err, nil)
 			return nil, fmt.Errorf("failed to connect to QEMU VNC server on port %d: %w", port, err)
 		}
 		return conn, nil
