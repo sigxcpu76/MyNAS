@@ -15,6 +15,7 @@ import {
   HttpLxcAdapter,
   HttpPrerequisiteAdapter,
   HttpShareAdapter,
+  HttpSystemAdapter,
   HttpZfsAdapter,
 } from './adapters/http/httpAdapters';
 import {
@@ -28,12 +29,14 @@ import {
   LxcService,
   PrerequisiteService,
   ShareService,
+  SystemService,
   ZfsService,
 } from './application/services';
 
 export const aipClient = new AipClient('/v1');
 
 export const authPort = new HttpAuthAdapter(aipClient);
+export const systemPort = new HttpSystemAdapter(aipClient);
 export const prerequisitePort = new HttpPrerequisiteAdapter(aipClient);
 export const diskPort = new HttpDiskAdapter(aipClient);
 export const zfsPort = new HttpZfsAdapter(aipClient);
@@ -47,6 +50,7 @@ export const catalogPort = new HttpCatalogAdapter(aipClient);
 
 export const services = {
   auth: new AuthService(authPort),
+  system: new SystemService(systemPort),
   prerequisites: new PrerequisiteService(prerequisitePort),
   disk: new DiskService(diskPort),
   zfs: new ZfsService(zfsPort),

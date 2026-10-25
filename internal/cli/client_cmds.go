@@ -1821,6 +1821,111 @@ func newDiskCmd(rootOpts *RootOptions) *cobra.Command {
 	return cmd
 }
 
+func newSystemCmd(rootOpts *RootOptions) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "system",
+		Short: "Manage system configuration, main ZFS pool, and dataset lifecycle",
+	}
+
+	statusCmd := &cobra.Command{
+		Use:   "status",
+		Short: "Display system configuration, main pool, and module states",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			resp, err := client.GetSystemConfig(cmd.Context(), &nasv1.GetSystemConfigRequest{})
+			if err != nil {
+				return err
+			}
+			if rootOpts.JSONOutput {
+				return rootOpts.printJSON(resp)
+			}
+
+			fmt.Fprintln(rootOpts.Out, "================================================================================")
+			fmt.Fprintln(rootOpts.Out, "SYSTEM CONFIGURATION & POOL STATUS")
+			fmt.Fprintln(rootOpts.Out, "================================================================================")
+			mainPool := resp.GetMainPool()
+			if mainPool == "" {
+				fmt.Fprintln(rootOpts.Out, "Main Storage Pool : [UNCONFIGURED] (Only ZFS is enabled)")
+			} else {
+				fmt.Fprintf(rootOpts.Out, "Main Storage Pool : %s (Initialized: %v)\n", mainPool, resp.GetIsInitialized())
+				fmt.Fprintf(rootOpts.Out, "System Dataset    : %s\n", resp.GetSystemDataset())
+				fmt.Fprintf(rootOpts.Out, "Mountpoint        : %s\n", resp.GetSystemMountpoint())
+			}
+			fmt.Fprintf(rootOpts.Out, "Config File Path  : %s\n", resp.GetConfigFilePath())
+			fmt.Fprintf(rootOpts.Out, "Enabled Modules   : %s\n", strings.Join(resp.GetEnabledModules(), ", "))
+			fmt.Fprintln(rootOpts.Out)
+			return nil
+		},
+	}
+
+	selectPoolCmd := &cobra.Command{
+		Use:   "select-pool <pool_name>",
+		Short: "Designate the main ZFS storage pool, initialize system datasets, and enable all modules",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			poolName := args[0]
+			resp, err := client.SelectMainPool(cmd.Context(), &nasv1.SelectMainPoolRequest{
+				PoolName:           poolName,
+				AutoImportExisting: true,
+			})
+			if err != nil {
+				return err
+			}
+			if rootOpts.JSONOutput {
+				return rootOpts.printJSON(resp)
+			}
+
+			fmt.Fprintf(rootOpts.Out, "Successfully configured %q as Main Storage Pool!\n", resp.GetMainPool())
+			fmt.Fprintf(rootOpts.Out, "System Dataset : %s\n", resp.GetSystemDataset())
+			fmt.Fprintf(rootOpts.Out, "Mountpoint     : %s\n", resp.GetSystemMountpoint())
+			fmt.Fprintf(rootOpts.Out, "Enabled Modules: %s\n", strings.Join(resp.GetEnabledModules(), ", "))
+			return nil
+		},
+	}
+
+	discoverCmd := &cobra.Command{
+		Use:   "discover",
+		Short: "Scan and discover ZFS pools with existing NAS system configurations",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			resp, err := client.DiscoverPools(cmd.Context(), &nasv1.DiscoverPoolsRequest{})
+			if err != nil {
+				return err
+			}
+			if rootOpts.JSONOutput {
+				return rootOpts.printJSON(resp)
+			}
+
+			tw := tabwriter.NewWriter(rootOpts.Out, 0, 4, 2, ' ', 0)
+			fmt.Fprintln(tw, "POOL NAME\tIMPORTED\tHAS .NAS-SYSTEM\tDATASET PATH\tMOUNTPOINT")
+			for _, p := range resp.GetPools() {
+				fmt.Fprintf(tw, "%s\t%v\t%v\t%s\t%s\n",
+					p.GetPoolName(), p.GetIsImported(), p.GetHasNasSystem(), p.GetDatasetPath(), p.GetMountpoint())
+			}
+			return tw.Flush()
+		},
+	}
+
+	cmd.AddCommand(statusCmd, selectPoolCmd, discoverCmd)
+	return cmd
+}
+
 func ensurePrefix(val, prefix string) string {
 	if strings.HasPrefix(val, prefix) {
 		return val

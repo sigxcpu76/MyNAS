@@ -214,6 +214,7 @@ type SystemChecker struct {
 	mu             sync.RWMutex
 	hybridFallback bool
 	flavor         domain.LinuxFlavor
+	mainPool       string
 	cached         []domain.Prerequisite
 	moduleSpecMap  map[string][]string
 }
@@ -233,6 +234,18 @@ func NewSystemChecker(hybridFallback bool) *SystemChecker {
 	return c
 }
 
+func (c *SystemChecker) SetMainPool(pool string) {
+	c.mu.Lock()
+	c.mainPool = strings.TrimSpace(pool)
+	c.mu.Unlock()
+}
+
+func (c *SystemChecker) GetMainPool() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.mainPool
+}
+
 func (c *SystemChecker) GetLinuxFlavor() domain.LinuxFlavor {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -240,10 +253,18 @@ func (c *SystemChecker) GetLinuxFlavor() domain.LinuxFlavor {
 }
 
 // IsModuleEnabled returns true if all required underlying binaries and libraries for the module
-// ("zfs", "kvm", "docker", "lxc", "cifs") are installed (or if hybrid fallback mode is active).
+// ("zfs", "kvm", "docker", "lxc", "cifs") are installed (or if hybrid fallback mode is active),
+// and verifies that a main ZFS storage pool has been selected for modules other than zfs.
 func (c *SystemChecker) IsModuleEnabled(module string) (bool, string) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+
+	// Gating: Only ZFS and basic storage telemetry are allowed until a main pool is selected
+	if module != "zfs" && module != "storage" {
+		if c.mainPool == "" {
+			return false, fmt.Sprintf("module %q is paused: no main ZFS pool selected. Please select a main storage pool to initialize system datasets and enable this module", strings.ToUpper(module))
+		}
+	}
 
 	if c.hybridFallback {
 		return true, "hybrid fallback mode active"

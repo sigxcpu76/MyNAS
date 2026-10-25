@@ -15,6 +15,7 @@ import (
 	"github.com/sigxcpu/nas/internal/adapters/outbound/lxc"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/prereq"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/share"
+	"github.com/sigxcpu/nas/internal/adapters/outbound/system"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/zfs"
 	"github.com/sigxcpu/nas/internal/application"
 	"github.com/sigxcpu/nas/internal/cli"
@@ -31,8 +32,11 @@ func TestNasctlCobraSubcommands(t *testing.T) {
 
 	dockerAdapter := docker.NewAdapterFull("/nonexistent/docker.sock", t.TempDir(), true)
 	zfsAdapter := zfs.NewAdapter(true)
+	prereqChecker := prereq.NewSystemChecker(true)
+	sysAdapter := system.NewAdapter(zfsAdapter, prereqChecker, true)
 	srv := grpcadapter.NewServer(
-		application.NewPrerequisiteService(prereq.NewSystemChecker(true)),
+		application.NewSystemService(sysAdapter),
+		application.NewPrerequisiteService(prereqChecker),
 		application.NewDiskService(disk.NewAdapter(zfsAdapter, true)),
 		application.NewZfsService(zfsAdapter),
 		application.NewKvmService(kvm.NewAdapter(true)),
@@ -56,6 +60,9 @@ func TestNasctlCobraSubcommands(t *testing.T) {
 		args     []string
 		contains string
 	}{
+		{[]string{"-s", addr, "system", "status"}, "SYSTEM CONFIGURATION & POOL STATUS"},
+		{[]string{"-s", addr, "system", "select-pool", "tank"}, "Successfully configured \"tank\" as Main Storage Pool"},
+		{[]string{"-s", addr, "system", "discover"}, "POOL NAME"},
 		{[]string{"-s", addr, "prereq", "list"}, "prerequisites/zpool"},
 		{[]string{"-s", addr, "prereq", "check"}, "PREREQUISITES STATUS REPORT"},
 		{[]string{"-s", addr, "prereq", "report"}, "PAGE 1: MISSING PREREQUISITES"},

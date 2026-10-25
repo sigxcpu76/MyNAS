@@ -18,6 +18,7 @@ import (
 type RootOptions struct {
 	ServerAddr string
 	LogLevel   string
+	ConfigFile string
 	JSONOutput bool
 	Logger     *slog.Logger
 	Out        io.Writer
@@ -28,6 +29,7 @@ func NewRootCmd() *cobra.Command {
 	opts := &RootOptions{
 		ServerAddr: "127.0.0.1:9090",
 		LogLevel:   "info",
+		ConfigFile: "",
 		Out:        os.Stdout,
 		ErrOut:     os.Stderr,
 	}
@@ -51,10 +53,12 @@ and Linux system users/groups.`,
 
 	rootCmd.PersistentFlags().StringVarP(&opts.ServerAddr, "server", "s", opts.ServerAddr, "gRPC API server address (host:port) for CLI client commands")
 	rootCmd.PersistentFlags().StringVar(&opts.LogLevel, "log-level", opts.LogLevel, "Log level (debug, info, warn, error)")
+	rootCmd.PersistentFlags().StringVarP(&opts.ConfigFile, "config", "c", opts.ConfigFile, "Path to config.yaml configuration file")
 	rootCmd.PersistentFlags().BoolVar(&opts.JSONOutput, "json", false, "Output CLI responses as JSON")
 
 	rootCmd.AddCommand(
 		newStartCmd(opts),
+		newSystemCmd(opts),
 		newPrereqCmd(opts),
 		newDiskCmd(opts),
 		newZfsCmd(opts),

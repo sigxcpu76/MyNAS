@@ -17,6 +17,14 @@ func NewPrerequisiteService(checker ports.PrerequisiteCheckerPort) *Prerequisite
 	return &PrerequisiteService{checker: checker}
 }
 
+func (s *PrerequisiteService) SetMainPool(pool string) {
+	s.checker.SetMainPool(pool)
+}
+
+func (s *PrerequisiteService) GetMainPool() string {
+	return s.checker.GetMainPool()
+}
+
 func (s *PrerequisiteService) IsModuleEnabled(module string) (bool, string) {
 	return s.checker.IsModuleEnabled(module)
 }

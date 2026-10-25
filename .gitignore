@@ -30,6 +30,7 @@ web/dist/*
 .env
 .env.*
 !.env.example
+config.yaml
 tmp/
 *.log
 *.pid

@@ -9,6 +9,7 @@ import type {
   CifsShare,
   DirectoryList,
   Disk,
+  DiscoveredPool,
   DockerApp,
   DockerConfig,
   DockerContainer,
@@ -16,6 +17,7 @@ import type {
   LxcContainer,
   Prerequisite,
   PrerequisiteSummary,
+  SystemConfig,
   User,
   VirtualMachine,
   VirtualMachineConsoleSession,
@@ -32,6 +34,13 @@ export interface AuthPort {
   logout(): void;
   getToken(): string | null;
   setToken(token: string | null): void;
+}
+
+export interface SystemPort {
+  getSystemConfig(): Promise<SystemConfig>;
+  updateSystemConfig(config: Partial<SystemConfig>): Promise<SystemConfig>;
+  selectMainPool(poolName: string, autoImportExisting?: boolean): Promise<SystemConfig>;
+  discoverPools(): Promise<DiscoveredPool[]>;
 }
 
 export interface PrerequisitePort {

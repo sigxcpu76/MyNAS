@@ -20,6 +20,14 @@ type PrerequisiteCheckerPort interface {
 	GetLinuxFlavor() domain.LinuxFlavor
 	IsModuleEnabled(module string) (bool, string)
 	HasHostPrerequisites(module string) bool
+	SetMainPool(pool string)
+	GetMainPool() string
+}
+
+type SystemPort interface {
+	GetConfig(ctx context.Context) (*domain.SystemConfig, error)
+	SelectMainPool(ctx context.Context, poolName string, autoImportExisting bool) (*domain.SystemConfig, error)
+	DiscoverPools(ctx context.Context) ([]domain.DiscoveredPool, error)
 }
 
 type DiskPort interface {

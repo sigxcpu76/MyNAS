@@ -14,6 +14,7 @@ import type {
   Group,
   LxcContainer,
   Prerequisite,
+  SystemConfig,
   User,
   VirtualMachine,
   WebdavShare,
@@ -67,6 +68,7 @@ export const nasState = reactive({
   lastRefreshed: '',
   liveSyncActive: false,
 
+  systemConfig: null as SystemConfig | null,
   prerequisites: [] as Prerequisite[],
   disks: [] as Disk[],
   pools: [] as ZfsPool[],
@@ -90,6 +92,30 @@ export const nasState = reactive({
 });
 
 export function getModuleAvailability(module: ManagedModule): ModuleStatus {
+  // Gating: Only ZFS is enabled until a main pool is selected
+  if (module !== 'zfs') {
+    if (!nasState.systemConfig?.mainPool) {
+      return {
+        enabled: false,
+        missing: [
+          {
+            name: 'system/main-pool',
+            displayName: 'Main ZFS Storage Pool (.nas-system)',
+            category: 'STORAGE',
+            kind: 'DAEMON',
+            binaryOrPath: 'zpool',
+            status: 'MISSING',
+            version: 'unconfigured',
+            details: 'A main ZFS storage pool must be designated to host system configuration and enable non-ZFS services',
+            installHint: 'Select or create a ZFS pool in the Storage tab to initialize the system dataset',
+            requiredBy: [module.toUpperCase()],
+            fallbackMode: false,
+          },
+        ],
+      };
+    }
+  }
+
   if (nasState.prerequisites.length === 0) {
     return { enabled: true, missing: [] };
   }
@@ -130,7 +156,11 @@ export async function refreshZfsSubresources(poolName: string): Promise<void> {
 export async function refreshAllData(): Promise<void> {
   nasState.loading = true;
   try {
-    const prereqs = await services.prerequisites.listPrerequisites().catch(() => []);
+    const [sysCfg, prereqs] = await Promise.all([
+      services.system.getSystemConfig().catch(() => null),
+      services.prerequisites.listPrerequisites().catch(() => []),
+    ]);
+    nasState.systemConfig = sysCfg;
     nasState.prerequisites = prereqs;
 
     const zfsOk = getModuleAvailability('zfs').enabled;

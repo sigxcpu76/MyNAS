@@ -21,8 +21,10 @@ import (
 	"github.com/sigxcpu/nas/internal/adapters/outbound/lxc"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/prereq"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/share"
+	"github.com/sigxcpu/nas/internal/adapters/outbound/system"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/zfs"
 	"github.com/sigxcpu/nas/internal/application"
+	"github.com/sigxcpu/nas/internal/config"
 	"github.com/sigxcpu/nas/internal/domain"
 	nasv1 "github.com/sigxcpu/nas/internal/gen/nas/v1"
 	"github.com/sigxcpu/nas/internal/logging"
@@ -87,10 +89,70 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 		}
 	}()
 
-	// 1. Outbound Prerequisite Checker & Module Availability Evaluation
-	prereqAdapter := prereq.NewSystemChecker(opts.HybridMode)
+	// 0. Load Configuration via spf13/viper from config.yaml
+	cfg, cfgPath, err := config.Load(rootOpts.ConfigFile)
+	if err != nil {
+		logger.Warn("could not load configuration file, falling back to defaults", "error", err)
+		cfg = config.DefaultConfig()
+	} else {
+		logger.Info("loaded configuration from viper config.yaml", "path", cfgPath)
+	}
 
+	// Override with CLI flags if explicitly provided
+	if opts.HTTPAddr != ":8080" || cfg.Server.HTTPAddr == "" {
+		cfg.Server.HTTPAddr = opts.HTTPAddr
+	}
+	if opts.GRPCAddr != ":9090" || cfg.Server.GRPCAddr == "" {
+		cfg.Server.GRPCAddr = opts.GRPCAddr
+	}
+	if opts.HybridMode {
+		cfg.Server.HybridMode = true
+	}
+	if opts.StateDir != "/tmp/nas-state" && opts.StateDir != "" {
+		cfg.Server.StateDir = opts.StateDir
+	}
+	if opts.JWTSecret != "nas-production-secret-2026" && opts.JWTSecret != "" {
+		cfg.Server.JWTSecret = opts.JWTSecret
+	}
+
+	// 1. Outbound Prerequisite Checker & ZFS Engine
+	prereqAdapter := prereq.NewSystemChecker(cfg.Server.HybridMode)
 	zfsHasHost := prereqAdapter.HasHostPrerequisites("zfs")
+	zfsHybrid := !zfsHasHost
+	zfsAdapter := zfs.NewAdapter(zfsHybrid)
+
+	// 1b. Outbound System Adapter for Main Pool & Dataset Configuration
+	systemAdapter := system.NewAdapter(zfsAdapter, prereqAdapter, zfsHybrid)
+	systemSvc := application.NewSystemService(systemAdapter)
+
+	// Auto-Discovery on Reinstall / Boot:
+	// If main pool is not selected, scan imported pools for existing .nas-system
+	if cfg.System.MainPool == "" && cfg.System.AutoDiscover {
+		if discovered, discErr := systemAdapter.DiscoverPools(ctx); discErr == nil {
+			for _, dp := range discovered {
+				if dp.IsImported && dp.HasNasSystem {
+					logger.Info("auto-discovering existing NAS system dataset on imported pool", "pool", dp.PoolName, "dataset", dp.DatasetPath)
+					if _, selErr := systemAdapter.SelectMainPool(ctx, dp.PoolName, true); selErr == nil {
+						logger.Info("re-discovered and restored NAS configuration from imported pool", "main_pool", dp.PoolName)
+						break
+					}
+				}
+			}
+		}
+	}
+
+	// Resolve State Storage Location:
+	// If a main pool is selected, use its persistent .nas-system dataset; otherwise fallback to stateDir
+	activeMainPool := prereqAdapter.GetMainPool()
+	stateDir := resolveStateDir(cfg.Server.StateDir)
+	if activeMainPool != "" {
+		poolSysDir := filepath.Join("/" + activeMainPool, cfg.System.SystemDataset)
+		if info, sErr := os.Stat(poolSysDir); sErr == nil && info.IsDir() {
+			stateDir = poolSysDir
+			logger.Info("using persistent ZFS system dataset for all unit state stores", "path", stateDir, "main_pool", activeMainPool)
+		}
+	}
+
 	kvmHasHost := prereqAdapter.HasHostPrerequisites("kvm")
 	dockerHasHost := prereqAdapter.HasHostPrerequisites("docker")
 	lxcHasHost := prereqAdapter.HasHostPrerequisites("lxc")
@@ -121,12 +183,11 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 			}
 			logger.Info("module enabled", "module", mod.name, "mode", mode, "details", mod.reason)
 		} else {
-			logger.Warn("module disabled due to missing prerequisites", "module", mod.name, "details", mod.reason)
+			logger.Warn("module disabled or paused", "module", mod.name, "details", mod.reason)
 		}
 	}
 
-	// 1b. Initialize Filesystem State Database for Units (Docker Compose, LXC, KVM, CIFS)
-	stateDir := resolveStateDir(opts.StateDir)
+	// 1c. Initialize Filesystem State Database for Units (Docker Compose, LXC, KVM, CIFS)
 	dockerUnitsDir := filepath.Join(stateDir, "docker")
 	lxcUnitsDir := filepath.Join(stateDir, "lxc")
 	vmUnitsDir := filepath.Join(stateDir, "vm")
@@ -139,13 +200,11 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	logger.Info("filesystem unit state store initialized", "path", stateDir)
 
 	// An adapter runs in hybrid/simulation mode ONLY when host prerequisites are missing
-	zfsHybrid := !zfsHasHost
 	kvmHybrid := !kvmHasHost
 	dockerHybrid := !dockerHasHost
 	lxcHybrid := !lxcHasHost
 	cifsHybrid := !cifsHasHost
 
-	zfsAdapter := zfs.NewAdapter(zfsHybrid)
 	kvmAdapter := kvm.NewAdapterWithStateDir(kvmHybrid, vmUnitsDir)
 	kvmAdapter.SetLogger(logger.With("subsystem", "libvirt"))
 	dockerAdapter := docker.NewAdapterWithStateDir(dockerHybrid, dockerUnitsDir)
@@ -183,7 +242,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	catalogSvc := application.NewCatalogService(catalogAdapter)
 
 	// 3. Inbound Adapters (Driving Ports: gRPC + gRPC-Gateway + noVNC WS + WebDAV + Embedded Vue UI + SSE Events)
-	nasGRPC := grpcadapter.NewServer(prereqSvc, diskSvc, zfsSvc, kvmSvc, dockerSvc, dockerAppSvc, lxcSvc, shareSvc, identitySvc, catalogSvc)
+	nasGRPC := grpcadapter.NewServer(systemSvc, prereqSvc, diskSvc, zfsSvc, kvmSvc, dockerSvc, dockerAppSvc, lxcSvc, shareSvc, identitySvc, catalogSvc)
 
 	rawGRPCServer := grpc.NewServer(
 		grpc.UnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {

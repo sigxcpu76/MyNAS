@@ -60,6 +60,31 @@ export interface PrerequisiteSummary {
 }
 
 // ---------------------------------------------------------------------------
+// System Configuration & Main Pool Lifecycle (`systemConfig`)
+// ---------------------------------------------------------------------------
+
+export interface DiscoveredPool {
+  poolName: string;
+  hasNasSystem: boolean;
+  configVersion: string;
+  lastModified: string;
+  isImported: boolean;
+  datasetPath: string;
+  mountpoint: string;
+}
+
+export interface SystemConfig {
+  mainPool: string;
+  systemDataset: string;
+  systemMountpoint: string;
+  isInitialized: boolean;
+  enabledModules: string[];
+  configFilePath: string;
+  autoDiscover: boolean;
+  discoveredPools: DiscoveredPool[];
+}
+
+// ---------------------------------------------------------------------------
 // Physical Disks & Storage Hardware (`disks/{disk}`)
 // ---------------------------------------------------------------------------
 

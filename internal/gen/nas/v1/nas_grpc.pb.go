@@ -22,6 +22,10 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	NasService_Login_FullMethodName                          = "/nas.v1.NasService/Login"
 	NasService_GetCurrentUser_FullMethodName                 = "/nas.v1.NasService/GetCurrentUser"
+	NasService_GetSystemConfig_FullMethodName                = "/nas.v1.NasService/GetSystemConfig"
+	NasService_UpdateSystemConfig_FullMethodName             = "/nas.v1.NasService/UpdateSystemConfig"
+	NasService_SelectMainPool_FullMethodName                 = "/nas.v1.NasService/SelectMainPool"
+	NasService_DiscoverPools_FullMethodName                  = "/nas.v1.NasService/DiscoverPools"
 	NasService_ListPrerequisites_FullMethodName              = "/nas.v1.NasService/ListPrerequisites"
 	NasService_GetPrerequisite_FullMethodName                = "/nas.v1.NasService/GetPrerequisite"
 	NasService_CheckPrerequisites_FullMethodName             = "/nas.v1.NasService/CheckPrerequisites"
@@ -130,6 +134,10 @@ type NasServiceClient interface {
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
 	// GetCurrentUser returns the currently authenticated user profile.
 	GetCurrentUser(ctx context.Context, in *GetCurrentUserRequest, opts ...grpc.CallOption) (*User, error)
+	GetSystemConfig(ctx context.Context, in *GetSystemConfigRequest, opts ...grpc.CallOption) (*SystemConfig, error)
+	UpdateSystemConfig(ctx context.Context, in *UpdateSystemConfigRequest, opts ...grpc.CallOption) (*SystemConfig, error)
+	SelectMainPool(ctx context.Context, in *SelectMainPoolRequest, opts ...grpc.CallOption) (*SystemConfig, error)
+	DiscoverPools(ctx context.Context, in *DiscoverPoolsRequest, opts ...grpc.CallOption) (*DiscoverPoolsResponse, error)
 	ListPrerequisites(ctx context.Context, in *ListPrerequisitesRequest, opts ...grpc.CallOption) (*ListPrerequisitesResponse, error)
 	GetPrerequisite(ctx context.Context, in *GetPrerequisiteRequest, opts ...grpc.CallOption) (*Prerequisite, error)
 	CheckPrerequisites(ctx context.Context, in *CheckPrerequisitesRequest, opts ...grpc.CallOption) (*CheckPrerequisitesResponse, error)
@@ -248,6 +256,46 @@ func (c *nasServiceClient) GetCurrentUser(ctx context.Context, in *GetCurrentUse
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(User)
 	err := c.cc.Invoke(ctx, NasService_GetCurrentUser_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) GetSystemConfig(ctx context.Context, in *GetSystemConfigRequest, opts ...grpc.CallOption) (*SystemConfig, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SystemConfig)
+	err := c.cc.Invoke(ctx, NasService_GetSystemConfig_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) UpdateSystemConfig(ctx context.Context, in *UpdateSystemConfigRequest, opts ...grpc.CallOption) (*SystemConfig, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SystemConfig)
+	err := c.cc.Invoke(ctx, NasService_UpdateSystemConfig_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) SelectMainPool(ctx context.Context, in *SelectMainPoolRequest, opts ...grpc.CallOption) (*SystemConfig, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SystemConfig)
+	err := c.cc.Invoke(ctx, NasService_SelectMainPool_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) DiscoverPools(ctx context.Context, in *DiscoverPoolsRequest, opts ...grpc.CallOption) (*DiscoverPoolsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DiscoverPoolsResponse)
+	err := c.cc.Invoke(ctx, NasService_DiscoverPools_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1206,6 +1254,10 @@ type NasServiceServer interface {
 	Login(context.Context, *LoginRequest) (*LoginResponse, error)
 	// GetCurrentUser returns the currently authenticated user profile.
 	GetCurrentUser(context.Context, *GetCurrentUserRequest) (*User, error)
+	GetSystemConfig(context.Context, *GetSystemConfigRequest) (*SystemConfig, error)
+	UpdateSystemConfig(context.Context, *UpdateSystemConfigRequest) (*SystemConfig, error)
+	SelectMainPool(context.Context, *SelectMainPoolRequest) (*SystemConfig, error)
+	DiscoverPools(context.Context, *DiscoverPoolsRequest) (*DiscoverPoolsResponse, error)
 	ListPrerequisites(context.Context, *ListPrerequisitesRequest) (*ListPrerequisitesResponse, error)
 	GetPrerequisite(context.Context, *GetPrerequisiteRequest) (*Prerequisite, error)
 	CheckPrerequisites(context.Context, *CheckPrerequisitesRequest) (*CheckPrerequisitesResponse, error)
@@ -1315,6 +1367,18 @@ func (UnimplementedNasServiceServer) Login(context.Context, *LoginRequest) (*Log
 }
 func (UnimplementedNasServiceServer) GetCurrentUser(context.Context, *GetCurrentUserRequest) (*User, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCurrentUser not implemented")
+}
+func (UnimplementedNasServiceServer) GetSystemConfig(context.Context, *GetSystemConfigRequest) (*SystemConfig, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSystemConfig not implemented")
+}
+func (UnimplementedNasServiceServer) UpdateSystemConfig(context.Context, *UpdateSystemConfigRequest) (*SystemConfig, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateSystemConfig not implemented")
+}
+func (UnimplementedNasServiceServer) SelectMainPool(context.Context, *SelectMainPoolRequest) (*SystemConfig, error) {
+	return nil, status.Error(codes.Unimplemented, "method SelectMainPool not implemented")
+}
+func (UnimplementedNasServiceServer) DiscoverPools(context.Context, *DiscoverPoolsRequest) (*DiscoverPoolsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DiscoverPools not implemented")
 }
 func (UnimplementedNasServiceServer) ListPrerequisites(context.Context, *ListPrerequisitesRequest) (*ListPrerequisitesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListPrerequisites not implemented")
@@ -1651,6 +1715,78 @@ func _NasService_GetCurrentUser_Handler(srv interface{}, ctx context.Context, de
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NasServiceServer).GetCurrentUser(ctx, req.(*GetCurrentUserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_GetSystemConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSystemConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).GetSystemConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_GetSystemConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).GetSystemConfig(ctx, req.(*GetSystemConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_UpdateSystemConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateSystemConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).UpdateSystemConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_UpdateSystemConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).UpdateSystemConfig(ctx, req.(*UpdateSystemConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_SelectMainPool_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SelectMainPoolRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).SelectMainPool(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_SelectMainPool_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).SelectMainPool(ctx, req.(*SelectMainPoolRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_DiscoverPools_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DiscoverPoolsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).DiscoverPools(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_DiscoverPools_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).DiscoverPools(ctx, req.(*DiscoverPoolsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -3361,6 +3497,22 @@ var NasService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetCurrentUser",
 			Handler:    _NasService_GetCurrentUser_Handler,
+		},
+		{
+			MethodName: "GetSystemConfig",
+			Handler:    _NasService_GetSystemConfig_Handler,
+		},
+		{
+			MethodName: "UpdateSystemConfig",
+			Handler:    _NasService_UpdateSystemConfig_Handler,
+		},
+		{
+			MethodName: "SelectMainPool",
+			Handler:    _NasService_SelectMainPool_Handler,
+		},
+		{
+			MethodName: "DiscoverPools",
+			Handler:    _NasService_DiscoverPools_Handler,
 		},
 		{
 			MethodName: "ListPrerequisites",

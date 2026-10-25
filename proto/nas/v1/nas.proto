@@ -36,6 +36,37 @@ service NasService {
   }
 
   // ---------------------------------------------------------------------------
+  // System Configuration & Main Storage Pool Management
+  // ---------------------------------------------------------------------------
+
+  rpc GetSystemConfig(GetSystemConfigRequest) returns (SystemConfig) {
+    option (google.api.http) = {
+      get: "/v1/systemConfig"
+    };
+  }
+
+  rpc UpdateSystemConfig(UpdateSystemConfigRequest) returns (SystemConfig) {
+    option (google.api.http) = {
+      patch: "/v1/systemConfig"
+      body: "system_config"
+    };
+    option (google.api.method_signature) = "system_config,update_mask";
+  }
+
+  rpc SelectMainPool(SelectMainPoolRequest) returns (SystemConfig) {
+    option (google.api.http) = {
+      post: "/v1/systemConfig:selectMainPool"
+      body: "*"
+    };
+  }
+
+  rpc DiscoverPools(DiscoverPoolsRequest) returns (DiscoverPoolsResponse) {
+    option (google.api.http) = {
+      get: "/v1/systemConfig:discoverPools"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // Prerequisites (AIP-131 Get, AIP-132 List, AIP-136 Custom :check)
   // ---------------------------------------------------------------------------
 
@@ -2114,5 +2145,48 @@ message SyncCatalogResponse {
   string message = 2;
   int32 total_apps = 3;
   string last_sync_time = 4;
+}
+
+// =============================================================================
+// System Configuration & Main Pool Messages
+// =============================================================================
+
+message DiscoveredPool {
+  string pool_name = 1;
+  bool has_nas_system = 2;
+  string config_version = 3;
+  string last_modified = 4;
+  bool is_imported = 5;
+  string dataset_path = 6;
+  string mountpoint = 7;
+}
+
+message SystemConfig {
+  string main_pool = 1;
+  string system_dataset = 2;
+  string system_mountpoint = 3;
+  bool is_initialized = 4;
+  repeated string enabled_modules = 5;
+  string config_file_path = 6;
+  bool auto_discover = 7;
+  repeated DiscoveredPool discovered_pools = 8;
+}
+
+message GetSystemConfigRequest {}
+
+message UpdateSystemConfigRequest {
+  SystemConfig system_config = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message SelectMainPoolRequest {
+  string pool_name = 1 [(google.api.field_behavior) = REQUIRED];
+  bool auto_import_existing = 2;
+}
+
+message DiscoverPoolsRequest {}
+
+message DiscoverPoolsResponse {
+  repeated DiscoveredPool pools = 1;
 }
 

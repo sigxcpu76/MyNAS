@@ -38,6 +38,7 @@ const (
 
 type Server struct {
 	nasv1.UnimplementedNasServiceServer
+	system    *application.SystemService
 	prereq    *application.PrerequisiteService
 	disk      *application.DiskService
 	zfs       *application.ZfsService
@@ -51,6 +52,7 @@ type Server struct {
 }
 
 func NewServer(
+	system *application.SystemService,
 	prereq *application.PrerequisiteService,
 	disk *application.DiskService,
 	zfs *application.ZfsService,
@@ -63,6 +65,7 @@ func NewServer(
 	catalog *application.CatalogService,
 ) *Server {
 	return &Server{
+		system:    system,
 		prereq:    prereq,
 		disk:      disk,
 		zfs:       zfs,
@@ -105,6 +108,66 @@ func (s *Server) GetCurrentUser(ctx context.Context, req *nasv1.GetCurrentUserRe
 		}
 	}
 	return nil, ToGRPCError(domain.ErrUnauthorized)
+}
+
+// =============================================================================
+// System Configuration & Main Pool Management
+// =============================================================================
+
+func (s *Server) GetSystemConfig(ctx context.Context, req *nasv1.GetSystemConfigRequest) (*nasv1.SystemConfig, error) {
+	if s.system == nil {
+		return &nasv1.SystemConfig{}, nil
+	}
+	cfg, err := s.system.GetConfig(ctx)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoSystemConfig(cfg), nil
+}
+
+func (s *Server) UpdateSystemConfig(ctx context.Context, req *nasv1.UpdateSystemConfigRequest) (*nasv1.SystemConfig, error) {
+	if s.system == nil {
+		return &nasv1.SystemConfig{}, nil
+	}
+	pool := req.GetSystemConfig().GetMainPool()
+	if pool != "" {
+		cfg, err := s.system.SelectMainPool(ctx, pool, true)
+		if err != nil {
+			return nil, ToGRPCError(err)
+		}
+		return toProtoSystemConfig(cfg), nil
+	}
+	cfg, err := s.system.GetConfig(ctx)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoSystemConfig(cfg), nil
+}
+
+func (s *Server) SelectMainPool(ctx context.Context, req *nasv1.SelectMainPoolRequest) (*nasv1.SystemConfig, error) {
+	if s.system == nil {
+		return nil, status.Errorf(codes.Unimplemented, "system service not configured")
+	}
+	cfg, err := s.system.SelectMainPool(ctx, req.GetPoolName(), req.GetAutoImportExisting())
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoSystemConfig(cfg), nil
+}
+
+func (s *Server) DiscoverPools(ctx context.Context, req *nasv1.DiscoverPoolsRequest) (*nasv1.DiscoverPoolsResponse, error) {
+	if s.system == nil {
+		return &nasv1.DiscoverPoolsResponse{}, nil
+	}
+	pools, err := s.system.DiscoverPools(ctx)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	var out []*nasv1.DiscoveredPool
+	for _, p := range pools {
+		out = append(out, toProtoDiscoveredPool(p))
+	}
+	return &nasv1.DiscoverPoolsResponse{Pools: out}, nil
 }
 
 // =============================================================================
@@ -2125,6 +2188,38 @@ func (s *Server) DeleteGroup(ctx context.Context, req *nasv1.DeleteGroupRequest)
 // =============================================================================
 // Domain -> Protobuf Mappers (using go.einride.tech/aip/resourcename.Sprint)
 // =============================================================================
+
+func toProtoSystemConfig(c *domain.SystemConfig) *nasv1.SystemConfig {
+	if c == nil {
+		return &nasv1.SystemConfig{}
+	}
+	var pools []*nasv1.DiscoveredPool
+	for _, p := range c.DiscoveredPools {
+		pools = append(pools, toProtoDiscoveredPool(p))
+	}
+	return &nasv1.SystemConfig{
+		MainPool:         c.MainPool,
+		SystemDataset:    c.SystemDataset,
+		SystemMountpoint: c.SystemMountpoint,
+		IsInitialized:    c.IsInitialized,
+		EnabledModules:   c.EnabledModules,
+		ConfigFilePath:   c.ConfigFilePath,
+		AutoDiscover:     c.AutoDiscover,
+		DiscoveredPools:  pools,
+	}
+}
+
+func toProtoDiscoveredPool(p domain.DiscoveredPool) *nasv1.DiscoveredPool {
+	return &nasv1.DiscoveredPool{
+		PoolName:      p.PoolName,
+		HasNasSystem:  p.HasNasSystem,
+		ConfigVersion: p.ConfigVersion,
+		LastModified:  p.LastModified,
+		IsImported:    p.IsImported,
+		DatasetPath:   p.DatasetPath,
+		Mountpoint:    p.Mountpoint,
+	}
+}
 
 func toProtoLinuxFlavor(f domain.LinuxFlavor) *nasv1.LinuxFlavor {
 	return &nasv1.LinuxFlavor{

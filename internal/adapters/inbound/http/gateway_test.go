@@ -21,6 +21,7 @@ import (
 	"github.com/sigxcpu/nas/internal/adapters/outbound/lxc"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/prereq"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/share"
+	"github.com/sigxcpu/nas/internal/adapters/outbound/system"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/zfs"
 	"github.com/sigxcpu/nas/internal/application"
 	"golang.org/x/net/websocket"
@@ -30,8 +31,11 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	ctx := context.Background()
 
-	prereqSvc := application.NewPrerequisiteService(prereq.NewSystemChecker(true))
+	prereqChecker := prereq.NewSystemChecker(true)
+	prereqChecker.SetMainPool("tank")
+	prereqSvc := application.NewPrerequisiteService(prereqChecker)
 	zfsAdapter := zfs.NewAdapter(true)
+	systemSvc := application.NewSystemService(system.NewAdapter(zfsAdapter, prereqChecker, true))
 	zfsSvc := application.NewZfsService(zfsAdapter)
 	diskSvc := application.NewDiskService(disk.NewAdapter(zfsAdapter, true))
 	kvmSvc := application.NewKvmService(kvm.NewAdapter(true))
@@ -44,7 +48,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	identitySvc := application.NewIdentityService(identity.NewAdapter(true), "test-jwt-secret")
 	catalogSvc := application.NewCatalogService(catalog.NewAdapter(t.TempDir()))
 
-	grpcSrv := grpcadapter.NewServer(prereqSvc, diskSvc, zfsSvc, kvmSvc, dockerSvc, dockerAppSvc, lxcSvc, shareSvc, identitySvc, catalogSvc)
+	grpcSrv := grpcadapter.NewServer(systemSvc, prereqSvc, diskSvc, zfsSvc, kvmSvc, dockerSvc, dockerAppSvc, lxcSvc, shareSvc, identitySvc, catalogSvc)
 	uiFS, err := nas.WebUIFS()
 	if err != nil {
 		t.Fatalf("failed to load embedded UI FS: %v", err)

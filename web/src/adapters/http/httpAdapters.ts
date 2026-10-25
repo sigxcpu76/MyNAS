@@ -12,6 +12,7 @@ import type {
   DirectoryList,
   Disk,
   DiskPartition,
+  DiscoveredPool,
   DockerApp,
   DockerAppContainer,
   DockerConfig,
@@ -22,6 +23,7 @@ import type {
   Prerequisite,
   PrerequisiteSummary,
   SmartParameter,
+  SystemConfig,
   User,
   VirtualMachine,
   VirtualMachineCloudInit,
@@ -46,6 +48,7 @@ import type {
   LxcPort,
   PrerequisitePort,
   SharePort,
+  SystemPort,
   ZfsPort,
 } from '../../ports/outbound';
 import { AipClient, normalizeInt64 } from './aipClient';
@@ -135,6 +138,34 @@ export function mapLinuxFlavor(raw: any): LinuxFlavor | undefined {
     versionId: raw.versionId ?? raw.version_id ?? '',
     packageManager: raw.packageManager ?? raw.package_manager ?? '',
     installCommandTemplate: raw.installCommandTemplate ?? raw.install_command_template ?? '',
+  };
+}
+
+export function mapDiscoveredPool(raw: any): DiscoveredPool {
+  return {
+    poolName: raw?.poolName ?? raw?.pool_name ?? '',
+    hasNasSystem: Boolean(raw?.hasNasSystem ?? raw?.has_nas_system ?? false),
+    configVersion: raw?.configVersion ?? raw?.config_version ?? '1.0',
+    lastModified: raw?.lastModified ?? raw?.last_modified ?? '',
+    isImported: Boolean(raw?.isImported ?? raw?.is_imported ?? true),
+    datasetPath: raw?.datasetPath ?? raw?.dataset_path ?? '',
+    mountpoint: raw?.mountpoint ?? '',
+  };
+}
+
+export function mapSystemConfig(raw: any): SystemConfig {
+  const pools = (raw?.discoveredPools ?? raw?.discovered_pools ?? []).map(mapDiscoveredPool);
+  return {
+    mainPool: raw?.mainPool ?? raw?.main_pool ?? '',
+    systemDataset: raw?.systemDataset ?? raw?.system_dataset ?? '',
+    systemMountpoint: raw?.systemMountpoint ?? raw?.system_mountpoint ?? '',
+    isInitialized: Boolean(raw?.isInitialized ?? raw?.is_initialized ?? false),
+    enabledModules: Array.isArray(raw?.enabledModules ?? raw?.enabled_modules)
+      ? (raw.enabledModules ?? raw.enabled_modules)
+      : ['zfs'],
+    configFilePath: raw?.configFilePath ?? raw?.config_file_path ?? '',
+    autoDiscover: Boolean(raw?.autoDiscover ?? raw?.auto_discover ?? true),
+    discoveredPools: pools,
   };
 }
 
@@ -590,6 +621,37 @@ export class HttpAuthAdapter implements AuthPort {
 
   setToken(token: string | null): void {
     this.client.setToken(token);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 1b. HttpSystemAdapter
+// ---------------------------------------------------------------------------
+
+export class HttpSystemAdapter implements SystemPort {
+  constructor(private readonly client: AipClient) {}
+
+  async getSystemConfig(): Promise<SystemConfig> {
+    const raw = await this.client.get<any>('systemConfig');
+    return mapSystemConfig(raw);
+  }
+
+  async updateSystemConfig(config: Partial<SystemConfig>): Promise<SystemConfig> {
+    const raw = await this.client.patch<any>('systemConfig', { system_config: config });
+    return mapSystemConfig(raw);
+  }
+
+  async selectMainPool(poolName: string, autoImportExisting = true): Promise<SystemConfig> {
+    const raw = await this.client.customMethod<any>('systemConfig', 'selectMainPool', {
+      pool_name: poolName,
+      auto_import_existing: autoImportExisting,
+    });
+    return mapSystemConfig(raw);
+  }
+
+  async discoverPools(): Promise<DiscoveredPool[]> {
+    const raw = await this.client.customMethod<any>('systemConfig', 'discoverPools', {});
+    return (raw?.pools ?? []).map(mapDiscoveredPool);
   }
 }
 

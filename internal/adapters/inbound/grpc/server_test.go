@@ -13,6 +13,7 @@ import (
 	"github.com/sigxcpu/nas/internal/adapters/outbound/lxc"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/prereq"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/share"
+	"github.com/sigxcpu/nas/internal/adapters/outbound/system"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/zfs"
 	"github.com/sigxcpu/nas/internal/application"
 	nasv1 "github.com/sigxcpu/nas/internal/gen/nas/v1"
@@ -25,8 +26,11 @@ func TestAIPResourceNamesPaginationAndErrors(t *testing.T) {
 	ctx := context.Background()
 	dockerAdapter := docker.NewAdapter(true)
 	zfsAdapter := zfs.NewAdapter(true)
+	prereqChecker := prereq.NewSystemChecker(true)
+	sysAdapter := system.NewAdapter(zfsAdapter, prereqChecker, true)
 	srv := grpcadapter.NewServer(
-		application.NewPrerequisiteService(prereq.NewSystemChecker(true)),
+		application.NewSystemService(sysAdapter),
+		application.NewPrerequisiteService(prereqChecker),
 		application.NewDiskService(disk.NewAdapter(zfsAdapter, true)),
 		application.NewZfsService(zfsAdapter),
 		application.NewKvmService(kvm.NewAdapter(true)),
@@ -93,7 +97,9 @@ func TestModuleAvailabilityEnforcement(t *testing.T) {
 	checker := prereq.NewSystemChecker(false)
 	dockerAdapter := docker.NewAdapter(false)
 	zfsAdapter := zfs.NewAdapter(false)
+	sysAdapter := system.NewAdapter(zfsAdapter, checker, false)
 	srv := grpcadapter.NewServer(
+		application.NewSystemService(sysAdapter),
 		application.NewPrerequisiteService(checker),
 		application.NewDiskService(disk.NewAdapter(zfsAdapter, false)),
 		application.NewZfsService(zfsAdapter),
@@ -139,7 +145,9 @@ func TestDockerConfigAndFilesystemGRPC(t *testing.T) {
 	zfsAdapter := zfs.NewAdapter(true)
 	dockerAdapter.SetZfsPort(zfsAdapter)
 
+	sysAdapter := system.NewAdapter(zfsAdapter, checker, true)
 	srv := grpcadapter.NewServer(
+		application.NewSystemService(sysAdapter),
 		application.NewPrerequisiteService(checker),
 		application.NewDiskService(disk.NewAdapter(zfsAdapter, true)),
 		application.NewZfsService(zfsAdapter),
@@ -184,4 +192,76 @@ func TestDockerConfigAndFilesystemGRPC(t *testing.T) {
 	if len(fsRes.GetEntries()) == 0 {
 		t.Fatalf("expected entries in /tank, got 0")
 	}
+}
+
+func TestSystemConfigAndPoolSelection(t *testing.T) {
+	ctx := context.Background()
+	checker := prereq.NewSystemChecker(true)
+	checker.SetMainPool("") // unselect initially
+
+	zfsAdapter := zfs.NewAdapter(true)
+	sysAdapter := system.NewAdapter(zfsAdapter, checker, true)
+	srv := grpcadapter.NewServer(
+		application.NewSystemService(sysAdapter),
+		application.NewPrerequisiteService(checker),
+		application.NewDiskService(disk.NewAdapter(zfsAdapter, true)),
+		application.NewZfsService(zfsAdapter),
+		application.NewKvmService(kvm.NewAdapter(true)),
+		application.NewDockerService(docker.NewAdapter(true)),
+		application.NewDockerAppService(docker.NewAdapter(true)),
+		application.NewLxcService(lxc.NewAdapter(true)),
+		application.NewShareService(share.NewCifsAdapter(true, t.TempDir()), share.NewWebdavAdapter(true)),
+		application.NewIdentityService(identity.NewAdapter(true), "test-secret"),
+		application.NewCatalogService(catalog.NewAdapter(t.TempDir())),
+	)
+
+	// 1. Initial State: No main pool -> Only ZFS allowed
+	initialCfg, err := srv.GetSystemConfig(ctx, &nasv1.GetSystemConfigRequest{})
+	if err != nil {
+		t.Fatalf("GetSystemConfig failed: %v", err)
+	}
+	if initialCfg.GetMainPool() != "" {
+		t.Fatalf("expected empty initial main pool, got %q", initialCfg.GetMainPool())
+	}
+
+	zfsOk, _ := checker.IsModuleEnabled("zfs")
+	if !zfsOk {
+		t.Fatalf("expected ZFS to be enabled even without main pool")
+	}
+	kvmOk, kvmReason := checker.IsModuleEnabled("kvm")
+	if kvmOk {
+		t.Fatalf("expected KVM to be disabled when main pool is unconfigured")
+	}
+	t.Logf("KVM paused as expected: %s", kvmReason)
+
+	// 2. Select Main Pool "tank"
+	selResp, err := srv.SelectMainPool(ctx, &nasv1.SelectMainPoolRequest{
+		PoolName:           "tank",
+		AutoImportExisting: true,
+	})
+	if err != nil {
+		t.Fatalf("SelectMainPool failed: %v", err)
+	}
+	if selResp.GetMainPool() != "tank" {
+		t.Fatalf("expected main pool to be tank, got %q", selResp.GetMainPool())
+	}
+	if selResp.GetSystemDataset() != "tank/.nas-system" {
+		t.Fatalf("expected system dataset tank/.nas-system, got %q", selResp.GetSystemDataset())
+	}
+
+	// 3. After selection, KVM and Docker should now be enabled
+	kvmNowOk, _ := checker.IsModuleEnabled("kvm")
+	if !kvmNowOk {
+		t.Fatalf("expected KVM to become enabled after selecting main pool")
+	}
+
+	// 4. Discover Pools
+	discResp, err := srv.DiscoverPools(ctx, &nasv1.DiscoverPoolsRequest{})
+	if err != nil {
+		t.Fatalf("DiscoverPools failed: %v", err)
+	}
+	if len(discResp.GetPools()) == 0 {
+		t.Fatalf("expected discovered pools")
+	}
+	t.Logf("Discovered %d pools; main pool is %s", len(discResp.GetPools()), selResp.GetMainPool())
 }

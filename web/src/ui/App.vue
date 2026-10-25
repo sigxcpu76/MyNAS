@@ -2,6 +2,8 @@
 import { computed, onMounted, ref } from 'vue';
 import {
   mdiAccountGroup,
+  mdiAlertCircle,
+  mdiCheckCircle,
   mdiChevronDown,
   mdiChevronRight,
   mdiCubeOutline,
@@ -30,6 +32,7 @@ import {
 } from './store';
 import { navigateTo, getPathFromTab } from './router';
 import LoginModal from './components/LoginModal.vue';
+import SystemPoolModal from './components/SystemPoolModal.vue';
 import MdiIcon from './components/MdiIcon.vue';
 import OverviewView from './views/OverviewView.vue';
 import PrerequisitesView from './views/PrerequisitesView.vue';
@@ -44,6 +47,7 @@ import SharesView from './views/SharesView.vue';
 import IdentityView from './views/IdentityView.vue';
 
 const storageExpanded = ref(true);
+const showPoolModal = ref(false);
 
 const totalDatasetsCount = computed(() => {
   let count = 0;
@@ -360,6 +364,16 @@ onMounted(() => {
           <span v-if="nasState.lastRefreshed" class="card-subtitle mono">
             Synced {{ nasState.lastRefreshed }}
           </span>
+
+          <button
+            class="badge"
+            :class="nasState.systemConfig?.mainPool ? 'badge-success' : 'badge-warning'"
+            style="cursor: pointer; display: inline-flex; align-items: center; gap: 5px; border: none; padding: 4px 10px; font-weight: 600"
+            @click="showPoolModal = true"
+          >
+            <MdiIcon :path="nasState.systemConfig?.mainPool ? mdiDatabase : mdiAlertCircle" size="14" />
+            {{ nasState.systemConfig?.mainPool ? `Main Pool: ${nasState.systemConfig.mainPool}` : 'No Main Pool (Setup Required)' }}
+          </button>
         </div>
 
         <div style="display: flex; align-items: center; gap: 10px">
@@ -385,6 +399,27 @@ onMounted(() => {
       </header>
 
       <main class="content-container">
+        <!-- Main Storage Pool Setup & Recovery Alert Banner -->
+        <div
+          v-if="!nasState.systemConfig?.mainPool"
+          class="system-pool-banner"
+        >
+          <div style="display: flex; align-items: center; gap: 12px">
+            <MdiIcon :path="mdiAlertCircle" size="26" style="color: #f59e0b; flex-shrink: 0" />
+            <div>
+              <div style="font-weight: 700; font-size: 14px; color: #fbbf24">
+                Main ZFS Storage Pool Unconfigured — Non-ZFS Modules Paused
+              </div>
+              <div style="font-size: 12.5px; color: var(--text-secondary); margin-top: 2px">
+                Until a main pool is selected, modules other than ZFS (KVM, Docker, LXC, CIFS, WebDAV) are paused. Select or import a pool to initialize <code>.nas-system</code> datasets and recover your configuration.
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-sm btn-primary" style="white-space: nowrap" @click="showPoolModal = true">
+            Configure Main Pool
+          </button>
+        </div>
+
         <div
           v-if="!activeModuleStatus.enabled"
           class="card"
@@ -447,6 +482,9 @@ onMounted(() => {
     <!-- Login Modal if not authenticated -->
     <LoginModal v-if="!nasState.authenticated" />
 
+    <!-- System Storage Pool Configuration Modal -->
+    <SystemPoolModal v-if="showPoolModal" @close="showPoolModal = false" />
+
     <!-- Toast Notifications -->
     <div class="toast-stack">
       <div
@@ -486,6 +524,19 @@ onMounted(() => {
 .nav-sub-item {
   padding: 7px 10px;
   font-size: 13px;
+}
+
+.system-pool-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-left: 4px solid #f59e0b;
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin-bottom: 18px;
 }
 </style>
 

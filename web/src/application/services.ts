@@ -19,6 +19,8 @@ import {
   type Prerequisite,
   type PrerequisiteSummary,
   ResourceNames,
+  type SystemConfig,
+  type DiscoveredPool,
   type User,
   validateSshPublicKey,
   type VirtualMachine,
@@ -39,6 +41,7 @@ import type {
   LxcPort,
   PrerequisitePort,
   SharePort,
+  SystemPort,
   ZfsPort,
 } from '../ports/outbound';
 
@@ -71,6 +74,33 @@ export class AuthService {
 
   isAuthenticated(): boolean {
     return Boolean(this.authPort.getToken());
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 1b. SystemService
+// ---------------------------------------------------------------------------
+
+export class SystemService {
+  constructor(private readonly systemPort: SystemPort) {}
+
+  async getSystemConfig(): Promise<SystemConfig> {
+    return this.systemPort.getSystemConfig();
+  }
+
+  async updateSystemConfig(config: Partial<SystemConfig>): Promise<SystemConfig> {
+    return this.systemPort.updateSystemConfig(config);
+  }
+
+  async selectMainPool(poolName: string, autoImportExisting = true): Promise<SystemConfig> {
+    if (!poolName.trim()) {
+      throw new Error('Pool name is required');
+    }
+    return this.systemPort.selectMainPool(poolName.trim(), autoImportExisting);
+  }
+
+  async discoverPools(): Promise<DiscoveredPool[]> {
+    return this.systemPort.discoverPools();
   }
 }
 
