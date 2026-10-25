@@ -19,6 +19,8 @@ type Adapter struct {
 	mu            sync.RWMutex
 	zfsPort       ports.ZfsEnginePort
 	prereqChecker ports.PrerequisiteCheckerPort
+	cachedConfig  *domain.SystemConfig
+	cachedTime    time.Time
 }
 
 func NewAdapter(zfsPort ports.ZfsEnginePort, prereqChecker ports.PrerequisiteCheckerPort) *Adapter {
@@ -33,12 +35,38 @@ func NewAdapter(zfsPort ports.ZfsEnginePort, prereqChecker ports.PrerequisiteChe
 		prereqChecker.SetMainPool(cfg.System.MainPool)
 	}
 
+	// Pre-populate initial cached config so first calls return immediately without disk scan latency
+	enabledModules := []string{"zfs"}
+	if cfg.System.MainPool != "" {
+		enabledModules = append(enabledModules, "kvm", "docker", "lxc", "cifs", "webdav")
+	}
+	a.cachedConfig = &domain.SystemConfig{
+		MainPool:       cfg.System.MainPool,
+		ConfigFilePath: config.GetConfigPath(),
+		AutoDiscover:   cfg.System.AutoDiscover,
+		EnabledModules: enabledModules,
+	}
+	a.cachedTime = time.Now()
+
 	return a
 }
 
 func (a *Adapter) GetConfig(ctx context.Context) (*domain.SystemConfig, error) {
 	a.mu.RLock()
-	defer a.mu.RUnlock()
+	if a.cachedConfig != nil && time.Since(a.cachedTime) < 10*time.Second {
+		cfgCopy := *a.cachedConfig
+		a.mu.RUnlock()
+		return &cfgCopy, nil
+	}
+	a.mu.RUnlock()
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.cachedConfig != nil && time.Since(a.cachedTime) < 10*time.Second {
+		cfgCopy := *a.cachedConfig
+		return &cfgCopy, nil
+	}
 
 	cfg := config.GetGlobal()
 	mainPool := cfg.System.MainPool
@@ -72,7 +100,7 @@ func (a *Adapter) GetConfig(ctx context.Context) (*domain.SystemConfig, error) {
 
 	discovered, _ := a.DiscoverPools(ctx)
 
-	return &domain.SystemConfig{
+	result := &domain.SystemConfig{
 		MainPool:         mainPool,
 		SystemDataset:    systemDataset,
 		SystemMountpoint: systemMountpoint,
@@ -81,7 +109,13 @@ func (a *Adapter) GetConfig(ctx context.Context) (*domain.SystemConfig, error) {
 		ConfigFilePath:   config.GetConfigPath(),
 		AutoDiscover:     cfg.System.AutoDiscover,
 		DiscoveredPools:  discovered,
-	}, nil
+	}
+
+	a.cachedConfig = result
+	a.cachedTime = time.Now()
+
+	cfgCopy := *result
+	return &cfgCopy, nil
 }
 
 func (a *Adapter) SelectMainPool(ctx context.Context, poolName string, autoImportExisting bool) (*domain.SystemConfig, error) {
@@ -161,6 +195,10 @@ func (a *Adapter) SelectMainPool(ctx context.Context, poolName string, autoImpor
 	}
 	_ = config.Save(cfg, localPath)
 	_ = config.Save(cfg, poolConfigFile)
+
+	a.mu.Lock()
+	a.cachedTime = time.Time{}
+	a.mu.Unlock()
 
 	return a.GetConfig(ctx)
 }

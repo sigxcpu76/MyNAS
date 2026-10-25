@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package nas.v1;
+
+import "google/api/field_behavior.proto";
+import "google/api/resource.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1";
+
+// =============================================================================
+// Prerequisite Resource
+// =============================================================================
+
+message Prerequisite {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/Prerequisite"
+    pattern: "prerequisites/{prerequisite}"
+    singular: "prerequisite"
+    plural: "prerequisites"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string display_name = 2;
+  string category = 3; // STORAGE, VIRTUALIZATION, CONTAINERS, SHARING, SECURITY
+  string kind = 4; // BINARY, LIBRARY, KERNEL_MODULE, DAEMON
+  string binary_or_path = 5;
+  string status = 6; // INSTALLED, MISSING, DEGRADED, FALLBACK_ACTIVE
+  string version = 7;
+  string details = 8;
+  string install_hint = 9;
+  repeated string required_by = 10;
+  bool fallback_mode = 11;
+  google.protobuf.Timestamp checked_time = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+message LinuxFlavor {
+  string id = 1;                     // e.g. "arch", "ubuntu", "debian", "fedora", "alpine"
+  string name = 2;                   // e.g. "Arch Linux", "Ubuntu"
+  string pretty_name = 3;             // e.g. "Arch Linux", "Ubuntu 24.04.1 LTS"
+  string version_id = 4;              // e.g. "24.04"
+  string package_manager = 5;         // e.g. "pacman", "apt", "dnf", "zypper", "apk"
+  string install_command_template = 6; // e.g. "sudo pacman -S --needed %s"
+}
+
+message ListPrerequisitesRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string filter = 3;
+}
+
+message ListPrerequisitesResponse {
+  repeated Prerequisite prerequisites = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+  LinuxFlavor linux_flavor = 4;
+  repeated Prerequisite missing_prerequisites = 5;
+  repeated Prerequisite installed_prerequisites = 6;
+  string remediation_script = 7;
+  bool is_fully_compliant = 8;
+}
+
+message GetPrerequisiteRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/Prerequisite"}
+  ];
+}
+
+message CheckPrerequisitesRequest {}
+
+message CheckPrerequisitesResponse {
+  repeated Prerequisite prerequisites = 1;
+  int32 installed_count = 2;
+  int32 missing_count = 3;
+  reserved 4;
+  LinuxFlavor linux_flavor = 5;
+  repeated Prerequisite missing_prerequisites = 6;
+  repeated Prerequisite installed_prerequisites = 7;
+  string remediation_script = 8;
+  bool is_fully_compliant = 9;
+}

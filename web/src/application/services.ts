@@ -14,6 +14,7 @@ import {
   type DockerConfig,
   type DockerContainer,
   type Group,
+  type HostPortStatus,
   isValidResourceId,
   type LxcContainer,
   type Prerequisite,
@@ -590,6 +591,14 @@ export class DockerAppService {
 
   async listDirectories(path?: string): Promise<DirectoryList> {
     return this.appPort.listDirectories(path);
+  }
+
+  async checkHostPort(port: number, protocol?: string, excludeAppId?: string): Promise<HostPortStatus> {
+    return this.appPort.checkHostPort(port, protocol, excludeAppId);
+  }
+
+  async checkHostPorts(ports: number[], protocol?: string, excludeAppId?: string): Promise<HostPortStatus[]> {
+    return this.appPort.checkHostPorts(ports, protocol, excludeAppId);
   }
 }
 

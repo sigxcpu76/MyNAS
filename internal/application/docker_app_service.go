@@ -162,3 +162,13 @@ func (s *DockerAppService) GetAppLogs(ctx context.Context, name string, tail int
 	}
 	return s.port.GetAppLogs(ctx, appID, tail, serviceName)
 }
+
+// CheckHostPort checks whether a single host port is available for binding.
+func (s *DockerAppService) CheckHostPort(ctx context.Context, port int, protocol string, excludeAppID string) (domain.HostPortStatus, error) {
+	return s.port.CheckHostPort(ctx, port, protocol, excludeAppID)
+}
+
+// CheckHostPorts checks whether a list of host ports are available for binding.
+func (s *DockerAppService) CheckHostPorts(ctx context.Context, ports []int, protocol string, excludeAppID string) ([]domain.HostPortStatus, error) {
+	return s.port.CheckHostPorts(ctx, ports, protocol, excludeAppID)
+}

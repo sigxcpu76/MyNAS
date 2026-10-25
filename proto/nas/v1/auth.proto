@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package nas.v1;
+
+import "google/api/field_behavior.proto";
+import "nas/v1/user.proto";
+
+option go_package = "github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1";
+
+// =============================================================================
+// Auth Messages
+// =============================================================================
+
+message LoginRequest {
+  string username = 1 [(google.api.field_behavior) = REQUIRED];
+  string password = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message LoginResponse {
+  string access_token = 1;
+  string token_type = 2;
+  int64 expires_in = 3;
+  User user = 4;
+}
+
+message GetCurrentUserRequest {}

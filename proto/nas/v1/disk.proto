@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+package nas.v1;
+
+import "google/api/field_behavior.proto";
+import "google/api/resource.proto";
+
+option go_package = "github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1";
+
+// =============================================================================
+// Disk & Storage Hardware Resources
+// =============================================================================
+
+message DiskPartition {
+  string name = 1;
+  string device_path = 2;
+  int64 size_bytes = 3;
+  string fstype = 4;
+  string mountpoint = 5;
+  string label = 6;
+  string owning_zfs_pool = 7;
+  repeated string aliases = 8; // e.g. "/dev/disk/by-id/...", "/dev/disk/by-partuuid/..."
+  bool is_system = 9;
+}
+
+message SmartParameter {
+  int32 id = 1;               // ATA attribute ID (e.g. 5, 9, 194) or index
+  string name = 2;             // Attribute name e.g. "Reallocated_Sector_Ct", "Power_On_Hours"
+  string value = 3;            // Normalized value (e.g. "100")
+  string worst = 4;            // Worst value (e.g. "100")
+  string threshold = 5;        // Failure threshold (e.g. "36")
+  string raw_value = 6;        // Raw value string (e.g. "0", "3200 hrs", "38 C")
+  string status = 7;           // "OK", "PASSED", "WARNING", "PRE_FAIL", "FAILED"
+  string type = 8;             // "Pre-fail", "Old_age", "NVMe"
+  string description = 9;      // Human-readable explanation
+}
+
+message Disk {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/Disk"
+    pattern: "disks/{disk}"
+    singular: "disk"
+    plural: "disks"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER]; // "disks/nvme0n1"
+  string disk_id = 2; // "nvme0n1"
+  string device_path = 3; // "/dev/nvme0n1"
+  int64 size_bytes = 4;
+  string model = 5;
+  string serial = 6;
+  string vendor = 7;
+  string transport = 8; // "nvme", "sata", "sas", "usb", "virtio"
+  bool rotational = 9;
+  string type = 10; // "NVME", "SSD", "HDD", "VIRTUAL"
+  string firmware_rev = 11;
+  string state = 12; // "live", "running"
+  bool removable = 13;
+  int64 logical_block_size = 14;
+  int64 physical_block_size = 15;
+  double temperature_celsius = 16;
+  string smart_status = 17; // "PASSED", "FAILED", "UNKNOWN"
+  int32 health_percentage = 18; // 0..100
+  string owning_zfs_pool = 19;
+  repeated DiskPartition partitions = 20;
+  repeated SmartParameter smart_parameters = 21;
+  int64 power_on_hours = 22;
+  int64 power_cycle_count = 23;
+  int64 unsafe_shutdowns = 24;
+  int64 media_errors = 25;
+  int64 total_bytes_read = 26;
+  int64 total_bytes_written = 27;
+  int64 reallocated_sectors = 28;
+  int64 pending_sectors = 29;
+  repeated string aliases = 30; // e.g. "/dev/disk/by-id/...", "/dev/disk/by-path/..."
+  bool is_system = 31;
+}
+
+message ListDisksRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string filter = 3;
+}
+
+message ListDisksResponse {
+  repeated Disk disks = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetDiskRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/Disk"}
+  ];
+}

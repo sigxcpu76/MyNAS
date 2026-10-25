@@ -19,8 +19,8 @@ const props = withDefaults(
     rootHint?: string;
   }>(),
   {
-    placeholder: '/tank/media',
-    rootHint: '',
+    placeholder: '/nas/tank/media',
+    rootHint: '/nas',
   }
 );
 
@@ -86,8 +86,11 @@ const pathBreadcrumbs = computed(() => {
 
 async function openBrowser() {
   let initial = props.modelValue.trim();
+  if (initial.startsWith('/tank')) {
+    initial = '/nas' + initial;
+  }
   if (!initial || !initial.startsWith('/')) {
-    initial = props.rootHint || '/';
+    initial = props.rootHint || '/nas';
   }
   isBrowserOpen.value = true;
   await navigateTo(initial);

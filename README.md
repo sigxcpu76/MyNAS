@@ -264,7 +264,7 @@ The `nasctl` binary doubles as a full CLI client communicating with the running 
 
 AegisNAS follows the **Google API Improvement Proposals (AIP)** convention:
 
-- **Protobuf Schemas**: Maintained in [`proto/nas/v1/nas.proto`](proto/nas/v1/nas.proto).
+- **Protobuf Schemas**: Maintained modularly in [`proto/nas/v1/`](proto/nas/v1/) (`service.proto` and per-entity proto files).
 - **gRPC API**: Served on `:9090`.
 - **REST / JSON Gateway**: Served on `:8080/v1/...` via `grpc-gateway`.
 - **Authentication**: JWT Bearer token via `POST /v1/auth:login` and header `Authorization: Bearer <token>`.

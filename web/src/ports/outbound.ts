@@ -14,6 +14,7 @@ import type {
   DockerConfig,
   DockerContainer,
   Group,
+  HostPortStatus,
   LxcContainer,
   Prerequisite,
   PrerequisiteSummary,
@@ -129,6 +130,8 @@ export interface DockerAppPort {
   getDockerConfig(): Promise<DockerConfig>;
   updateDockerConfig(dataset: string, pool?: string): Promise<DockerConfig>;
   listDirectories(path?: string): Promise<DirectoryList>;
+  checkHostPort(port: number, protocol?: string, excludeAppId?: string): Promise<HostPortStatus>;
+  checkHostPorts(ports: number[], protocol?: string, excludeAppId?: string): Promise<HostPortStatus[]>;
 }
 
 export interface LxcPort {

@@ -1,0 +1,310 @@
+syntax = "proto3";
+
+package nas.v1;
+
+import "google/api/field_behavior.proto";
+import "google/api/resource.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1";
+
+// =============================================================================
+// KVM Virtual Machine Resource (libvirt + noVNC)
+// =============================================================================
+
+message VirtualMachineDisk {
+  string id = 1;                     // "scsi0", "virtio0", "sata1"
+  string bus = 2;                    // "scsi", "virtio", "sata", "ide", "nvme"
+  string disk_path = 3;              // ZFS zvol "/dev/zvol/tank/vm-100-disk0" or qcow2 file
+  int64 size_bytes = 4;
+  string cache_mode = 5;             // "none", "writeback", "writethrough", "unsafe"
+  bool discard = 6;                  // TRIM passthrough
+  bool iothread = 7;                 // Dedicated IOThread
+  bool read_only = 8;
+  bool ssd_emulation = 9;
+  bool backup = 10;
+  int64 iops_limit_read = 11;
+  int64 iops_limit_write = 12;
+  int64 mbps_limit_read = 13;
+  int64 mbps_limit_write = 14;
+}
+
+message VirtualMachineNetworkInterface {
+  string id = 1;                     // "net0", "net1"
+  string model = 2;                  // "virtio", "e1000", "rtl8139", "vmxnet3"
+  string bridge = 3;                 // "virbr0", "vmbr0", "br0"
+  int32 vlan_tag = 4;                // 0 = untagged, 1..4094
+  string mac_address = 5;
+  int64 rate_limit_mbps = 6;
+  bool disconnected = 7;
+  bool firewall = 8;
+}
+
+message VirtualMachineCloudInit {
+  string user = 1;
+  string password = 2;
+  repeated string ssh_public_keys = 3;
+  string ip_config = 4;              // "dhcp" or "ip=192.168.1.50/24,gw=192.168.1.1"
+  string dns_nameservers = 5;
+  string dns_search = 6;
+  string custom_user_data = 7;       // Custom cloud-config YAML
+}
+
+message VirtualMachinePciDevice {
+  string host_address = 1;           // "0000:01:00.0"
+  bool pcie = 2;
+  bool primary_gpu = 3;
+}
+
+message VirtualMachineUsbDevice {
+  string host_bus_port = 1;          // "1-1.2"
+  string vendor_product_id = 2;      // "046d:c52b"
+}
+
+message VirtualMachineSnapshot {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/VirtualMachineSnapshot"
+    pattern: "virtualMachines/{virtual_machine}/snapshots/{snapshot}"
+    singular: "snapshot"
+    plural: "snapshots"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string snapshot_id = 2;
+  string description = 3;
+  google.protobuf.Timestamp create_time = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+  bool include_ram = 5;
+  string parent_snapshot = 6;
+  string vm_state = 7;
+}
+
+message VirtualMachine {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/VirtualMachine"
+    pattern: "virtualMachines/{virtual_machine}"
+    singular: "virtualMachine"
+    plural: "virtualMachines"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string vm_name = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string uuid = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string state = 4 [(google.api.field_behavior) = OUTPUT_ONLY]; // RUNNING, STOPPED, PAUSED
+  int32 vcpus = 5;
+  int64 memory_mib = 6;
+  string disk_path = 7;
+  int64 disk_size_gib = 8;
+  string iso_image = 9;
+  string network_bridge = 10;
+  int32 vnc_port = 11 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string vnc_display = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
+  bool autostart = 13;
+  string os_variant = 14;
+  string description = 15;
+
+  // Proxmox VE Hardware Topology
+  int32 sockets = 16;
+  int32 cores = 17;
+  string cpu_type = 18;              // "host", "kvm64", "x86-64-v2-AES", "EPYC"
+  int32 cpu_units = 19;
+  int32 cpu_limit = 20;
+  bool numa = 21;
+  int64 balloon_min_mib = 22;
+  string hugepages = 23;             // "off", "2MB", "1GB"
+  string machine_type = 24;          // "q35", "i440fx"
+  string bios_type = 25;             // "seabios", "ovmf" (UEFI)
+  string tpm_version = 26;           // "none", "v2.0"
+  bool secure_boot = 27;
+
+  // Multi-Disk & Media
+  repeated VirtualMachineDisk disks = 28;
+  string cdrom_iso_image = 29;
+
+  // Networking & Cloud-Init
+  repeated VirtualMachineNetworkInterface network_interfaces = 30;
+  VirtualMachineCloudInit cloud_init = 31;
+
+  // Hardware Passthrough
+  repeated VirtualMachinePciDevice pci_devices = 32;
+  repeated VirtualMachineUsbDevice usb_devices = 33;
+
+  // QEMU Guest Agent & Runtime Telemetry
+  bool agent_enabled = 34;
+  bool agent_running = 35;
+  repeated string guest_ip_addresses = 36;
+  string guest_os_name = 37;
+  double guest_cpu_percent = 38;
+  int64 guest_memory_used_mib = 39;
+
+  // Lifecycle, Boot Order, Watchdog & Consoles
+  int32 startup_delay_seconds = 40;
+  string boot_order = 41;            // "order=scsi0;ide2;net0"
+  string watchdog_model = 42;        // "none", "i6300esb"
+  string watchdog_action = 43;       // "reset", "poweroff", "pause"
+  string display_type = 44;          // "virtio-gpu", "qxl", "vga", "serial", "none"
+  bool is_template = 45;
+  repeated string qemu_commandline_args = 46;
+  string serial_console_url = 47;
+}
+
+message ListVirtualMachinesRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string filter = 3;
+}
+
+message ListVirtualMachinesResponse {
+  repeated VirtualMachine virtual_machines = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetVirtualMachineRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+}
+
+message CreateVirtualMachineRequest {
+  string virtual_machine_id = 1 [(google.api.field_behavior) = REQUIRED];
+  VirtualMachine virtual_machine = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateVirtualMachineRequest {
+  VirtualMachine virtual_machine = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteVirtualMachineRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+}
+
+message StartVirtualMachineRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+}
+
+message StopVirtualMachineRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+  bool force = 2;
+}
+
+message RebootVirtualMachineRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+}
+
+message OpenVirtualMachineConsoleRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+}
+
+message VirtualMachineConsoleSession {
+  string vm_name = 1;
+  string token = 2;
+  string websocket_url = 3;
+  int32 vnc_port = 4;
+  string resolution = 5;
+  string expires_at = 6;
+}
+
+message ResetVirtualMachineRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+}
+
+message PauseVirtualMachineRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+}
+
+message ResumeVirtualMachineRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+}
+
+message CloneVirtualMachineRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+  string new_virtual_machine_id = 2 [(google.api.field_behavior) = REQUIRED];
+  string new_name = 3;
+  string target_pool = 4;
+  bool linked_clone = 5;
+}
+
+message AttachVirtualMachineMediaRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+  string device_id = 2; // e.g. "ide2", or empty for default CD-ROM
+  string iso_path = 3 [(google.api.field_behavior) = REQUIRED];
+}
+
+message EjectVirtualMachineMediaRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+  string device_id = 2;
+}
+
+message ListVirtualMachineSnapshotsRequest {
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListVirtualMachineSnapshotsResponse {
+  repeated VirtualMachineSnapshot snapshots = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message CreateVirtualMachineSnapshotRequest {
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
+  ];
+  string snapshot_id = 2 [(google.api.field_behavior) = REQUIRED];
+  VirtualMachineSnapshot snapshot = 3 [(google.api.field_behavior) = REQUIRED];
+}
+
+message RollbackVirtualMachineSnapshotRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachineSnapshot"}
+  ];
+}
+
+message DeleteVirtualMachineSnapshotRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachineSnapshot"}
+  ];
+}

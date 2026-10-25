@@ -1,0 +1,823 @@
+syntax = "proto3";
+
+package nas.v1;
+
+import "google/api/annotations.proto";
+import "google/api/client.proto";
+import "google/protobuf/empty.proto";
+import "nas/v1/auth.proto";
+import "nas/v1/catalog.proto";
+import "nas/v1/disk.proto";
+import "nas/v1/docker.proto";
+import "nas/v1/filesystem.proto";
+import "nas/v1/kvm.proto";
+import "nas/v1/lxc.proto";
+import "nas/v1/prerequisite.proto";
+import "nas/v1/share.proto";
+import "nas/v1/system.proto";
+import "nas/v1/user.proto";
+import "nas/v1/zfs.proto";
+
+option go_package = "github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1";
+
+// NasService provides Google AIP-compliant resource management for the NAS:
+// Prerequisites, ZFS (Pools, Datasets, Volumes), KVM Virtual Machines + noVNC,
+// Docker Containers, LXC Containers, CIFS/WebDAV Shares, and Linux Users/Groups.
+service NasService {
+  // ---------------------------------------------------------------------------
+  // Authentication & Session
+  // ---------------------------------------------------------------------------
+
+  // Login authenticates a Linux system user (or configured admin) and issues a JWT.
+  rpc Login(LoginRequest) returns (LoginResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth:login"
+      body: "*"
+    };
+  }
+
+  // GetCurrentUser returns the currently authenticated user profile.
+  rpc GetCurrentUser(GetCurrentUserRequest) returns (User) {
+    option (google.api.http) = {
+      get: "/v1/auth:me"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // System Configuration & Main Storage Pool Management
+  // ---------------------------------------------------------------------------
+
+  rpc GetSystemConfig(GetSystemConfigRequest) returns (SystemConfig) {
+    option (google.api.http) = {
+      get: "/v1/systemConfig"
+    };
+  }
+
+  rpc UpdateSystemConfig(UpdateSystemConfigRequest) returns (SystemConfig) {
+    option (google.api.http) = {
+      patch: "/v1/systemConfig"
+      body: "system_config"
+    };
+    option (google.api.method_signature) = "system_config,update_mask";
+  }
+
+  rpc SelectMainPool(SelectMainPoolRequest) returns (SystemConfig) {
+    option (google.api.http) = {
+      post: "/v1/systemConfig:selectMainPool"
+      body: "*"
+    };
+  }
+
+  rpc DiscoverPools(DiscoverPoolsRequest) returns (DiscoverPoolsResponse) {
+    option (google.api.http) = {
+      get: "/v1/systemConfig:discoverPools"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Prerequisites (AIP-131 Get, AIP-132 List, AIP-136 Custom :check)
+  // ---------------------------------------------------------------------------
+
+  rpc ListPrerequisites(ListPrerequisitesRequest) returns (ListPrerequisitesResponse) {
+    option (google.api.http) = {
+      get: "/v1/prerequisites"
+    };
+  }
+
+  rpc GetPrerequisite(GetPrerequisiteRequest) returns (Prerequisite) {
+    option (google.api.http) = {
+      get: "/v1/{name=prerequisites/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CheckPrerequisites(CheckPrerequisitesRequest) returns (CheckPrerequisitesResponse) {
+    option (google.api.http) = {
+      post: "/v1/prerequisites:check"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Disks & Block Devices (AIP-131, AIP-132)
+  // ---------------------------------------------------------------------------
+
+  rpc ListDisks(ListDisksRequest) returns (ListDisksResponse) {
+    option (google.api.http) = {
+      get: "/v1/disks"
+    };
+  }
+
+  rpc GetDisk(GetDiskRequest) returns (Disk) {
+    option (google.api.http) = {
+      get: "/v1/{name=disks/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // ---------------------------------------------------------------------------
+  // ZFS Pools (AIP-131..136)
+  // ---------------------------------------------------------------------------
+
+  rpc ListZfsPools(ListZfsPoolsRequest) returns (ListZfsPoolsResponse) {
+    option (google.api.http) = {
+      get: "/v1/zfsPools"
+    };
+  }
+
+  rpc GetZfsPool(GetZfsPoolRequest) returns (ZfsPool) {
+    option (google.api.http) = {
+      get: "/v1/{name=zfsPools/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateZfsPool(CreateZfsPoolRequest) returns (ZfsPool) {
+    option (google.api.http) = {
+      post: "/v1/zfsPools"
+      body: "zfs_pool"
+    };
+    option (google.api.method_signature) = "zfs_pool,zfs_pool_id";
+  }
+
+  rpc DeleteZfsPool(DeleteZfsPoolRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=zfsPools/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc ExportZfsPool(ExportZfsPoolRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/v1/{name=zfsPools/*}:export"
+      body: "*"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc ScrubZfsPool(ScrubZfsPoolRequest) returns (ZfsPool) {
+    option (google.api.http) = {
+      post: "/v1/{name=zfsPools/*}:scrub"
+      body: "*"
+    };
+  }
+
+  rpc UpdateZfsPool(UpdateZfsPoolRequest) returns (ZfsPool) {
+    option (google.api.http) = {
+      patch: "/v1/{zfs_pool.name=zfsPools/*}"
+      body: "zfs_pool"
+    };
+    option (google.api.method_signature) = "zfs_pool,update_mask";
+  }
+
+  rpc AddZfsPoolVdev(AddZfsPoolVdevRequest) returns (ZfsPool) {
+    option (google.api.http) = {
+      post: "/v1/{name=zfsPools/*}:addVdev"
+      body: "*"
+    };
+  }
+
+  rpc RemoveZfsPoolVdev(RemoveZfsPoolVdevRequest) returns (ZfsPool) {
+    option (google.api.http) = {
+      post: "/v1/{name=zfsPools/*}:removeVdev"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // ZFS Datasets (Sub-resource of ZfsPool: zfsPools/{zfs_pool}/datasets/{dataset})
+  // ---------------------------------------------------------------------------
+
+  rpc ListZfsDatasets(ListZfsDatasetsRequest) returns (ListZfsDatasetsResponse) {
+    option (google.api.http) = {
+      get: "/v1/{parent=zfsPools/*}/datasets"
+    };
+    option (google.api.method_signature) = "parent";
+  }
+
+  rpc GetZfsDataset(GetZfsDatasetRequest) returns (ZfsDataset) {
+    option (google.api.http) = {
+      get: "/v1/{name=zfsPools/*/datasets/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateZfsDataset(CreateZfsDatasetRequest) returns (ZfsDataset) {
+    option (google.api.http) = {
+      post: "/v1/{parent=zfsPools/*}/datasets"
+      body: "zfs_dataset"
+    };
+    option (google.api.method_signature) = "parent,zfs_dataset,zfs_dataset_id";
+  }
+
+  rpc UpdateZfsDataset(UpdateZfsDatasetRequest) returns (ZfsDataset) {
+    option (google.api.http) = {
+      patch: "/v1/{zfs_dataset.name=zfsPools/*/datasets/*}"
+      body: "zfs_dataset"
+    };
+    option (google.api.method_signature) = "zfs_dataset,update_mask";
+  }
+
+  rpc DeleteZfsDataset(DeleteZfsDatasetRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=zfsPools/*/datasets/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc SnapshotZfsDataset(SnapshotZfsDatasetRequest) returns (ZfsDataset) {
+    option (google.api.http) = {
+      post: "/v1/{name=zfsPools/*/datasets/*}:snapshot"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // ZFS Volumes / ZVols (Sub-resource of ZfsPool: zfsPools/{zfs_pool}/volumes/{volume})
+  // ---------------------------------------------------------------------------
+
+  rpc ListZfsVolumes(ListZfsVolumesRequest) returns (ListZfsVolumesResponse) {
+    option (google.api.http) = {
+      get: "/v1/{parent=zfsPools/*}/volumes"
+    };
+    option (google.api.method_signature) = "parent";
+  }
+
+  rpc GetZfsVolume(GetZfsVolumeRequest) returns (ZfsVolume) {
+    option (google.api.http) = {
+      get: "/v1/{name=zfsPools/*/volumes/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateZfsVolume(CreateZfsVolumeRequest) returns (ZfsVolume) {
+    option (google.api.http) = {
+      post: "/v1/{parent=zfsPools/*}/volumes"
+      body: "zfs_volume"
+    };
+    option (google.api.method_signature) = "parent,zfs_volume,zfs_volume_id";
+  }
+
+  rpc UpdateZfsVolume(UpdateZfsVolumeRequest) returns (ZfsVolume) {
+    option (google.api.http) = {
+      patch: "/v1/{zfs_volume.name=zfsPools/*/volumes/*}"
+      body: "zfs_volume"
+    };
+    option (google.api.method_signature) = "zfs_volume,update_mask";
+  }
+
+  rpc DeleteZfsVolume(DeleteZfsVolumeRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=zfsPools/*/volumes/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // ---------------------------------------------------------------------------
+  // KVM Virtual Machines (libvirt + noVNC)
+  // ---------------------------------------------------------------------------
+
+  rpc ListVirtualMachines(ListVirtualMachinesRequest) returns (ListVirtualMachinesResponse) {
+    option (google.api.http) = {
+      get: "/v1/virtualMachines"
+    };
+  }
+
+  rpc GetVirtualMachine(GetVirtualMachineRequest) returns (VirtualMachine) {
+    option (google.api.http) = {
+      get: "/v1/{name=virtualMachines/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateVirtualMachine(CreateVirtualMachineRequest) returns (VirtualMachine) {
+    option (google.api.http) = {
+      post: "/v1/virtualMachines"
+      body: "virtual_machine"
+    };
+    option (google.api.method_signature) = "virtual_machine,virtual_machine_id";
+  }
+
+  rpc UpdateVirtualMachine(UpdateVirtualMachineRequest) returns (VirtualMachine) {
+    option (google.api.http) = {
+      patch: "/v1/{virtual_machine.name=virtualMachines/*}"
+      body: "virtual_machine"
+    };
+    option (google.api.method_signature) = "virtual_machine,update_mask";
+  }
+
+  rpc DeleteVirtualMachine(DeleteVirtualMachineRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=virtualMachines/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc StartVirtualMachine(StartVirtualMachineRequest) returns (VirtualMachine) {
+    option (google.api.http) = {
+      post: "/v1/{name=virtualMachines/*}:start"
+      body: "*"
+    };
+  }
+
+  rpc StopVirtualMachine(StopVirtualMachineRequest) returns (VirtualMachine) {
+    option (google.api.http) = {
+      post: "/v1/{name=virtualMachines/*}:stop"
+      body: "*"
+    };
+  }
+
+  rpc RebootVirtualMachine(RebootVirtualMachineRequest) returns (VirtualMachine) {
+    option (google.api.http) = {
+      post: "/v1/{name=virtualMachines/*}:reboot"
+      body: "*"
+    };
+  }
+
+  rpc ResetVirtualMachine(ResetVirtualMachineRequest) returns (VirtualMachine) {
+    option (google.api.http) = {
+      post: "/v1/{name=virtualMachines/*}:reset"
+      body: "*"
+    };
+  }
+
+  rpc PauseVirtualMachine(PauseVirtualMachineRequest) returns (VirtualMachine) {
+    option (google.api.http) = {
+      post: "/v1/{name=virtualMachines/*}:pause"
+      body: "*"
+    };
+  }
+
+  rpc ResumeVirtualMachine(ResumeVirtualMachineRequest) returns (VirtualMachine) {
+    option (google.api.http) = {
+      post: "/v1/{name=virtualMachines/*}:resume"
+      body: "*"
+    };
+  }
+
+  rpc CloneVirtualMachine(CloneVirtualMachineRequest) returns (VirtualMachine) {
+    option (google.api.http) = {
+      post: "/v1/{name=virtualMachines/*}:clone"
+      body: "*"
+    };
+  }
+
+  rpc AttachVirtualMachineMedia(AttachVirtualMachineMediaRequest) returns (VirtualMachine) {
+    option (google.api.http) = {
+      post: "/v1/{name=virtualMachines/*}:attachMedia"
+      body: "*"
+    };
+  }
+
+  rpc EjectVirtualMachineMedia(EjectVirtualMachineMediaRequest) returns (VirtualMachine) {
+    option (google.api.http) = {
+      post: "/v1/{name=virtualMachines/*}:ejectMedia"
+      body: "*"
+    };
+  }
+
+  rpc ListVirtualMachineSnapshots(ListVirtualMachineSnapshotsRequest) returns (ListVirtualMachineSnapshotsResponse) {
+    option (google.api.http) = {
+      get: "/v1/{parent=virtualMachines/*}/snapshots"
+    };
+  }
+
+  rpc CreateVirtualMachineSnapshot(CreateVirtualMachineSnapshotRequest) returns (VirtualMachineSnapshot) {
+    option (google.api.http) = {
+      post: "/v1/{parent=virtualMachines/*}/snapshots"
+      body: "snapshot"
+    };
+    option (google.api.method_signature) = "parent,snapshot,snapshot_id";
+  }
+
+  rpc RollbackVirtualMachineSnapshot(RollbackVirtualMachineSnapshotRequest) returns (VirtualMachine) {
+    option (google.api.http) = {
+      post: "/v1/{name=virtualMachines/*/snapshots/*}:rollback"
+      body: "*"
+    };
+  }
+
+  rpc DeleteVirtualMachineSnapshot(DeleteVirtualMachineSnapshotRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=virtualMachines/*/snapshots/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc OpenVirtualMachineConsole(OpenVirtualMachineConsoleRequest) returns (VirtualMachineConsoleSession) {
+    option (google.api.http) = {
+      post: "/v1/{name=virtualMachines/*}:openConsole"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Docker Containers
+  // ---------------------------------------------------------------------------
+
+  rpc ListDockerContainers(ListDockerContainersRequest) returns (ListDockerContainersResponse) {
+    option (google.api.http) = {
+      get: "/v1/dockerContainers"
+    };
+  }
+
+  rpc GetDockerContainer(GetDockerContainerRequest) returns (DockerContainer) {
+    option (google.api.http) = {
+      get: "/v1/{name=dockerContainers/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateDockerContainer(CreateDockerContainerRequest) returns (DockerContainer) {
+    option (google.api.http) = {
+      post: "/v1/dockerContainers"
+      body: "docker_container"
+    };
+    option (google.api.method_signature) = "docker_container,docker_container_id";
+  }
+
+  rpc UpdateDockerContainer(UpdateDockerContainerRequest) returns (DockerContainer) {
+    option (google.api.http) = {
+      patch: "/v1/{docker_container.name=dockerContainers/*}"
+      body: "docker_container"
+    };
+    option (google.api.method_signature) = "docker_container,update_mask";
+  }
+
+  rpc DeleteDockerContainer(DeleteDockerContainerRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=dockerContainers/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc GetDockerContainerLogs(GetDockerContainerLogsRequest) returns (GetDockerContainerLogsResponse) {
+    option (google.api.http) = {
+      get: "/v1/{name=dockerContainers/*}:logs"
+    };
+  }
+
+  rpc StartDockerContainer(StartDockerContainerRequest) returns (DockerContainer) {
+    option (google.api.http) = {
+      post: "/v1/{name=dockerContainers/*}:start"
+      body: "*"
+    };
+  }
+
+  rpc StopDockerContainer(StopDockerContainerRequest) returns (DockerContainer) {
+    option (google.api.http) = {
+      post: "/v1/{name=dockerContainers/*}:stop"
+      body: "*"
+    };
+  }
+
+  rpc RestartDockerContainer(RestartDockerContainerRequest) returns (DockerContainer) {
+    option (google.api.http) = {
+      post: "/v1/{name=dockerContainers/*}:restart"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Docker Apps (TrueNAS SCALE Compose Descriptors)
+  // ---------------------------------------------------------------------------
+
+  rpc ListDockerApps(ListDockerAppsRequest) returns (ListDockerAppsResponse) {
+    option (google.api.http) = {
+      get: "/v1/dockerApps"
+    };
+  }
+
+  rpc GetDockerApp(GetDockerAppRequest) returns (DockerApp) {
+    option (google.api.http) = {
+      get: "/v1/{name=dockerApps/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateDockerApp(CreateDockerAppRequest) returns (DockerApp) {
+    option (google.api.http) = {
+      post: "/v1/dockerApps"
+      body: "docker_app"
+    };
+    option (google.api.method_signature) = "docker_app,docker_app_id";
+  }
+
+  rpc UpdateDockerApp(UpdateDockerAppRequest) returns (DockerApp) {
+    option (google.api.http) = {
+      patch: "/v1/{docker_app.name=dockerApps/*}"
+      body: "docker_app"
+    };
+    option (google.api.method_signature) = "docker_app,update_mask";
+  }
+
+  rpc DeleteDockerApp(DeleteDockerAppRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=dockerApps/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc StartDockerApp(StartDockerAppRequest) returns (DockerApp) {
+    option (google.api.http) = {
+      post: "/v1/{name=dockerApps/*}:start"
+      body: "*"
+    };
+  }
+
+  rpc StopDockerApp(StopDockerAppRequest) returns (DockerApp) {
+    option (google.api.http) = {
+      post: "/v1/{name=dockerApps/*}:stop"
+      body: "*"
+    };
+  }
+
+  rpc RestartDockerApp(RestartDockerAppRequest) returns (DockerApp) {
+    option (google.api.http) = {
+      post: "/v1/{name=dockerApps/*}:restart"
+      body: "*"
+    };
+  }
+
+  rpc GetDockerAppLogs(GetDockerAppLogsRequest) returns (GetDockerAppLogsResponse) {
+    option (google.api.http) = {
+      get: "/v1/{name=dockerApps/*}:logs"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Docker Storage & Apps Pool Configuration
+  // ---------------------------------------------------------------------------
+
+  rpc GetDockerConfig(GetDockerConfigRequest) returns (DockerConfig) {
+    option (google.api.http) = {
+      get: "/v1/dockerConfig"
+    };
+  }
+
+  rpc UpdateDockerConfig(UpdateDockerConfigRequest) returns (DockerConfig) {
+    option (google.api.http) = {
+      patch: "/v1/dockerConfig"
+      body: "docker_config"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Preemptive Host Port Availability Check
+  // ---------------------------------------------------------------------------
+
+  rpc CheckHostPort(CheckHostPortRequest) returns (CheckHostPortResponse) {
+    option (google.api.http) = {
+      get: "/v1/docker:checkPort"
+    };
+  }
+
+  rpc CheckHostPorts(CheckHostPortsRequest) returns (CheckHostPortsResponse) {
+    option (google.api.http) = {
+      post: "/v1/docker:checkPorts"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Host Filesystem Directory Browser
+  // ---------------------------------------------------------------------------
+
+  rpc ListFileSystemDirectories(ListFileSystemDirectoriesRequest) returns (ListFileSystemDirectoriesResponse) {
+    option (google.api.http) = {
+      get: "/v1/filesystem:directories"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // LXC Containers
+  // ---------------------------------------------------------------------------
+
+  rpc ListLxcContainers(ListLxcContainersRequest) returns (ListLxcContainersResponse) {
+    option (google.api.http) = {
+      get: "/v1/lxcContainers"
+    };
+  }
+
+  rpc GetLxcContainer(GetLxcContainerRequest) returns (LxcContainer) {
+    option (google.api.http) = {
+      get: "/v1/{name=lxcContainers/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateLxcContainer(CreateLxcContainerRequest) returns (LxcContainer) {
+    option (google.api.http) = {
+      post: "/v1/lxcContainers"
+      body: "lxc_container"
+    };
+    option (google.api.method_signature) = "lxc_container,lxc_container_id";
+  }
+
+  rpc DeleteLxcContainer(DeleteLxcContainerRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=lxcContainers/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc StartLxcContainer(StartLxcContainerRequest) returns (LxcContainer) {
+    option (google.api.http) = {
+      post: "/v1/{name=lxcContainers/*}:start"
+      body: "*"
+    };
+  }
+
+  rpc StopLxcContainer(StopLxcContainerRequest) returns (LxcContainer) {
+    option (google.api.http) = {
+      post: "/v1/{name=lxcContainers/*}:stop"
+      body: "*"
+    };
+  }
+
+  rpc FreezeLxcContainer(FreezeLxcContainerRequest) returns (LxcContainer) {
+    option (google.api.http) = {
+      post: "/v1/{name=lxcContainers/*}:freeze"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // CIFS (Samba) Shares
+  // ---------------------------------------------------------------------------
+
+  rpc ListCifsShares(ListCifsSharesRequest) returns (ListCifsSharesResponse) {
+    option (google.api.http) = {
+      get: "/v1/cifsShares"
+    };
+  }
+
+  rpc GetCifsShare(GetCifsShareRequest) returns (CifsShare) {
+    option (google.api.http) = {
+      get: "/v1/{name=cifsShares/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateCifsShare(CreateCifsShareRequest) returns (CifsShare) {
+    option (google.api.http) = {
+      post: "/v1/cifsShares"
+      body: "cifs_share"
+    };
+    option (google.api.method_signature) = "cifs_share,cifs_share_id";
+  }
+
+  rpc UpdateCifsShare(UpdateCifsShareRequest) returns (CifsShare) {
+    option (google.api.http) = {
+      patch: "/v1/{cifs_share.name=cifsShares/*}"
+      body: "cifs_share"
+    };
+    option (google.api.method_signature) = "cifs_share,update_mask";
+  }
+
+  rpc DeleteCifsShare(DeleteCifsShareRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=cifsShares/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // ---------------------------------------------------------------------------
+  // WebDAV Shares
+  // ---------------------------------------------------------------------------
+
+  rpc ListWebdavShares(ListWebdavSharesRequest) returns (ListWebdavSharesResponse) {
+    option (google.api.http) = {
+      get: "/v1/webdavShares"
+    };
+  }
+
+  rpc GetWebdavShare(GetWebdavShareRequest) returns (WebdavShare) {
+    option (google.api.http) = {
+      get: "/v1/{name=webdavShares/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateWebdavShare(CreateWebdavShareRequest) returns (WebdavShare) {
+    option (google.api.http) = {
+      post: "/v1/webdavShares"
+      body: "webdav_share"
+    };
+    option (google.api.method_signature) = "webdav_share,webdav_share_id";
+  }
+
+  rpc UpdateWebdavShare(UpdateWebdavShareRequest) returns (WebdavShare) {
+    option (google.api.http) = {
+      patch: "/v1/{webdav_share.name=webdavShares/*}"
+      body: "webdav_share"
+    };
+    option (google.api.method_signature) = "webdav_share,update_mask";
+  }
+
+  rpc DeleteWebdavShare(DeleteWebdavShareRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=webdavShares/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // ---------------------------------------------------------------------------
+  // Linux System Users & Groups
+  // ---------------------------------------------------------------------------
+
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse) {
+    option (google.api.http) = {
+      get: "/v1/users"
+    };
+  }
+
+  rpc GetUser(GetUserRequest) returns (User) {
+    option (google.api.http) = {
+      get: "/v1/{name=users/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateUser(CreateUserRequest) returns (User) {
+    option (google.api.http) = {
+      post: "/v1/users"
+      body: "user"
+    };
+    option (google.api.method_signature) = "user,user_id";
+  }
+
+  rpc UpdateUser(UpdateUserRequest) returns (User) {
+    option (google.api.http) = {
+      patch: "/v1/{user.name=users/*}"
+      body: "user"
+    };
+    option (google.api.method_signature) = "user,update_mask";
+  }
+
+  rpc DeleteUser(DeleteUserRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=users/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc ListGroups(ListGroupsRequest) returns (ListGroupsResponse) {
+    option (google.api.http) = {
+      get: "/v1/groups"
+    };
+  }
+
+  rpc GetGroup(GetGroupRequest) returns (Group) {
+    option (google.api.http) = {
+      get: "/v1/{name=groups/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateGroup(CreateGroupRequest) returns (Group) {
+    option (google.api.http) = {
+      post: "/v1/groups"
+      body: "group"
+    };
+    option (google.api.method_signature) = "group,group_id";
+  }
+
+  rpc UpdateGroup(UpdateGroupRequest) returns (Group) {
+    option (google.api.http) = {
+      patch: "/v1/{group.name=groups/*}"
+      body: "group"
+    };
+    option (google.api.method_signature) = "group,update_mask";
+  }
+
+  rpc DeleteGroup(DeleteGroupRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=groups/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // ---------------------------------------------------------------------------
+  // Application Catalog (TrueNAS SCALE Catalog Integration)
+  // ---------------------------------------------------------------------------
+
+  rpc ListCatalogApps(ListCatalogAppsRequest) returns (ListCatalogAppsResponse) {
+    option (google.api.http) = {
+      get: "/v1/catalog/apps"
+    };
+  }
+
+  rpc GetCatalogApp(GetCatalogAppRequest) returns (CatalogApp) {
+    option (google.api.http) = {
+      get: "/v1/catalog/apps/{app_id}"
+    };
+  }
+
+  rpc SyncCatalog(SyncCatalogRequest) returns (SyncCatalogResponse) {
+    option (google.api.http) = {
+      post: "/v1/catalog:sync"
+      body: "*"
+    };
+  }
+}

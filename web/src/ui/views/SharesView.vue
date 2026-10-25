@@ -9,7 +9,7 @@ const cifsModuleStatus = computed(() => getModuleAvailability('cifs'));
 const showCreateCifs = ref(false);
 const cifsForm = reactive({
   shareId: '',
-  path: '/tank/media',
+  path: '/nas/tank/media',
   comment: 'Shared ZFS Dataset',
   validUsersText: 'admin, nasuser',
   validGroupsText: 'nasusers',
@@ -35,7 +35,7 @@ const editCifsForm = reactive({
 const showCreateWebdav = ref(false);
 const webdavForm = reactive({
   shareId: '',
-  path: '/tank/documents',
+  path: '/nas/tank/documents',
   description: 'HTTP/2 WebDAV Document Endpoint',
   allowedUsersText: 'admin, nasuser',
   allowedGroupsText: 'nasusers',
@@ -301,7 +301,7 @@ async function handleDeleteWebdav(name: string) {
           </div>
           <div class="form-group">
             <label>Filesystem Path (`path`)</label>
-            <input v-model="cifsForm.path" class="input mono" placeholder="/tank/media" required />
+            <input v-model="cifsForm.path" class="input mono" placeholder="/nas/tank/media" required />
           </div>
           <div class="form-group">
             <label>Valid Users (comma-separated)</label>
@@ -460,7 +460,7 @@ async function handleDeleteWebdav(name: string) {
           </div>
           <div class="form-group">
             <label>Filesystem Path (`path`)</label>
-            <input v-model="webdavForm.path" class="input mono" placeholder="/tank/documents" required />
+            <input v-model="webdavForm.path" class="input mono" placeholder="/nas/tank/documents" required />
           </div>
           <div class="form-group">
             <label>Allowed Users</label>

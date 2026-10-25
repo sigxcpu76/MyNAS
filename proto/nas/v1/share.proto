@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package nas.v1;
+
+import "google/api/field_behavior.proto";
+import "google/api/resource.proto";
+import "google/protobuf/field_mask.proto";
+
+option go_package = "github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1";
+
+// =============================================================================
+// CIFS (Samba) & WebDAV Share Resources
+// =============================================================================
+
+message CifsShare {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/CifsShare"
+    pattern: "cifsShares/{cifs_share}"
+    singular: "cifsShare"
+    plural: "cifsShares"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string share_name = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string path = 3 [(google.api.field_behavior) = REQUIRED];
+  string comment = 4;
+  bool read_only = 5;
+  bool guest_ok = 6;
+  bool browseable = 7;
+  repeated string valid_users = 8;
+  repeated string valid_groups = 9;
+  string create_mask = 10;
+  string directory_mask = 11;
+  bool enabled = 12;
+}
+
+message ListCifsSharesRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListCifsSharesResponse {
+  repeated CifsShare cifs_shares = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetCifsShareRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/CifsShare"}
+  ];
+}
+
+message CreateCifsShareRequest {
+  string cifs_share_id = 1 [(google.api.field_behavior) = REQUIRED];
+  CifsShare cifs_share = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateCifsShareRequest {
+  CifsShare cifs_share = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteCifsShareRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/CifsShare"}
+  ];
+}
+
+message WebdavShare {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/WebdavShare"
+    pattern: "webdavShares/{webdav_share}"
+    singular: "webdavShare"
+    plural: "webdavShares"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string share_name = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string path = 3 [(google.api.field_behavior) = REQUIRED];
+  string url_prefix = 4 [(google.api.field_behavior) = OUTPUT_ONLY]; // e.g. "/dav/documents"
+  string description = 5;
+  bool read_only = 6;
+  repeated string allowed_users = 7;
+  repeated string allowed_groups = 8;
+  bool enabled = 9;
+}
+
+message ListWebdavSharesRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListWebdavSharesResponse {
+  repeated WebdavShare webdav_shares = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetWebdavShareRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/WebdavShare"}
+  ];
+}
+
+message CreateWebdavShareRequest {
+  string webdav_share_id = 1 [(google.api.field_behavior) = REQUIRED];
+  WebdavShare webdav_share = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateWebdavShareRequest {
+  WebdavShare webdav_share = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteWebdavShareRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/WebdavShare"}
+  ];
+}

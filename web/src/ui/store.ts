@@ -60,25 +60,67 @@ export interface ToastNotification {
 
 let nextToastId = 1;
 
+interface LocalCachePayload {
+  systemConfig?: SystemConfig | null;
+  prerequisites?: Prerequisite[];
+  disks?: Disk[];
+  pools?: ZfsPool[];
+  dockerApps?: DockerApp[];
+  lastRefreshed?: string;
+}
+
+function loadLocalCache(): LocalCachePayload | null {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem('aegis_nas_cache_v1');
+      if (raw) return JSON.parse(raw);
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+export function saveLocalCache(): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const data: LocalCachePayload = {
+        systemConfig: nasState.systemConfig,
+        prerequisites: nasState.prerequisites,
+        disks: nasState.disks,
+        pools: nasState.pools,
+        dockerApps: nasState.dockerApps,
+        lastRefreshed: nasState.lastRefreshed,
+      };
+      window.localStorage.setItem('aegis_nas_cache_v1', JSON.stringify(data));
+    }
+  } catch {
+    // ignore
+  }
+}
+
+const cached = loadLocalCache();
+
 export const nasState = reactive({
   activeTab: 'overview' as NavTab,
   authenticated: services.auth.isAuthenticated(),
   currentUser: null as User | null,
   loading: false,
-  lastRefreshed: '',
+  initialLoaded: Boolean(cached?.systemConfig),
+  lastRefreshed: cached?.lastRefreshed || '',
   liveSyncActive: false,
 
-  systemConfig: null as SystemConfig | null,
-  prerequisites: [] as Prerequisite[],
-  disks: [] as Disk[],
-  pools: [] as ZfsPool[],
+  systemConfig: cached?.systemConfig || null,
+  prerequisites: cached?.prerequisites || [],
+  disks: cached?.disks || [],
+  pools: cached?.pools || [],
   datasetsByPool: {} as Record<string, ZfsDataset[]>,
   volumesByPool: {} as Record<string, ZfsVolume[]>,
-  selectedPoolName: '' as string,
+  selectedPoolName: (cached?.pools && cached.pools.length > 0 ? cached.pools[0].name : '') as string,
 
   vms: [] as VirtualMachine[],
   dockerContainers: [] as DockerContainer[],
-  dockerApps: [] as DockerApp[],
+  dockerApps: cached?.dockerApps || [],
   dockerConfig: null as DockerConfig | null,
   lxcContainers: [] as LxcContainer[],
   cifsShares: [] as CifsShare[],
@@ -93,8 +135,9 @@ export const nasState = reactive({
 
 export function getModuleAvailability(module: ManagedModule): ModuleStatus {
   // Gating: Only ZFS is enabled until a main pool is selected
+  // Do not report missing main pool if initial fetch is still in flight and no config is available yet
   if (module !== 'zfs') {
-    if (!nasState.systemConfig?.mainPool) {
+    if (nasState.initialLoaded && !nasState.systemConfig?.mainPool) {
       return {
         enabled: false,
         missing: [
@@ -160,8 +203,13 @@ export async function refreshAllData(): Promise<void> {
       services.system.getSystemConfig().catch(() => null),
       services.prerequisites.listPrerequisites().catch(() => []),
     ]);
-    nasState.systemConfig = sysCfg;
-    nasState.prerequisites = prereqs;
+    if (sysCfg) {
+      nasState.systemConfig = sysCfg;
+    }
+    if (prereqs && prereqs.length > 0) {
+      nasState.prerequisites = prereqs;
+    }
+    nasState.initialLoaded = true;
 
     const zfsOk = getModuleAvailability('zfs').enabled;
     const kvmOk = getModuleAvailability('kvm').enabled;
@@ -217,7 +265,9 @@ export async function refreshAllData(): Promise<void> {
     }
 
     nasState.lastRefreshed = new Date().toLocaleTimeString();
+    saveLocalCache();
   } finally {
+    nasState.initialLoaded = true;
     nasState.loading = false;
   }
 }
@@ -233,6 +283,7 @@ export async function refreshDockerData(): Promise<void> {
     nasState.dockerContainers = containers;
     nasState.dockerApps = apps;
     nasState.lastRefreshed = new Date().toLocaleTimeString();
+    saveLocalCache();
   } catch {
     // ignore
   }

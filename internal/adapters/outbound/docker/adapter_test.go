@@ -3,15 +3,19 @@ package docker_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/sigxcpu/nas/internal/adapters/outbound/docker"
 	"github.com/sigxcpu/nas/internal/domain"
+	"gopkg.in/yaml.v3"
 )
 
 func TestDockerLiveHost(t *testing.T) {
@@ -328,6 +332,67 @@ func TestPortDeduplicationAndNormalization(t *testing.T) {
 	}
 }
 
+func TestRandomHighPortAssignment(t *testing.T) {
+	tempUnitsDir := t.TempDir()
+	adapter := docker.NewAdapterFull("/nonexistent/docker.sock", tempUnitsDir)
+	ctx := context.Background()
+
+	rawCompose := `services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "80"
+      - "8080/udp"
+      - target: 9000
+`
+	normalized := adapter.NormalizeComposePorts(ctx, rawCompose)
+	if !strings.Contains(normalized, ":80") {
+		t.Fatalf("expected normalized port for :80, got:\n%s", normalized)
+	}
+	if !strings.Contains(normalized, ":8080/udp") {
+		t.Fatalf("expected normalized udp port for :8080/udp, got:\n%s", normalized)
+	}
+	if !strings.Contains(normalized, "published:") {
+		t.Fatalf("expected published node added for target: 9000, got:\n%s", normalized)
+	}
+
+	var c struct {
+		Services map[string]struct {
+			Ports []any `yaml:"ports"`
+		} `yaml:"services"`
+	}
+	if err := yaml.Unmarshal([]byte(normalized), &c); err != nil {
+		t.Fatalf("failed to unmarshal normalized yaml: %v", err)
+	}
+
+	webPorts := c.Services["web"].Ports
+	if len(webPorts) != 3 {
+		t.Fatalf("expected 3 ports, got %d", len(webPorts))
+	}
+
+	for _, p := range webPorts {
+		switch pv := p.(type) {
+		case string:
+			parts := strings.Split(pv, ":")
+			if len(parts) < 2 {
+				t.Fatalf("expected host:container format, got %s", pv)
+			}
+			hp, err := strconv.Atoi(parts[0])
+			if err != nil || hp < 32000 || hp > 65000 {
+				t.Fatalf("expected port in 32000-65000, got %d from %s", hp, pv)
+			}
+		case map[string]any:
+			pub := fmt.Sprintf("%v", pv["published"])
+			hp, err := strconv.Atoi(pub)
+			if err != nil || hp < 32000 || hp > 65000 {
+				t.Fatalf("expected published port in 32000-65000, got %d from %v", hp, pv)
+			}
+		default:
+			t.Fatalf("unexpected port type: %T", p)
+		}
+	}
+}
+
 func TestDockerConfigAndDirectoryListing(t *testing.T) {
 	ctx := context.Background()
 	unitsDir := t.TempDir()
@@ -425,5 +490,246 @@ func TestDockerAdapter_MainPoolEnforcement(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatalf("expected error when trying to use otherpool for apps root, got nil")
+	}
+}
+
+func TestDockerManagementPortDetection(t *testing.T) {
+	ctx := context.Background()
+	tempUnitsDir := t.TempDir()
+
+	// 1. App with explicit x-nas-management-port: 81
+	npmDir := filepath.Join(tempUnitsDir, "npm")
+	_ = os.MkdirAll(npmDir, 0755)
+	npmYAML := `x-nas-management-port: 81
+services:
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    ports:
+      - "80:80"
+      - "81:81"
+      - "443:443"
+`
+	if err := os.WriteFile(filepath.Join(npmDir, "compose.yaml"), []byte(npmYAML), 0644); err != nil {
+		t.Fatalf("failed to write compose.yaml: %v", err)
+	}
+
+	adapter := docker.NewAdapterFull("/nonexistent/docker.sock", tempUnitsDir)
+	app, err := adapter.GetApp(ctx, "npm")
+	if err != nil {
+		t.Fatalf("GetApp failed: %v", err)
+	}
+	if app.WebUIURL != "http://localhost:81" {
+		t.Fatalf("expected WebUIURL http://localhost:81, got %q", app.WebUIURL)
+	}
+
+	// 2. App with label nas.management.port=3000 and DNS port 53
+	adguardDir := filepath.Join(tempUnitsDir, "adguard")
+	_ = os.MkdirAll(adguardDir, 0755)
+	adguardYAML := `services:
+  adguard:
+    image: adguard/adguardhome:latest
+    labels:
+      - "nas.management.port=3000"
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+      - "3000:3000"
+`
+	if err := os.WriteFile(filepath.Join(adguardDir, "compose.yaml"), []byte(adguardYAML), 0644); err != nil {
+		t.Fatalf("failed to write compose.yaml: %v", err)
+	}
+
+	app2, err := adapter.GetApp(ctx, "adguard")
+	if err != nil {
+		t.Fatalf("GetApp failed: %v", err)
+	}
+	if app2.WebUIURL != "http://localhost:3000" {
+		t.Fatalf("expected WebUIURL http://localhost:3000, got %q", app2.WebUIURL)
+	}
+
+	// 3. Fallback: app with ports 443 and 80 without explicit management port
+	webDir := filepath.Join(tempUnitsDir, "web")
+	_ = os.MkdirAll(webDir, 0755)
+	webYAML := `services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "443:443"
+      - "80:80"
+`
+	if err := os.WriteFile(filepath.Join(webDir, "compose.yaml"), []byte(webYAML), 0644); err != nil {
+		t.Fatalf("failed to write compose.yaml: %v", err)
+	}
+
+	app3, err := adapter.GetApp(ctx, "web")
+	if err != nil {
+		t.Fatalf("GetApp failed: %v", err)
+	}
+	if app3.WebUIURL != "http://localhost:80" {
+		t.Fatalf("expected fallback WebUIURL http://localhost:80, got %q", app3.WebUIURL)
+	}
+
+	// 4. App with explicit x-portals from TrueNAS SCALE manifest
+	portalsDir := filepath.Join(tempUnitsDir, "npm-portals")
+	_ = os.MkdirAll(portalsDir, 0755)
+	npmPortalsYAML := `x-portals:
+  - name: "Admin Console"
+    scheme: "http"
+    port: 81
+    path: "/"
+  - name: "HTTPS Portal"
+    scheme: "https"
+    port: 443
+    path: "/admin"
+services:
+  app:
+    image: jc21/nginx-proxy-manager:latest
+    ports:
+      - "8081:81"
+      - "8443:443"
+`
+	if err := os.WriteFile(filepath.Join(portalsDir, "compose.yaml"), []byte(npmPortalsYAML), 0644); err != nil {
+		t.Fatalf("failed to write compose.yaml: %v", err)
+	}
+
+	app4, err := adapter.GetApp(ctx, "npm-portals")
+	if err != nil {
+		t.Fatalf("GetApp failed: %v", err)
+	}
+	if len(app4.Portals) != 2 {
+		t.Fatalf("expected 2 portals, got %d (%+v)", len(app4.Portals), app4.Portals)
+	}
+	if app4.Portals[0].Name != "Admin Console" || app4.Portals[0].URL != "http://localhost:8081/" {
+		t.Fatalf("unexpected portal 0: %+v", app4.Portals[0])
+	}
+	if app4.Portals[1].Name != "HTTPS Portal" || app4.Portals[1].URL != "https://localhost:8443/admin" {
+		t.Fatalf("unexpected portal 1: %+v", app4.Portals[1])
+	}
+}
+
+func TestDockerHostPortPreemptiveCheck(t *testing.T) {
+	ctx := context.Background()
+	tempUnitsDir := t.TempDir()
+
+	// Spin up a test TCP listener on an ephemeral port
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer ln.Close()
+
+	boundPort := ln.Addr().(*net.TCPAddr).Port
+
+	adapter := docker.NewAdapterWithStateDir(tempUnitsDir)
+
+	// 1. Bound port should be detected as unavailable
+	st, err := adapter.CheckHostPort(ctx, boundPort, "tcp", "")
+	if err != nil {
+		t.Fatalf("CheckHostPort failed: %v", err)
+	}
+	if st.Available {
+		t.Fatalf("expected port %d to be in use, but reported available", boundPort)
+	}
+	if st.InUseBy == "" {
+		t.Fatalf("expected non-empty InUseBy for in-use port %d", boundPort)
+	}
+
+	// 2. Free port (we find one by listening and closing it)
+	freeLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to get free port: %v", err)
+	}
+	freePort := freeLn.Addr().(*net.TCPAddr).Port
+	freeLn.Close()
+
+	freeSt, err := adapter.CheckHostPort(ctx, freePort, "tcp", "")
+	if err != nil {
+		t.Fatalf("CheckHostPort failed: %v", err)
+	}
+	if !freeSt.Available {
+		t.Fatalf("expected port %d to be available, got in_use_by=%s", freePort, freeSt.InUseBy)
+	}
+
+	// 3. Batch check
+	batch, err := adapter.CheckHostPorts(ctx, []int{boundPort, freePort}, "tcp", "")
+	if err != nil {
+		t.Fatalf("CheckHostPorts failed: %v", err)
+	}
+	if len(batch) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(batch))
+	}
+	if batch[0].Available || !batch[1].Available {
+		t.Fatalf("unexpected batch result: %+v", batch)
+	}
+
+	// 4. Duplicate port conflict in Compose file
+	dupYAML := fmt.Sprintf(`services:
+  web1:
+    image: nginx:alpine
+    ports:
+      - "%d:80"
+  web2:
+    image: httpd:alpine
+    ports:
+      - "%d:80"
+`, freePort, freePort)
+
+	_, err = adapter.CreateApp(ctx, domain.DockerApp{
+		ID:          "dup-test",
+		Name:        "dockerApps/dup-test",
+		ComposeYAML: dupYAML,
+	})
+	if err == nil || !strings.Contains(err.Error(), "port conflict") {
+		t.Fatalf("expected duplicate port conflict error, got: %v", err)
+	}
+
+	// 5. Compose with internal expose (no host port mapped) should not conflict
+	internalOnlyYAML := fmt.Sprintf(`services:
+  web:
+    image: nginx:alpine
+    expose:
+      - "%d"
+`, boundPort) // bound on host, but only exposed internally in docker network
+
+	// This should pass port check because it does not map to host
+	appDir := filepath.Join(tempUnitsDir, "internal-test")
+	_ = os.MkdirAll(appDir, 0755)
+	_ = os.WriteFile(filepath.Join(appDir, "compose.yaml"), []byte(internalOnlyYAML), 0644)
+	app, err := adapter.GetApp(ctx, "internal-test")
+	if err != nil {
+		t.Fatalf("GetApp failed: %v", err)
+	}
+	if app.ID != "internal-test" {
+		t.Fatalf("expected internal-test app, got %s", app.ID)
+	}
+
+	// 6. Redeploy / Update: App reusing its own currently mapped port should be permitted
+	existingAppDir := filepath.Join(tempUnitsDir, "redeploy-test")
+	_ = os.MkdirAll(existingAppDir, 0755)
+	existingAppYAML := fmt.Sprintf(`services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "%d:80"
+`, boundPort)
+	_ = os.WriteFile(filepath.Join(existingAppDir, "compose.yaml"), []byte(existingAppYAML), 0644)
+
+	// Checking boundPort with excludeAppID="redeploy-test" should report AVAILABLE (owned by itself)
+	redeploySt, err := adapter.CheckHostPort(ctx, boundPort, "tcp", "redeploy-test")
+	if err != nil {
+		t.Fatalf("CheckHostPort with excludeAppID failed: %v", err)
+	}
+	if !redeploySt.Available {
+		t.Fatalf("expected port %d to be available for redeploy-test, but reported in-use: %s", boundPort, redeploySt.InUseBy)
+	}
+
+	// UpdateApp on redeploy-test with same yaml using boundPort should NOT fail on port conflict
+	_, err = adapter.UpdateApp(ctx, domain.DockerApp{
+		ID:          "redeploy-test",
+		Name:        "dockerApps/redeploy-test",
+		ComposeYAML: existingAppYAML,
+	}, nil)
+	if err != nil && strings.Contains(err.Error(), "port conflict") {
+		t.Fatalf("UpdateApp failed with unexpected port conflict: %v", err)
 	}
 }

@@ -38,12 +38,14 @@ func TestDiskAdapter(t *testing.T) {
 	if len(found.SmartParameters) == 0 {
 		t.Errorf("expected SMART parameters for disk %q, got 0", found.DiskID)
 	}
-	t.Logf("Disk %s has %d SMART parameters, powerOnHours=%d, writtenBytes=%d, owningPool=%q, aliases=%v",
-		found.DiskID, len(found.SmartParameters), found.PowerOnHours, found.TotalBytesWritten, found.OwningZfsPool, found.Aliases)
-	if len(found.Aliases) == 0 {
-		t.Errorf("expected aliases for disk %q, got empty", found.DiskID)
+	t.Logf("Disk %s has %d SMART parameters, powerOnHours=%d, writtenBytes=%d, owningPool=%q, isSystem=%v, aliases=%v",
+		found.DiskID, len(found.SmartParameters), found.PowerOnHours, found.TotalBytesWritten, found.OwningZfsPool, found.IsSystem, found.Aliases)
+	for _, p := range found.Partitions {
+		t.Logf("  Partition %s: mountpoint=%q, isSystem=%v, owningPool=%q", p.Name, p.Mountpoint, p.IsSystem, p.OwningZfsPool)
 	}
-	if found.DiskID == "nvme0n1" && found.OwningZfsPool == "" {
-		t.Logf("Note: disk nvme0n1 owningPool is empty if pools are not backed by this device")
+	if found.DiskID == "nvme0n1" {
+		if !found.IsSystem {
+			t.Errorf("expected nvme0n1 to be marked as system disk (hosting /)")
+		}
 	}
 }

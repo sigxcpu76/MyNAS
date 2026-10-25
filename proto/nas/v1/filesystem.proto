@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package nas.v1;
+
+option go_package = "github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1";
+
+// =============================================================================
+// Host Filesystem Directory Browser (for Host Paths & Volumes)
+// =============================================================================
+
+message DirectoryEntry {
+  string name = 1;
+  string path = 2;
+  bool is_dir = 3;
+}
+
+message ListFileSystemDirectoriesRequest {
+  string path = 1;
+}
+
+message ListFileSystemDirectoriesResponse {
+  string current_path = 1;
+  string parent_path = 2;
+  repeated DirectoryEntry entries = 3;
+}

@@ -14,6 +14,7 @@ type DiskPartition struct {
 	Label         string   `json:"label"`
 	OwningZfsPool string   `json:"owning_zfs_pool"`
 	Aliases       []string `json:"aliases"`
+	IsSystem      bool     `json:"is_system"`
 }
 
 type SmartParameter struct {
@@ -59,6 +60,7 @@ type Disk struct {
 	ReallocatedSectors int64            `json:"reallocated_sectors"`
 	PendingSectors     int64            `json:"pending_sectors"`
 	Aliases            []string         `json:"aliases"`
+	IsSystem           bool             `json:"is_system"`
 }
 
 func (d *Disk) Validate() error {

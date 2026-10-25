@@ -128,7 +128,13 @@ const navItems = computed<NavItem[]>(() => {
           label: 'Disks',
           icon: mdiHarddisk,
           path: '/storage/disks',
-          badge: nasState.disks.length,
+          badge: nasState.disks.filter(
+            (d) =>
+              !d.isSystem &&
+              !d.diskId.startsWith('zd') &&
+              d.transport !== 'zvol' &&
+              !d.partitions?.some((p) => p.isSystem || p.mountpoint === '/')
+          ).length,
         },
         {
           id: 'storage-pools',
@@ -378,7 +384,7 @@ onMounted(() => {
             <span style="font-size: 10px; opacity: 0.75; margin-left: 2px">▼ Change</span>
           </button>
           <button
-            v-else
+            v-else-if="nasState.initialLoaded && !nasState.systemConfig?.mainPool"
             class="badge badge-warning interactive"
             style="cursor: pointer; display: inline-flex; align-items: center; gap: 5px; border: none; padding: 4px 10px; font-weight: 600"
             title="No main pool selected. Non-ZFS modules are paused. Click to select main pool."
@@ -387,6 +393,14 @@ onMounted(() => {
             <MdiIcon :path="mdiAlertCircle" size="14" />
             No Main Pool (Setup Required)
           </button>
+          <span
+            v-else-if="!nasState.initialLoaded"
+            class="badge badge-neutral"
+            style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; opacity: 0.8"
+          >
+            <span class="spinner" style="width: 10px; height: 10px; border-width: 2px"></span>
+            Syncing System...
+          </span>
         </div>
 
         <div style="display: flex; align-items: center; gap: 10px">
@@ -412,82 +426,99 @@ onMounted(() => {
       </header>
 
       <main class="content-container">
-        <!-- Main Storage Pool Setup & Recovery Alert Banner -->
+        <!-- Initial Loading State (Before first fetch completes and no cache available) -->
         <div
-          v-if="!nasState.systemConfig?.mainPool"
-          class="system-pool-banner"
-        >
-          <div style="display: flex; align-items: center; gap: 12px">
-            <MdiIcon :path="mdiAlertCircle" size="26" style="color: #f59e0b; flex-shrink: 0" />
-            <div>
-              <div style="font-weight: 700; font-size: 14px; color: #fbbf24">
-                Main ZFS Storage Pool Unconfigured — Non-ZFS Modules Paused
-              </div>
-              <div style="font-size: 12.5px; color: var(--text-secondary); margin-top: 2px">
-                Until a main pool is selected, modules other than ZFS (KVM, Docker, LXC, CIFS, WebDAV) are paused. Select or import a pool to initialize <code>.nas-system</code> datasets and recover your configuration.
-              </div>
-            </div>
-          </div>
-          <button class="btn btn-sm btn-primary" style="white-space: nowrap" @click="showPoolModal = true">
-            Configure Main Pool
-          </button>
-        </div>
-
-        <div
-          v-if="!activeModuleStatus.enabled"
+          v-if="!nasState.initialLoaded && !nasState.systemConfig"
           class="card"
-          style="border-color: rgba(239, 68, 68, 0.45)"
+          style="padding: 48px 24px; text-align: center; margin: 40px auto; max-width: 520px; border: 1px solid var(--border-subtle)"
         >
-          <div class="card-header">
-            <div>
-              <h3 class="card-title" style="color: #f87171">
-                Module Disabled — Required Host Binaries / Libraries Missing
-              </h3>
-              <p class="card-subtitle">
-                This module is automatically disabled because one or more underlying Linux binaries,
-                shared libraries, or kernel modules were not detected on the host.
-              </p>
-            </div>
-            <button class="btn btn-primary btn-sm" @click="navigateTo('prerequisites')">
-              View Prerequisites Page
-            </button>
+          <div class="spinner" style="margin: 0 auto 16px auto; width: 34px; height: 34px; border-width: 3px"></div>
+          <div style="font-weight: 700; font-size: 15px; color: var(--text-primary)">
+            Connecting to Aegis NAS...
           </div>
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Missing Prerequisite</th>
-                  <th>Kind</th>
-                  <th>Binary / Library Target</th>
-                  <th>Installation Hint</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="m in activeModuleStatus.missing" :key="m.name">
-                  <td style="font-weight: 600">{{ m.displayName }}</td>
-                  <td><span class="badge badge-danger">{{ m.kind }}</span></td>
-                  <td class="mono">{{ m.binaryOrPath }}</td>
-                  <td class="mono" style="font-size: 11.5px; color: var(--accent-primary)">
-                    {{ m.installHint }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div style="font-size: 12.5px; color: var(--text-secondary); margin-top: 6px">
+            Synchronizing storage topology, services, and system configuration
           </div>
         </div>
 
         <template v-else>
-          <OverviewView v-if="nasState.activeTab === 'overview'" />
-          <PrerequisitesView v-else-if="nasState.activeTab === 'prerequisites'" />
-          <DisksView v-else-if="nasState.activeTab === 'storage-disks'" />
-          <PoolsView v-else-if="nasState.activeTab === 'storage-pools' || nasState.activeTab === 'zfs'" />
-          <DatasetsView v-else-if="nasState.activeTab === 'storage-datasets'" />
-          <VolumesView v-else-if="nasState.activeTab === 'storage-volumes'" />
-          <KvmView v-else-if="nasState.activeTab === 'kvm'" />
-          <DockerView v-else-if="nasState.activeTab === 'docker'" />
-          <LxcView v-else-if="nasState.activeTab === 'lxc'" />
-          <SharesView v-else-if="nasState.activeTab === 'shares'" />
-          <IdentityView v-else-if="nasState.activeTab === 'identity'" />
+          <!-- Main Storage Pool Setup & Recovery Alert Banner -->
+          <div
+            v-if="nasState.initialLoaded && !nasState.systemConfig?.mainPool"
+            class="system-pool-banner"
+          >
+            <div style="display: flex; align-items: center; gap: 12px">
+              <MdiIcon :path="mdiAlertCircle" size="26" style="color: #f59e0b; flex-shrink: 0" />
+              <div>
+                <div style="font-weight: 700; font-size: 14px; color: #fbbf24">
+                  Main ZFS Storage Pool Unconfigured — Non-ZFS Modules Paused
+                </div>
+                <div style="font-size: 12.5px; color: var(--text-secondary); margin-top: 2px">
+                  Until a main pool is selected, modules other than ZFS (KVM, Docker, LXC, CIFS, WebDAV) are paused. Select or import a pool to initialize <code>.nas-system</code> datasets and recover your configuration.
+                </div>
+              </div>
+            </div>
+            <button class="btn btn-sm btn-primary" style="white-space: nowrap" @click="showPoolModal = true">
+              Configure Main Pool
+            </button>
+          </div>
+
+          <div
+            v-if="nasState.initialLoaded && !activeModuleStatus.enabled"
+            class="card"
+            style="border-color: rgba(239, 68, 68, 0.45)"
+          >
+            <div class="card-header">
+              <div>
+                <h3 class="card-title" style="color: #f87171">
+                  Module Disabled — Required Host Binaries / Libraries Missing
+                </h3>
+                <p class="card-subtitle">
+                  This module is automatically disabled because one or more underlying Linux binaries,
+                  shared libraries, or kernel modules were not detected on the host.
+                </p>
+              </div>
+              <button class="btn btn-primary btn-sm" @click="navigateTo('prerequisites')">
+                View Prerequisites Page
+              </button>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Missing Prerequisite</th>
+                    <th>Kind</th>
+                    <th>Binary / Library Target</th>
+                    <th>Installation Hint</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="m in activeModuleStatus.missing" :key="m.name">
+                    <td style="font-weight: 600">{{ m.displayName }}</td>
+                    <td><span class="badge badge-danger">{{ m.kind }}</span></td>
+                    <td class="mono">{{ m.binaryOrPath }}</td>
+                    <td class="mono" style="font-size: 11.5px; color: var(--accent-primary)">
+                      {{ m.installHint }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <template v-else>
+            <OverviewView v-if="nasState.activeTab === 'overview'" />
+            <PrerequisitesView v-else-if="nasState.activeTab === 'prerequisites'" />
+            <DisksView v-else-if="nasState.activeTab === 'storage-disks'" />
+            <PoolsView v-else-if="nasState.activeTab === 'storage-pools' || nasState.activeTab === 'zfs'" />
+            <DatasetsView v-else-if="nasState.activeTab === 'storage-datasets'" />
+            <VolumesView v-else-if="nasState.activeTab === 'storage-volumes'" />
+            <KvmView v-else-if="nasState.activeTab === 'kvm'" />
+            <DockerView v-else-if="nasState.activeTab === 'docker'" />
+            <LxcView v-else-if="nasState.activeTab === 'lxc'" />
+            <SharesView v-else-if="nasState.activeTab === 'shares'" />
+            <IdentityView v-else-if="nasState.activeTab === 'identity'" />
+          </template>
         </template>
       </main>
     </div>

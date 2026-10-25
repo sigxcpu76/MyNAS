@@ -1,0 +1,127 @@
+syntax = "proto3";
+
+package nas.v1;
+
+import "google/api/field_behavior.proto";
+import "google/api/resource.proto";
+import "google/protobuf/field_mask.proto";
+
+option go_package = "github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1";
+
+// =============================================================================
+// Linux Users & Groups Resources
+// =============================================================================
+
+message User {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/User"
+    pattern: "users/{user}"
+    singular: "user"
+    plural: "users"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string username = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int32 uid = 3;
+  int32 primary_gid = 4;
+  string primary_group = 5;
+  repeated string supplementary_groups = 6;
+  string full_name = 7;
+  string home_directory = 8;
+  string shell = 9;
+  bool ssh_enabled = 10;
+  bool ssh_password_auth = 11;
+  repeated string ssh_authorized_keys = 12;
+  bool locked = 13;
+  bool system_account = 14 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string password = 15 [(google.api.field_behavior) = INPUT_ONLY];
+  bool is_admin = 16;
+}
+
+message ListUsersRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  bool include_system_accounts = 3;
+}
+
+message ListUsersResponse {
+  repeated User users = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetUserRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/User"}
+  ];
+}
+
+message CreateUserRequest {
+  string user_id = 1 [(google.api.field_behavior) = REQUIRED];
+  User user = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateUserRequest {
+  User user = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteUserRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/User"}
+  ];
+  bool remove_home = 2;
+}
+
+message Group {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/Group"
+    pattern: "groups/{group}"
+    singular: "group"
+    plural: "groups"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string group_name = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int32 gid = 3;
+  repeated string members = 4;
+  bool system_group = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+message ListGroupsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  bool include_system_groups = 3;
+}
+
+message ListGroupsResponse {
+  repeated Group groups = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetGroupRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/Group"}
+  ];
+}
+
+message CreateGroupRequest {
+  string group_id = 1 [(google.api.field_behavior) = REQUIRED];
+  Group group = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateGroupRequest {
+  Group group = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteGroupRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/Group"}
+  ];
+}

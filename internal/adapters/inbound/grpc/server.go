@@ -313,6 +313,7 @@ func toProtoDisk(d domain.Disk) *nasv1.Disk {
 			Label:         p.Label,
 			OwningZfsPool: p.OwningZfsPool,
 			Aliases:       p.Aliases,
+			IsSystem:      p.IsSystem,
 		})
 	}
 	var smartParams []*nasv1.SmartParameter
@@ -360,6 +361,7 @@ func toProtoDisk(d domain.Disk) *nasv1.Disk {
 		ReallocatedSectors: d.ReallocatedSectors,
 		PendingSectors:     d.PendingSectors,
 		Aliases:            d.Aliases,
+		IsSystem:           d.IsSystem,
 	}
 }
 
@@ -1426,6 +1428,16 @@ func dockerAppToProto(a *domain.DockerApp) *nasv1.DockerApp {
 			NetTxRate:   c.NetTxRate,
 		})
 	}
+	var portals []*nasv1.DockerAppPortal
+	for _, p := range a.Portals {
+		portals = append(portals, &nasv1.DockerAppPortal{
+			Name:     p.Name,
+			Url:      p.URL,
+			Port:     int32(p.Port),
+			Protocol: p.Protocol,
+			Path:     p.Path,
+		})
+	}
 	return &nasv1.DockerApp{
 		Name:            domain.DockerAppName(a.ID),
 		AppId:           a.ID,
@@ -1439,6 +1451,7 @@ func dockerAppToProto(a *domain.DockerApp) *nasv1.DockerApp {
 		PortMappings:    a.PortMappings,
 		Volumes:         a.Volumes,
 		WebUiUrl:        a.WebUIURL,
+		Portals:         portals,
 		TotalCpuPercent: a.TotalCPUPercent,
 		TotalMemoryMib:  a.TotalMemoryMiB,
 		CreatedAt:       a.CreatedAt.Format(time.RFC3339),
@@ -1686,6 +1699,48 @@ func (s *Server) UpdateDockerConfig(ctx context.Context, req *nasv1.UpdateDocker
 		DatasetSelected:   updated.DatasetSelected,
 		AppdataDataset:    updated.AppdataPath,
 		PoolSelected:      updated.DatasetSelected,
+	}, nil
+}
+
+func (s *Server) CheckHostPort(ctx context.Context, req *nasv1.CheckHostPortRequest) (*nasv1.CheckHostPortResponse, error) {
+	if s.dockerApp == nil {
+		return nil, status.Error(codes.Unavailable, "docker app service unavailable")
+	}
+	st, err := s.dockerApp.CheckHostPort(ctx, int(req.GetPort()), req.GetProtocol(), req.GetExcludeAppId())
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return &nasv1.CheckHostPortResponse{
+		Port:      int32(st.Port),
+		Protocol:  st.Protocol,
+		Available: st.Available,
+		InUseBy:   st.InUseBy,
+	}, nil
+}
+
+func (s *Server) CheckHostPorts(ctx context.Context, req *nasv1.CheckHostPortsRequest) (*nasv1.CheckHostPortsResponse, error) {
+	if s.dockerApp == nil {
+		return nil, status.Error(codes.Unavailable, "docker app service unavailable")
+	}
+	intPorts := make([]int, 0, len(req.GetPorts()))
+	for _, p := range req.GetPorts() {
+		intPorts = append(intPorts, int(p))
+	}
+	statuses, err := s.dockerApp.CheckHostPorts(ctx, intPorts, req.GetProtocol(), req.GetExcludeAppId())
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	out := make([]*nasv1.HostPortStatus, 0, len(statuses))
+	for _, st := range statuses {
+		out = append(out, &nasv1.HostPortStatus{
+			Port:      int32(st.Port),
+			Protocol:  st.Protocol,
+			Available: st.Available,
+			InUseBy:   st.InUseBy,
+		})
+	}
+	return &nasv1.CheckHostPortsResponse{
+		Ports: out,
 	}, nil
 }
 

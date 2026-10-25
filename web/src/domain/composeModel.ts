@@ -8,6 +8,8 @@ export interface ComposePortModel {
   hostPort: string;
   containerPort: string;
   protocol: 'tcp' | 'udp';
+  publishToHost?: boolean;
+  isManagementPort?: boolean;
 }
 
 export interface ComposeEnvModel {
@@ -54,12 +56,21 @@ export interface ComposeTopLevelVolume {
   external: boolean;
 }
 
+export interface ComposePortalModel {
+  name: string;
+  scheme: string;
+  port: string;
+  path: string;
+}
+
 export interface ComposeAppFormModel {
   appId: string;
   title: string;
   services: ComposeServiceModel[];
   networks: ComposeTopLevelNetwork[];
   volumes: ComposeTopLevelVolume[];
+  managementPort?: string; // Container internal port used for Open Web UI (e.g. "81")
+  portals?: ComposePortalModel[];
 }
 
 // =============================================================================
@@ -69,6 +80,22 @@ export interface ComposeAppFormModel {
 let nextUid = 1;
 export function generateUid(): string {
   return `uid_${Date.now()}_${nextUid++}`;
+}
+
+/**
+ * Generates a random high host port in 32000-65000 range.
+ */
+export function generateRandomHighPort(usedPorts?: Set<number>): number {
+  const min = 32000;
+  const max = 65000;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const candidate = Math.floor(Math.random() * (max - min + 1)) + min;
+    if (!usedPorts || !usedPorts.has(candidate)) {
+      if (usedPorts) usedPorts.add(candidate);
+      return candidate;
+    }
+  }
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 export function createDefaultService(name = 'app', image = ''): ComposeServiceModel {
@@ -99,6 +126,8 @@ export function createDefaultAppForm(appId = '', title = ''): ComposeAppFormMode
     services: [createDefaultService('app')],
     networks: [],
     volumes: [],
+    managementPort: '',
+    portals: [],
   };
 }
 
@@ -141,11 +170,34 @@ export function composeYamlToForm(
     return model;
   }
 
+  // Extract management port if specified in extension fields or comments
+  let mgmtPort = '';
+  if (parsed['x-nas-management-port'] !== undefined && parsed['x-nas-management-port'] !== null) {
+    mgmtPort = String(parsed['x-nas-management-port']).trim();
+  } else if (parsed['x-management-port'] !== undefined && parsed['x-management-port'] !== null) {
+    mgmtPort = String(parsed['x-management-port']).trim();
+  } else if (parsed['x-webui-port'] !== undefined && parsed['x-webui-port'] !== null) {
+    mgmtPort = String(parsed['x-webui-port']).trim();
+  }
+
   // 1. Parse Services
   const rawServices = parsed.services || {};
   for (const [svcName, rawSvc] of Object.entries(rawServices)) {
     if (!rawSvc || typeof rawSvc !== 'object') continue;
     const svc = rawSvc as any;
+
+    if (!mgmtPort && svc.labels) {
+      if (Array.isArray(svc.labels)) {
+        for (const l of svc.labels) {
+          const lStr = String(l);
+          if (lStr.startsWith('nas.management.port=') || lStr.startsWith('nas.webui.port=')) {
+            mgmtPort = lStr.split('=')[1]?.trim() || '';
+          }
+        }
+      } else if (typeof svc.labels === 'object') {
+        mgmtPort = String(svc.labels['nas.management.port'] || svc.labels['nas.webui.port'] || '').trim();
+      }
+    }
 
     const serviceModel: ComposeServiceModel = {
       id: generateUid(),
@@ -184,25 +236,58 @@ export function composeYamlToForm(
               containerPart = parts[2];
             }
             const [contP, proto] = containerPart.split('/');
+            let cleanHostP = hostP.trim();
+            if (!cleanHostP) {
+              cleanHostP = String(generateRandomHighPort());
+            }
             serviceModel.ports.push({
-              hostPort: hostP.trim(),
+              hostPort: cleanHostP,
               containerPort: contP.trim(),
               protocol: (proto?.toLowerCase() === 'udp' ? 'udp' : 'tcp') as 'tcp' | 'udp',
+              publishToHost: true,
             });
           } else {
+            // Port specified under `ports:` without host mapping (e.g. - "80")
+            // Pick a random high port in 32000+ range
             const [contP, proto] = str.split('/');
+            const randHost = generateRandomHighPort();
+            serviceModel.ports.push({
+              hostPort: String(randHost),
+              containerPort: contP.trim(),
+              protocol: (proto?.toLowerCase() === 'udp' ? 'udp' : 'tcp') as 'tcp' | 'udp',
+              publishToHost: true,
+            });
+          }
+        } else if (p && typeof p === 'object') {
+          const hasHost = p.published !== undefined && p.published !== null && String(p.published).trim() !== '';
+          const hostP = hasHost ? String(p.published).trim() : String(generateRandomHighPort());
+          serviceModel.ports.push({
+            hostPort: hostP,
+            containerPort: String(p.target || '').trim(),
+            protocol: (p.protocol?.toLowerCase() === 'udp' ? 'udp' : 'tcp') as 'tcp' | 'udp',
+            publishToHost: true,
+          });
+        }
+      }
+    }
+
+    // Parse Expose (Internal-only container ports not published to host)
+    if (Array.isArray(svc.expose)) {
+      for (const exp of svc.expose) {
+        if (typeof exp === 'string' || typeof exp === 'number') {
+          const str = String(exp).trim();
+          const [contP, proto] = str.split('/');
+          const exists = serviceModel.ports.some(
+            (existing) => existing.containerPort === contP.trim() && !existing.publishToHost
+          );
+          if (!exists) {
             serviceModel.ports.push({
               hostPort: '',
               containerPort: contP.trim(),
               protocol: (proto?.toLowerCase() === 'udp' ? 'udp' : 'tcp') as 'tcp' | 'udp',
+              publishToHost: false,
             });
           }
-        } else if (p && typeof p === 'object') {
-          serviceModel.ports.push({
-            hostPort: String(p.published || ''),
-            containerPort: String(p.target || ''),
-            protocol: (p.protocol?.toLowerCase() === 'udp' ? 'udp' : 'tcp') as 'tcp' | 'udp',
-          });
         }
       }
     }
@@ -304,6 +389,58 @@ export function composeYamlToForm(
     }
   }
 
+  // 4. Parse Portals (TrueNAS SCALE x-portals or standard portals)
+  const portals: ComposePortalModel[] = [];
+  const rawPortals = parsed['x-portals'] || parsed['portals'];
+  if (Array.isArray(rawPortals)) {
+    for (const p of rawPortals) {
+      if (p && typeof p === 'object') {
+        portals.push({
+          name: String(p.name || 'Web UI'),
+          scheme: String(p.scheme || p.protocol || 'http'),
+          port: String(p.port ?? ''),
+          path: String(p.path || '/'),
+        });
+      }
+    }
+  } else if (rawPortals && typeof rawPortals === 'object') {
+    for (const [key, p] of Object.entries(rawPortals)) {
+      if (p && typeof p === 'object') {
+        const pObj = p as any;
+        portals.push({
+          name: String(pObj.name || key),
+          scheme: String(pObj.scheme || pObj.protocol || 'http'),
+          port: String(pObj.port ?? ''),
+          path: String(pObj.path || '/'),
+        });
+      }
+    }
+  }
+  model.portals = portals;
+
+  // Fallback: check portals or YAML comments for management port definition
+  if (!mgmtPort) {
+    if (portals.length > 0 && portals[0].port) {
+      mgmtPort = portals[0].port;
+    } else {
+      const commentMatch = yamlStr.match(/#\s*(?:x-nas-management-port|nas\.management\.port|webui-port)[:=]\s*(\d+)/i);
+      if (commentMatch) {
+        mgmtPort = commentMatch[1];
+      }
+    }
+  }
+
+  model.managementPort = mgmtPort;
+  if (mgmtPort) {
+    for (const s of model.services) {
+      for (const p of s.ports) {
+        if (p.containerPort === mgmtPort) {
+          p.isManagementPort = true;
+        }
+      }
+    }
+  }
+
   return model;
 }
 
@@ -314,6 +451,35 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
   const rootObj: any = {
     services: {},
   };
+
+  const mgmtPort = form.managementPort?.trim() || '';
+  if (mgmtPort) {
+    const numPort = Number(mgmtPort);
+    rootObj['x-nas-management-port'] = Number.isNaN(numPort) ? mgmtPort : numPort;
+  }
+
+  if (form.portals && form.portals.length > 0) {
+    rootObj['x-portals'] = form.portals.map((p, idx) => {
+      const portVal = idx === 0 && mgmtPort ? mgmtPort : p.port;
+      const pNum = Number(portVal);
+      return {
+        name: p.name || 'Web UI',
+        scheme: p.scheme || 'http',
+        port: Number.isNaN(pNum) ? portVal : pNum,
+        path: p.path || '/',
+      };
+    });
+  } else if (mgmtPort) {
+    const pNum = Number(mgmtPort);
+    rootObj['x-portals'] = [
+      {
+        name: 'Web UI',
+        scheme: 'http',
+        port: Number.isNaN(pNum) ? mgmtPort : pNum,
+        path: '/',
+      },
+    ];
+  }
 
   for (const svc of form.services) {
     const svcKey = svc.name.trim() || 'app';
@@ -335,14 +501,30 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
       svcObj.command = svc.command.trim();
     }
 
-    // Ports
+    // Ports & Expose
     const activePorts = svc.ports.filter((p) => p.containerPort.trim());
-    if (activePorts.length > 0) {
-      svcObj.ports = activePorts.map((p) => {
+    const publishedPorts = activePorts.filter((p) => p.publishToHost !== false);
+    const internalPorts = activePorts.filter((p) => p.publishToHost === false);
+
+    if (publishedPorts.length > 0) {
+      svcObj.ports = publishedPorts.map((p) => {
+        let hostP = p.hostPort.trim();
+        if (!hostP) {
+          hostP = String(generateRandomHighPort());
+          p.hostPort = hostP;
+        }
         const protoSuffix = p.protocol === 'udp' ? '/udp' : '';
-        const portStr = p.hostPort.trim()
-          ? `${p.hostPort.trim()}:${p.containerPort.trim()}${protoSuffix}`
-          : `${p.containerPort.trim()}${protoSuffix}`;
+        const portStr = `${hostP}:${p.containerPort.trim()}${protoSuffix}`;
+        const s = new YAML.Scalar(portStr);
+        s.type = 'QUOTE_DOUBLE';
+        return s;
+      });
+    }
+
+    if (internalPorts.length > 0) {
+      svcObj.expose = internalPorts.map((p) => {
+        const protoSuffix = p.protocol === 'udp' ? '/udp' : '';
+        const portStr = `${p.containerPort.trim()}${protoSuffix}`;
         const s = new YAML.Scalar(portStr);
         s.type = 'QUOTE_DOUBLE';
         return s;
@@ -390,6 +572,12 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
     // Privileged
     if (svc.privileged) {
       svcObj.privileged = true;
+    }
+
+    // Web UI Management Port label
+    const hasMgmtPortInSvc = svc.ports.some((p) => p.containerPort.trim() === mgmtPort);
+    if (mgmtPort && hasMgmtPortInSvc) {
+      svcObj.labels = [`nas.management.port=${mgmtPort}`];
     }
 
     // Devices

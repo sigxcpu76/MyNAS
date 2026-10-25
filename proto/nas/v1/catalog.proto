@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package nas.v1;
+
+option go_package = "github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1";
+
+// =============================================================================
+// Application Catalog Messages (TrueNAS SCALE Catalog)
+// =============================================================================
+
+message CatalogApp {
+  string app_id = 1;
+  string title = 2;
+  string description = 3;
+  string category = 4;
+  repeated string categories = 5;
+  string icon_url = 6;
+  string home = 7;
+  string train = 8;
+  string version = 9;
+  string app_version = 10;
+  repeated string tags = 11;
+  repeated string screenshots = 12;
+  string compose_yaml = 13;
+  int32 default_port = 14;
+  repeated string sources = 15;
+  string container_image = 16;
+}
+
+message ListCatalogAppsRequest {
+  string train = 1;
+  string category = 2;
+  string query = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+}
+
+message ListCatalogAppsResponse {
+  repeated CatalogApp apps = 1;
+  int32 total_size = 2;
+  string last_sync_time = 3;
+}
+
+message GetCatalogAppRequest {
+  string app_id = 1;
+  string train = 2;
+}
+
+message SyncCatalogRequest {
+  bool force = 1;
+}
+
+message SyncCatalogResponse {
+  bool success = 1;
+  string message = 2;
+  int32 total_apps = 3;
+  string last_sync_time = 4;
+}

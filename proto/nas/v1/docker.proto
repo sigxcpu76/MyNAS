@@ -1,0 +1,302 @@
+syntax = "proto3";
+
+package nas.v1;
+
+import "google/api/field_behavior.proto";
+import "google/api/resource.proto";
+import "google/protobuf/field_mask.proto";
+
+option go_package = "github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1";
+
+// =============================================================================
+// Docker Container Resource
+// =============================================================================
+
+message DockerContainer {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/DockerContainer"
+    pattern: "dockerContainers/{docker_container}"
+    singular: "dockerContainer"
+    plural: "dockerContainers"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string container_id = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string container_name = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string image = 4;
+  string state = 5 [(google.api.field_behavior) = OUTPUT_ONLY]; // RUNNING, EXITED, CREATED, PAUSED
+  string status_text = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+  repeated string ports = 7; // e.g. "8080:80/tcp"
+  repeated string volumes = 8; // e.g. "/tank/appdata:/config"
+  repeated string environment = 9; // e.g. "TZ=UTC"
+  string restart_policy = 10; // unless-stopped, always, no, on-failure
+  string network_mode = 11; // bridge, host
+  double cpu_percent = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 memory_usage_mib = 13 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string created_at = 14 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 memory_limit_mib = 15;
+  repeated string command = 16;
+  bool privileged = 17;
+  string compose_yaml = 18;
+}
+
+message ListDockerContainersRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string filter = 3;
+}
+
+message ListDockerContainersResponse {
+  repeated DockerContainer docker_containers = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetDockerContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerContainer"}
+  ];
+}
+
+message CreateDockerContainerRequest {
+  string docker_container_id = 1 [(google.api.field_behavior) = REQUIRED];
+  DockerContainer docker_container = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateDockerContainerRequest {
+  DockerContainer docker_container = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message GetDockerContainerLogsRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerContainer"}
+  ];
+  int32 tail = 2;
+}
+
+message GetDockerContainerLogsResponse {
+  string logs = 1;
+}
+
+message DeleteDockerContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerContainer"}
+  ];
+  bool force = 2;
+}
+
+message StartDockerContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerContainer"}
+  ];
+}
+
+message StopDockerContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerContainer"}
+  ];
+}
+
+message RestartDockerContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerContainer"}
+  ];
+}
+
+// =============================================================================
+// Docker App Resource (TrueNAS SCALE Compose Descriptors)
+// =============================================================================
+
+message DockerApp {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/DockerApp"
+    pattern: "dockerApps/{docker_app}"
+    singular: "dockerApp"
+    plural: "dockerApps"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string app_id = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string title = 3;
+  string state = 4 [(google.api.field_behavior) = OUTPUT_ONLY]; // RUNNING, STOPPED, PARTIALLY_RUNNING, ERROR
+  string status_text = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string compose_yaml = 6;
+  string compose_file_path = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
+  repeated string services = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
+  repeated DockerAppContainer containers = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
+  repeated string port_mappings = 10 [(google.api.field_behavior) = OUTPUT_ONLY];
+  repeated string volumes = 11 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string web_ui_url = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
+  double total_cpu_percent = 13 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 total_memory_mib = 14 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string created_at = 15 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string updated_at = 16 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 total_net_rx_bytes = 17 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 total_net_tx_bytes = 18 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 total_net_rx_rate = 19 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 total_net_tx_rate = 20 [(google.api.field_behavior) = OUTPUT_ONLY];
+  repeated DockerAppPortal portals = 21 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+message DockerAppPortal {
+  string name = 1;
+  string url = 2;
+  int32 port = 3;
+  string protocol = 4;
+  string path = 5;
+}
+
+message DockerAppContainer {
+  string container_id = 1;
+  string name = 2;
+  string service_name = 3;
+  string image = 4;
+  string state = 5;
+  string status = 6;
+  double cpu_percent = 7;
+  int64 memory_mib = 8;
+  repeated string ports = 9;
+  string created_at = 10;
+  int64 net_rx_bytes = 11;
+  int64 net_tx_bytes = 12;
+  int64 net_rx_rate = 13;
+  int64 net_tx_rate = 14;
+}
+
+message ListDockerAppsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string filter = 3;
+}
+
+message ListDockerAppsResponse {
+  repeated DockerApp docker_apps = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetDockerAppRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerApp"}
+  ];
+}
+
+message CreateDockerAppRequest {
+  string docker_app_id = 1 [(google.api.field_behavior) = REQUIRED];
+  DockerApp docker_app = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateDockerAppRequest {
+  DockerApp docker_app = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteDockerAppRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerApp"}
+  ];
+  bool delete_volumes = 2;
+}
+
+message StartDockerAppRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerApp"}
+  ];
+}
+
+message StopDockerAppRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerApp"}
+  ];
+}
+
+message RestartDockerAppRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerApp"}
+  ];
+}
+
+message GetDockerAppLogsRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerApp"}
+  ];
+  int32 tail = 2;
+  string service_name = 3;
+}
+
+message GetDockerAppLogsResponse {
+  string logs = 1;
+  int32 line_count = 2;
+}
+
+// =============================================================================
+// Docker Storage & ZFS Dataset Configuration
+// =============================================================================
+
+message DockerConfig {
+  string dataset = 1;                  // ZFS dataset owned by Docker, e.g. "tank/apps" or "tank/docker"
+  string pool = 2;                     // Parent ZFS pool, e.g. "tank"
+  string mountpoint = 3;               // Mountpoint of the dataset, e.g. "/tank/apps"
+  string appdata_path = 4;             // Path for container appdata volumes, e.g. "/tank/apps/appdata"
+  string docker_data_root = 5;         // Path for Docker engine data-root, e.g. "/tank/apps/docker"
+  repeated string available_datasets = 6;
+  repeated string available_pools = 7;
+  bool dataset_selected = 8;
+  string appdata_dataset = 9;
+  bool pool_selected = 10;
+}
+
+message GetDockerConfigRequest {}
+
+message UpdateDockerConfigRequest {
+  DockerConfig docker_config = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+// =============================================================================
+// Preemptive Host Port Availability Check Messages
+// =============================================================================
+
+message CheckHostPortRequest {
+  int32 port = 1;
+  string protocol = 2; // "tcp" or "udp"
+  string exclude_app_id = 3;
+}
+
+message CheckHostPortResponse {
+  int32 port = 1;
+  string protocol = 2;
+  bool available = 3;
+  string in_use_by = 4;
+}
+
+message CheckHostPortsRequest {
+  repeated int32 ports = 1;
+  string protocol = 2; // "tcp" or "udp"
+  string exclude_app_id = 3;
+}
+
+message HostPortStatus {
+  int32 port = 1;
+  string protocol = 2;
+  bool available = 3;
+  string in_use_by = 4;
+}
+
+message CheckHostPortsResponse {
+  repeated HostPortStatus ports = 1;
+}
+

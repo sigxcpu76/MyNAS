@@ -47,7 +47,10 @@ func (a *Adapter) ListDisks(ctx context.Context) ([]domain.Disk, error) {
 	// 3. Fetch ZFS Pool vdev mappings using alias matching, symlink resolution, and backing devices
 	poolDeviceMap := a.getPoolDeviceMap(ctx, aliasToDev, partitionToDisk)
 
-	// 4. Discover block devices in /sys/block
+	// 4. Identify system device(s) hosting the root (/) filesystem
+	sysDevices := a.identifySystemDevices(partitionToDisk, aliasToDev)
+
+	// 5. Discover block devices in /sys/block
 	entries, err := os.ReadDir(a.sysFS)
 	if err == nil {
 		for _, entry := range entries {
@@ -58,7 +61,7 @@ func (a *Adapter) ListDisks(ctx context.Context) ([]domain.Disk, error) {
 				continue
 			}
 
-			disk, err := a.inspectSysfsDisk(name, poolDeviceMap, devToAliases)
+			disk, err := a.inspectSysfsDisk(name, poolDeviceMap, devToAliases, sysDevices)
 			if err == nil && disk != nil {
 				disks = append(disks, *disk)
 			}
@@ -82,7 +85,7 @@ func (a *Adapter) GetDisk(ctx context.Context, id string) (*domain.Disk, error) 
 	return nil, fmt.Errorf("disk %q not found", cleanID)
 }
 
-func (a *Adapter) inspectSysfsDisk(devName string, poolMap map[string]string, devToAliases map[string][]string) (*domain.Disk, error) {
+func (a *Adapter) inspectSysfsDisk(devName string, poolMap map[string]string, devToAliases map[string][]string, sysDevices systemDevices) (*domain.Disk, error) {
 	devDir := filepath.Join(a.sysFS, devName)
 
 	// Read size in 512-byte sectors
@@ -174,7 +177,7 @@ func (a *Adapter) inspectSysfsDisk(devName string, poolMap map[string]string, de
 	}
 
 	// Partitions discovery
-	partitions := a.inspectSysfsPartitions(devDir, devName, poolMap, devToAliases)
+	partitions := a.inspectSysfsPartitions(devDir, devName, poolMap, devToAliases, sysDevices)
 
 	// If any child partition is owned by a ZFS pool, disk is also associated
 	if owningPool == "" {
@@ -192,6 +195,25 @@ func (a *Adapter) inspectSysfsDisk(devName string, poolMap map[string]string, de
 	}
 	if diskAliases == nil {
 		diskAliases = []string{}
+	}
+
+	// Determine if this disk or any of its partitions host the root (/) filesystem
+	isSystemDisk := sysDevices.disks[devName] || sysDevices.disks[devPath]
+	if !isSystemDisk {
+		for _, alias := range diskAliases {
+			if sysDevices.disks[alias] || sysDevices.disks[filepath.Base(alias)] {
+				isSystemDisk = true
+				break
+			}
+		}
+	}
+	if !isSystemDisk {
+		for _, p := range partitions {
+			if p.IsSystem || p.Mountpoint == "/" {
+				isSystemDisk = true
+				break
+			}
+		}
 	}
 
 	disk := &domain.Disk{
@@ -216,6 +238,7 @@ func (a *Adapter) inspectSysfsDisk(devName string, poolMap map[string]string, de
 		OwningZfsPool:      owningPool,
 		Partitions:         partitions,
 		Aliases:            diskAliases,
+		IsSystem:           isSystemDisk,
 	}
 
 	readIOs, writeIOs := readSysfsStat(devDir, disk)
@@ -224,7 +247,7 @@ func (a *Adapter) inspectSysfsDisk(devName string, poolMap map[string]string, de
 	return disk, nil
 }
 
-func (a *Adapter) inspectSysfsPartitions(devDir, devName string, poolMap map[string]string, devToAliases map[string][]string) []domain.DiskPartition {
+func (a *Adapter) inspectSysfsPartitions(devDir, devName string, poolMap map[string]string, devToAliases map[string][]string, sysDevices systemDevices) []domain.DiskPartition {
 	var parts []domain.DiskPartition
 
 	entries, err := os.ReadDir(devDir)
@@ -267,13 +290,44 @@ func (a *Adapter) inspectSysfsPartitions(devDir, devName string, poolMap map[str
 				}
 			}
 
+			mountpoint := mounts[partPath]
+			if mountpoint == "" {
+				mountpoint = mounts[subName]
+			}
+			if mountpoint == "" {
+				for _, alias := range partAliases {
+					if m := mounts[alias]; m != "" {
+						mountpoint = m
+						break
+					}
+					if m := mounts[filepath.Base(alias)]; m != "" {
+						mountpoint = m
+						break
+					}
+				}
+			}
+
+			isSystemPart := mountpoint == "/" || sysDevices.partitions[subName] || sysDevices.partitions[partPath]
+			if !isSystemPart {
+				for _, alias := range partAliases {
+					if sysDevices.partitions[alias] || sysDevices.partitions[filepath.Base(alias)] {
+						isSystemPart = true
+						break
+					}
+				}
+			}
+			if isSystemPart && mountpoint == "" {
+				mountpoint = "/"
+			}
+
 			parts = append(parts, domain.DiskPartition{
 				Name:          subName,
 				DevicePath:    partPath,
 				SizeBytes:     sec * 512,
-				Mountpoint:    mounts[partPath],
+				Mountpoint:    mountpoint,
 				OwningZfsPool: owningPool,
 				Aliases:       partAliases,
+				IsSystem:      isSystemPart,
 			})
 		}
 	}
@@ -900,6 +954,147 @@ func (a *Adapter) buildPartitionToDiskMap() map[string]string {
 	return partToDisk
 }
 
+type systemDevices struct {
+	disks      map[string]bool
+	partitions map[string]bool
+}
+
+func extractParentDiskName(name string) string {
+	name = strings.TrimPrefix(name, "/dev/")
+	// nvme0n1p1 -> nvme0n1, mmcblk0p1 -> mmcblk0
+	if strings.Contains(name, "nvme") || strings.Contains(name, "mmcblk") {
+		if idx := strings.LastIndex(name, "p"); idx > 0 {
+			suffix := name[idx+1:]
+			if _, err := strconv.Atoi(suffix); err == nil {
+				return name[:idx]
+			}
+		}
+	}
+	// sda1, vda1, hda1 -> strip trailing digits
+	trimmed := strings.TrimRight(name, "0123456789")
+	if trimmed != "" && trimmed != name {
+		return trimmed
+	}
+	return ""
+}
+
+func (a *Adapter) identifySystemDevices(partitionToDisk map[string]string, aliasToDev map[string]string) systemDevices {
+	res := systemDevices{
+		disks:      make(map[string]bool),
+		partitions: make(map[string]bool),
+	}
+
+	markDev := func(dev string) {
+		if dev == "" {
+			return
+		}
+		dev = strings.TrimSpace(dev)
+		res.partitions[dev] = true
+		res.partitions[filepath.Base(dev)] = true
+
+		// Check if resolved symlink
+		if realPath, err := filepath.EvalSymlinks(dev); err == nil && realPath != dev {
+			res.partitions[realPath] = true
+			res.partitions[filepath.Base(realPath)] = true
+			dev = realPath
+		}
+
+		base := filepath.Base(dev)
+
+		// Check if dev itself is a parent disk in /sys/block
+		if _, err := os.Stat(filepath.Join(a.sysFS, base)); err == nil {
+			res.disks[base] = true
+			res.disks["/dev/"+base] = true
+		}
+
+		// Check partitionToDisk map
+		if parent := partitionToDisk[base]; parent != "" {
+			res.disks[parent] = true
+			res.disks["/dev/"+parent] = true
+		}
+		if parent := partitionToDisk["/dev/"+base]; parent != "" {
+			res.disks[parent] = true
+			res.disks["/dev/"+parent] = true
+		}
+
+		// Check alias map
+		if origDev := aliasToDev[base]; origDev != "" {
+			res.partitions[origDev] = true
+			res.partitions[filepath.Base(origDev)] = true
+			if parent := partitionToDisk[origDev]; parent != "" {
+				res.disks[parent] = true
+				res.disks["/dev/"+parent] = true
+			}
+		}
+
+		// Handle naming conventions: nvme0n1p2 -> nvme0n1, sda2 -> sda, etc.
+		if parent := extractParentDiskName(base); parent != "" {
+			res.disks[parent] = true
+			res.disks["/dev/"+parent] = true
+		}
+	}
+
+	// 1. Resolve backing device for root filesystem "/" using kernel syscall stat
+	if rootDev := findBackingDeviceForPath("/"); rootDev != "" {
+		markDev(rootDev)
+	}
+
+	// 2. Direct unix.Stat to check /sys/dev/block/<major>:<minor>
+	var st unix.Stat_t
+	if err := unix.Stat("/", &st); err == nil && st.Dev != 0 {
+		maj := unix.Major(st.Dev)
+		min := unix.Minor(st.Dev)
+		sysLink := fmt.Sprintf("/sys/dev/block/%d:%d", maj, min)
+		if resolved, err := filepath.EvalSymlinks(sysLink); err == nil {
+			base := filepath.Base(resolved)
+			markDev("/dev/" + base)
+			// Check slaves for device mapper
+			if entries, err := os.ReadDir(filepath.Join(resolved, "slaves")); err == nil {
+				for _, e := range entries {
+					markDev("/dev/" + e.Name())
+				}
+			}
+			if _, err := os.Stat(filepath.Join(resolved, "partition")); err == nil {
+				parentName := filepath.Base(filepath.Dir(resolved))
+				markDev("/dev/" + parentName)
+			}
+		}
+	}
+
+	// 3. Scan /proc/self/mountinfo for "/" mountpoint
+	if data, err := os.ReadFile("/proc/self/mountinfo"); err == nil {
+		lines := strings.Split(string(data), "\n")
+		for _, l := range lines {
+			fields := strings.Fields(l)
+			if len(fields) >= 5 && fields[4] == "/" {
+				for i, f := range fields {
+					if f == "-" && i+2 < len(fields) {
+						mountSrc := fields[i+2]
+						if strings.HasPrefix(mountSrc, "/dev/") {
+							markDev(mountSrc)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 4. Scan /proc/mounts for "/" mountpoint
+	if data, err := os.ReadFile("/proc/mounts"); err == nil {
+		lines := strings.Split(string(data), "\n")
+		for _, l := range lines {
+			fields := strings.Fields(l)
+			if len(fields) >= 2 && fields[1] == "/" {
+				if strings.HasPrefix(fields[0], "/dev/") {
+					markDev(fields[0])
+				}
+			}
+		}
+	}
+
+	return res
+}
+
 func findBackingDeviceForPath(filePath string) string {
 	if filePath == "" {
 		return ""
@@ -1217,7 +1412,14 @@ func parseProcMounts() map[string]string {
 	for _, l := range lines {
 		parts := strings.Fields(l)
 		if len(parts) >= 2 {
-			res[parts[0]] = parts[1]
+			src := parts[0]
+			mp := parts[1]
+			res[src] = mp
+			res[filepath.Base(src)] = mp
+			if realDev, err := filepath.EvalSymlinks(src); err == nil && realDev != src {
+				res[realDev] = mp
+				res[filepath.Base(realDev)] = mp
+			}
 		}
 	}
 	return res

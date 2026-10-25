@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"math"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,6 +19,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1314,6 +1316,14 @@ func (a *Adapter) CreateApp(ctx context.Context, app domain.DockerApp) (*domain.
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	// When no host is specified in mapping, pick a random high port in 32000+ range
+	app.ComposeYAML = a.NormalizeComposePorts(ctx, app.ComposeYAML)
+
+	// Preemptively check if all published host ports are available
+	if err := a.checkComposeHostPortsAvailable(ctx, app.ComposeYAML, app.ID); err != nil {
+		return nil, err
+	}
+
 	appDir := filepath.Join(a.unitsDir, app.ID)
 	if err := os.MkdirAll(appDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create app directory: %w", err)
@@ -1343,6 +1353,14 @@ func (a *Adapter) CreateApp(ctx context.Context, app domain.DockerApp) (*domain.
 func (a *Adapter) UpdateApp(ctx context.Context, app domain.DockerApp, fields []string) (*domain.DockerApp, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
+	// When no host is specified in mapping, pick a random high port in 32000+ range
+	app.ComposeYAML = a.NormalizeComposePorts(ctx, app.ComposeYAML)
+
+	// Preemptively check if all published host ports are available
+	if err := a.checkComposeHostPortsAvailable(ctx, app.ComposeYAML, app.ID); err != nil {
+		return nil, err
+	}
 
 	appDir := filepath.Join(a.unitsDir, app.ID)
 	composeFile := filepath.Join(appDir, "compose.yaml")
@@ -1403,6 +1421,11 @@ func (a *Adapter) StartApp(ctx context.Context, id string) (*domain.DockerApp, e
 	appDir := filepath.Join(a.unitsDir, id)
 	composePath := filepath.Join(appDir, "compose.yaml")
 	if _, err := os.Stat(composePath); err == nil {
+		if content, err := os.ReadFile(composePath); err == nil {
+			if err := a.checkComposeHostPortsAvailable(ctx, string(content), id); err != nil {
+				return nil, err
+			}
+		}
 		if err := a.runCompose(ctx, appDir, id, "up", "-d", "--remove-orphans"); err != nil {
 			return nil, err
 		}
@@ -1504,13 +1527,88 @@ func (a *Adapter) runComposeOutput(ctx context.Context, unitDir string, projectN
 	return outBuf.String(), nil
 }
 
+type rawPortalEntry struct {
+	Name     string `yaml:"name"`
+	Scheme   string `yaml:"scheme"`
+	Protocol string `yaml:"protocol"`
+	Host     string `yaml:"host"`
+	Port     any    `yaml:"port"`
+	Path     string `yaml:"path"`
+}
+
 type composeDescriptor struct {
-	Services map[string]struct {
+	ManagementPort any `yaml:"x-nas-management-port"`
+	XPortals       any `yaml:"x-portals"`
+	Portals        any `yaml:"portals"`
+	Services       map[string]struct {
 		Image         string `yaml:"image"`
 		ContainerName string `yaml:"container_name"`
 		Ports         []any  `yaml:"ports"`
 		Volumes       []any  `yaml:"volumes"`
+		Labels        any    `yaml:"labels"`
 	} `yaml:"services"`
+}
+
+func parseRawPortals(raw any) []rawPortalEntry {
+	if raw == nil {
+		return nil
+	}
+	var result []rawPortalEntry
+	switch v := raw.(type) {
+	case []any:
+		for _, item := range v {
+			if m, ok := item.(map[string]any); ok {
+				p := rawPortalEntry{
+					Name:     fmt.Sprintf("%v", m["name"]),
+					Scheme:   fmt.Sprintf("%v", m["scheme"]),
+					Protocol: fmt.Sprintf("%v", m["protocol"]),
+					Host:     fmt.Sprintf("%v", m["host"]),
+					Port:     m["port"],
+					Path:     fmt.Sprintf("%v", m["path"]),
+				}
+				if p.Name == "<nil>" || p.Name == "" {
+					p.Name = "Web UI"
+				}
+				if p.Scheme == "<nil>" || p.Scheme == "" {
+					if p.Protocol != "<nil>" && p.Protocol != "" {
+						p.Scheme = p.Protocol
+					} else {
+						p.Scheme = "http"
+					}
+				}
+				if p.Path == "<nil>" || p.Path == "" {
+					p.Path = "/"
+				}
+				result = append(result, p)
+			}
+		}
+	case map[string]any:
+		for k, item := range v {
+			if m, ok := item.(map[string]any); ok {
+				name := k
+				if m["name"] != nil {
+					name = fmt.Sprintf("%v", m["name"])
+				}
+				scheme := "http"
+				if m["scheme"] != nil {
+					scheme = fmt.Sprintf("%v", m["scheme"])
+				} else if m["protocol"] != nil {
+					scheme = fmt.Sprintf("%v", m["protocol"])
+				}
+				path := "/"
+				if m["path"] != nil {
+					path = fmt.Sprintf("%v", m["path"])
+				}
+				result = append(result, rawPortalEntry{
+					Name:   name,
+					Scheme: scheme,
+					Port:   m["port"],
+					Path:   path,
+				})
+			}
+		}
+	}
+	return result
 }
 
 func normalizePortSpec(s string) string {
@@ -1541,15 +1639,68 @@ func normalizePortSpec(s string) string {
 	return s
 }
 
-func parseComposeYAML(content string) (services []string, ports []string, volumes []string, err error) {
+func parsePortMapping(p string) (hostPort, containerPort string) {
+	p = strings.TrimSpace(p)
+	if idx := strings.LastIndex(p, "/"); idx != -1 {
+		p = p[:idx]
+	}
+	// Check "->" format from live docker: e.g. "0.0.0.0:8080->80"
+	if idx := strings.Index(p, "->"); idx != -1 {
+		hostPart := strings.TrimSpace(p[:idx])
+		containerPart := strings.TrimSpace(p[idx+2:])
+		if colon := strings.LastIndex(hostPart, ":"); colon != -1 {
+			hostPart = hostPart[colon+1:]
+		}
+		return hostPart, containerPart
+	}
+	parts := strings.Split(p, ":")
+	if len(parts) == 1 {
+		return "", parts[0]
+	} else if len(parts) == 2 {
+		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+	} else if len(parts) == 3 {
+		return strings.TrimSpace(parts[1]), strings.TrimSpace(parts[2])
+	}
+	return "", ""
+}
+
+func parseComposeYAML(content string) (services []string, ports []string, volumes []string, managementPort string, rawPortals []rawPortalEntry, err error) {
 	var c composeDescriptor
 	if err := yaml.Unmarshal([]byte(content), &c); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, "", nil, err
+	}
+	var mgmtPort string
+	if c.ManagementPort != nil {
+		mgmtPort = strings.TrimSpace(fmt.Sprintf("%v", c.ManagementPort))
+	}
+	rawPortals = parseRawPortals(c.XPortals)
+	if len(rawPortals) == 0 {
+		rawPortals = parseRawPortals(c.Portals)
 	}
 	portSet := make(map[string]bool)
 	volSet := make(map[string]bool)
 	for svcName, svc := range c.Services {
 		services = append(services, svcName)
+		if mgmtPort == "" && svc.Labels != nil {
+			switch lv := svc.Labels.(type) {
+			case []any:
+				for _, l := range lv {
+					ls := fmt.Sprintf("%v", l)
+					if strings.HasPrefix(ls, "nas.management.port=") || strings.HasPrefix(ls, "nas.webui.port=") {
+						parts := strings.SplitN(ls, "=", 2)
+						if len(parts) == 2 {
+							mgmtPort = strings.TrimSpace(parts[1])
+						}
+					}
+				}
+			case map[string]any:
+				for k, v := range lv {
+					if k == "nas.management.port" || k == "nas.webui.port" {
+						mgmtPort = strings.TrimSpace(fmt.Sprintf("%v", v))
+					}
+				}
+			}
+		}
 		for _, p := range svc.Ports {
 			ps := normalizePortSpec(fmt.Sprintf("%v", p))
 			if ps != "" && !portSet[ps] {
@@ -1568,22 +1719,35 @@ func parseComposeYAML(content string) (services []string, ports []string, volume
 	sort.Strings(services)
 	sort.Strings(ports)
 	sort.Strings(volumes)
-	return services, ports, volumes, nil
+	return services, ports, volumes, mgmtPort, rawPortals, nil
 }
 
-func deriveWebUIURL(ports []string) string {
+func deriveWebUIURL(ports []string, preferredContainerPort string) string {
+	if preferredContainerPort != "" {
+		for _, p := range ports {
+			hPort, cPort := parsePortMapping(p)
+			if cPort == preferredContainerPort && hPort != "" && hPort != "53" {
+				return fmt.Sprintf("http://localhost:%s", hPort)
+			}
+		}
+	}
+
+	// Fallback 1: Prefer well-known HTTP/Web ports
+	wellKnownWebPorts := []string{"80", "81", "8080", "3000", "8000", "8088", "8384", "9000", "5000", "5001", "8443", "443"}
+	for _, targetPort := range wellKnownWebPorts {
+		for _, p := range ports {
+			hPort, cPort := parsePortMapping(p)
+			if cPort == targetPort && hPort != "" && hPort != "53" {
+				return fmt.Sprintf("http://localhost:%s", hPort)
+			}
+		}
+	}
+
+	// Fallback 2: First non-53 port with a published host port
 	for _, p := range ports {
-		parts := strings.Split(p, ":")
-		if len(parts) >= 2 {
-			hostPort := parts[0]
-			if len(parts) == 3 {
-				hostPort = parts[1]
-			}
-			hostPort = strings.TrimSpace(hostPort)
-			// Avoid non-HTTP standard ports like DNS 53
-			if hostPort != "" && hostPort != "53" {
-				return fmt.Sprintf("http://localhost:%s", hostPort)
-			}
+		hPort, _ := parsePortMapping(p)
+		if hPort != "" && hPort != "53" && hPort != "22" && hPort != "22000" && hPort != "51820" {
+			return fmt.Sprintf("http://localhost:%s", hPort)
 		}
 	}
 	return ""
@@ -1596,7 +1760,7 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 		composeYAML = string(data)
 	}
 
-	services, parsedPorts, parsedVols, _ := parseComposeYAML(composeYAML)
+	services, parsedPorts, parsedVols, mgmtPort, rawPortals, _ := parseComposeYAML(composeYAML)
 
 	var appContainers []domain.DockerAppContainer
 	var totalCPU float64
@@ -1740,7 +1904,92 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 	}
 	sort.Strings(allPorts)
 
-	webUI := deriveWebUIURL(allPorts)
+	webUI := deriveWebUIURL(allPorts, mgmtPort)
+
+	var appPortals []domain.DockerAppPortal
+	for _, rp := range rawPortals {
+		portVal := 0
+		switch pv := rp.Port.(type) {
+		case int:
+			portVal = pv
+		case float64:
+			portVal = int(pv)
+		case string:
+			portVal, _ = strconv.Atoi(strings.TrimSpace(pv))
+		}
+
+		scheme := rp.Scheme
+		if scheme == "" || scheme == "<nil>" {
+			scheme = "http"
+		}
+		path := rp.Path
+		if path == "" || path == "<nil>" {
+			path = "/"
+		}
+		if !strings.HasPrefix(path, "/") {
+			path = "/" + path
+		}
+
+		// Find mapped host port for container port
+		resolvedHostPort := 0
+		if portVal > 0 {
+			portStr := strconv.Itoa(portVal)
+			for _, p := range allPorts {
+				hPort, cPort := parsePortMapping(p)
+				if cPort == portStr && hPort != "" {
+					if hp, err := strconv.Atoi(hPort); err == nil && hp > 0 {
+						resolvedHostPort = hp
+						break
+					}
+				}
+				if hPort == portStr {
+					if hp, err := strconv.Atoi(hPort); err == nil && hp > 0 {
+						resolvedHostPort = hp
+						break
+					}
+				}
+			}
+		}
+
+		if resolvedHostPort > 0 {
+			portalURL := fmt.Sprintf("%s://localhost:%d%s", scheme, resolvedHostPort, path)
+			appPortals = append(appPortals, domain.DockerAppPortal{
+				Name:     rp.Name,
+				URL:      portalURL,
+				Port:     resolvedHostPort,
+				Protocol: scheme,
+				Path:     path,
+			})
+		}
+	}
+
+	if webUI != "" {
+		portVal := 80
+		if u, err := url.Parse(webUI); err == nil {
+			if p, err := strconv.Atoi(u.Port()); err == nil {
+				portVal = p
+			}
+		}
+		alreadyPresent := false
+		for _, ap := range appPortals {
+			if ap.Port == portVal || strings.TrimSuffix(ap.URL, "/") == strings.TrimSuffix(webUI, "/") {
+				alreadyPresent = true
+				break
+			}
+		}
+		if !alreadyPresent {
+			primaryPortal := domain.DockerAppPortal{
+				Name:     "Web UI",
+				URL:      webUI,
+				Port:     portVal,
+				Protocol: "http",
+				Path:     "/",
+			}
+			appPortals = append([]domain.DockerAppPortal{primaryPortal}, appPortals...)
+		}
+	} else if len(appPortals) > 0 {
+		webUI = appPortals[0].URL
+	}
 
 	title := strings.ReplaceAll(appID, "-", " ")
 	if len(title) > 0 {
@@ -1760,6 +2009,7 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 		PortMappings:    allPorts,
 		Volumes:         parsedVols,
 		WebUIURL:        webUI,
+		Portals:         appPortals,
 		TotalCPUPercent: math.Round(totalCPU*100) / 100,
 		TotalMemoryMiB:  totalMem,
 		TotalNetRxBytes: totalNetRx,
@@ -1977,13 +2227,24 @@ func (a *Adapter) GetConfig(ctx context.Context) (*domain.DockerConfig, error) {
 				parts := strings.Split(cfg.Dataset, "/")
 				cfg.Pool = parts[0]
 			}
-			if cfg.Mountpoint == "" {
-				cfg.Mountpoint = "/" + cfg.Dataset
+			if cfg.Mountpoint == "" || strings.HasPrefix(cfg.Mountpoint, "/tank") || (!strings.HasPrefix(cfg.Mountpoint, "/nas/") && cfg.Pool != "") {
+				poolMount := fmt.Sprintf("/nas/%s", cfg.Pool)
+				if a.zfsPort != nil {
+					if p, err := a.zfsPort.GetPool(ctx, cfg.Pool); err == nil && p != nil && p.Mountpoint != "" && p.Mountpoint != "none" {
+						poolMount = p.Mountpoint
+					}
+				}
+				datasetSuffix := strings.TrimPrefix(cfg.Dataset, cfg.Pool)
+				datasetSuffix = strings.TrimPrefix(datasetSuffix, "/")
+				if datasetSuffix == "" {
+					datasetSuffix = "apps"
+				}
+				cfg.Mountpoint = fmt.Sprintf("%s/%s", strings.TrimRight(poolMount, "/"), datasetSuffix)
 			}
-			if cfg.AppdataPath == "" {
+			if cfg.AppdataPath == "" || strings.HasPrefix(cfg.AppdataPath, "/tank") || (!strings.HasPrefix(cfg.AppdataPath, "/nas/") && cfg.Pool != "") {
 				cfg.AppdataPath = filepath.Join(cfg.Mountpoint, "appdata")
 			}
-			if cfg.DockerDataRoot == "" {
+			if cfg.DockerDataRoot == "" || strings.HasPrefix(cfg.DockerDataRoot, "/tank") || (!strings.HasPrefix(cfg.DockerDataRoot, "/nas/") && cfg.Pool != "") {
 				cfg.DockerDataRoot = filepath.Join(cfg.Mountpoint, "docker")
 			}
 			cfg.AppdataDataset = cfg.AppdataPath
@@ -2129,14 +2390,19 @@ func (a *Adapter) UpdateConfig(ctx context.Context, cfg domain.DockerConfig) (*d
 func (a *Adapter) ListDirectories(ctx context.Context, reqPath string) (*domain.DirectoryList, error) {
 	if reqPath == "" {
 		cfg, _ := a.GetConfig(ctx)
-		if cfg != nil && cfg.Pool != "" {
-			reqPath = "/" + cfg.Pool
+		if cfg != nil && cfg.Mountpoint != "" {
+			reqPath = cfg.Mountpoint
+		} else if cfg != nil && cfg.Pool != "" {
+			reqPath = fmt.Sprintf("/nas/%s", cfg.Pool)
 		} else {
-			reqPath = "/"
+			reqPath = "/nas"
 		}
 	}
 
 	cleanPath := filepath.Clean(reqPath)
+	if strings.HasPrefix(cleanPath, "/tank") {
+		cleanPath = "/nas" + cleanPath
+	}
 	if !filepath.IsAbs(cleanPath) {
 		cleanPath = "/" + cleanPath
 	}
@@ -2170,4 +2436,509 @@ func (a *Adapter) ListDirectories(ctx context.Context, reqPath string) (*domain.
 	})
 
 	return res, nil
+}
+
+func (a *Adapter) isContainerOfApp(c dockerContainerSummary, appID string) bool {
+	if appID == "" {
+		return false
+	}
+	cleanAppID := strings.ToLower(strings.TrimSpace(appID))
+	if c.Labels != nil {
+		proj := strings.ToLower(c.Labels["com.docker.compose.project"])
+		nasID := strings.ToLower(c.Labels["nas.app.id"])
+		if proj == cleanAppID || nasID == cleanAppID {
+			return true
+		}
+		cleanProj := strings.ReplaceAll(proj, "-", "")
+		cleanTarget := strings.ReplaceAll(cleanAppID, "-", "")
+		if cleanProj == cleanTarget && cleanProj != "" {
+			return true
+		}
+	}
+	for _, n := range c.Names {
+		cleanName := strings.ToLower(strings.TrimPrefix(n, "/"))
+		if cleanName == cleanAppID ||
+			strings.HasPrefix(cleanName, cleanAppID+"-") ||
+			strings.HasPrefix(cleanName, cleanAppID+"_") {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *Adapter) isPortOwnedByApp(ctx context.Context, port int, proto string, appID string, liveContainers []dockerContainerSummary) bool {
+	if appID == "" {
+		return false
+	}
+
+	// 1. Check live containers belonging to this app
+	for _, c := range liveContainers {
+		if a.isContainerOfApp(c, appID) {
+			for _, p := range c.Ports {
+				if int(p.PublicPort) == port && (proto == "" || strings.EqualFold(p.Type, proto)) {
+					return true
+				}
+			}
+		}
+	}
+
+	// 2. Check the existing compose.yaml for this app if it exists on disk
+	appDir := filepath.Join(a.unitsDir, appID)
+	existingCompose := filepath.Join(appDir, "compose.yaml")
+	if data, err := os.ReadFile(existingCompose); err == nil {
+		var c composeDescriptor
+		if err := yaml.Unmarshal(data, &c); err == nil {
+			for _, svc := range c.Services {
+				for _, portRaw := range svc.Ports {
+					var ps string
+					switch pv := portRaw.(type) {
+					case string:
+						ps = pv
+					case int:
+						ps = strconv.Itoa(pv)
+					case map[string]any:
+						pub := fmt.Sprintf("%v", pv["published"])
+						tgt := fmt.Sprintf("%v", pv["target"])
+						prt := fmt.Sprintf("%v", pv["protocol"])
+						if prt == "<nil>" || prt == "" {
+							prt = "tcp"
+						}
+						if pub != "<nil>" && pub != "" {
+							ps = fmt.Sprintf("%s:%s/%s", pub, tgt, prt)
+						} else {
+							ps = fmt.Sprintf("%s/%s", tgt, prt)
+						}
+					}
+					hPort, cPort := parsePortMapping(ps)
+					if hPort != "" {
+						cleanHPort := strings.TrimSuffix(strings.TrimSuffix(hPort, "/tcp"), "/udp")
+						if idx := strings.LastIndex(cleanHPort, ":"); idx != -1 {
+							cleanHPort = cleanHPort[idx+1:]
+						}
+						pProto := "tcp"
+						if strings.HasSuffix(cPort, "/udp") || strings.HasSuffix(hPort, "/udp") {
+							pProto = "udp"
+						}
+						if num, err := strconv.Atoi(cleanHPort); err == nil && num == port {
+							if proto == "" || strings.EqualFold(proto, pProto) {
+								return true
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+// CheckHostPort checks preemptively if a specific host port is free or already allocated.
+func (a *Adapter) CheckHostPort(ctx context.Context, port int, protocol string, excludeAppID string) (domain.HostPortStatus, error) {
+	if port <= 0 || port > 65535 {
+		return domain.HostPortStatus{
+			Port:      port,
+			Protocol:  protocol,
+			Available: false,
+			InUseBy:   "invalid port number (must be 1-65535)",
+		}, nil
+	}
+
+	proto := strings.ToLower(protocol)
+	if proto == "" {
+		proto = "tcp"
+	}
+
+	liveContainers := a.fetchLiveContainers(ctx)
+
+	// If the port is already owned/published by the excluded app itself, it is available for reuse (e.g. during redeploy)
+	if excludeAppID != "" && a.isPortOwnedByApp(ctx, port, proto, excludeAppID, liveContainers) {
+		return domain.HostPortStatus{
+			Port:      port,
+			Protocol:  proto,
+			Available: true,
+			InUseBy:   "",
+		}, nil
+	}
+
+	// 1. Check against active Docker container port bindings
+	for _, c := range liveContainers {
+		if excludeAppID != "" && a.isContainerOfApp(c, excludeAppID) {
+			continue
+		}
+
+		for _, p := range c.Ports {
+			if int(p.PublicPort) == port && (proto == "" || strings.EqualFold(p.Type, proto)) {
+				cName := "unknown"
+				if len(c.Names) > 0 {
+					cName = strings.TrimPrefix(c.Names[0], "/")
+				}
+				return domain.HostPortStatus{
+					Port:      port,
+					Protocol:  proto,
+					Available: false,
+					InUseBy:   fmt.Sprintf("docker container %q (%s)", cName, c.Image),
+				}, nil
+			}
+		}
+	}
+
+	// 2. Check host socket binding via OS network stack
+	if proto == "tcp" {
+		ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
+		if err != nil {
+			inUseBy := a.identifyProcessUsingPort(port, "tcp")
+			return domain.HostPortStatus{
+				Port:      port,
+				Protocol:  "tcp",
+				Available: false,
+				InUseBy:   inUseBy,
+			}, nil
+		}
+		_ = ln.Close()
+
+		if ln6, err6 := net.Listen("tcp6", fmt.Sprintf("[::]:%d", port)); err6 == nil {
+			_ = ln6.Close()
+		}
+	} else if proto == "udp" {
+		pc, err := net.ListenPacket("udp", fmt.Sprintf("0.0.0.0:%d", port))
+		if err != nil {
+			inUseBy := a.identifyProcessUsingPort(port, "udp")
+			return domain.HostPortStatus{
+				Port:      port,
+				Protocol:  "udp",
+				Available: false,
+				InUseBy:   inUseBy,
+			}, nil
+		}
+		_ = pc.Close()
+	}
+
+	return domain.HostPortStatus{
+		Port:      port,
+		Protocol:  proto,
+		Available: true,
+		InUseBy:   "",
+	}, nil
+}
+
+// CheckHostPorts checks a slice of host ports for availability.
+func (a *Adapter) CheckHostPorts(ctx context.Context, ports []int, protocol string, excludeAppID string) ([]domain.HostPortStatus, error) {
+	results := make([]domain.HostPortStatus, 0, len(ports))
+	for _, p := range ports {
+		st, err := a.CheckHostPort(ctx, p, protocol, excludeAppID)
+		if err != nil {
+			results = append(results, domain.HostPortStatus{
+				Port:      p,
+				Protocol:  protocol,
+				Available: false,
+				InUseBy:   err.Error(),
+			})
+		} else {
+			results = append(results, st)
+		}
+	}
+	return results, nil
+}
+
+func (a *Adapter) identifyProcessUsingPort(port int, proto string) string {
+	if ssPath, err := exec.LookPath("ss"); err == nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, ssPath, "-H", "-t", "-u", "-l", "-p", "-n", fmt.Sprintf("sport = :%d", port))
+		if out, err := cmd.Output(); err == nil && len(out) > 0 {
+			outStr := string(out)
+			if idx := strings.Index(outStr, `users:(("`); idx != -1 {
+				sub := outStr[idx+len(`users:(("`):]
+				if endIdx := strings.Index(sub, `"`); endIdx != -1 {
+					procName := sub[:endIdx]
+					return fmt.Sprintf("host process %q", procName)
+				}
+			}
+		}
+	}
+
+	switch port {
+	case 22:
+		return "host service (SSH)"
+	case 53:
+		return "host service (DNS/systemd-resolved)"
+	case 80:
+		return "host service (HTTP/Web)"
+	case 137, 138, 139, 445:
+		return "host service (Samba/SMB)"
+	case 443:
+		return "host service (HTTPS)"
+	case 631:
+		return "host service (CUPS)"
+	case 3306:
+		return "host service (MySQL/MariaDB)"
+	case 5432:
+		return "host service (PostgreSQL)"
+	case 5900, 5901, 5902, 5903:
+		return "host service (VNC)"
+	case 6379:
+		return "host service (Redis)"
+	default:
+		return "host system process"
+	}
+}
+
+func (a *Adapter) checkComposeHostPortsAvailable(ctx context.Context, composeYAML string, appID string) error {
+	if strings.TrimSpace(composeYAML) == "" {
+		return nil
+	}
+
+	var c composeDescriptor
+	if err := yaml.Unmarshal([]byte(composeYAML), &c); err != nil {
+		return nil
+	}
+
+	seen := make(map[string]string) // key -> serviceName
+	for svcName, svc := range c.Services {
+		for _, portRaw := range svc.Ports {
+			var ps string
+			switch pv := portRaw.(type) {
+			case string:
+				ps = pv
+			case int:
+				ps = strconv.Itoa(pv)
+			case map[string]any:
+				published := fmt.Sprintf("%v", pv["published"])
+				target := fmt.Sprintf("%v", pv["target"])
+				protocol := fmt.Sprintf("%v", pv["protocol"])
+				if protocol == "<nil>" || protocol == "" {
+					protocol = "tcp"
+				}
+				if published != "<nil>" && published != "" {
+					ps = fmt.Sprintf("%s:%s/%s", published, target, protocol)
+				} else {
+					ps = fmt.Sprintf("%s/%s", target, protocol)
+				}
+			default:
+				continue
+			}
+
+			hostP, contP := parsePortMapping(ps)
+			if hostP == "" {
+				continue // Internal container port or not published to host
+			}
+
+			proto := "tcp"
+			if strings.HasSuffix(contP, "/udp") || strings.HasSuffix(hostP, "/udp") {
+				proto = "udp"
+			}
+			cleanHostP := strings.TrimSuffix(hostP, "/tcp")
+			cleanHostP = strings.TrimSuffix(cleanHostP, "/udp")
+			if idx := strings.LastIndex(cleanHostP, ":"); idx != -1 {
+				cleanHostP = cleanHostP[idx+1:]
+			}
+
+			portNum, err := strconv.Atoi(cleanHostP)
+			if err != nil || portNum <= 0 {
+				continue
+			}
+
+			key := fmt.Sprintf("%d/%s", portNum, proto)
+			if priorSvc, ok := seen[key]; ok {
+				return fmt.Errorf("port conflict: host port %d/%s is mapped multiple times in compose file (service %s and %s)", portNum, proto, priorSvc, svcName)
+			}
+			seen[key] = svcName
+
+			st, err := a.CheckHostPort(ctx, portNum, proto, appID)
+			if err == nil && !st.Available {
+				return fmt.Errorf("port conflict: host port %d/%s is already in use by %s; cannot bind port", portNum, proto, st.InUseBy)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (a *Adapter) pickRandomHighPort(ctx context.Context, proto string, usedPorts map[int]bool) int {
+	const minPort = 32000
+	const maxPort = 65000
+	for attempt := 0; attempt < 500; attempt++ {
+		cand := rand.IntN(maxPort-minPort+1) + minPort
+		if usedPorts != nil && usedPorts[cand] {
+			continue
+		}
+		st, err := a.CheckHostPort(ctx, cand, proto, "")
+		if err == nil && st.Available {
+			if usedPorts != nil {
+				usedPorts[cand] = true
+			}
+			return cand
+		}
+	}
+	cand := rand.IntN(maxPort-minPort+1) + minPort
+	if usedPorts != nil {
+		usedPorts[cand] = true
+	}
+	return cand
+}
+
+// NormalizeComposePorts inspects the Compose YAML and assigns a random high host port (32000-65000)
+// to any published port mapping that omits an explicit host port.
+func (a *Adapter) NormalizeComposePorts(ctx context.Context, composeYAML string) string {
+	if strings.TrimSpace(composeYAML) == "" {
+		return composeYAML
+	}
+
+	var root yaml.Node
+	if err := yaml.Unmarshal([]byte(composeYAML), &root); err != nil {
+		return composeYAML
+	}
+
+	if root.Kind != yaml.DocumentNode || len(root.Content) == 0 || root.Content[0].Kind != yaml.MappingNode {
+		return composeYAML
+	}
+
+	docMap := root.Content[0]
+	usedPorts := make(map[int]bool)
+	var servicesNode *yaml.Node
+
+	for i := 0; i < len(docMap.Content); i += 2 {
+		if docMap.Content[i].Value == "services" && docMap.Content[i+1].Kind == yaml.MappingNode {
+			servicesNode = docMap.Content[i+1]
+			break
+		}
+	}
+
+	if servicesNode == nil {
+		return composeYAML
+	}
+
+	extractProto := func(pStr string) string {
+		if strings.HasSuffix(strings.ToLower(pStr), "/udp") {
+			return "udp"
+		}
+		return "tcp"
+	}
+
+	// 1. Scan existing host ports
+	for i := 1; i < len(servicesNode.Content); i += 2 {
+		svcMap := servicesNode.Content[i]
+		if svcMap.Kind != yaml.MappingNode {
+			continue
+		}
+		for j := 0; j < len(svcMap.Content); j += 2 {
+			if svcMap.Content[j].Value == "ports" && svcMap.Content[j+1].Kind == yaml.SequenceNode {
+				portsSeq := svcMap.Content[j+1]
+				for _, pNode := range portsSeq.Content {
+					if pNode.Kind == yaml.ScalarNode {
+						hPort, _ := parsePortMapping(pNode.Value)
+						if hPort != "" {
+							if hp, err := strconv.Atoi(hPort); err == nil && hp > 0 {
+								usedPorts[hp] = true
+							}
+						}
+					} else if pNode.Kind == yaml.MappingNode {
+						for k := 0; k < len(pNode.Content); k += 2 {
+							if pNode.Content[k].Value == "published" {
+								if hp, err := strconv.Atoi(pNode.Content[k+1].Value); err == nil && hp > 0 {
+									usedPorts[hp] = true
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Normalize ports without host mapping
+	modified := false
+	for i := 1; i < len(servicesNode.Content); i += 2 {
+		svcMap := servicesNode.Content[i]
+		if svcMap.Kind != yaml.MappingNode {
+			continue
+		}
+		for j := 0; j < len(svcMap.Content); j += 2 {
+			if svcMap.Content[j].Value == "ports" && svcMap.Content[j+1].Kind == yaml.SequenceNode {
+				portsSeq := svcMap.Content[j+1]
+				for _, pNode := range portsSeq.Content {
+					if pNode.Kind == yaml.ScalarNode {
+						val := strings.TrimSpace(pNode.Value)
+						hPort, cPort := parsePortMapping(val)
+						if hPort == "" && cPort != "" {
+							proto := extractProto(val)
+							cleanCPort := strings.TrimSuffix(strings.TrimSuffix(cPort, "/tcp"), "/udp")
+							randPort := a.pickRandomHighPort(ctx, proto, usedPorts)
+							if proto == "udp" {
+								pNode.Value = fmt.Sprintf("%d:%s/udp", randPort, cleanCPort)
+							} else {
+								pNode.Value = fmt.Sprintf("%d:%s", randPort, cleanCPort)
+							}
+							pNode.Tag = "!!str"
+							pNode.Style = yaml.DoubleQuotedStyle
+							modified = true
+						}
+					} else if pNode.Kind == yaml.MappingNode {
+						var pubNode *yaml.Node
+						var targetNode *yaml.Node
+						var protoNode *yaml.Node
+						for k := 0; k < len(pNode.Content); k += 2 {
+							key := pNode.Content[k].Value
+							val := pNode.Content[k+1]
+							switch key {
+							case "published":
+								pubNode = val
+							case "target":
+								targetNode = val
+							case "protocol":
+								protoNode = val
+							}
+						}
+						proto := "tcp"
+						if protoNode != nil && strings.ToLower(protoNode.Value) == "udp" {
+							proto = "udp"
+						}
+						needsHost := false
+						if pubNode == nil {
+							needsHost = true
+						} else {
+							hp, err := strconv.Atoi(pubNode.Value)
+							if err != nil || hp <= 0 {
+								needsHost = true
+							}
+						}
+						if needsHost && targetNode != nil && targetNode.Value != "" {
+							randPort := a.pickRandomHighPort(ctx, proto, usedPorts)
+							if pubNode != nil {
+								pubNode.Value = strconv.Itoa(randPort)
+								pubNode.Tag = "!!int"
+								pubNode.Style = 0
+							} else {
+								keyNode := &yaml.Node{
+									Kind:  yaml.ScalarNode,
+									Tag:   "!!str",
+									Value: "published",
+								}
+								valNode := &yaml.Node{
+									Kind:  yaml.ScalarNode,
+									Tag:   "!!int",
+									Value: strconv.Itoa(randPort),
+								}
+								pNode.Content = append(pNode.Content, keyNode, valNode)
+							}
+							modified = true
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if !modified {
+		return composeYAML
+	}
+
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(&root); err != nil {
+		return composeYAML
+	}
+	return buf.String()
 }

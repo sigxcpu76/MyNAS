@@ -26,14 +26,26 @@ const selectedDisk = ref<Disk | null>(null);
 const modalTab = ref<'smart' | 'hardware' | 'partitions'>('smart');
 const smartSearch = ref('');
 
+function isSystemDisk(d: Disk): boolean {
+  if (d.isSystem) return true;
+  if (d.partitions && d.partitions.some((p) => p.isSystem || p.mountpoint === '/')) return true;
+  return false;
+}
+
+const storageDisks = computed(() => {
+  return nasState.disks.filter(
+    (d) =>
+      !isSystemDisk(d) &&
+      !d.diskId.startsWith('zd') &&
+      d.transport !== 'zvol' &&
+      !d.devicePath.includes('/zd')
+  );
+});
+
 const filteredDisks = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
-  // Exclude virtual ZFS volumes (zvols) which are managed in Storage > Volumes
-  const nonZvolDisks = nasState.disks.filter(
-    (d) => !d.diskId.startsWith('zd') && d.transport !== 'zvol' && !d.devicePath.includes('/zd')
-  );
-  if (!q) return nonZvolDisks;
-  return nonZvolDisks.filter((d) =>
+  if (!q) return storageDisks.value;
+  return storageDisks.value.filter((d) =>
     d.diskId.toLowerCase().includes(q) ||
     d.model.toLowerCase().includes(q) ||
     d.vendor.toLowerCase().includes(q) ||
@@ -96,7 +108,7 @@ function goToPool(poolName: string) {
             <MdiIcon :path="mdiHarddisk" size="24" style="color: var(--accent-primary)" />
             <h2 class="card-title" style="font-size: 19px; margin: 0">Storage Disks</h2>
             <span class="badge badge-info" style="font-size: 12px">
-              {{ nasState.disks.length }} {{ nasState.disks.length === 1 ? 'Drive' : 'Drives' }}
+              {{ storageDisks.length }} {{ storageDisks.length === 1 ? 'Drive' : 'Drives' }}
             </span>
           </div>
           <p class="card-subtitle" style="margin-top: 4px; font-size: 13px">

@@ -25,6 +25,23 @@ type DockerAppContainer struct {
 	NetTxRate   int64     `json:"netTxRate"`
 }
 
+// DockerAppPortal represents an exposed web UI portal link defined by the app manifest.
+type DockerAppPortal struct {
+	Name     string `json:"name"`
+	URL      string `json:"url"`
+	Port     int    `json:"port"`
+	Protocol string `json:"protocol"` // "http" or "https"
+	Path     string `json:"path"`
+}
+
+// HostPortStatus represents preemptive port availability status on the host system.
+type HostPortStatus struct {
+	Port      int    `json:"port"`
+	Protocol  string `json:"protocol"` // "tcp" or "udp"
+	Available bool   `json:"available"`
+	InUseBy   string `json:"in_use_by"`
+}
+
 // DockerApp represents a Docker Compose Application descriptor and its child containers.
 type DockerApp struct {
 	ID              string               `json:"id"` // Unique app identifier e.g. "nextcloud"
@@ -39,6 +56,7 @@ type DockerApp struct {
 	PortMappings    []string             `json:"portMappings"`
 	Volumes         []string             `json:"volumes"`
 	WebUIURL        string               `json:"webUiUrl"`
+	Portals         []DockerAppPortal    `json:"portals"`
 	TotalCPUPercent float64              `json:"totalCpuPercent"`
 	TotalMemoryMiB  int64                `json:"totalMemoryMib"`
 	TotalNetRxBytes int64                `json:"totalNetRxBytes"`

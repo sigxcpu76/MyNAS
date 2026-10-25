@@ -1,0 +1,266 @@
+syntax = "proto3";
+
+package nas.v1;
+
+import "google/api/field_behavior.proto";
+import "google/api/resource.proto";
+import "google/protobuf/field_mask.proto";
+
+option go_package = "github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1";
+
+// =============================================================================
+// ZFS Pool, Dataset, Volume Resources
+// =============================================================================
+
+message ZfsPool {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/ZfsPool"
+    pattern: "zfsPools/{zfs_pool}"
+    singular: "zfsPool"
+    plural: "zfsPools"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string pool_name = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string state = 3 [(google.api.field_behavior) = OUTPUT_ONLY]; // ONLINE, DEGRADED, FAULTED
+  int64 size_bytes = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 allocated_bytes = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 free_bytes = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int32 fragmentation_percent = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int32 capacity_percent = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
+  double dedup_ratio = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string vdev_layout = 10; // stripe, mirror, raidz1, raidz2
+  repeated string devices = 11;
+  string mountpoint = 12;
+  string compression = 13;
+  string last_scrub_status = 14 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string health_details = 15 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string sync = 16; // "standard", "always", "disabled"
+  string autotrim = 17; // "on", "off"
+  repeated ZfsVdev vdevs = 18;
+}
+
+message ZfsVdev {
+  string name = 1;
+  string type = 2; // "data", "cache", "log", "special", "dedup", "spare"
+  string layout = 3; // "stripe", "mirror", "raidz1", "raidz2", "file", "disk"
+  string state = 4; // "ONLINE", "DEGRADED", etc.
+  string path = 5;
+  repeated ZfsVdev children = 6;
+  string read_errors = 7;
+  string write_errors = 8;
+  string checksum_errors = 9;
+}
+
+message ListZfsPoolsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string filter = 3;
+}
+
+message ListZfsPoolsResponse {
+  repeated ZfsPool zfs_pools = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetZfsPoolRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+}
+
+message CreateZfsPoolRequest {
+  string zfs_pool_id = 1 [(google.api.field_behavior) = REQUIRED];
+  ZfsPool zfs_pool = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message DeleteZfsPoolRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+  bool force = 2;
+}
+
+message ExportZfsPoolRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+  bool force = 2;
+}
+
+message ScrubZfsPoolRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+}
+
+message UpdateZfsPoolRequest {
+  ZfsPool zfs_pool = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message AddZfsPoolVdevRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+  string type = 2 [(google.api.field_behavior) = REQUIRED]; // "data", "cache", "log", "special", "dedup", "spare"
+  string layout = 3; // "stripe", "mirror", "raidz1", "raidz2"
+  repeated string devices = 4 [(google.api.field_behavior) = REQUIRED];
+}
+
+message RemoveZfsPoolVdevRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+  string device = 2 [(google.api.field_behavior) = REQUIRED]; // e.g. "/dev/nvme0n1"
+}
+
+message ZfsDataset {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/ZfsDataset"
+    pattern: "zfsPools/{zfs_pool}/datasets/{dataset}"
+    singular: "zfsDataset"
+    plural: "zfsDatasets"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string dataset_path = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string mountpoint = 3;
+  int64 used_bytes = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 available_bytes = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 referenced_bytes = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 quota_bytes = 7;
+  string compression = 8; // lz4, zstd, off, gzip
+  bool readonly = 9;
+  bool atime = 10;
+  string recordsize = 11;
+  int32 snapshots_count = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string last_snapshot = 13 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string sync = 14;
+  int64 reservation_bytes = 15;
+  bool dedup = 16;
+}
+
+message ListZfsDatasetsRequest {
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+  int32 page_size = 2;
+  string page_token = 3;
+  string filter = 4;
+}
+
+message ListZfsDatasetsResponse {
+  repeated ZfsDataset zfs_datasets = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetZfsDatasetRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsDataset"}
+  ];
+}
+
+message CreateZfsDatasetRequest {
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+  string zfs_dataset_id = 2 [(google.api.field_behavior) = REQUIRED];
+  ZfsDataset zfs_dataset = 3 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateZfsDatasetRequest {
+  ZfsDataset zfs_dataset = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteZfsDatasetRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsDataset"}
+  ];
+  bool recursive = 2;
+}
+
+message SnapshotZfsDatasetRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsDataset"}
+  ];
+  string snapshot_name = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message ZfsVolume {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/ZfsVolume"
+    pattern: "zfsPools/{zfs_pool}/volumes/{volume}"
+    singular: "zfsVolume"
+    plural: "zfsVolumes"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string volume_path = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string device_path = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 size_bytes = 4;
+  int64 used_bytes = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string volblocksize = 6;
+  string compression = 7;
+  bool thin_provisioned = 8;
+  string sync = 9;
+  bool readonly = 10;
+  bool dedup = 11;
+}
+
+message ListZfsVolumesRequest {
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListZfsVolumesResponse {
+  repeated ZfsVolume zfs_volumes = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetZfsVolumeRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsVolume"}
+  ];
+}
+
+message CreateZfsVolumeRequest {
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsPool"}
+  ];
+  string zfs_volume_id = 2 [(google.api.field_behavior) = REQUIRED];
+  ZfsVolume zfs_volume = 3 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateZfsVolumeRequest {
+  ZfsVolume zfs_volume = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteZfsVolumeRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/ZfsVolume"}
+  ];
+}

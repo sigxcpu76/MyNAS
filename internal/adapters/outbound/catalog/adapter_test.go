@@ -134,6 +134,9 @@ func TestCatalogAdapter_NginxProxyManagerAndImageResolution(t *testing.T) {
 	if !strings.Contains(npm.ComposeYAML, "81:81") || !strings.Contains(npm.ComposeYAML, "80:80") {
 		t.Errorf("compose YAML does not contain web and proxy ports: %s", npm.ComposeYAML)
 	}
+	if !strings.Contains(npm.ComposeYAML, "x-portals:") {
+		t.Errorf("expected x-portals in compose YAML: %s", npm.ComposeYAML)
+	}
 
 	// 2. Mock TrueNAS catalog with sources and verify image resolution
 	mockCatalog := map[string]map[string]any{
@@ -193,5 +196,29 @@ func TestCatalogAdapter_NginxProxyManagerAndImageResolution(t *testing.T) {
 	}
 	if app3.ContainerImage != "lscr.io/linuxserver/myapp:latest" {
 		t.Errorf("expected 'lscr.io/linuxserver/myapp:latest', got %q", app3.ContainerImage)
+	}
+}
+
+func TestExtractPortalFromTrueNASTemplate(t *testing.T) {
+	tpl := `
+  {% do c1.add_port(values.network.web_port, {"container_port": 81}) %}
+  {% do tpl.portals.add(values.network.web_port) %}
+`
+	port, name, scheme, path := catalog.ExtractPortalFromTemplate(tpl, "")
+	if port != 81 || name != "Web UI" || scheme != "http" || path != "/" {
+		t.Fatalf("unexpected extracted portal: port=%d name=%s scheme=%s path=%s", port, name, scheme, path)
+	}
+
+	jellyfinTpl := `
+  {% do c1.add_port(values.network.web_port, {"container_port": values.consts.internal_web_port}) %}
+  {% do tpl.portals.add(values.network.web_port) %}
+`
+	ixValues := `
+consts:
+  internal_web_port: 8096
+`
+	port2, _, _, _ := catalog.ExtractPortalFromTemplate(jellyfinTpl, ixValues)
+	if port2 != 8096 {
+		t.Fatalf("expected port 8096, got %d", port2)
 	}
 }

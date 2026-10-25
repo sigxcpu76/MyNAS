@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -59,7 +60,7 @@ func NewAdapter(cacheDir string) *Adapter {
 		httpClient:  &http.Client{Timeout: 30 * time.Second},
 		catalogURL:  defaultCatalogURL,
 		appsPool:    "tank",
-		appdataPath: "/tank/appdata",
+		appdataPath: "/nas/tank/appdata",
 	}
 
 	// 1. Seed high-quality offline apps
@@ -306,7 +307,11 @@ func (a *Adapter) getAppdataPath() string {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	if a.appdataPath != "" {
-		return a.appdataPath
+		if strings.HasPrefix(a.appdataPath, "/nas/") {
+			return a.appdataPath
+		}
+		clean := strings.TrimPrefix(a.appdataPath, "/")
+		return "/nas/" + clean
 	}
 	if a.appsPool != "" {
 		return fmt.Sprintf("/nas/%s/appdata", a.appsPool)
@@ -322,15 +327,15 @@ func (a *Adapter) ensureComposeYAML(app domain.CatalogApp) domain.CatalogApp {
 		app.ComposeYAML, app.DefaultPort = generateResolvedCompose(app)
 	}
 	appdataPath := a.getAppdataPath()
-	if appdataPath != "/nas/tank/appdata" && appdataPath != "/tank/appdata" {
-		app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/tank/appdata", appdataPath)
-		app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/nas/tank/appdata", appdataPath)
-	}
+	app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/tank/appdata", appdataPath)
+	app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/nas/tank/appdata", appdataPath)
 	pool := a.getAppsPool()
-	if pool != "tank" {
-		app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/tank/media", fmt.Sprintf("/nas/%s/media", pool))
-		app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/nas/tank/media", fmt.Sprintf("/nas/%s/media", pool))
+	if pool == "" {
+		pool = "tank"
 	}
+	mediaPath := fmt.Sprintf("/nas/%s/media", pool)
+	app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/tank/media", mediaPath)
+	app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/nas/tank/media", mediaPath)
 	return app
 }
 
@@ -571,6 +576,76 @@ func extractImageFromSources(appID string, sources []string, home string) string
 	return ""
 }
 
+var (
+	reTplPortals   = regexp.MustCompile(`tpl\.portals\.add\(([^,\)]+)(?:,\s*(\{[^\}]+\}))?\)`)
+	reAddPort      = regexp.MustCompile(`add_port\(\s*([^,\)]+)(?:,\s*\{[^}]*"container_port":\s*([^\s,}]+)[^}]*\})?`)
+	reInternalPort = regexp.MustCompile(`(?i)(?:internal_web_port|web_port|port):\s*(\d+)`)
+)
+
+func ExtractPortalFromTemplate(tplContent, ixValuesContent string) (port int, name, scheme, path string) {
+	name = "Web UI"
+	scheme = "http"
+	path = "/"
+
+	if m := reTplPortals.FindStringSubmatch(tplContent); len(m) > 1 {
+		portVar := strings.TrimSpace(m[1])
+		if len(m) > 2 && m[2] != "" {
+			if strings.Contains(m[2], `"name":`) {
+				reName := regexp.MustCompile(`"name":\s*"([^"]+)"`)
+				if nm := reName.FindStringSubmatch(m[2]); len(nm) > 1 {
+					name = nm[1]
+				}
+			}
+			if strings.Contains(m[2], `"path":`) {
+				rePath := regexp.MustCompile(`"path":\s*"([^"]+)"`)
+				if pm := rePath.FindStringSubmatch(m[2]); len(pm) > 1 {
+					path = pm[1]
+				}
+			}
+			if strings.Contains(m[2], `"scheme":`) {
+				reScheme := regexp.MustCompile(`"scheme":\s*"([^"]+)"`)
+				if sm := reScheme.FindStringSubmatch(m[2]); len(sm) > 1 {
+					scheme = sm[1]
+				}
+			}
+		}
+
+		// Look for matching add_port call
+		for _, am := range reAddPort.FindAllStringSubmatch(tplContent, -1) {
+			if len(am) > 1 && strings.TrimSpace(am[1]) == portVar {
+				if len(am) > 2 && am[2] != "" {
+					target := strings.TrimSpace(am[2])
+					if p, err := strconv.Atoi(target); err == nil && p > 0 {
+						port = p
+						return
+					}
+					// Check consts reference e.g. values.consts.internal_web_port
+					if strings.Contains(target, "values.consts.") {
+						constName := strings.TrimPrefix(target, "values.consts.")
+						reNamed := regexp.MustCompile(fmt.Sprintf(`(?m)^\s*%s:\s*(\d+)`, regexp.QuoteMeta(constName)))
+						if nm := reNamed.FindStringSubmatch(ixValuesContent); len(nm) > 1 {
+							if p, err := strconv.Atoi(nm[1]); err == nil && p > 0 {
+								port = p
+								return
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Fallback to ix_values.yaml port definition
+	if m := reInternalPort.FindStringSubmatch(ixValuesContent); len(m) > 1 {
+		if p, err := strconv.Atoi(m[1]); err == nil && p > 0 {
+			port = p
+			return
+		}
+	}
+
+	return 0, name, scheme, path
+}
+
 func (a *Adapter) enrichFromIXValues(ctx context.Context, app *domain.CatalogApp) {
 	if app.Version == "" || app.Train == "" {
 		return
@@ -617,6 +692,38 @@ func (a *Adapter) enrichFromIXValues(ctx context.Context, app *domain.CatalogApp
 		}
 		// Regenerate compose if using fallback template
 		app.ComposeYAML, app.DefaultPort = generateResolvedCompose(*app)
+	}
+
+	// Fetch docker-compose.yaml template if available to extract portals
+	tplCacheFile := filepath.Join(valuesCacheDir, fmt.Sprintf("%s-%s-compose.yaml", app.AppID, app.Version))
+	var tplData []byte
+	if fileBytes, err := os.ReadFile(tplCacheFile); err == nil && len(fileBytes) > 0 {
+		tplData = fileBytes
+	} else {
+		tplURL := fmt.Sprintf("https://raw.githubusercontent.com/truenas/apps/master/trains/%s/%s/%s/templates/docker-compose.yaml",
+			app.Train, app.AppID, app.Version)
+		reqCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		if req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, tplURL, nil); err == nil {
+			if resp, err := a.httpClient.Do(req); err == nil {
+				if resp.StatusCode == http.StatusOK {
+					if bodyBytes, err := io.ReadAll(resp.Body); err == nil {
+						tplData = bodyBytes
+						_ = os.WriteFile(tplCacheFile, bodyBytes, 0644)
+					}
+				}
+				resp.Body.Close()
+			}
+		}
+	}
+
+	if portalPort, portalName, portalScheme, portalPath := ExtractPortalFromTemplate(string(tplData), string(data)); portalPort > 0 {
+		app.DefaultPort = portalPort
+		portalYAML := fmt.Sprintf("x-nas-management-port: %d\nx-portals:\n  - name: %q\n    scheme: %q\n    port: %d\n    path: %q\n",
+			portalPort, portalName, portalScheme, portalPort, portalPath)
+		if !strings.Contains(app.ComposeYAML, "x-portals:") {
+			app.ComposeYAML = portalYAML + app.ComposeYAML
+		}
 	}
 }
 
@@ -673,8 +780,8 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
       - PUID=1000
       - PGID=1000
     volumes:
-      - /tank/appdata/%s/config:/var/syncthing
-      - /tank/media:/var/syncthing/Sync
+      - /nas/tank/appdata/%s/config:/var/syncthing
+      - /nas/tank/media:/var/syncthing/Sync
 `, image, appID, port, appID), port
 
 	case "wg-easy":
@@ -695,7 +802,7 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
       - WG_HOST=your-server-ip
       - PASSWORD=admin
     volumes:
-      - /tank/appdata/%s:/etc/wireguard
+      - /nas/tank/appdata/%s:/etc/wireguard
 `, image, appID, port, appID), port
 
 	case "ollama":
@@ -709,7 +816,7 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
     ports:
       - "%d:11434"
     volumes:
-      - /tank/appdata/%s:/root/.ollama
+      - /nas/tank/appdata/%s:/root/.ollama
 `, image, appID, port, appID), port
 
 	case "uptime-kuma":
@@ -723,7 +830,7 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
     ports:
       - "%d:3001"
     volumes:
-      - /tank/appdata/%s:/app/data
+      - /nas/tank/appdata/%s:/app/data
 `, image, appID, port, appID), port
 
 	case "vaultwarden":
@@ -739,7 +846,7 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
     environment:
       - WEBSOCKET_ENABLED=true
     volumes:
-      - /tank/appdata/%s:/data
+      - /nas/tank/appdata/%s:/data
 `, image, appID, port, appID), port
 
 	case "pihole":
@@ -758,8 +865,8 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
       - TZ=Etc/UTC
       - WEBPASSWORD=admin
     volumes:
-      - /tank/appdata/%s/etc-pihole:/etc/pihole
-      - /tank/appdata/%s/etc-dnsmasq.d:/etc/dnsmasq.d
+      - /nas/tank/appdata/%s/etc-pihole:/etc/pihole
+      - /nas/tank/appdata/%s/etc-dnsmasq.d:/etc/dnsmasq.d
 `, image, appID, port, appID, appID), port
 
 	case "plex":
@@ -776,8 +883,8 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
       - PGID=1000
       - VERSION=docker
     volumes:
-      - /tank/appdata/%s:/config
-      - /tank/media:/media
+      - /nas/tank/appdata/%s:/config
+      - /nas/tank/media:/media
 `, image, appID, appID), port
 
 	case "home-assistant":
@@ -790,7 +897,7 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
     restart: unless-stopped
     network_mode: host
     volumes:
-      - /tank/appdata/%s:/config
+      - /nas/tank/appdata/%s:/config
       - /etc/localtime:/etc/localtime:ro
 `, image, appID, appID), port
 
@@ -807,8 +914,8 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
       - "53:53/udp"
       - "%d:3000/tcp"
     volumes:
-      - /tank/appdata/%s/work:/opt/adguardhome/work
-      - /tank/appdata/%s/conf:/opt/adguardhome/conf
+      - /nas/tank/appdata/%s/work:/opt/adguardhome/work
+      - /nas/tank/appdata/%s/conf:/opt/adguardhome/conf
 `, image, appID, port, appID, appID), port
 
 	case "actual-budget":
@@ -822,13 +929,27 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
     ports:
       - "%d:5006"
     volumes:
-      - /tank/appdata/%s:/data
+      - /nas/tank/appdata/%s:/data
 `, image, appID, port, appID), port
 
 	case "nginx-proxy-manager":
 		image = "jc21/nginx-proxy-manager:latest"
 		port = 81
-		return fmt.Sprintf(`services:
+		return fmt.Sprintf(`x-nas-management-port: 81
+x-portals:
+  - name: "Admin Web UI"
+    scheme: "http"
+    port: 81
+    path: "/"
+  - name: "HTTP Traffic"
+    scheme: "http"
+    port: 80
+    path: "/"
+  - name: "HTTPS Traffic"
+    scheme: "https"
+    port: 443
+    path: "/"
+services:
   nginx-proxy-manager:
     image: %s
     container_name: %s
@@ -840,8 +961,8 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
     environment:
       - DISABLE_IPV6=true
     volumes:
-      - /tank/appdata/%s/data:/data
-      - /tank/appdata/%s/letsencrypt:/etc/letsencrypt
+      - /nas/tank/appdata/%s/data:/data
+      - /nas/tank/appdata/%s/letsencrypt:/etc/letsencrypt
 `, image, appID, port, appID, appID), port
 
 	case "qbittorrent":
@@ -862,8 +983,8 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
       - TZ=Etc/UTC
       - WEBUI_PORT=8080
     volumes:
-      - /tank/appdata/%s/config:/config
-      - /tank/media/downloads:/downloads
+      - /nas/tank/appdata/%s/config:/config
+      - /nas/tank/media/downloads:/downloads
 `, image, appID, port, appID), port
 
 	case "transmission":
@@ -883,8 +1004,8 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
       - PGID=1000
       - TZ=Etc/UTC
     volumes:
-      - /tank/appdata/%s/config:/config
-      - /tank/media/downloads:/downloads
+      - /nas/tank/appdata/%s/config:/config
+      - /nas/tank/media/downloads:/downloads
 `, image, appID, port, appID), port
 
 	case "radarr":
@@ -902,8 +1023,8 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
       - PGID=1000
       - TZ=Etc/UTC
     volumes:
-      - /tank/appdata/%s/config:/config
-      - /tank/media:/media
+      - /nas/tank/appdata/%s/config:/config
+      - /nas/tank/media:/media
 `, image, appID, port, appID), port
 
 	case "sonarr":
@@ -921,8 +1042,8 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
       - PGID=1000
       - TZ=Etc/UTC
     volumes:
-      - /tank/appdata/%s/config:/config
-      - /tank/media:/media
+      - /nas/tank/appdata/%s/config:/config
+      - /nas/tank/media:/media
 `, image, appID, port, appID), port
 
 	case "dockge":
@@ -937,14 +1058,24 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
       - "%d:5001"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /tank/appdata/%s/data:/app/data
-      - /tank/appdata/stacks:/opt/stacks
+      - /nas/tank/appdata/%s/data:/app/data
+      - /nas/tank/appdata/stacks:/opt/stacks
 `, image, appID, port, appID), port
 
 	case "portainer":
 		image = "portainer/portainer-ce:latest"
 		port = 9443
-		return fmt.Sprintf(`services:
+		return fmt.Sprintf(`x-nas-management-port: 9443
+x-portals:
+  - name: "Web UI (HTTPS)"
+    scheme: "https"
+    port: 9443
+    path: "/"
+  - name: "Web UI (HTTP)"
+    scheme: "http"
+    port: 9000
+    path: "/"
+services:
   portainer:
     image: %s
     container_name: %s
@@ -954,7 +1085,7 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
       - "9000:9000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /tank/appdata/%s/data:/data
+      - /nas/tank/appdata/%s/data:/data
 `, image, appID, port, appID), port
 
 	case "audiobookshelf":
@@ -971,9 +1102,9 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
       - AUDIOBOOKSHELF_UID=1000
       - AUDIOBOOKSHELF_GID=1000
     volumes:
-      - /tank/appdata/%s/config:/config
-      - /tank/appdata/%s/metadata:/metadata
-      - /tank/media/audiobooks:/audiobooks
+      - /nas/tank/appdata/%s/config:/config
+      - /nas/tank/appdata/%s/metadata:/metadata
+      - /nas/tank/media/audiobooks:/audiobooks
 `, image, appID, port, appID, appID), port
 
 	case "paperless-ngx":
@@ -990,9 +1121,9 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
       - USERMAP_UID=1000
       - USERMAP_GID=1000
     volumes:
-      - /tank/appdata/%s/data:/usr/src/paperless/data
-      - /tank/appdata/%s/media:/usr/src/paperless/media
-      - /tank/appdata/%s/consume:/usr/src/paperless/consume
+      - /nas/tank/appdata/%s/data:/usr/src/paperless/data
+      - /nas/tank/appdata/%s/media:/usr/src/paperless/media
+      - /nas/tank/appdata/%s/consume:/usr/src/paperless/consume
 `, image, appID, port, appID, appID, appID), port
 	}
 
@@ -1014,7 +1145,7 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
       - PGID=1000
       - TZ=Etc/UTC
     volumes:
-      - /tank/appdata/%s:/data
+      - /nas/tank/appdata/%s:/data
 `, appID, image, appID, port, appID), port
 }
 
@@ -1044,7 +1175,7 @@ func (a *Adapter) seedDefaultApps() {
       - POSTGRES_PASSWORD=nextcloud
       - REDIS_HOST=redis
     volumes:
-      - /tank/appdata/nextcloud:/var/www/html
+      - /nas/tank/appdata/nextcloud:/var/www/html
     depends_on:
       - db
       - redis
@@ -1057,7 +1188,7 @@ func (a *Adapter) seedDefaultApps() {
       - POSTGRES_USER=nextcloud
       - POSTGRES_PASSWORD=nextcloud
     volumes:
-      - /tank/appdata/nextcloud-db:/var/lib/postgresql/data
+      - /nas/tank/appdata/nextcloud-db:/var/lib/postgresql/data
   redis:
     image: redis:alpine
     container_name: nextcloud-redis
@@ -1082,9 +1213,9 @@ func (a *Adapter) seedDefaultApps() {
     ports:
       - "8096:8096"
     volumes:
-      - /tank/appdata/jellyfin/config:/config
-      - /tank/appdata/jellyfin/cache:/cache
-      - /tank/media:/media:ro
+      - /nas/tank/appdata/jellyfin/config:/config
+      - /nas/tank/appdata/jellyfin/cache:/cache
+      - /nas/tank/media:/media:ro
 `,
 		},
 		{
@@ -1190,8 +1321,8 @@ func (a *Adapter) seedDefaultApps() {
     environment:
       - DISABLE_IPV6=true
     volumes:
-      - /tank/appdata/nginx-proxy-manager/data:/data
-      - /tank/appdata/nginx-proxy-manager/letsencrypt:/etc/letsencrypt
+      - /nas/tank/appdata/nginx-proxy-manager/data:/data
+      - /nas/tank/appdata/nginx-proxy-manager/letsencrypt:/etc/letsencrypt
 `,
 		},
 		{

@@ -96,6 +96,7 @@ export interface DiskPartition {
   label: string;
   owningZfsPool?: string;
   aliases?: string[];
+  isSystem?: boolean;
 }
 
 export interface SmartParameter {
@@ -141,6 +142,7 @@ export interface Disk {
   totalBytesWritten?: number;
   reallocatedSectors?: number;
   pendingSectors?: number;
+  isSystem?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -371,6 +373,21 @@ export interface DockerContainer {
 
 export type DockerAppState = 'RUNNING' | 'STOPPED' | 'PARTIALLY_RUNNING' | 'ERROR';
 
+export interface DockerAppPortal {
+  name: string;
+  url: string;
+  port: number;
+  protocol: string;
+  path: string;
+}
+
+export interface HostPortStatus {
+  port: number;
+  protocol: string;
+  available: boolean;
+  inUseBy: string;
+}
+
 export interface DockerAppContainer {
   containerId: string;
   name: string;
@@ -401,6 +418,7 @@ export interface DockerApp {
   portMappings: string[];
   volumes: string[];
   webUiUrl: string;
+  portals?: DockerAppPortal[];
   totalCpuPercent: number;
   totalMemoryMib: number;
   totalNetRxBytes?: number;
@@ -681,7 +699,7 @@ export const APP_CATALOG_TEMPLATES: AppCatalogTemplate[] = [
       - POSTGRES_PASSWORD=nextcloud
       - REDIS_HOST=redis
     volumes:
-      - /tank/appdata/nextcloud:/var/www/html
+      - /nas/tank/appdata/nextcloud:/var/www/html
     depends_on:
       - db
       - redis
@@ -694,7 +712,7 @@ export const APP_CATALOG_TEMPLATES: AppCatalogTemplate[] = [
       - POSTGRES_USER=nextcloud
       - POSTGRES_PASSWORD=nextcloud
     volumes:
-      - /tank/appdata/nextcloud-db:/var/lib/postgresql/data
+      - /nas/tank/appdata/nextcloud-db:/var/lib/postgresql/data
   redis:
     image: redis:alpine
     container_name: nextcloud-redis
@@ -716,8 +734,8 @@ export const APP_CATALOG_TEMPLATES: AppCatalogTemplate[] = [
     ports:
       - "8096:8096"
     volumes:
-      - /tank/media:/media:ro
-      - /tank/appdata/jellyfin:/config
+      - /nas/tank/media:/media:ro
+      - /nas/tank/appdata/jellyfin:/config
 `,
   },
   {
@@ -738,7 +756,7 @@ export const APP_CATALOG_TEMPLATES: AppCatalogTemplate[] = [
       - SIGNUPS_ALLOWED=true
       - WEBSOCKET_ENABLED=true
     volumes:
-      - /tank/appdata/vaultwarden:/data
+      - /nas/tank/appdata/vaultwarden:/data
 `,
   },
   {
@@ -761,8 +779,8 @@ export const APP_CATALOG_TEMPLATES: AppCatalogTemplate[] = [
       - TZ=UTC
       - WEBPASSWORD=admin
     volumes:
-      - /tank/appdata/pihole:/etc/pihole
-      - /tank/appdata/dnsmasq:/etc/dnsmasq.d
+      - /nas/tank/appdata/pihole:/etc/pihole
+      - /nas/tank/appdata/dnsmasq:/etc/dnsmasq.d
 `,
   },
   {
@@ -783,8 +801,8 @@ export const APP_CATALOG_TEMPLATES: AppCatalogTemplate[] = [
       - PGID=1000
       - VERSION=docker
     volumes:
-      - /tank/appdata/plex:/config
-      - /tank/media:/media:ro
+      - /nas/tank/appdata/plex:/config
+      - /nas/tank/media:/media:ro
 `,
   },
   {
@@ -794,7 +812,21 @@ export const APP_CATALOG_TEMPLATES: AppCatalogTemplate[] = [
     description: 'Expose your self-hosted apps securely with free SSL certificates and clean GUI.',
     icon: mdiWeb,
     defaultPort: 81,
-    composeYaml: `services:
+    composeYaml: `x-nas-management-port: 81
+x-portals:
+  - name: "Admin Web UI"
+    scheme: "http"
+    port: 81
+    path: "/"
+  - name: "HTTP Traffic"
+    scheme: "http"
+    port: 80
+    path: "/"
+  - name: "HTTPS Traffic"
+    scheme: "https"
+    port: 443
+    path: "/"
+services:
   app:
     image: jc21/nginx-proxy-manager:latest
     container_name: npm-proxy
@@ -804,8 +836,8 @@ export const APP_CATALOG_TEMPLATES: AppCatalogTemplate[] = [
       - "81:81"
       - "443:443"
     volumes:
-      - /tank/appdata/npm/data:/data
-      - /tank/appdata/npm/letsencrypt:/etc/letsencrypt
+      - /nas/tank/appdata/npm/data:/data
+      - /nas/tank/appdata/npm/letsencrypt:/etc/letsencrypt
 `,
   },
   {
@@ -823,7 +855,7 @@ export const APP_CATALOG_TEMPLATES: AppCatalogTemplate[] = [
     network_mode: host
     privileged: true
     volumes:
-      - /tank/appdata/homeassistant:/config
+      - /nas/tank/appdata/homeassistant:/config
       - /etc/localtime:/etc/localtime:ro
 `,
   },

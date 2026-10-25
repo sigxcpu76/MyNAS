@@ -607,8 +607,10 @@ describe('Application Layer: Use-Case Services with Mock Ports', () => {
         smart_status: 'PASSED',
         health_percentage: 99,
         owning_zfs_pool: 'tank',
+        is_system: true,
         partitions: [
-          { name: 'nvme0n1p1', device_path: '/dev/nvme0n1p1', size_bytes: '1073741824', mountpoint: '/boot' },
+          { name: 'nvme0n1p1', device_path: '/dev/nvme0n1p1', size_bytes: '1073741824', mountpoint: '/boot', is_system: false },
+          { name: 'nvme0n1p2', device_path: '/dev/nvme0n1p2', size_bytes: '107374182400', mountpoint: '/', is_system: true },
         ],
       },
     ];
@@ -631,7 +633,10 @@ describe('Application Layer: Use-Case Services with Mock Ports', () => {
     expect(disks[0].temperatureCelsius).toBe(38.5);
     expect(disks[0].smartStatus).toBe('PASSED');
     expect(disks[0].owningZfsPool).toBe('tank');
-    expect(disks[0].partitions.length).toBe(1);
+    expect(disks[0].isSystem).toBe(true);
+    expect(disks[0].partitions.length).toBe(2);
+    expect(disks[0].partitions[1].isSystem).toBe(true);
+    expect(disks[0].partitions[1].mountpoint).toBe('/');
 
     const single = await diskService.getDisk('nvme0n1');
     expect(single.diskId).toBe('nvme0n1');

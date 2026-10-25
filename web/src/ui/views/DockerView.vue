@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import {
   mdiAlertCircleOutline,
   mdiCheck,
+  mdiChevronDown,
   mdiClose,
   mdiCloudSync,
   mdiConsole,
@@ -89,7 +90,6 @@ function formatNetworkRate(app: DockerApp): string {
   if (app.state !== 'RUNNING') return '—';
   const rx = app.totalNetRxRate || 0;
   const tx = app.totalNetTxRate || 0;
-  if (rx + tx === 0) return '0 B/s';
   const rxStr = formatBytes(rx) + '/s ↓';
   const txStr = formatBytes(tx) + '/s ↑';
   return `${rxStr} · ${txStr}`;
@@ -621,6 +621,110 @@ async function deleteApp(app: DockerApp) {
   }
 }
 
+// Port selection for Open Web UI
+const activePortMenuAppId = ref<string | null>(null);
+
+interface AppPortEntry {
+  hostPort: string;
+  containerPort: string;
+  protocol: string;
+}
+
+function getAppPorts(app: DockerApp): AppPortEntry[] {
+  const result: AppPortEntry[] = [];
+  const seen = new Set<string>();
+
+  const rawPorts = [...(app.portMappings || [])];
+  for (const c of app.containers || []) {
+    for (const p of c.ports || []) {
+      rawPorts.push(p);
+    }
+  }
+
+  for (const p of rawPorts) {
+    let clean = p.trim();
+    if (!clean) continue;
+    let proto = 'tcp';
+    if (clean.includes('/')) {
+      const parts = clean.split('/');
+      clean = parts[0];
+      proto = parts[1] || 'tcp';
+    }
+    // format 0.0.0.0:8080->80
+    if (clean.includes('->')) {
+      const parts = clean.split('->');
+      const hostPart = parts[0].replace(/^(0\.0\.0\.0|\[::\]|:::):/, '');
+      const contPart = parts[1];
+      const key = `${hostPart}:${contPart}`;
+      if (!seen.has(key) && hostPart && contPart) {
+        seen.add(key);
+        result.push({ hostPort: hostPart, containerPort: contPart, protocol: proto });
+      }
+      continue;
+    }
+    // format host:container
+    const colons = clean.split(':');
+    if (colons.length === 2) {
+      const hostPart = colons[0];
+      const contPart = colons[1];
+      const key = `${hostPart}:${contPart}`;
+      if (!seen.has(key) && hostPart && contPart) {
+        seen.add(key);
+        result.push({ hostPort: hostPart, containerPort: contPart, protocol: proto });
+      }
+    } else if (colons.length === 3) {
+      const hostPart = colons[1];
+      const contPart = colons[2];
+      const key = `${hostPart}:${contPart}`;
+      if (!seen.has(key) && hostPart && contPart) {
+        seen.add(key);
+        result.push({ hostPort: hostPart, containerPort: contPart, protocol: proto });
+      }
+    }
+  }
+
+  return result;
+}
+
+function togglePortMenu(appId: string) {
+  if (activePortMenuAppId.value === appId) {
+    activePortMenuAppId.value = null;
+  } else {
+    activePortMenuAppId.value = appId;
+  }
+}
+
+function openPortUrl(hostPort: string) {
+  if (!hostPort) return;
+  const hostname = window.location.hostname || 'localhost';
+  const url = `http://${hostname}:${hostPort}`;
+  window.open(url, '_blank', 'noopener,noreferrer');
+  activePortMenuAppId.value = null;
+}
+
+function isPortActiveWebUi(app: DockerApp, p: AppPortEntry): boolean {
+  if (!app.webUiUrl) return false;
+  return app.webUiUrl.endsWith(`:${p.hostPort}`) || app.webUiUrl.endsWith(`:${p.hostPort}/`);
+}
+
+function handleGlobalClick(e: MouseEvent) {
+  if (!(e.target as HTMLElement)?.closest('.webui-port-dropdown') && !(e.target as HTMLElement)?.closest('.webui-port-trigger')) {
+    activePortMenuAppId.value = null;
+  }
+}
+
+function getPrimaryWebUiUrl(app: DockerApp): string {
+  if (app.webUiUrl) return app.webUiUrl;
+  if (app.portals && app.portals.length > 0 && app.portals[0].url) {
+    return app.portals[0].url;
+  }
+  const ports = getAppPorts(app);
+  if (ports.length > 0 && ports[0].hostPort) {
+    return `http://${window.location.hostname || 'localhost'}:${ports[0].hostPort}`;
+  }
+  return '';
+}
+
 function openWebPortal(url: string) {
   if (!url) return;
   let targetUrl = url;
@@ -632,6 +736,7 @@ function openWebPortal(url: string) {
 
 onMounted(() => {
   isViewActive = true;
+  window.addEventListener('click', handleGlobalClick);
   fetchDockerConfig();
   if (nasState.dockerApps.length === 0) {
     refreshApps();
@@ -641,6 +746,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   isViewActive = false;
+  window.removeEventListener('click', handleGlobalClick);
   if (telemetryTimer) {
     clearTimeout(telemetryTimer);
     telemetryTimer = null;
@@ -712,7 +818,7 @@ onUnmounted(() => {
             Docker Storage Dataset Not Configured
           </div>
           <div style="font-size: 12.5px; color: var(--text-secondary); margin-top: 2px">
-            Select or create a ZFS dataset (e.g. {{ nasState.dockerConfig.dataset || 'tank/apps' }}) to store container images (/{{ nasState.dockerConfig.dataset || 'tank/apps' }}/docker) and persistent app volumes (/{{ nasState.dockerConfig.dataset || 'tank/apps' }}/appdata).
+            Select or create a ZFS dataset (e.g. {{ nasState.dockerConfig.dataset || 'tank/apps' }}) to store container images (/nas/{{ nasState.dockerConfig.dataset || 'tank/apps' }}/docker) and persistent app volumes (/nas/{{ nasState.dockerConfig.dataset || 'tank/apps' }}/appdata).
           </div>
         </div>
       </div>
@@ -849,18 +955,15 @@ onUnmounted(() => {
 
     <!-- Applications Table View -->
     <div v-else class="card" style="padding: 0; overflow-x: auto">
-      <table class="table" style="width: 100%; border-collapse: collapse">
+      <table class="data-table" style="width: 100%; border-collapse: collapse">
         <thead>
           <tr style="border-bottom: 1px solid var(--border-subtle); text-align: left; font-size: 11.5px; color: var(--text-secondary); text-transform: uppercase">
-            <th style="padding: 12px 16px">Application</th>
-            <th style="padding: 12px 16px">Status</th>
-            <th style="padding: 12px 16px">Services</th>
-            <th style="padding: 12px 16px">Ports</th>
-            <th style="padding: 12px 16px">Web UI</th>
-            <th style="padding: 12px 16px">CPU</th>
-            <th style="padding: 12px 16px">Memory</th>
-            <th style="padding: 12px 16px">Network (1s)</th>
-            <th style="padding: 12px 16px; text-align: right">Actions</th>
+            <th style="padding: 10px 14px; width: 280px; min-width: 220px; max-width: 340px">Application</th>
+            <th style="padding: 10px 14px; width: 130px; min-width: 130px">Web UI</th>
+            <th style="padding: 10px 14px; width: 85px; min-width: 85px; max-width: 85px">CPU</th>
+            <th style="padding: 10px 14px; width: 105px; min-width: 105px; max-width: 105px">Memory</th>
+            <th style="padding: 10px 14px; width: 210px; min-width: 210px; max-width: 210px">Network (1s)</th>
+            <th style="padding: 10px 14px; min-width: 240px; text-align: right">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -868,115 +971,167 @@ onUnmounted(() => {
             v-for="app in filteredApps"
             :key="app.name"
             style="border-bottom: 1px solid var(--border-subtle)"
+            :title="`Application: ${app.title || app.appId}\nServices: ${app.services.join(', ') || 'none'}\nStatus: ${app.statusText || app.state}`"
           >
-            <!-- Application -->
-            <td style="padding: 12px 16px">
+            <!-- Application (Status Indicator Icon + Title + AppId with Services Tooltip) -->
+            <td style="padding: 10px 14px; width: 280px; min-width: 220px; max-width: 340px">
               <div style="display: flex; align-items: center; gap: 10px">
-                <div style="width: 34px; height: 34px; border-radius: 6px; background: rgba(59, 130, 246, 0.12); display: flex; align-items: center; justify-content: center; color: #3b82f6; flex-shrink: 0">
-                  <MdiIcon :path="mdiDocker" size="20" />
+                <!-- Status indicator dot replacing the old Docker logo -->
+                <div
+                  :title="`Status: ${app.state} (${app.statusText})`"
+                  style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 16px; height: 16px"
+                >
+                  <span
+                    v-if="app.state === 'RUNNING'"
+                    style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, 0.6)"
+                  ></span>
+                  <span
+                    v-else-if="app.state === 'PARTIALLY_RUNNING'"
+                    style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #f59e0b; box-shadow: 0 0 8px rgba(245, 158, 11, 0.6)"
+                  ></span>
+                  <span
+                    v-else-if="app.state === 'ERROR'"
+                    style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 8px rgba(239, 68, 68, 0.6)"
+                  ></span>
+                  <span
+                    v-else
+                    style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #64748b"
+                  ></span>
                 </div>
+
                 <div>
-                  <div style="font-weight: 600; color: var(--text-primary)">
+                  <div style="font-weight: 600; font-size: 13.5px; color: var(--text-primary)">
                     {{ app.title || app.appId }}
                   </div>
-                  <div class="mono" style="font-size: 11.5px; color: var(--text-secondary)">
+                  <div
+                    class="mono"
+                    style="font-size: 11.5px; color: var(--text-secondary); cursor: help"
+                    :title="`Services: ${app.services.join(', ') || 'none'}`"
+                  >
                     {{ app.appId }} · {{ app.services.length }} service{{ app.services.length === 1 ? '' : 's' }}
                   </div>
                 </div>
               </div>
             </td>
 
-            <!-- State -->
-            <td style="padding: 12px 16px">
-              <span
-                class="badge"
-                :class="{
-                  'badge-success': app.state === 'RUNNING',
-                  'badge-neutral': app.state === 'STOPPED',
-                  'badge-warning': app.state === 'PARTIALLY_RUNNING',
-                  'badge-danger': app.state === 'ERROR'
-                }"
-              >
-                {{ app.state }}
-              </span>
-              <div style="font-size: 11px; color: var(--text-secondary); margin-top: 3px">
-                {{ app.statusText }}
-              </div>
-            </td>
-
-            <!-- Containers / Services -->
-            <td style="padding: 12px 16px">
-              <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 220px">
-                <span
-                  v-for="c in app.containers"
-                  :key="c.name"
-                  class="badge"
-                  :class="c.state === 'RUNNING' ? 'badge-success' : 'badge-neutral'"
-                  style="font-size: 10px; font-family: monospace"
-                  :title="`${c.name} (${c.image})`"
+            <!-- Web Portal / Web UI -->
+            <td style="padding: 10px 14px; width: 130px; min-width: 130px; position: relative">
+              <div v-if="getPrimaryWebUiUrl(app)" style="display: inline-flex; align-items: center; gap: 2px">
+                <button
+                  class="btn btn-sm"
+                  style="padding: 3px 8px; font-size: 11.5px; color: #10b981; border-color: rgba(16, 185, 129, 0.3); display: inline-flex; align-items: center; gap: 4px"
+                  :title="`Open Web UI (${getPrimaryWebUiUrl(app)})`"
+                  @click="openWebPortal(getPrimaryWebUiUrl(app))"
                 >
-                  {{ c.serviceName }}
-                </span>
+                  <MdiIcon :path="mdiOpenInNew" size="13" />
+                  {{ app.portals && app.portals.length > 0 ? (app.portals[0].name || 'Open UI') : 'Open UI' }}
+                </button>
+                <button
+                  v-if="(app.portals && app.portals.length > 1) || getAppPorts(app).length > 1"
+                  type="button"
+                  class="btn btn-sm btn-icon webui-port-trigger"
+                  style="padding: 3px 4px; font-size: 11px; color: #10b981; border-color: rgba(16, 185, 129, 0.3)"
+                  title="View all portals and ports"
+                  @click.stop="togglePortMenu(app.appId)"
+                >
+                  <MdiIcon :path="mdiChevronDown" size="14" />
+                </button>
               </div>
-            </td>
 
-            <!-- Ports -->
-            <td style="padding: 12px 16px">
-              <div v-if="displayPorts(app).length > 0" class="mono" style="font-size: 11.5px" :title="displayPorts(app).join(', ')">
-                <div v-for="p in displayPorts(app).slice(0, 2)" :key="p">{{ p }}</div>
-                <div v-if="displayPorts(app).length > 2" style="color: var(--text-secondary); font-size: 10.5px">
-                  +{{ displayPorts(app).length - 2 }} more
-                </div>
-              </div>
               <span v-else style="color: var(--text-secondary); font-size: 12px">—</span>
-            </td>
 
-            <!-- Web Portal -->
-            <td style="padding: 12px 16px">
-              <button
-                v-if="app.webUiUrl"
-                class="btn btn-sm"
-                style="padding: 3px 8px; font-size: 11.5px; color: #10b981; border-color: rgba(16, 185, 129, 0.3); display: inline-flex; align-items: center; gap: 4px"
-                @click="openWebPortal(app.webUiUrl)"
+              <!-- Port Selector / Portal Dropdown Menu -->
+              <div
+                v-if="activePortMenuAppId === app.appId"
+                class="webui-port-dropdown"
+                style="position: absolute; top: calc(100% - 4px); left: 16px; z-index: 100; min-width: 230px; background: var(--bg-surface, #0f172a); border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.15)); border-radius: 6px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); padding: 6px; display: flex; flex-direction: column; gap: 2px"
               >
-                <MdiIcon :path="mdiOpenInNew" size="13" />
-                Open UI
-              </button>
-              <span v-else style="color: var(--text-secondary); font-size: 12px">—</span>
+                <!-- Application Portals from Manifest -->
+                <template v-if="app.portals && app.portals.length > 0">
+                  <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); padding: 4px 8px; border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08)); margin-bottom: 2px">
+                    Application Portals
+                  </div>
+                  <button
+                    v-for="portal in app.portals"
+                    :key="portal.name + portal.url"
+                    type="button"
+                    class="btn btn-sm btn-ghost"
+                    style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 6px 8px; text-align: left"
+                    @click="openWebPortal(portal.url)"
+                  >
+                    <div style="display: flex; flex-direction: column">
+                      <span style="font-weight: 600; font-size: 12px; color: var(--text-primary)">
+                        {{ portal.name }}
+                      </span>
+                      <span class="mono" style="font-size: 10.5px; color: #38bdf8">
+                        {{ portal.protocol }}://:{{ portal.port }}{{ portal.path }}
+                      </span>
+                    </div>
+                    <MdiIcon :path="mdiOpenInNew" size="13" style="color: var(--text-secondary); flex-shrink: 0" />
+                  </button>
+                </template>
+
+                <!-- Container Exposed Ports -->
+                <div
+                  v-if="getAppPorts(app).length > 0"
+                  style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); padding: 4px 8px; border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08)); margin-top: 4px; margin-bottom: 2px"
+                >
+                  Container Ports
+                </div>
+                <button
+                  v-for="p in getAppPorts(app)"
+                  :key="p.containerPort"
+                  type="button"
+                  class="btn btn-sm btn-ghost"
+                  style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 5px 8px; text-align: left; font-size: 12px"
+                  @click="openPortUrl(p.hostPort)"
+                >
+                  <span class="mono font-semibold" style="color: #38bdf8">
+                    :{{ p.containerPort }}
+                  </span>
+                  <span style="color: var(--text-secondary); font-size: 11px">
+                    → host :{{ p.hostPort }}
+                  </span>
+                  <span v-if="isPortActiveWebUi(app, p)" class="badge badge-success" style="font-size: 9px; padding: 1px 4px">
+                    UI
+                  </span>
+                </button>
+              </div>
             </td>
 
             <!-- CPU -->
-            <td style="padding: 12px 16px">
-              <div class="mono" style="font-size: 12.5px; font-weight: 600; color: var(--text-primary)">
+            <td style="padding: 10px 14px; width: 85px; min-width: 85px; max-width: 85px; box-sizing: border-box; white-space: nowrap">
+              <div class="mono" style="font-size: 12.5px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums">
                 {{ app.totalCpuPercent.toFixed(1) }}%
               </div>
             </td>
 
             <!-- Memory -->
-            <td style="padding: 12px 16px">
-              <div class="mono" style="font-size: 12.5px; color: var(--text-primary)">
+            <td style="padding: 10px 14px; width: 105px; min-width: 105px; max-width: 105px; box-sizing: border-box; white-space: nowrap">
+              <div class="mono" style="font-size: 12.5px; color: var(--text-primary); font-variant-numeric: tabular-nums">
                 {{ app.totalMemoryMib }} MiB
               </div>
             </td>
 
             <!-- Network (1s Live) -->
-            <td style="padding: 12px 16px">
-              <div class="mono" style="font-size: 11.5px; white-space: nowrap">
+            <td style="padding: 10px 14px; width: 210px; min-width: 210px; max-width: 210px; box-sizing: border-box; white-space: nowrap">
+              <div class="mono" style="font-size: 11.5px; font-variant-numeric: tabular-nums">
                 <div style="color: var(--text-primary); font-weight: 500">
                   {{ formatNetworkRate(app) }}
                 </div>
-                <div v-if="formatNetworkTotal(app)" style="font-size: 10.5px; color: var(--text-secondary)">
-                  {{ formatNetworkTotal(app) }}
+                <div style="font-size: 10.5px; color: var(--text-secondary); min-height: 14px">
+                  {{ formatNetworkTotal(app) || ' ' }}
                 </div>
               </div>
             </td>
 
             <!-- Actions (Icon-only buttons with tooltips) -->
-            <td style="padding: 12px 16px; text-align: right">
-              <div style="display: flex; gap: 6px; justify-content: flex-end; align-items: center">
+            <td style="padding: 10px 14px; min-width: 240px; text-align: right">
+              <div style="display: flex; gap: 6px; justify-content: flex-end; align-items: center; white-space: nowrap; flex-shrink: 0">
                 <button
                   v-if="app.state === 'RUNNING'"
                   class="btn btn-sm btn-icon btn-warning"
+                  style="flex-shrink: 0"
                   title="Stop Application"
                   aria-label="Stop Application"
                   @click="stopApp(app)"
@@ -986,6 +1141,7 @@ onUnmounted(() => {
                 <button
                   v-if="app.state === 'RUNNING'"
                   class="btn btn-sm btn-icon"
+                  style="flex-shrink: 0"
                   title="Restart Application"
                   aria-label="Restart Application"
                   @click="restartApp(app)"
@@ -995,7 +1151,7 @@ onUnmounted(() => {
                 <button
                   v-if="app.state === 'RUNNING'"
                   class="btn btn-sm btn-icon"
-                  style="color: #38bdf8"
+                  style="flex-shrink: 0; color: #38bdf8"
                   title="Open Shell Terminal"
                   aria-label="Open Shell Terminal"
                   @click="openTerminalForApp(app)"
@@ -1005,6 +1161,7 @@ onUnmounted(() => {
                 <button
                   v-if="app.state !== 'RUNNING'"
                   class="btn btn-sm btn-icon btn-success"
+                  style="flex-shrink: 0"
                   title="Start Application"
                   aria-label="Start Application"
                   @click="startApp(app)"
@@ -1014,6 +1171,7 @@ onUnmounted(() => {
 
                 <button
                   class="btn btn-sm btn-icon"
+                  style="flex-shrink: 0"
                   title="View Application Logs"
                   aria-label="View Application Logs"
                   @click="openInspectModal(app, 'logs')"
@@ -1023,6 +1181,7 @@ onUnmounted(() => {
 
                 <button
                   class="btn btn-sm btn-icon"
+                  style="flex-shrink: 0"
                   title="Edit Compose Configuration"
                   aria-label="Edit Compose Configuration"
                   @click="openEditModal(app)"
@@ -1032,6 +1191,7 @@ onUnmounted(() => {
 
                 <button
                   class="btn btn-sm btn-icon btn-danger"
+                  style="flex-shrink: 0"
                   title="Delete Application"
                   aria-label="Delete Application"
                   @click="deleteApp(app)"
@@ -1211,10 +1371,10 @@ onUnmounted(() => {
                 <th style="padding: 8px">SERVICE</th>
                 <th style="padding: 8px">IMAGE</th>
                 <th style="padding: 8px">STATE</th>
-                <th style="padding: 8px">CPU</th>
-                <th style="padding: 8px">RAM</th>
+                <th style="padding: 8px; width: 85px; min-width: 85px; max-width: 85px">CPU</th>
+                <th style="padding: 8px; width: 105px; min-width: 105px; max-width: 105px">RAM</th>
                 <th style="padding: 8px">PORTS</th>
-                <th style="padding: 8px; text-align: right">ACTIONS</th>
+                <th style="padding: 8px; width: 70px; text-align: right">ACTIONS</th>
               </tr>
             </thead>
             <tbody>
@@ -1225,8 +1385,8 @@ onUnmounted(() => {
                 <td style="padding: 8px">
                   <span class="badge" :class="c.state === 'RUNNING' ? 'badge-success' : 'badge-neutral'">{{ c.state }}</span>
                 </td>
-                <td style="padding: 8px" class="mono">{{ c.cpuPercent.toFixed(1) }}%</td>
-                <td style="padding: 8px" class="mono">{{ c.memoryMib }} MiB</td>
+                <td style="padding: 8px; width: 85px; min-width: 85px; max-width: 85px; white-space: nowrap; font-variant-numeric: tabular-nums" class="mono">{{ c.cpuPercent.toFixed(1) }}%</td>
+                <td style="padding: 8px; width: 105px; min-width: 105px; max-width: 105px; white-space: nowrap; font-variant-numeric: tabular-nums" class="mono">{{ c.memoryMib }} MiB</td>
                 <td class="mono" style="padding: 8px; font-size: 11px">
                   {{ formatContainerPorts(c.ports) }}
                 </td>
@@ -1757,15 +1917,15 @@ onUnmounted(() => {
             </div>
             <div>
               <span style="color: var(--text-secondary)">Mountpoint:</span>
-              <span style="color: #38bdf8; margin-left: 6px">/{{ selectedDatasetToSave.replace(/^\//, '') }}</span>
+              <span style="color: #38bdf8; margin-left: 6px">/nas/{{ selectedDatasetToSave.replace(/^\//, '') }}</span>
             </div>
             <div>
               <span style="color: var(--text-secondary)">App Volumes:</span>
-              <span style="color: #38bdf8; margin-left: 6px">/{{ selectedDatasetToSave.replace(/^\//, '') }}/appdata</span>
+              <span style="color: #38bdf8; margin-left: 6px">/nas/{{ selectedDatasetToSave.replace(/^\//, '') }}/appdata</span>
             </div>
             <div>
               <span style="color: var(--text-secondary)">Docker Data Root:</span>
-              <span style="color: #38bdf8; margin-left: 6px">/{{ selectedDatasetToSave.replace(/^\//, '') }}/docker</span>
+              <span style="color: #38bdf8; margin-left: 6px">/nas/{{ selectedDatasetToSave.replace(/^\//, '') }}/docker</span>
             </div>
           </div>
         </div>

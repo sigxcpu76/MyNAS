@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package nas.v1;
+
+import "google/api/field_behavior.proto";
+import "google/api/resource.proto";
+
+option go_package = "github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1";
+
+// =============================================================================
+// LXC Container Resource
+// =============================================================================
+
+message LxcContainer {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/LxcContainer"
+    pattern: "lxcContainers/{lxc_container}"
+    singular: "lxcContainer"
+    plural: "lxcContainers"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string container_name = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string state = 3 [(google.api.field_behavior) = OUTPUT_ONLY]; // RUNNING, STOPPED, FROZEN
+  string distribution = 4; // debian, ubuntu, alpine, archlinux
+  string release = 5; // bookworm, noble, 3.20, current
+  string architecture = 6; // amd64, arm64
+  string ipv4_address = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
+  bool autostart = 8;
+  bool unprivileged = 9;
+  string rootfs_path = 10;
+  int64 memory_limit_mib = 11;
+  int32 cpu_cores = 12;
+  string template_archive = 13; // Template archive (.tar.gz / .tar.xz) in this pool or another pool
+}
+
+message ListLxcContainersRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string filter = 3;
+}
+
+message ListLxcContainersResponse {
+  repeated LxcContainer lxc_containers = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetLxcContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/LxcContainer"}
+  ];
+}
+
+message CreateLxcContainerRequest {
+  string lxc_container_id = 1 [(google.api.field_behavior) = REQUIRED];
+  LxcContainer lxc_container = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message DeleteLxcContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/LxcContainer"}
+  ];
+  bool force = 2;
+}
+
+message StartLxcContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/LxcContainer"}
+  ];
+}
+
+message StopLxcContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/LxcContainer"}
+  ];
+}
+
+message FreezeLxcContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/LxcContainer"}
+  ];
+}

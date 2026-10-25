@@ -11,6 +11,7 @@ import {
   composeYamlToForm,
   createDefaultService,
   formToComposeYaml,
+  generateRandomHighPort,
   generateUid,
 } from '../../domain/composeModel';
 import { nasState, notify } from '../store';
@@ -18,7 +19,19 @@ import { generateNanosecondId } from '../../domain/id';
 import CodeMirrorEditor from './CodeMirrorEditor.vue';
 import MdiIcon from './MdiIcon.vue';
 import PathSelector from './PathSelector.vue';
-import { mdiContentCopy, mdiDocker, mdiHarddisk, mdiLanConnect } from '@mdi/js';
+import { services } from '../../container';
+import {
+  mdiAlert,
+  mdiAlertCircle,
+  mdiCheckCircle,
+  mdiContentCopy,
+  mdiDocker,
+  mdiHarddisk,
+  mdiLanConnect,
+  mdiOpenInNew,
+  mdiPlus,
+  mdiStar,
+} from '@mdi/js';
 
 const props = defineProps<{
   initialAppId?: string;
@@ -92,7 +105,7 @@ const zfsDatasetPaths = computed(() => {
   return paths;
 });
 
-const appsPoolName = computed(() => nasState.dockerConfig?.pool || 'tank');
+const appsPoolName = computed(() => nasState.dockerConfig?.pool || nasState.systemConfig?.mainPool || 'tank');
 const appsPoolAppdataDir = computed(
   () => nasState.dockerConfig?.appdataDataset || `/nas/${appsPoolName.value}/apps/appdata`
 );
@@ -100,6 +113,50 @@ const appsPoolAppdataDir = computed(
 function defaultAppdataMount(appId: string, subfolder = 'data'): string {
   const cleanId = appId.trim() || generateNanosecondId();
   return `${appsPoolAppdataDir.value}/${cleanId}/${subfolder}`;
+}
+
+const commonContainerPaths = [
+  '/config',
+  '/data',
+  '/media',
+  '/app/data',
+  '/var/www/html',
+  '/var/lib/postgresql/data',
+  '/var/lib/mysql',
+  '/etc/letsencrypt',
+  '/downloads',
+  '/etc/pihole',
+];
+
+function isNamedVolumeMount(source: string): boolean {
+  if (!source) return false;
+  return !source.startsWith('/') && !source.startsWith('.');
+}
+
+function setMountType(mount: ComposeVolumeMountModel, type: 'bind' | 'volume') {
+  if (type === 'volume') {
+    if (form.volumes.length === 0) {
+      addTopLevelVolume();
+    }
+    mount.source = form.volumes[0]?.name || `${form.appId || 'app'}_data`;
+  } else {
+    mount.source = defaultAppdataMount(
+      form.appId,
+      mount.target ? mount.target.split('/').filter(Boolean).pop() || 'data' : 'data'
+    );
+  }
+}
+
+function createAndAttachNamedVolume(mount: ComposeVolumeMountModel) {
+  const volName = `${form.appId || 'app'}_vol_${form.volumes.length + 1}`;
+  form.volumes.push({
+    id: generateUid(),
+    name: volName,
+    driver: 'local',
+    external: false,
+  });
+  mount.source = volName;
+  notify('info', `Created named volume "${volName}"`);
 }
 
 // Watch mode changes: sync form <-> rawYaml
@@ -152,13 +209,156 @@ function duplicateService(svc: ComposeServiceModel) {
 }
 
 // Ports
+const allContainerPorts = computed(() => {
+  const result: Array<{
+    serviceName: string;
+    containerPort: string;
+    hostPort: string;
+    protocol: string;
+    publishToHost: boolean;
+  }> = [];
+  const seen = new Set<string>();
+  for (const s of form.services) {
+    for (const p of s.ports) {
+      const cp = p.containerPort.trim();
+      if (cp && !seen.has(cp)) {
+        seen.add(cp);
+        result.push({
+          serviceName: s.name,
+          containerPort: cp,
+          hostPort: p.hostPort.trim(),
+          protocol: p.protocol,
+          publishToHost: p.publishToHost !== false,
+        });
+      }
+    }
+  }
+  return result;
+});
+
+function toggleManagementPort(containerPort: string) {
+  const clean = containerPort.trim();
+  if (form.managementPort === clean) {
+    form.managementPort = '';
+  } else {
+    form.managementPort = clean;
+    if (form.portals && form.portals.length > 0) {
+      form.portals[0].port = clean;
+    }
+  }
+}
+
+watch(
+  () => form.managementPort,
+  (newVal) => {
+    const clean = (newVal || '').trim();
+    if (clean && form.portals && form.portals.length > 0) {
+      form.portals[0].port = clean;
+    }
+  }
+);
+
 function addPort(svc: ComposeServiceModel) {
-  svc.ports.push({ hostPort: '', containerPort: '', protocol: 'tcp' });
+  const randHost = generateRandomHighPort();
+  svc.ports.push({ hostPort: String(randHost), containerPort: '', protocol: 'tcp', publishToHost: true });
 }
 
 function removePort(svc: ComposeServiceModel, idx: number) {
   svc.ports.splice(idx, 1);
 }
+
+// Preemptive Host Port Availability Tracking
+interface PortCheckResult {
+  available?: boolean;
+  inUseBy?: string;
+  checking?: boolean;
+  isDuplicate?: boolean;
+}
+
+const portCheckCache = reactive<Record<string, PortCheckResult>>({});
+let checkDebounceTimer: any = null;
+
+function schedulePortAvailabilityCheck() {
+  clearTimeout(checkDebounceTimer);
+  checkDebounceTimer = setTimeout(async () => {
+    const portEntries: Array<{ portNum: number; proto: string; key: string }> = [];
+    const portCountByKey = new Map<string, number>();
+
+    for (const svc of form.services) {
+      for (const p of svc.ports) {
+        if (p.publishToHost !== false && p.hostPort && p.hostPort.trim()) {
+          const num = parseInt(p.hostPort.trim(), 10);
+          if (!isNaN(num) && num > 0 && num <= 65535) {
+            const proto = p.protocol || 'tcp';
+            const key = `${num}/${proto}`;
+            portEntries.push({ portNum: num, proto, key });
+            portCountByKey.set(key, (portCountByKey.get(key) || 0) + 1);
+          }
+        }
+      }
+    }
+
+    const portsToQueryByProto: Record<string, number[]> = { tcp: [], udp: [] };
+    for (const entry of portEntries) {
+      const isDup = (portCountByKey.get(entry.key) || 0) > 1;
+      if (isDup) {
+        portCheckCache[entry.key] = { isDuplicate: true };
+      } else {
+        if (!portCheckCache[entry.key] || portCheckCache[entry.key].isDuplicate) {
+          portCheckCache[entry.key] = { checking: true };
+        }
+        const list = portsToQueryByProto[entry.proto] || (portsToQueryByProto[entry.proto] = []);
+        if (!list.includes(entry.portNum)) {
+          list.push(entry.portNum);
+        }
+      }
+    }
+
+    for (const [proto, ports] of Object.entries(portsToQueryByProto)) {
+      if (ports.length === 0) continue;
+      try {
+        const statuses = await services.apps.checkHostPorts(ports, proto, form.appId);
+        for (const st of statuses) {
+          const key = `${st.port}/${st.protocol}`;
+          if (!portCountByKey.has(key) || (portCountByKey.get(key) || 0) <= 1) {
+            portCheckCache[key] = {
+              available: st.available,
+              inUseBy: st.inUseBy,
+              checking: false,
+              isDuplicate: false,
+            };
+          }
+        }
+      } catch {
+        for (const pNum of ports) {
+          const key = `${pNum}/${proto}`;
+          if (portCheckCache[key]?.checking) {
+            delete portCheckCache[key];
+          }
+        }
+      }
+    }
+  }, 350);
+}
+
+function getHostPortStatus(p: ComposePortModel): PortCheckResult | null {
+  if (p.publishToHost === false || !p.hostPort || !p.hostPort.trim()) return null;
+  const num = parseInt(p.hostPort.trim(), 10);
+  if (isNaN(num) || num <= 0 || num > 65535) return null;
+  const key = `${num}/${p.protocol || 'tcp'}`;
+  return portCheckCache[key] || null;
+}
+
+watch(
+  () =>
+    form.services
+      .map((s) => s.ports.map((p) => `${p.publishToHost}:${p.hostPort}:${p.protocol}`).join(','))
+      .join(';'),
+  () => {
+    schedulePortAvailabilityCheck();
+  },
+  { immediate: true }
+);
 
 // Environment
 function addEnv(svc: ComposeServiceModel) {
@@ -275,6 +475,25 @@ function handleSave() {
     if (!s.image.trim()) {
       notify('error', `Service "${s.name}" is missing a container image tag`);
       return;
+    }
+  }
+
+  // Preemptive check: block submission if there are known host port conflicts
+  if (editorMode.value === 'form') {
+    for (const s of form.services) {
+      for (const p of s.ports) {
+        if (p.publishToHost !== false && p.hostPort && p.hostPort.trim()) {
+          const st = getHostPortStatus(p);
+          if (st?.isDuplicate) {
+            notify('error', `Host port ${p.hostPort} is mapped multiple times in this application`);
+            return;
+          }
+          if (st?.available === false) {
+            notify('error', `Host port ${p.hostPort}/${p.protocol || 'tcp'} is already in use by ${st.inUseBy || 'another service'}`);
+            return;
+          }
+        }
+      }
     }
   }
 
@@ -611,6 +830,40 @@ function copyYaml() {
 
           <!-- Sub-Tab: Ports -->
           <div v-else-if="serviceSubTab === 'ports'">
+            <!-- Web UI Management Port Banner / Selector -->
+            <div
+              v-if="allContainerPorts.length > 0"
+              style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; margin-bottom: 14px; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px"
+            >
+              <div style="display: flex; align-items: center; gap: 8px">
+                <MdiIcon :path="mdiOpenInNew" size="18" style="color: #38bdf8; flex-shrink: 0" />
+                <div>
+                  <div style="font-size: 12.5px; font-weight: 600; color: var(--text-primary)">
+                    Open Web UI Management Port
+                  </div>
+                  <div style="font-size: 11.5px; color: var(--text-secondary)">
+                    Pick which container internal port provides the web management interface.
+                  </div>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px">
+                <select
+                  v-model="form.managementPort"
+                  class="form-input mono"
+                  style="padding: 4px 10px; font-size: 12px; min-width: 220px"
+                >
+                  <option value="">Auto-detect / Default</option>
+                  <option
+                    v-for="cp in allContainerPorts"
+                    :key="cp.containerPort"
+                    :value="cp.containerPort"
+                  >
+                    Port {{ cp.containerPort }} ({{ cp.serviceName }} : {{ cp.publishToHost ? (cp.hostPort || 'auto') : 'internal' }} → {{ cp.containerPort }})
+                  </option>
+                </select>
+              </div>
+            </div>
+
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px">
               <span style="font-size: 12.5px; color: var(--text-secondary)">
                 Expose container network ports to host interfaces.
@@ -627,24 +880,90 @@ function copyYaml() {
             <table v-else class="table" style="width: 100%; border-collapse: collapse">
               <thead>
                 <tr style="text-align: left; font-size: 11.5px; color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle)">
+                  <th style="padding: 6px 8px; width: 120px">MAP TO HOST</th>
                   <th style="padding: 6px 8px">HOST PORT</th>
-                  <th style="padding: 6px 8px">CONTAINER PORT</th>
-                  <th style="padding: 6px 8px">PROTOCOL</th>
+                  <th style="padding: 6px 8px; width: 140px">CONTAINER PORT</th>
+                  <th style="padding: 6px 8px; width: 100px">PROTOCOL</th>
+                  <th style="padding: 6px 8px; width: 90px; text-align: center">WEB UI</th>
                   <th style="padding: 6px 8px; width: 40px"></th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="(p, idx) in activeService.ports" :key="idx" style="border-bottom: 1px solid var(--border-subtle)">
-                  <td style="padding: 6px 8px">
-                    <input
-                      v-model="p.hostPort"
-                      type="text"
-                      class="form-input mono"
-                      placeholder="e.g. 8080"
-                      style="padding: 4px 8px; font-size: 12.5px"
-                    />
+                  <td style="padding: 6px 8px; vertical-align: middle">
+                    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; margin: 0">
+                      <input
+                        type="checkbox"
+                        :checked="p.publishToHost !== false"
+                        @change="p.publishToHost = ($event.target as HTMLInputElement).checked; if (!p.publishToHost) { p.hostPort = ''; } else if (!p.hostPort) { p.hostPort = String(generateRandomHighPort()); }"
+                      />
+                      <span :style="{ color: p.publishToHost !== false ? 'var(--text-primary)' : 'var(--text-secondary)' }">
+                        {{ p.publishToHost !== false ? 'Publish' : 'Internal' }}
+                      </span>
+                    </label>
                   </td>
-                  <td style="padding: 6px 8px">
+                  <td style="padding: 6px 8px; vertical-align: middle">
+                    <div v-if="p.publishToHost !== false" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
+                      <div style="display: flex; align-items: center; gap: 4px">
+                        <input
+                          v-model="p.hostPort"
+                          type="text"
+                          class="form-input mono"
+                          placeholder="32000+"
+                          style="padding: 4px 8px; font-size: 12.5px; width: 95px"
+                        />
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-ghost"
+                          style="padding: 2px 5px; font-size: 11.5px; line-height: 1"
+                          title="Pick another random high port (32000+)"
+                          @click="p.hostPort = String(generateRandomHighPort())"
+                        >
+                          🎲
+                        </button>
+                      </div>
+                      <!-- Preemptive port availability check indicator -->
+                      <div v-if="getHostPortStatus(p)" style="display: inline-flex; align-items: center">
+                        <span
+                          v-if="getHostPortStatus(p)?.isDuplicate"
+                          class="badge"
+                          style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; padding: 2px 7px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px"
+                          title="Port duplicate: mapped multiple times in this application"
+                        >
+                          <MdiIcon :path="mdiAlert" size="13" /> Duplicate
+                        </span>
+                        <span
+                          v-else-if="getHostPortStatus(p)?.checking"
+                          class="badge"
+                          style="background: rgba(148, 163, 184, 0.15); color: var(--text-secondary); padding: 2px 7px; font-size: 11px"
+                        >
+                          Checking...
+                        </span>
+                        <span
+                          v-else-if="getHostPortStatus(p)?.available"
+                          class="badge"
+                          style="background: rgba(34, 197, 94, 0.15); color: #22c55e; padding: 2px 7px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px"
+                          title="Host port is free and ready to bind"
+                        >
+                          <MdiIcon :path="mdiCheckCircle" size="13" /> Available
+                        </span>
+                        <span
+                          v-else-if="getHostPortStatus(p)?.available === false"
+                          class="badge"
+                          style="background: rgba(239, 68, 68, 0.15); color: #ef4444; padding: 2px 7px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px"
+                          :title="`Port conflict: in use by ${getHostPortStatus(p)?.inUseBy}`"
+                        >
+                          <MdiIcon :path="mdiAlertCircle" size="13" /> In Use: {{ getHostPortStatus(p)?.inUseBy }}
+                        </span>
+                      </div>
+                    </div>
+                    <div v-else>
+                      <span class="badge" style="background: rgba(148, 163, 184, 0.15); color: var(--text-secondary); font-size: 11px; padding: 3px 8px">
+                        Internal only (expose)
+                      </span>
+                    </div>
+                  </td>
+                  <td style="padding: 6px 8px; vertical-align: middle">
                     <input
                       v-model="p.containerPort"
                       type="text"
@@ -653,13 +972,26 @@ function copyYaml() {
                       style="padding: 4px 8px; font-size: 12.5px"
                     />
                   </td>
-                  <td style="padding: 6px 8px">
+                  <td style="padding: 6px 8px; vertical-align: middle">
                     <select v-model="p.protocol" class="form-input" style="padding: 4px 8px; font-size: 12.5px">
                       <option value="tcp">TCP</option>
                       <option value="udp">UDP</option>
                     </select>
                   </td>
-                  <td style="padding: 6px 8px; text-align: center">
+                  <td style="padding: 6px 8px; text-align: center; vertical-align: middle">
+                    <button
+                      type="button"
+                      class="btn btn-sm"
+                      :class="form.managementPort === p.containerPort.trim() && p.containerPort.trim() ? 'btn-primary' : 'btn-ghost'"
+                      style="padding: 2px 8px; font-size: 11px; white-space: nowrap"
+                      :title="form.managementPort === p.containerPort.trim() ? 'Active Web UI Port' : 'Set as Web UI Management Port'"
+                      :disabled="!p.containerPort.trim()"
+                      @click="toggleManagementPort(p.containerPort)"
+                    >
+                      {{ form.managementPort === p.containerPort.trim() && p.containerPort.trim() ? '★ Primary' : 'Set UI' }}
+                    </button>
+                  </td>
+                  <td style="padding: 6px 8px; text-align: center; vertical-align: middle">
                     <button class="btn btn-sm btn-danger" style="padding: 2px 6px" @click="removePort(activeService, idx)">
                       ✕
                     </button>
@@ -730,103 +1062,182 @@ function copyYaml() {
 
           <!-- Sub-Tab: Volumes -->
           <div v-else-if="serviceSubTab === 'volumes'">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px">
-              <span style="font-size: 12.5px; color: var(--text-secondary)">
-                Bind mount host paths (e.g. ZFS datasets) or persistent named volumes.
-              </span>
-              <button class="btn btn-sm btn-primary" @click="addVolumeMount(activeService)">
-                + Add Storage Mount
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px">
+              <div>
+                <span style="font-size: 13px; font-weight: 600; color: var(--text-primary)">
+                  Storage & Volume Mounts
+                </span>
+                <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px">
+                  Mount ZFS datasets (under <code class="mono" style="color: var(--accent-primary)">/nas/{{ appsPoolName }}</code>) or persistent Docker named volumes into the container.
+                </div>
+              </div>
+              <button class="btn btn-sm btn-primary" style="display: inline-flex; align-items: center; gap: 4px" @click="addVolumeMount(activeService)">
+                <MdiIcon :path="mdiPlus" size="14" />
+                <span>Add Storage Mount</span>
               </button>
             </div>
 
-            <div v-if="activeService.volumes.length === 0" style="padding: 24px; text-align: center; color: var(--text-secondary); font-size: 13px">
-              No storage volumes mounted for this service.
+            <div v-if="activeService.volumes.length === 0" style="padding: 32px 16px; text-align: center; border: 1px dashed var(--border-subtle); border-radius: 8px; color: var(--text-secondary); font-size: 13px">
+              <div>No storage volumes mounted for this service.</div>
+              <div style="font-size: 11.5px; margin-top: 4px; opacity: 0.8">Click "Add Storage Mount" above to connect ZFS datasets, app data, or named volumes.</div>
             </div>
 
-            <table v-else class="table" style="width: 100%; border-collapse: collapse">
-              <thead>
-                <tr style="text-align: left; font-size: 11.5px; color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle)">
-                  <th style="padding: 6px 8px; width: 45%">HOST PATH / NAMED VOLUME</th>
-                  <th style="padding: 6px 8px; width: 40%">CONTAINER DESTINATION</th>
-                  <th style="padding: 6px 8px; width: 10%">MODE</th>
-                  <th style="padding: 6px 8px; width: 5%"></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(v, idx) in activeService.volumes" :key="idx" style="border-bottom: 1px solid var(--border-subtle)">
-                  <td style="padding: 6px 8px">
-                    <div style="display: flex; flex-direction: column; gap: 4px">
+            <div v-else style="display: flex; flex-direction: column; gap: 12px">
+              <div
+                v-for="(v, idx) in activeService.volumes"
+                :key="idx"
+                style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px"
+              >
+                <!-- Top Header of Volume Card: Type Selector, Presets & Remove -->
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap">
+                  <!-- Type Pill / Switcher -->
+                  <div style="display: flex; align-items: center; gap: 6px">
+                    <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase">Volume Type:</span>
+                    <div style="display: inline-flex; border: 1px solid var(--border-strong); border-radius: 6px; overflow: hidden; background: var(--bg-surface)">
+                      <button
+                        type="button"
+                        class="btn-sm"
+                        :style="{
+                          padding: '3px 10px',
+                          fontSize: '11.5px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          background: !isNamedVolumeMount(v.source) ? 'var(--accent-primary)' : 'transparent',
+                          color: !isNamedVolumeMount(v.source) ? '#fff' : 'var(--text-secondary)',
+                          fontWeight: !isNamedVolumeMount(v.source) ? '600' : 'normal',
+                        }"
+                        @click="setMountType(v, 'bind')"
+                      >
+                        📁 Host ZFS Dataset / Path
+                      </button>
+                      <button
+                        type="button"
+                        class="btn-sm"
+                        :style="{
+                          padding: '3px 10px',
+                          fontSize: '11.5px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          background: isNamedVolumeMount(v.source) ? 'var(--accent-primary)' : 'transparent',
+                          color: isNamedVolumeMount(v.source) ? '#fff' : 'var(--text-secondary)',
+                          fontWeight: isNamedVolumeMount(v.source) ? '600' : 'normal',
+                        }"
+                        @click="setMountType(v, 'volume')"
+                      >
+                        💾 Named Volume
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Quick Presets Dropdown (for host bind) -->
+                  <div v-if="!isNamedVolumeMount(v.source)" style="display: flex; align-items: center; gap: 6px">
+                    <label style="font-size: 11px; color: var(--text-secondary)">Preset:</label>
+                    <select
+                      class="input mono"
+                      style="font-size: 11px; padding: 2px 6px; height: 26px"
+                      @change="(e: any) => { if (e.target.value) { v.source = e.target.value; e.target.value = ''; } }"
+                    >
+                      <option value="">Choose preset / dataset...</option>
+                      <optgroup label="App Data Presets">
+                        <option :value="defaultAppdataMount(form.appId, 'data')">
+                          📁 App Data (/nas/{{ appsPoolName }}/apps/appdata/{{ form.appId || 'app' }}/data)
+                        </option>
+                        <option :value="defaultAppdataMount(form.appId, 'config')">
+                          ⚙️ App Config (/nas/{{ appsPoolName }}/apps/appdata/{{ form.appId || 'app' }}/config)
+                        </option>
+                      </optgroup>
+                      <optgroup label="Shared Media & Downloads">
+                        <option :value="`/nas/${appsPoolName}/media`">🎬 Media (/nas/{{ appsPoolName }}/media)</option>
+                        <option :value="`/nas/${appsPoolName}/downloads`">📥 Downloads (/nas/{{ appsPoolName }}/downloads)</option>
+                      </optgroup>
+                      <optgroup v-if="zfsDatasetPaths.length > 0" label="Existing ZFS Datasets">
+                        <option v-for="d in zfsDatasetPaths" :key="d" :value="d">
+                          🗄️ {{ d }}
+                        </option>
+                      </optgroup>
+                    </select>
+                  </div>
+
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-icon btn-danger"
+                    style="padding: 2px 6px"
+                    title="Remove Mount"
+                    aria-label="Remove Mount"
+                    @click="removeVolumeMount(activeService, idx)"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <!-- Middle Grid: Source, Target, Mode -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr 140px; gap: 10px; align-items: flex-start">
+                  <!-- Source Column -->
+                  <div>
+                    <label style="display: block; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px">
+                      {{ isNamedVolumeMount(v.source) ? 'NAMED VOLUME' : 'HOST PATH / ZFS DATASET' }}
+                    </label>
+
+                    <!-- Case A: Named Volume Selector -->
+                    <div v-if="isNamedVolumeMount(v.source)" style="display: flex; gap: 6px; align-items: center">
+                      <select v-model="v.source" class="form-input mono" style="font-size: 12px; flex: 1; padding: 4px 8px">
+                        <option v-for="vol in form.volumes" :key="vol.id" :value="vol.name">
+                          {{ vol.name }}
+                        </option>
+                      </select>
+                      <button
+                        type="button"
+                        class="btn btn-sm"
+                        style="padding: 4px 8px; font-size: 11.5px; white-space: nowrap"
+                        title="Create new named volume"
+                        @click="createAndAttachNamedVolume(v)"
+                      >
+                        + New Volume
+                      </button>
+                    </div>
+
+                    <!-- Case B: Host Path / ZFS Dataset Selector -->
+                    <div v-else>
                       <PathSelector
                         v-model="v.source"
                         :placeholder="defaultAppdataMount(form.appId, 'data')"
-                        :root-hint="appsPoolAppdataDir"
+                        :root-hint="`/nas/${appsPoolName}`"
                       />
-                      <div style="display: flex; gap: 6px; align-items: center">
-                        <button
-                          type="button"
-                          class="btn-link"
-                          style="font-size: 10.5px; color: var(--accent-primary); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline"
-                          title="Quick-set to Docker owned ZFS appdata pool volume"
-                          @click="
-                            v.source = defaultAppdataMount(
-                              form.appId,
-                              v.target
-                                ? v.target.split('/').filter(Boolean).pop() || 'data'
-                                : 'data'
-                            )
-                          "
-                        >
-                          Set to App Pool Volume ({{ appsPoolName }})
-                        </button>
-                        <span v-if="form.volumes.length > 0" style="color: var(--text-secondary); font-size: 10px">|</span>
-                        <select
-                          v-if="form.volumes.length > 0"
-                          style="font-size: 10.5px; padding: 1px 4px; background: none; border: 1px solid var(--border-subtle); color: var(--text-secondary); border-radius: 4px"
-                          @change="
-                            (e: any) => {
-                              if (e.target.value) {
-                                v.source = e.target.value;
-                                e.target.value = '';
-                              }
-                            }
-                          "
-                        >
-                          <option value="">Attach Named Volume...</option>
-                          <option v-for="vol in form.volumes" :key="vol.id" :value="vol.name">
-                            {{ vol.name }}
-                          </option>
-                        </select>
-                      </div>
                     </div>
-                  </td>
-                  <td style="padding: 6px 8px">
+                  </div>
+
+                  <!-- Container Target Column -->
+                  <div>
+                    <label style="display: block; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px">
+                      CONTAINER DESTINATION PATH
+                    </label>
                     <input
                       v-model="v.target"
                       type="text"
                       class="form-input mono"
-                      placeholder="e.g. /var/www/html"
-                      style="padding: 4px 8px; font-size: 12px"
+                      placeholder="e.g. /config or /data"
+                      list="container-target-options"
+                      style="font-size: 12px; padding: 4px 8px; width: 100%"
                     />
-                  </td>
-                  <td style="padding: 6px 8px">
-                    <select v-model="v.mode" class="form-input" style="padding: 4px 8px; font-size: 12px">
-                      <option value="rw">Read/Write (rw)</option>
+                  </div>
+
+                  <!-- Mode Column -->
+                  <div>
+                    <label style="display: block; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px">
+                      ACCESS MODE
+                    </label>
+                    <select v-model="v.mode" class="form-input" style="font-size: 12px; padding: 4px 8px; width: 100%">
+                      <option value="rw">Read-Write (rw)</option>
                       <option value="ro">Read-Only (ro)</option>
                     </select>
-                  </td>
-                  <td style="padding: 6px 8px; text-align: center">
-                    <button class="btn btn-sm btn-danger" style="padding: 2px 6px" @click="removeVolumeMount(activeService, idx)">
-                      ✕
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-            <!-- Autocomplete datalist for host ZFS datasets -->
-            <datalist id="zfs-mount-options">
-              <option v-for="d in zfsDatasetPaths" :key="d" :value="d" />
-              <option v-for="vol in form.volumes" :key="vol.id" :value="vol.name" />
+            <!-- Datalist for Container Target suggestions -->
+            <datalist id="container-target-options">
+              <option v-for="target in commonContainerPaths" :key="target" :value="target" />
             </datalist>
           </div>
 

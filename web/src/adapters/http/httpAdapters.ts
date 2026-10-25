@@ -18,6 +18,7 @@ import type {
   DockerConfig,
   DockerContainer,
   Group,
+  HostPortStatus,
   LinuxFlavor,
   LxcContainer,
   Prerequisite,
@@ -180,6 +181,7 @@ export function mapDiskPartition(raw: any): DiskPartition {
     label: raw.label ?? '',
     owningZfsPool: raw.owningZfsPool ?? raw.owning_zfs_pool ?? '',
     aliases: Array.isArray(raw.aliases) ? raw.aliases : [],
+    isSystem: Boolean(raw.isSystem ?? raw.is_system),
   };
 }
 
@@ -267,6 +269,7 @@ export function mapDisk(raw: any): Disk {
     totalBytesWritten: normalizeInt64(raw.totalBytesWritten ?? raw.total_bytes_written),
     reallocatedSectors: normalizeInt64(raw.reallocatedSectors ?? raw.reallocated_sectors),
     pendingSectors: normalizeInt64(raw.pendingSectors ?? raw.pending_sectors),
+    isSystem: Boolean(raw.isSystem ?? raw.is_system),
   };
 }
 
@@ -519,6 +522,13 @@ export function mapDockerApp(raw: any): DockerApp {
     portMappings: raw?.portMappings ?? raw?.port_mappings ?? [],
     volumes: raw?.volumes ?? [],
     webUiUrl: raw?.webUiUrl ?? raw?.web_ui_url ?? '',
+    portals: (raw?.portals || []).map((p: any) => ({
+      name: p?.name || 'Web UI',
+      url: p?.url || '',
+      port: Number(p?.port || 0),
+      protocol: p?.protocol || 'http',
+      path: p?.path || '/',
+    })),
     totalCpuPercent: Number(raw?.totalCpuPercent ?? raw?.total_cpu_percent ?? 0),
     totalMemoryMib: normalizeInt64(raw?.totalMemoryMib ?? raw?.total_memory_mib ?? 0),
     totalNetRxBytes: normalizeInt64(raw?.totalNetRxBytes ?? raw?.total_net_rx_bytes ?? 0),
@@ -1327,6 +1337,35 @@ export class HttpDockerAppAdapter implements DockerAppPort {
         isDir: Boolean(e.isDir ?? e.is_dir ?? true),
       })),
     };
+  }
+
+  async checkHostPort(port: number, protocol = 'tcp', excludeAppId = ''): Promise<HostPortStatus> {
+    const params: Record<string, any> = { port, protocol };
+    if (excludeAppId) params.exclude_app_id = excludeAppId;
+    const raw = await this.client.get<any>('docker/ports/check', params);
+    return {
+      port: Number(raw?.port ?? port),
+      protocol: String(raw?.protocol ?? protocol),
+      available: Boolean(raw?.available ?? false),
+      inUseBy: String(raw?.inUseBy ?? raw?.in_use_by ?? ''),
+    };
+  }
+
+  async checkHostPorts(ports: number[], protocol = 'tcp', excludeAppId = ''): Promise<HostPortStatus[]> {
+    if (!ports || ports.length === 0) return [];
+    const body: Record<string, any> = {
+      ports,
+      protocol,
+    };
+    if (excludeAppId) body.exclude_app_id = excludeAppId;
+    const raw = await this.client.post<any>('docker/ports/check', body);
+    const rawPorts = raw?.ports ?? [];
+    return rawPorts.map((p: any) => ({
+      port: Number(p.port),
+      protocol: String(p.protocol || protocol),
+      available: Boolean(p.available),
+      inUseBy: String(p.inUseBy ?? p.in_use_by ?? ''),
+    }));
   }
 }
 

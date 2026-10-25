@@ -53,7 +53,7 @@ volumes:
     expect(appSvc.containerName).toBe('nextcloud-app');
     expect(appSvc.restart).toBe('always');
     expect(appSvc.ports).toEqual([
-      { hostPort: '8080', containerPort: '80', protocol: 'tcp' },
+      { hostPort: '8080', containerPort: '80', protocol: 'tcp', publishToHost: true },
     ]);
     expect(appSvc.environment).toEqual([
       { key: 'POSTGRES_HOST', value: 'db' },
@@ -136,5 +136,150 @@ volumes:
     const out = formToComposeYaml(form);
     expect(out).toContain('nginx-proxy-manager:');
     expect(out).toContain('jc21/nginx-proxy-manager:latest');
+  });
+
+  it('correctly parses, stores, and generates Web UI management port from container internal ports', () => {
+    const yaml = `x-nas-management-port: 81
+services:
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    ports:
+      - "80:80"
+      - "81:81"
+      - "443:443"
+`;
+    const form = composeYamlToForm(yaml, 'npm');
+    expect(form.managementPort).toBe('81');
+    const port81 = form.services[0].ports.find((p) => p.containerPort === '81');
+    expect(port81?.isManagementPort).toBe(true);
+
+    const port80 = form.services[0].ports.find((p) => p.containerPort === '80');
+    expect(port80?.isManagementPort).toBeFalsy();
+
+    // Round-trip generates x-nas-management-port and label
+    const generatedYaml = formToComposeYaml(form);
+    expect(generatedYaml).toContain('x-nas-management-port: 81');
+    expect(generatedYaml).toContain('nas.management.port=81');
+
+    // Change management port to 80
+    form.managementPort = '80';
+    const updatedYaml = formToComposeYaml(form);
+    expect(updatedYaml).toContain('x-nas-management-port: 80');
+    expect(updatedYaml).toContain('nas.management.port=80');
+  });
+
+  it('correctly parses and outputs TrueNAS SCALE style x-portals', () => {
+    const yaml = `x-portals:
+  - name: Admin Web UI
+    scheme: http
+    port: 81
+    path: /admin
+  - name: HTTP Proxy
+    scheme: http
+    port: 80
+    path: /
+services:
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    ports:
+      - "80:80"
+      - "81:81"
+`;
+    const form = composeYamlToForm(yaml, 'npm');
+    expect(form.portals).toHaveLength(2);
+    expect(form.portals?.[0]).toEqual({
+      name: 'Admin Web UI',
+      scheme: 'http',
+      port: '81',
+      path: '/admin',
+    });
+    expect(form.portals?.[1]).toEqual({
+      name: 'HTTP Proxy',
+      scheme: 'http',
+      port: '80',
+      path: '/',
+    });
+    // Default management port should fall back to first portal's port
+    expect(form.managementPort).toBe('81');
+
+    const generated = formToComposeYaml(form);
+    expect(generated).toContain('x-portals:');
+    expect(generated).toContain('Admin Web UI');
+    expect(generated).toContain('path: /admin');
+  });
+
+  it('handles internal container ports (expose) without mapping to host', () => {
+    const yaml = `services:
+  db:
+    image: postgres:16
+    expose:
+      - "5432"
+  web:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    expose:
+      - "9000/tcp"
+`;
+    const form = composeYamlToForm(yaml, 'stack');
+    const dbSvc = form.services.find((s) => s.name === 'db')!;
+    expect(dbSvc.ports).toEqual([
+      { hostPort: '', containerPort: '5432', protocol: 'tcp', publishToHost: false },
+    ]);
+
+    const webSvc = form.services.find((s) => s.name === 'web')!;
+    expect(webSvc.ports).toEqual([
+      { hostPort: '8080', containerPort: '80', protocol: 'tcp', publishToHost: true },
+      { hostPort: '', containerPort: '9000', protocol: 'tcp', publishToHost: false },
+    ]);
+
+    const generated = formToComposeYaml(form);
+    expect(generated).toContain('expose:');
+    expect(generated).toContain('"5432"');
+    expect(generated).toContain('"9000"');
+    expect(generated).toContain('"8080:80"');
+  });
+
+  it('assigns a random high port in 32000+ range when no host port is specified in mapping', () => {
+    const yaml = `services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "80"
+      - "8080/udp"
+`;
+    const form = composeYamlToForm(yaml, 'autoport');
+    const webSvc = form.services.find((s) => s.name === 'web')!;
+    expect(webSvc.ports).toHaveLength(2);
+
+    const port80 = webSvc.ports[0];
+    expect(port80.containerPort).toBe('80');
+    expect(port80.publishToHost).toBe(true);
+    const hostPort80 = Number(port80.hostPort);
+    expect(hostPort80).toBeGreaterThanOrEqual(32000);
+    expect(hostPort80).toBeLessThanOrEqual(65000);
+
+    const port8080 = webSvc.ports[1];
+    expect(port8080.containerPort).toBe('8080');
+    expect(port8080.protocol).toBe('udp');
+    expect(port8080.publishToHost).toBe(true);
+    const hostPort8080 = Number(port8080.hostPort);
+    expect(hostPort8080).toBeGreaterThanOrEqual(32000);
+    expect(hostPort8080).toBeLessThanOrEqual(65000);
+
+    // Also verify formToComposeYaml generates high ports when hostPort is empty
+    const manualForm = createDefaultAppForm('manual', 'Manual App');
+    manualForm.services[0].ports.push({
+      hostPort: '',
+      containerPort: '9000',
+      protocol: 'tcp',
+      publishToHost: true,
+    });
+    const generatedYaml = formToComposeYaml(manualForm);
+    const match = generatedYaml.match(/"(\d+):9000"/);
+    expect(match).not.toBeNull();
+    const assignedPort = Number(match![1]);
+    expect(assignedPort).toBeGreaterThanOrEqual(32000);
+    expect(assignedPort).toBeLessThanOrEqual(65000);
   });
 });

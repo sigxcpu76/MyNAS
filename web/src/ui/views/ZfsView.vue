@@ -111,7 +111,14 @@ function toggleDeviceInAddVdev(devicePath: string) {
 }
 
 const unassignedDisks = computed(() => {
-  return nasState.disks.filter((d) => !d.owningZfsPool);
+  return nasState.disks.filter(
+    (d) =>
+      !d.owningZfsPool &&
+      !d.isSystem &&
+      !d.diskId.startsWith('zd') &&
+      d.transport !== 'zvol' &&
+      !d.partitions?.some((p) => p.isSystem || p.mountpoint === '/')
+  );
 });
 
 const builderAssignedPaths = computed(() => {

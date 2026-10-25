@@ -95,9 +95,16 @@ function openCreatePoolModal() {
   showCreatePool.value = true;
 }
 
-// Drives not attached to an imported pool
+// Drives not attached to an imported pool (excluding system OS disks and zvols)
 const unassignedDisks = computed(() => {
-  return nasState.disks.filter((d) => !d.owningZfsPool);
+  return nasState.disks.filter(
+    (d) =>
+      !d.owningZfsPool &&
+      !d.isSystem &&
+      !d.diskId.startsWith('zd') &&
+      d.transport !== 'zvol' &&
+      !d.partitions?.some((p) => p.isSystem || p.mountpoint === '/')
+  );
 });
 
 const builderAssignedPaths = computed(() => {

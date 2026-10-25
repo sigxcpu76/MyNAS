@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             (unknown)
-// source: nas/v1/nas.proto
+// source: nas/v1/service.proto
 
 package nasv1
 
@@ -90,6 +90,8 @@ const (
 	NasService_GetDockerAppLogs_FullMethodName               = "/nas.v1.NasService/GetDockerAppLogs"
 	NasService_GetDockerConfig_FullMethodName                = "/nas.v1.NasService/GetDockerConfig"
 	NasService_UpdateDockerConfig_FullMethodName             = "/nas.v1.NasService/UpdateDockerConfig"
+	NasService_CheckHostPort_FullMethodName                  = "/nas.v1.NasService/CheckHostPort"
+	NasService_CheckHostPorts_FullMethodName                 = "/nas.v1.NasService/CheckHostPorts"
 	NasService_ListFileSystemDirectories_FullMethodName      = "/nas.v1.NasService/ListFileSystemDirectories"
 	NasService_ListLxcContainers_FullMethodName              = "/nas.v1.NasService/ListLxcContainers"
 	NasService_GetLxcContainer_FullMethodName                = "/nas.v1.NasService/GetLxcContainer"
@@ -203,6 +205,8 @@ type NasServiceClient interface {
 	GetDockerAppLogs(ctx context.Context, in *GetDockerAppLogsRequest, opts ...grpc.CallOption) (*GetDockerAppLogsResponse, error)
 	GetDockerConfig(ctx context.Context, in *GetDockerConfigRequest, opts ...grpc.CallOption) (*DockerConfig, error)
 	UpdateDockerConfig(ctx context.Context, in *UpdateDockerConfigRequest, opts ...grpc.CallOption) (*DockerConfig, error)
+	CheckHostPort(ctx context.Context, in *CheckHostPortRequest, opts ...grpc.CallOption) (*CheckHostPortResponse, error)
+	CheckHostPorts(ctx context.Context, in *CheckHostPortsRequest, opts ...grpc.CallOption) (*CheckHostPortsResponse, error)
 	ListFileSystemDirectories(ctx context.Context, in *ListFileSystemDirectoriesRequest, opts ...grpc.CallOption) (*ListFileSystemDirectoriesResponse, error)
 	ListLxcContainers(ctx context.Context, in *ListLxcContainersRequest, opts ...grpc.CallOption) (*ListLxcContainersResponse, error)
 	GetLxcContainer(ctx context.Context, in *GetLxcContainerRequest, opts ...grpc.CallOption) (*LxcContainer, error)
@@ -944,6 +948,26 @@ func (c *nasServiceClient) UpdateDockerConfig(ctx context.Context, in *UpdateDoc
 	return out, nil
 }
 
+func (c *nasServiceClient) CheckHostPort(ctx context.Context, in *CheckHostPortRequest, opts ...grpc.CallOption) (*CheckHostPortResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckHostPortResponse)
+	err := c.cc.Invoke(ctx, NasService_CheckHostPort_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) CheckHostPorts(ctx context.Context, in *CheckHostPortsRequest, opts ...grpc.CallOption) (*CheckHostPortsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckHostPortsResponse)
+	err := c.cc.Invoke(ctx, NasService_CheckHostPorts_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nasServiceClient) ListFileSystemDirectories(ctx context.Context, in *ListFileSystemDirectoriesRequest, opts ...grpc.CallOption) (*ListFileSystemDirectoriesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListFileSystemDirectoriesResponse)
@@ -1334,6 +1358,8 @@ type NasServiceServer interface {
 	GetDockerAppLogs(context.Context, *GetDockerAppLogsRequest) (*GetDockerAppLogsResponse, error)
 	GetDockerConfig(context.Context, *GetDockerConfigRequest) (*DockerConfig, error)
 	UpdateDockerConfig(context.Context, *UpdateDockerConfigRequest) (*DockerConfig, error)
+	CheckHostPort(context.Context, *CheckHostPortRequest) (*CheckHostPortResponse, error)
+	CheckHostPorts(context.Context, *CheckHostPortsRequest) (*CheckHostPortsResponse, error)
 	ListFileSystemDirectories(context.Context, *ListFileSystemDirectoriesRequest) (*ListFileSystemDirectoriesResponse, error)
 	ListLxcContainers(context.Context, *ListLxcContainersRequest) (*ListLxcContainersResponse, error)
 	GetLxcContainer(context.Context, *GetLxcContainerRequest) (*LxcContainer, error)
@@ -1584,6 +1610,12 @@ func (UnimplementedNasServiceServer) GetDockerConfig(context.Context, *GetDocker
 }
 func (UnimplementedNasServiceServer) UpdateDockerConfig(context.Context, *UpdateDockerConfigRequest) (*DockerConfig, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateDockerConfig not implemented")
+}
+func (UnimplementedNasServiceServer) CheckHostPort(context.Context, *CheckHostPortRequest) (*CheckHostPortResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckHostPort not implemented")
+}
+func (UnimplementedNasServiceServer) CheckHostPorts(context.Context, *CheckHostPortsRequest) (*CheckHostPortsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckHostPorts not implemented")
 }
 func (UnimplementedNasServiceServer) ListFileSystemDirectories(context.Context, *ListFileSystemDirectoriesRequest) (*ListFileSystemDirectoriesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListFileSystemDirectories not implemented")
@@ -2959,6 +2991,42 @@ func _NasService_UpdateDockerConfig_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NasService_CheckHostPort_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckHostPortRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).CheckHostPort(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_CheckHostPort_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).CheckHostPort(ctx, req.(*CheckHostPortRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_CheckHostPorts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckHostPortsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).CheckHostPorts(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_CheckHostPorts_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).CheckHostPorts(ctx, req.(*CheckHostPortsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NasService_ListFileSystemDirectories_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListFileSystemDirectoriesRequest)
 	if err := dec(in); err != nil {
@@ -3805,6 +3873,14 @@ var NasService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NasService_UpdateDockerConfig_Handler,
 		},
 		{
+			MethodName: "CheckHostPort",
+			Handler:    _NasService_CheckHostPort_Handler,
+		},
+		{
+			MethodName: "CheckHostPorts",
+			Handler:    _NasService_CheckHostPorts_Handler,
+		},
+		{
 			MethodName: "ListFileSystemDirectories",
 			Handler:    _NasService_ListFileSystemDirectories_Handler,
 		},
@@ -3930,5 +4006,5 @@ var NasService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "nas/v1/nas.proto",
+	Metadata: "nas/v1/service.proto",
 }
