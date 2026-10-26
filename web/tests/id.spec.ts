@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   generateNanosecondId,
+  generateVMDiskFilePath,
   generateVMDiskName,
   generateZvolDiskPath,
   generateVMPath,
@@ -52,6 +53,9 @@ describe('Domain Slug and Resource Path Helpers (TypeScript)', () => {
 
     const vmDir = generateVMPath('mypool', vmId);
     expect(vmDir).toBe('/nas/mypool/vms/debian-server');
+
+    const vmFilePath = generateVMDiskFilePath('mypool', vmId, 0);
+    expect(vmFilePath).toBe('/nas/mypool/vms/debian-server/disk-0.raw');
   });
 
   it('generates standardized LXC rootfs rooted to /containers/<container_id>', () => {

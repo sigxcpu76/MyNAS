@@ -90,6 +90,12 @@ func TestGenerateNanosecondID(t *testing.T) {
 		t.Fatalf("expected %q, got %q", expectedZvol1, zvolPath1)
 	}
 
+	vmFilePath := domain.GenerateVMDiskFilePath("mypool", vmID, 0)
+	expectedFilePath := "/nas/mypool/vms/my-ubuntu-vm/disk-0.raw"
+	if vmFilePath != expectedFilePath {
+		t.Fatalf("expected %q, got %q", expectedFilePath, vmFilePath)
+	}
+
 	// 4. LXC containers rootfs helper
 	lxcRootfs := domain.GenerateLxcRootfsPath("mypool", "debian-noble")
 	expectedLxc := "/nas/mypool/containers/debian-noble/rootfs"

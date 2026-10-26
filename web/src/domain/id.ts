@@ -71,6 +71,16 @@ export function generateVMPath(mainPool: string, vmId: string): string {
 }
 
 /**
+ * Generates the default primary disk image path for a VM on the main storage pool.
+ * All VMs are rooted to the main pool under /vms/<vm_id>.
+ * E.g. "/nas/mypool/vms/my-vm/disk-0.raw"
+ */
+export function generateVMDiskFilePath(mainPool: string, vmId: string, diskIndex = 0): string {
+  const root = generateVMPath(mainPool, vmId);
+  return `${root}/disk-${diskIndex}.raw`;
+}
+
+/**
  * Generates a standard LXC rootfs path on the main pool.
  * All LXC containers are rooted to the main pool under /containers/<container_id>.
  * E.g. "/nas/mypool/containers/my-container/rootfs"

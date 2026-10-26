@@ -215,12 +215,65 @@ func (m memoryXML) ToMiB() int64 {
 }
 
 func ensureDiskAllocated(diskPath string, sizeBytes int64) error {
+	if strings.HasPrefix(diskPath, "/dev/zvol/") {
+		// Clean up any stale regular file mistakenly created in /dev/zvol
+		if st, err := os.Lstat(diskPath); err == nil && (st.Mode()&os.ModeDevice == 0) && (st.Mode()&os.ModeSymlink == 0) {
+			_ = os.Remove(diskPath)
+		}
+
+		// Check if the ZFS volume block device already exists
+		if st, err := os.Stat(diskPath); err == nil && (st.Mode()&os.ModeDevice != 0) {
+			return nil
+		}
+
+		// Create real ZFS volume if zfs command is available
+		if _, err := exec.LookPath("zfs"); err == nil {
+			vol := strings.TrimPrefix(diskPath, "/dev/zvol/")
+			sizeG := sizeBytes / (1024 * 1024 * 1024)
+			if sizeG <= 0 {
+				sizeG = 32
+			}
+			cmd := exec.Command("zfs", "create", "-p", "-s", "-V", fmt.Sprintf("%dG", sizeG), vol)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				if !strings.Contains(string(out), "dataset already exists") {
+					return fmt.Errorf("zfs create -V failed for %s: %s: %w", vol, strings.TrimSpace(string(out)), err)
+				}
+			}
+			_ = exec.Command("udevadm", "settle").Run()
+			for attempt := 0; attempt < 30; attempt++ {
+				if st, err := os.Stat(diskPath); err == nil && (st.Mode()&os.ModeDevice != 0) {
+					return nil
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+			if st, err := os.Stat(diskPath); err == nil && (st.Mode()&os.ModeDevice != 0) {
+				return nil
+			}
+			return fmt.Errorf("zfs volume %s was created but block device node %s did not appear", vol, diskPath)
+		}
+
+		if st, err := os.Stat(diskPath); err == nil && (st.Mode()&os.ModeDevice != 0) {
+			return nil
+		}
+		return fmt.Errorf("block device %s does not exist on host", diskPath)
+	}
+
+	if strings.HasPrefix(diskPath, "/dev/") {
+		st, err := os.Stat(diskPath)
+		if err == nil && (st.Mode()&os.ModeDevice != 0) {
+			return nil
+		}
+		return fmt.Errorf("block device %s does not exist on host", diskPath)
+	}
+
 	if _, err := os.Stat(diskPath); err == nil {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(diskPath), 0755); err != nil {
+	dir := filepath.Dir(diskPath)
+	if err := os.MkdirAll(dir, 0777); err != nil {
 		return fmt.Errorf("failed to create directory for disk %s: %w", diskPath, err)
 	}
+	_ = os.Chmod(dir, 0777)
 	if sizeBytes <= 0 {
 		sizeBytes = 10 * 1024 * 1024 * 1024
 	}
@@ -234,18 +287,64 @@ func ensureDiskAllocated(diskPath string, sizeBytes int64) error {
 			if out, err := cmd.CombinedOutput(); err != nil {
 				return fmt.Errorf("qemu-img create failed: %s: %w", strings.TrimSpace(string(out)), err)
 			}
+			_ = os.Chmod(diskPath, 0666)
 			return nil
 		}
 	}
-	f, err := os.Create(diskPath)
+	f, err := os.OpenFile(diskPath, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		return fmt.Errorf("failed to create disk file %s: %w", diskPath, err)
 	}
 	defer f.Close()
+	_ = os.Chmod(diskPath, 0666)
 	if err := f.Truncate(sizeBytes); err != nil {
 		return fmt.Errorf("failed to allocate sparse disk %s (%d bytes): %w", diskPath, sizeBytes, err)
 	}
 	return nil
+}
+
+func (a *Adapter) sanitizeAndEnsureDisks(vm *domain.VirtualMachine) bool {
+	changed := false
+	mainPool := a.getMainPool()
+
+	if len(vm.Disks) == 0 {
+		diskPath := domain.GenerateZvolDiskPath(mainPool, vm.ID, 0)
+		sizeB := int64(vm.DiskSizeGiB) * 1024 * 1024 * 1024
+		if sizeB <= 0 {
+			sizeB = 32 * 1024 * 1024 * 1024
+		}
+		_ = ensureDiskAllocated(diskPath, sizeB)
+		vm.Disks = []domain.VirtualMachineDisk{
+			{
+				ID:        domain.GenerateVMDiskName(vm.ID, 0),
+				Bus:       "scsi",
+				DiskPath:  diskPath,
+				SizeBytes: sizeB,
+				CacheMode: "none",
+				Discard:   true,
+				IOThread:  true,
+			},
+		}
+		return true
+	}
+
+	for i := range vm.Disks {
+		d := &vm.Disks[i]
+		if d.ID == "" {
+			d.ID = domain.GenerateVMDiskName(vm.ID, i)
+			changed = true
+		}
+		if d.DiskPath == "" {
+			d.DiskPath = domain.GenerateZvolDiskPath(mainPool, vm.ID, i)
+			changed = true
+		}
+		if err := ensureDiskAllocated(d.DiskPath, d.SizeBytes); err == nil {
+			if fi, sErr := os.Stat(d.DiskPath); sErr == nil && d.SizeBytes <= 0 {
+				d.SizeBytes = fi.Size()
+			}
+		}
+	}
+	return changed
 }
 
 func (a *Adapter) getDomainFromVirsh(ctx context.Context, name string) (*domain.VirtualMachine, error) {
@@ -442,41 +541,7 @@ func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*doma
 			return nil, fmt.Errorf("%w: virtual machine %q already exists in libvirt", domain.ErrAlreadyExists, vm.ID)
 		}
 
-		if len(vm.Disks) == 0 {
-			diskDir := filepath.Join(a.stateDir, "disks")
-			_ = os.MkdirAll(diskDir, 0755)
-			diskPath := filepath.Join(diskDir, fmt.Sprintf("%s.raw", domain.GenerateVMDiskName(vm.ID, 0)))
-			sizeB := int64(vm.DiskSizeGiB) * 1024 * 1024 * 1024
-			if sizeB <= 0 {
-				sizeB = 32 * 1024 * 1024 * 1024
-			}
-			vm.Disks = []domain.VirtualMachineDisk{
-				{
-					ID:        domain.GenerateVMDiskName(vm.ID, 0),
-					Bus:       "scsi",
-					DiskPath:  diskPath,
-					SizeBytes: sizeB,
-					CacheMode: "none",
-					Discard:   true,
-					IOThread:  true,
-				},
-			}
-		}
-
-		for i := range vm.Disks {
-			d := &vm.Disks[i]
-			if d.ID == "" {
-				d.ID = domain.GenerateVMDiskName(vm.ID, i)
-			}
-			if d.DiskPath == "" {
-				diskDir := filepath.Join(a.stateDir, "disks")
-				_ = os.MkdirAll(diskDir, 0755)
-				d.DiskPath = filepath.Join(diskDir, fmt.Sprintf("%s.raw", domain.GenerateVMDiskName(vm.ID, i)))
-			}
-			if err := ensureDiskAllocated(d.DiskPath, d.SizeBytes); err != nil {
-				return nil, fmt.Errorf("failed to allocate disk %s: %w", d.DiskPath, err)
-			}
-		}
+		a.sanitizeAndEnsureDisks(&vm)
 
 		if len(vm.NetworkIfaces) == 0 {
 			vm.NetworkIfaces = []domain.VirtualMachineNetworkInterface{
@@ -506,19 +571,18 @@ func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*doma
 		startCmd := exec.CommandContext(ctx, "virsh", "start", vm.ID)
 		startOut, err := startCmd.CombinedOutput()
 		if err != nil {
-			// Auto-heal if start failed due to unsupported CPU mode (e.g. host-passthrough on qemu domain)
-			if strings.Contains(string(startOut), "CPU mode") || strings.Contains(string(startOut), "not supported by hypervisor") {
-				if createdVM, getErr := a.getDomainFromVirsh(ctx, vm.ID); getErr == nil {
-					xmlStr := buildDomainXML(*createdVM)
-					redefCmd := exec.CommandContext(ctx, "virsh", "define", "/dev/stdin")
-					redefCmd.Stdin = strings.NewReader(xmlStr)
-					if _, redefErr := redefCmd.CombinedOutput(); redefErr == nil {
-						if retryOut, retryErr := exec.CommandContext(ctx, "virsh", "start", vm.ID).CombinedOutput(); retryErr == nil {
-							return a.getDomainFromVirsh(ctx, vm.ID)
-						} else {
-							startOut = retryOut
-							err = retryErr
-						}
+			// Auto-heal if start failed (CPU mode unsupported, non-existent disk zvol bind error, etc.)
+			if createdVM, getErr := a.getDomainFromVirsh(ctx, vm.ID); getErr == nil {
+				a.sanitizeAndEnsureDisks(createdVM)
+				redefStr := buildDomainXML(*createdVM)
+				redefCmd := exec.CommandContext(ctx, "virsh", "define", "/dev/stdin")
+				redefCmd.Stdin = strings.NewReader(redefStr)
+				if _, redefErr := redefCmd.CombinedOutput(); redefErr == nil {
+					if retryOut, retryErr := exec.CommandContext(ctx, "virsh", "start", vm.ID).CombinedOutput(); retryErr == nil {
+						return a.getDomainFromVirsh(ctx, vm.ID)
+					} else {
+						startOut = retryOut
+						err = retryErr
 					}
 				}
 			}
@@ -548,28 +612,7 @@ func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*doma
 	vm.State = "RUNNING"
 	vm.SerialConsoleURL = fmt.Sprintf("/ws/serial/%s", vm.ID)
 
-	if len(vm.Disks) == 0 {
-		diskPath := vm.DiskPath
-		if diskPath == "" {
-			mainPool := a.getMainPool()
-			diskPath = domain.GenerateZvolDiskPath(mainPool, vm.ID, 0)
-		}
-		sizeGiB := vm.DiskSizeGiB
-		if sizeGiB <= 0 {
-			sizeGiB = 32
-		}
-		vm.Disks = []domain.VirtualMachineDisk{
-			{
-				ID:        domain.GenerateVMDiskName(vm.ID, 0),
-				Bus:       "scsi",
-				DiskPath:  diskPath,
-				SizeBytes: sizeGiB * 1024 * 1024 * 1024,
-				CacheMode: "none",
-				Discard:   true,
-				IOThread:  true,
-			},
-		}
-	}
+	a.sanitizeAndEnsureDisks(&vm)
 
 	if len(vm.NetworkIfaces) == 0 {
 		bridge := vm.NetworkBridge
@@ -683,19 +726,18 @@ func (a *Adapter) StartVM(ctx context.Context, id string) (*domain.VirtualMachin
 	if a.isRealDomain(ctx, id) {
 		out, err := exec.CommandContext(ctx, "virsh", "start", id).CombinedOutput()
 		if err != nil {
-			// Auto-heal if start failed due to unsupported CPU mode (e.g. host-passthrough on qemu domain)
-			if strings.Contains(string(out), "CPU mode") || strings.Contains(string(out), "not supported by hypervisor") {
-				if vm, getErr := a.getDomainFromVirsh(ctx, id); getErr == nil {
-					xmlStr := buildDomainXML(*vm)
-					redefCmd := exec.CommandContext(ctx, "virsh", "define", "/dev/stdin")
-					redefCmd.Stdin = strings.NewReader(xmlStr)
-					if _, redefErr := redefCmd.CombinedOutput(); redefErr == nil {
-						if retryOut, retryErr := exec.CommandContext(ctx, "virsh", "start", id).CombinedOutput(); retryErr == nil {
-							return a.getDomainFromVirsh(ctx, id)
-						} else {
-							out = retryOut
-							err = retryErr
-						}
+			// Auto-heal if start failed (CPU mode unsupported, non-existent disk zvol bind error, etc.)
+			if vm, getErr := a.getDomainFromVirsh(ctx, id); getErr == nil {
+				a.sanitizeAndEnsureDisks(vm)
+				xmlStr := buildDomainXML(*vm)
+				redefCmd := exec.CommandContext(ctx, "virsh", "define", "/dev/stdin")
+				redefCmd.Stdin = strings.NewReader(xmlStr)
+				if _, redefErr := redefCmd.CombinedOutput(); redefErr == nil {
+					if retryOut, retryErr := exec.CommandContext(ctx, "virsh", "start", id).CombinedOutput(); retryErr == nil {
+						return a.getDomainFromVirsh(ctx, id)
+					} else {
+						out = retryOut
+						err = retryErr
 					}
 				}
 			}
@@ -849,13 +891,14 @@ func (a *Adapter) CloneVM(ctx context.Context, id, newID, newName, targetPool st
 	cloned.State = "STOPPED"
 	cloned.SerialConsoleURL = fmt.Sprintf("/ws/serial/%s", newID)
 
+	if targetPool == "" {
+		targetPool = a.getMainPool()
+	}
 	clonedDisks := make([]domain.VirtualMachineDisk, 0, len(source.Disks))
 	for i, d := range source.Disks {
 		cDisk := d
 		cDisk.ID = domain.GenerateVMDiskName(newID, i)
-		diskDir := filepath.Join(a.stateDir, "disks")
-		_ = os.MkdirAll(diskDir, 0755)
-		cDisk.DiskPath = filepath.Join(diskDir, fmt.Sprintf("%s.raw", domain.GenerateVMDiskName(newID, i)))
+		cDisk.DiskPath = domain.GenerateVMDiskFilePath(targetPool, newID, i)
 		_ = ensureDiskAllocated(cDisk.DiskPath, cDisk.SizeBytes)
 		clonedDisks = append(clonedDisks, cDisk)
 	}
@@ -1233,8 +1276,10 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 		sourceAttr := "file"
 		driverType := "raw"
 		if strings.HasPrefix(d.DiskPath, "/dev/") {
-			diskKind = "block"
-			sourceAttr = "dev"
+			if st, err := os.Stat(d.DiskPath); err == nil && (st.Mode()&os.ModeDevice != 0) {
+				diskKind = "block"
+				sourceAttr = "dev"
+			}
 		}
 		if strings.HasSuffix(d.DiskPath, ".qcow2") {
 			driverType = "qcow2"

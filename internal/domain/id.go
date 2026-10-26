@@ -84,6 +84,13 @@ func GenerateVMPath(mainPool, vmID string) string {
 	return fmt.Sprintf("/nas/%s/vms/%s", cleanPool, cleanID)
 }
 
+// GenerateVMDiskFilePath returns the standard disk image path on the main pool for a VM.
+// All VMs are rooted to the main pool under /vms/<vm_id>.
+// E.g. "/nas/mypool/vms/my-vm/disk-0.raw"
+func GenerateVMDiskFilePath(mainPool, vmID string, diskIndex int) string {
+	return fmt.Sprintf("%s/disk-%d.raw", GenerateVMPath(mainPool, vmID), diskIndex)
+}
+
 // GenerateLxcRootfsPath returns the standard rootfs path for an LXC container on the main pool.
 // All LXC containers are rooted to the main pool under /containers/<container_id>.
 // E.g. "/nas/mypool/containers/my-container/rootfs"

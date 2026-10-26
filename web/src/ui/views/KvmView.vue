@@ -15,7 +15,7 @@ import { confirmModal, nasState, notify, refreshIsos as storeRefreshIsos } from 
 import NoVncModal from '../components/NoVncModal.vue';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
-import { generateNanosecondId, generateVMDiskName, generateZvolDiskPath, toZfsSafeSlug } from '../../domain/id';
+import { generateNanosecondId, generateVMDiskFilePath, generateVMDiskName, generateZvolDiskPath, toZfsSafeSlug } from '../../domain/id';
 import {
   mdiClose,
   mdiCog,
