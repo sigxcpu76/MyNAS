@@ -37,6 +37,7 @@ import {
 import ComposeFormEditor from '../components/ComposeFormEditor.vue';
 import CodeMirrorEditor from '../components/CodeMirrorEditor.vue';
 import DockerTerminalModal, { type TerminalContainerOption } from '../components/DockerTerminalModal.vue';
+import CatalogQuestionWizard from '../components/CatalogQuestionWizard.vue';
 import MdiIcon from '../components/MdiIcon.vue';
 import { askModal, nasState, notify } from '../store';
 
@@ -292,26 +293,75 @@ function openCatalogModal() {
   }
 }
 
+// =============================================================================
+// TrueNAS SCALE App Configuration Wizard
+// =============================================================================
+const isQuestionWizardOpen = ref(false);
+const wizardCatalogApp = ref<CatalogApp | null>(null);
+
 async function importFromCatalog(app: CatalogApp) {
   importingAppId.value = app.appId;
   try {
     const detailed = await services.catalog.getApp(app.appId, app.train);
-    installAppId.value = detailed.appId;
-    installTitle.value = detailed.title || detailed.appId;
-    const resolvedImg = detailed.containerImage || `${detailed.appId}:latest`;
-    installComposeYaml.value =
-      detailed.composeYaml ||
-      `services:\n  ${detailed.appId}:\n    image: ${resolvedImg}\n`;
-    activeInstallTemplate.value = null;
-    installEditorKey.value++;
-    isCatalogModalOpen.value = false;
-    isInstallModalOpen.value = true;
-    notify('success', `Imported "${detailed.title}" from TrueNAS Catalog into Compose Editor`);
+    const hasQuestions =
+      (detailed.questionGroups && detailed.questionGroups.length > 0) ||
+      (detailed.questions && detailed.questions.length > 0);
+
+    if (hasQuestions) {
+      wizardCatalogApp.value = detailed;
+      isCatalogModalOpen.value = false;
+      isQuestionWizardOpen.value = true;
+      notify('info', `Opened Setup Wizard for "${detailed.title || detailed.appId}"`);
+    } else {
+      installAppId.value = detailed.appId;
+      installTitle.value = detailed.title || detailed.appId;
+      const resolvedImg = detailed.containerImage || `${detailed.appId}:latest`;
+      installComposeYaml.value =
+        detailed.composeYaml ||
+        `services:\n  ${detailed.appId}:\n    image: ${resolvedImg}\n`;
+      activeInstallTemplate.value = null;
+      installEditorKey.value++;
+      isCatalogModalOpen.value = false;
+      isInstallModalOpen.value = true;
+      notify('success', `Imported "${detailed.title}" from TrueNAS Catalog into Compose Editor`);
+    }
   } catch (err: any) {
     notify('error', err?.message || `Failed to load template for ${app.title}`);
   } finally {
     importingAppId.value = null;
   }
+}
+
+function handleWizardOpenInEditor(data: { appId: string; title: string; composeYaml: string }) {
+  installAppId.value = data.appId;
+  installTitle.value = data.title;
+  installComposeYaml.value = data.composeYaml;
+  activeInstallTemplate.value = null;
+  installEditorKey.value++;
+  isQuestionWizardOpen.value = false;
+  isInstallModalOpen.value = true;
+  notify('success', `Configuration loaded into visual Compose Editor`);
+}
+
+function handleWizardDeploy(data: { appId: string; title: string; composeYaml: string }) {
+  isQuestionWizardOpen.value = false;
+  handleDeployApp(data);
+}
+
+function handleWizardSkip() {
+  if (!wizardCatalogApp.value) return;
+  const app = wizardCatalogApp.value;
+  installAppId.value = app.appId;
+  installTitle.value = app.title || app.appId;
+  const resolvedImg = app.containerImage || `${app.appId}:latest`;
+  installComposeYaml.value =
+    app.composeYaml ||
+    `services:\n  ${app.appId}:\n    image: ${resolvedImg}\n`;
+  activeInstallTemplate.value = null;
+  installEditorKey.value++;
+  isQuestionWizardOpen.value = false;
+  isInstallModalOpen.value = true;
+  notify('info', `Loaded raw template for "${app.title || app.appId}" into Compose Editor`);
 }
 
 // =============================================================================
@@ -1859,6 +1909,20 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- ===================================================================== -->
+    <!-- MODAL: TrueNAS SCALE App Configuration Wizard                         -->
+    <!-- ===================================================================== -->
+    <CatalogQuestionWizard
+      v-if="isQuestionWizardOpen && wizardCatalogApp"
+      :app="wizardCatalogApp"
+      :apps-pool="nasState.systemConfig?.mainPool || (nasState.dockerConfig?.availablePools?.[0] || 'tank')"
+      :is-deploying="isDeployingApp"
+      @close="isQuestionWizardOpen = false"
+      @open-in-editor="handleWizardOpenInEditor"
+      @deploy="handleWizardDeploy"
+      @skip-wizard="handleWizardSkip"
+    />
 
     <!-- ===================================================================== -->
     <!-- MODAL: Docker Storage Dataset Configuration                           -->

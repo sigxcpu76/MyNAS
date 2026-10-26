@@ -725,6 +725,39 @@ func (a *Adapter) enrichFromIXValues(ctx context.Context, app *domain.CatalogApp
 			app.ComposeYAML = portalYAML + app.ComposeYAML
 		}
 	}
+
+	// Fetch questions.yaml if available to extract dynamic configuration questions
+	qCacheFile := filepath.Join(valuesCacheDir, fmt.Sprintf("%s-%s-questions.yaml", app.AppID, app.Version))
+	var qData []byte
+	if fileBytes, err := os.ReadFile(qCacheFile); err == nil && len(fileBytes) > 0 {
+		qData = fileBytes
+	} else {
+		qURL := fmt.Sprintf("https://raw.githubusercontent.com/truenas/apps/master/trains/%s/%s/%s/questions.yaml",
+			app.Train, app.AppID, app.Version)
+		reqCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		if req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, qURL, nil); err == nil {
+			if resp, err := a.httpClient.Do(req); err == nil {
+				if resp.StatusCode == http.StatusOK {
+					if bodyBytes, err := io.ReadAll(resp.Body); err == nil {
+						qData = bodyBytes
+						_ = os.WriteFile(qCacheFile, bodyBytes, 0644)
+					}
+				}
+				resp.Body.Close()
+			}
+		}
+	}
+
+	if len(qData) > 0 {
+		groups, flatQs := ParseQuestionsYAML(qData, app.AppID, a.getAppsPool(), a.getAppdataPath())
+		app.QuestionGroups = groups
+		app.Questions = flatQs
+	} else {
+		groups, flatQs := GetCuratedQuestions(*app, a.getAppsPool(), a.getAppdataPath())
+		app.QuestionGroups = groups
+		app.Questions = flatQs
+	}
 }
 
 func extractIXImageAndTag(yamlContent string) (string, string) {

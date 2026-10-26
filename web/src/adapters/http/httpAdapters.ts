@@ -8,6 +8,8 @@
 import type {
   AuthSession,
   CatalogApp,
+  CatalogQuestion,
+  CatalogQuestionGroup,
   CifsShare,
   DirectoryList,
   Disk,
@@ -1663,7 +1665,31 @@ export class HttpIdentityAdapter implements IdentityPort {
 // 9. HttpCatalogAdapter (TrueNAS SCALE App Catalog)
 // ---------------------------------------------------------------------------
 
+function mapCatalogQuestion(raw: any): CatalogQuestion {
+  return {
+    variable: raw?.variable ?? '',
+    label: raw?.label ?? '',
+    description: raw?.description ?? '',
+    type: raw?.type ?? 'string',
+    defaultValue: raw?.defaultValue ?? raw?.default_value ?? '',
+    required: Boolean(raw?.required ?? false),
+    group: raw?.group ?? '',
+    options: raw?.options ?? [],
+    mountPath: raw?.mountPath ?? raw?.mount_path ?? '',
+  };
+}
+
+function mapCatalogQuestionGroup(raw: any): CatalogQuestionGroup {
+  return {
+    name: raw?.name ?? '',
+    description: raw?.description ?? '',
+    questions: (raw?.questions ?? []).map(mapCatalogQuestion),
+  };
+}
+
 function mapCatalogApp(raw: any): CatalogApp {
+  const rawGroups = raw?.questionGroups ?? raw?.question_groups ?? [];
+  const rawQuestions = raw?.questions ?? [];
   return {
     appId: raw?.appId ?? raw?.app_id ?? '',
     title: raw?.title ?? '',
@@ -1681,6 +1707,8 @@ function mapCatalogApp(raw: any): CatalogApp {
     containerImage: raw?.containerImage ?? raw?.container_image ?? '',
     composeYaml: raw?.composeYaml ?? raw?.compose_yaml ?? '',
     defaultPort: Number(raw?.defaultPort ?? raw?.default_port ?? 0),
+    questionGroups: rawGroups.map(mapCatalogQuestionGroup),
+    questions: rawQuestions.map(mapCatalogQuestion),
   };
 }
 

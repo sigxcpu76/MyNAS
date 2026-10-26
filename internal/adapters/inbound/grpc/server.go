@@ -2816,22 +2816,62 @@ func (s *Server) SyncCatalog(ctx context.Context, req *nasv1.SyncCatalogRequest)
 }
 
 func domainCatalogAppToPB(a domain.CatalogApp) *nasv1.CatalogApp {
+	var qGroups []*nasv1.CatalogQuestionGroup
+	for _, g := range a.QuestionGroups {
+		var qs []*nasv1.CatalogQuestion
+		for _, q := range g.Questions {
+			qs = append(qs, &nasv1.CatalogQuestion{
+				Variable:     q.Variable,
+				Label:        q.Label,
+				Description:  q.Description,
+				Type:         q.Type,
+				DefaultValue: q.DefaultValue,
+				Required:     q.Required,
+				Group:        q.Group,
+				Options:      q.Options,
+				MountPath:    q.MountPath,
+			})
+		}
+		qGroups = append(qGroups, &nasv1.CatalogQuestionGroup{
+			Name:        g.Name,
+			Description: g.Description,
+			Questions:   qs,
+		})
+	}
+
+	var flatQs []*nasv1.CatalogQuestion
+	for _, q := range a.Questions {
+		flatQs = append(flatQs, &nasv1.CatalogQuestion{
+			Variable:     q.Variable,
+			Label:        q.Label,
+			Description:  q.Description,
+			Type:         q.Type,
+			DefaultValue: q.DefaultValue,
+			Required:     q.Required,
+			Group:        q.Group,
+			Options:      q.Options,
+			MountPath:    q.MountPath,
+		})
+	}
+
 	return &nasv1.CatalogApp{
-		AppId:       a.AppID,
-		Title:       a.Title,
-		Description: a.Description,
-		Category:    a.Category,
-		Categories:  a.Categories,
-		IconUrl:     a.IconURL,
-		Home:        a.Home,
-		Train:       a.Train,
-		Version:     a.Version,
-		AppVersion:  a.AppVersion,
-		Tags:        a.Tags,
+		AppId:          a.AppID,
+		Title:          a.Title,
+		Description:    a.Description,
+		Category:       a.Category,
+		Categories:     a.Categories,
+		IconUrl:        a.IconURL,
+		Home:           a.Home,
+		Train:          a.Train,
+		Version:        a.Version,
+		AppVersion:     a.AppVersion,
+		Tags:           a.Tags,
 		Screenshots:    a.Screenshots,
 		ComposeYaml:    a.ComposeYAML,
 		DefaultPort:    int32(a.DefaultPort),
 		Sources:        a.Sources,
 		ContainerImage: a.ContainerImage,
+		QuestionGroups: qGroups,
+		Questions:      flatQs,
 	}
 }

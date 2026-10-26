@@ -17,9 +17,31 @@ type CatalogApp struct {
 	Tags        []string `json:"tags"`
 	Screenshots    []string `json:"screenshots"`
 	Sources        []string `json:"sources"`
-	ContainerImage string   `json:"containerImage"`
-	ComposeYAML    string   `json:"composeYaml"`
-	DefaultPort    int      `json:"defaultPort"`
+	ContainerImage string                 `json:"containerImage"`
+	ComposeYAML    string                 `json:"composeYaml"`
+	DefaultPort    int                    `json:"defaultPort"`
+	QuestionGroups []CatalogQuestionGroup `json:"questionGroups,omitempty"`
+	Questions      []CatalogQuestion      `json:"questions,omitempty"`
+}
+
+// CatalogQuestion represents an individual configuration question from TrueNAS questions.yaml.
+type CatalogQuestion struct {
+	Variable     string   `json:"variable"`
+	Label        string   `json:"label"`
+	Description  string   `json:"description"`
+	Type         string   `json:"type"` // "string", "int", "boolean", "hostpath", "select"
+	DefaultValue string   `json:"defaultValue"`
+	Required     bool     `json:"required"`
+	Group        string   `json:"group"`
+	Options      []string `json:"options,omitempty"`
+	MountPath    string   `json:"mountPath,omitempty"`
+}
+
+// CatalogQuestionGroup groups related configuration questions.
+type CatalogQuestionGroup struct {
+	Name        string            `json:"name"`
+	Description string            `json:"description"`
+	Questions   []CatalogQuestion `json:"questions"`
 }
 
 // CatalogSyncSummary provides metrics on catalog synchronization.

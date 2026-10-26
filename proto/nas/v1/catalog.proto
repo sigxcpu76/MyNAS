@@ -25,6 +25,26 @@ message CatalogApp {
   int32 default_port = 14;
   repeated string sources = 15;
   string container_image = 16;
+  repeated CatalogQuestionGroup question_groups = 17;
+  repeated CatalogQuestion questions = 18;
+}
+
+message CatalogQuestion {
+  string variable = 1;
+  string label = 2;
+  string description = 3;
+  string type = 4;
+  string default_value = 5;
+  bool required = 6;
+  string group = 7;
+  repeated string options = 8;
+  string mount_path = 9;
+}
+
+message CatalogQuestionGroup {
+  string name = 1;
+  string description = 2;
+  repeated CatalogQuestion questions = 3;
 }
 
 message ListCatalogAppsRequest {

@@ -22,23 +22,25 @@ const (
 )
 
 type CatalogApp struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	AppId          string                 `protobuf:"bytes,1,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
-	Title          string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	Description    string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	Category       string                 `protobuf:"bytes,4,opt,name=category,proto3" json:"category,omitempty"`
-	Categories     []string               `protobuf:"bytes,5,rep,name=categories,proto3" json:"categories,omitempty"`
-	IconUrl        string                 `protobuf:"bytes,6,opt,name=icon_url,json=iconUrl,proto3" json:"icon_url,omitempty"`
-	Home           string                 `protobuf:"bytes,7,opt,name=home,proto3" json:"home,omitempty"`
-	Train          string                 `protobuf:"bytes,8,opt,name=train,proto3" json:"train,omitempty"`
-	Version        string                 `protobuf:"bytes,9,opt,name=version,proto3" json:"version,omitempty"`
-	AppVersion     string                 `protobuf:"bytes,10,opt,name=app_version,json=appVersion,proto3" json:"app_version,omitempty"`
-	Tags           []string               `protobuf:"bytes,11,rep,name=tags,proto3" json:"tags,omitempty"`
-	Screenshots    []string               `protobuf:"bytes,12,rep,name=screenshots,proto3" json:"screenshots,omitempty"`
-	ComposeYaml    string                 `protobuf:"bytes,13,opt,name=compose_yaml,json=composeYaml,proto3" json:"compose_yaml,omitempty"`
-	DefaultPort    int32                  `protobuf:"varint,14,opt,name=default_port,json=defaultPort,proto3" json:"default_port,omitempty"`
-	Sources        []string               `protobuf:"bytes,15,rep,name=sources,proto3" json:"sources,omitempty"`
-	ContainerImage string                 `protobuf:"bytes,16,opt,name=container_image,json=containerImage,proto3" json:"container_image,omitempty"`
+	state          protoimpl.MessageState  `protogen:"open.v1"`
+	AppId          string                  `protobuf:"bytes,1,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
+	Title          string                  `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Description    string                  `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Category       string                  `protobuf:"bytes,4,opt,name=category,proto3" json:"category,omitempty"`
+	Categories     []string                `protobuf:"bytes,5,rep,name=categories,proto3" json:"categories,omitempty"`
+	IconUrl        string                  `protobuf:"bytes,6,opt,name=icon_url,json=iconUrl,proto3" json:"icon_url,omitempty"`
+	Home           string                  `protobuf:"bytes,7,opt,name=home,proto3" json:"home,omitempty"`
+	Train          string                  `protobuf:"bytes,8,opt,name=train,proto3" json:"train,omitempty"`
+	Version        string                  `protobuf:"bytes,9,opt,name=version,proto3" json:"version,omitempty"`
+	AppVersion     string                  `protobuf:"bytes,10,opt,name=app_version,json=appVersion,proto3" json:"app_version,omitempty"`
+	Tags           []string                `protobuf:"bytes,11,rep,name=tags,proto3" json:"tags,omitempty"`
+	Screenshots    []string                `protobuf:"bytes,12,rep,name=screenshots,proto3" json:"screenshots,omitempty"`
+	ComposeYaml    string                  `protobuf:"bytes,13,opt,name=compose_yaml,json=composeYaml,proto3" json:"compose_yaml,omitempty"`
+	DefaultPort    int32                   `protobuf:"varint,14,opt,name=default_port,json=defaultPort,proto3" json:"default_port,omitempty"`
+	Sources        []string                `protobuf:"bytes,15,rep,name=sources,proto3" json:"sources,omitempty"`
+	ContainerImage string                  `protobuf:"bytes,16,opt,name=container_image,json=containerImage,proto3" json:"container_image,omitempty"`
+	QuestionGroups []*CatalogQuestionGroup `protobuf:"bytes,17,rep,name=question_groups,json=questionGroups,proto3" json:"question_groups,omitempty"`
+	Questions      []*CatalogQuestion      `protobuf:"bytes,18,rep,name=questions,proto3" json:"questions,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -185,6 +187,188 @@ func (x *CatalogApp) GetContainerImage() string {
 	return ""
 }
 
+func (x *CatalogApp) GetQuestionGroups() []*CatalogQuestionGroup {
+	if x != nil {
+		return x.QuestionGroups
+	}
+	return nil
+}
+
+func (x *CatalogApp) GetQuestions() []*CatalogQuestion {
+	if x != nil {
+		return x.Questions
+	}
+	return nil
+}
+
+type CatalogQuestion struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Variable      string                 `protobuf:"bytes,1,opt,name=variable,proto3" json:"variable,omitempty"`
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
+	DefaultValue  string                 `protobuf:"bytes,5,opt,name=default_value,json=defaultValue,proto3" json:"default_value,omitempty"`
+	Required      bool                   `protobuf:"varint,6,opt,name=required,proto3" json:"required,omitempty"`
+	Group         string                 `protobuf:"bytes,7,opt,name=group,proto3" json:"group,omitempty"`
+	Options       []string               `protobuf:"bytes,8,rep,name=options,proto3" json:"options,omitempty"`
+	MountPath     string                 `protobuf:"bytes,9,opt,name=mount_path,json=mountPath,proto3" json:"mount_path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CatalogQuestion) Reset() {
+	*x = CatalogQuestion{}
+	mi := &file_nas_v1_catalog_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CatalogQuestion) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CatalogQuestion) ProtoMessage() {}
+
+func (x *CatalogQuestion) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_catalog_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CatalogQuestion.ProtoReflect.Descriptor instead.
+func (*CatalogQuestion) Descriptor() ([]byte, []int) {
+	return file_nas_v1_catalog_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *CatalogQuestion) GetVariable() string {
+	if x != nil {
+		return x.Variable
+	}
+	return ""
+}
+
+func (x *CatalogQuestion) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *CatalogQuestion) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *CatalogQuestion) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *CatalogQuestion) GetDefaultValue() string {
+	if x != nil {
+		return x.DefaultValue
+	}
+	return ""
+}
+
+func (x *CatalogQuestion) GetRequired() bool {
+	if x != nil {
+		return x.Required
+	}
+	return false
+}
+
+func (x *CatalogQuestion) GetGroup() string {
+	if x != nil {
+		return x.Group
+	}
+	return ""
+}
+
+func (x *CatalogQuestion) GetOptions() []string {
+	if x != nil {
+		return x.Options
+	}
+	return nil
+}
+
+func (x *CatalogQuestion) GetMountPath() string {
+	if x != nil {
+		return x.MountPath
+	}
+	return ""
+}
+
+type CatalogQuestionGroup struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Questions     []*CatalogQuestion     `protobuf:"bytes,3,rep,name=questions,proto3" json:"questions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CatalogQuestionGroup) Reset() {
+	*x = CatalogQuestionGroup{}
+	mi := &file_nas_v1_catalog_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CatalogQuestionGroup) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CatalogQuestionGroup) ProtoMessage() {}
+
+func (x *CatalogQuestionGroup) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_catalog_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CatalogQuestionGroup.ProtoReflect.Descriptor instead.
+func (*CatalogQuestionGroup) Descriptor() ([]byte, []int) {
+	return file_nas_v1_catalog_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *CatalogQuestionGroup) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CatalogQuestionGroup) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *CatalogQuestionGroup) GetQuestions() []*CatalogQuestion {
+	if x != nil {
+		return x.Questions
+	}
+	return nil
+}
+
 type ListCatalogAppsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Train         string                 `protobuf:"bytes,1,opt,name=train,proto3" json:"train,omitempty"`
@@ -198,7 +382,7 @@ type ListCatalogAppsRequest struct {
 
 func (x *ListCatalogAppsRequest) Reset() {
 	*x = ListCatalogAppsRequest{}
-	mi := &file_nas_v1_catalog_proto_msgTypes[1]
+	mi := &file_nas_v1_catalog_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -210,7 +394,7 @@ func (x *ListCatalogAppsRequest) String() string {
 func (*ListCatalogAppsRequest) ProtoMessage() {}
 
 func (x *ListCatalogAppsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_catalog_proto_msgTypes[1]
+	mi := &file_nas_v1_catalog_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -223,7 +407,7 @@ func (x *ListCatalogAppsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCatalogAppsRequest.ProtoReflect.Descriptor instead.
 func (*ListCatalogAppsRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_catalog_proto_rawDescGZIP(), []int{1}
+	return file_nas_v1_catalog_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ListCatalogAppsRequest) GetTrain() string {
@@ -272,7 +456,7 @@ type ListCatalogAppsResponse struct {
 
 func (x *ListCatalogAppsResponse) Reset() {
 	*x = ListCatalogAppsResponse{}
-	mi := &file_nas_v1_catalog_proto_msgTypes[2]
+	mi := &file_nas_v1_catalog_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -284,7 +468,7 @@ func (x *ListCatalogAppsResponse) String() string {
 func (*ListCatalogAppsResponse) ProtoMessage() {}
 
 func (x *ListCatalogAppsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_catalog_proto_msgTypes[2]
+	mi := &file_nas_v1_catalog_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -297,7 +481,7 @@ func (x *ListCatalogAppsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCatalogAppsResponse.ProtoReflect.Descriptor instead.
 func (*ListCatalogAppsResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_catalog_proto_rawDescGZIP(), []int{2}
+	return file_nas_v1_catalog_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ListCatalogAppsResponse) GetApps() []*CatalogApp {
@@ -331,7 +515,7 @@ type GetCatalogAppRequest struct {
 
 func (x *GetCatalogAppRequest) Reset() {
 	*x = GetCatalogAppRequest{}
-	mi := &file_nas_v1_catalog_proto_msgTypes[3]
+	mi := &file_nas_v1_catalog_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -343,7 +527,7 @@ func (x *GetCatalogAppRequest) String() string {
 func (*GetCatalogAppRequest) ProtoMessage() {}
 
 func (x *GetCatalogAppRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_catalog_proto_msgTypes[3]
+	mi := &file_nas_v1_catalog_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -356,7 +540,7 @@ func (x *GetCatalogAppRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCatalogAppRequest.ProtoReflect.Descriptor instead.
 func (*GetCatalogAppRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_catalog_proto_rawDescGZIP(), []int{3}
+	return file_nas_v1_catalog_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetCatalogAppRequest) GetAppId() string {
@@ -382,7 +566,7 @@ type SyncCatalogRequest struct {
 
 func (x *SyncCatalogRequest) Reset() {
 	*x = SyncCatalogRequest{}
-	mi := &file_nas_v1_catalog_proto_msgTypes[4]
+	mi := &file_nas_v1_catalog_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -394,7 +578,7 @@ func (x *SyncCatalogRequest) String() string {
 func (*SyncCatalogRequest) ProtoMessage() {}
 
 func (x *SyncCatalogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_catalog_proto_msgTypes[4]
+	mi := &file_nas_v1_catalog_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -407,7 +591,7 @@ func (x *SyncCatalogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncCatalogRequest.ProtoReflect.Descriptor instead.
 func (*SyncCatalogRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_catalog_proto_rawDescGZIP(), []int{4}
+	return file_nas_v1_catalog_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *SyncCatalogRequest) GetForce() bool {
@@ -429,7 +613,7 @@ type SyncCatalogResponse struct {
 
 func (x *SyncCatalogResponse) Reset() {
 	*x = SyncCatalogResponse{}
-	mi := &file_nas_v1_catalog_proto_msgTypes[5]
+	mi := &file_nas_v1_catalog_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -441,7 +625,7 @@ func (x *SyncCatalogResponse) String() string {
 func (*SyncCatalogResponse) ProtoMessage() {}
 
 func (x *SyncCatalogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_catalog_proto_msgTypes[5]
+	mi := &file_nas_v1_catalog_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -454,7 +638,7 @@ func (x *SyncCatalogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncCatalogResponse.ProtoReflect.Descriptor instead.
 func (*SyncCatalogResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_catalog_proto_rawDescGZIP(), []int{5}
+	return file_nas_v1_catalog_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SyncCatalogResponse) GetSuccess() bool {
@@ -489,7 +673,7 @@ var File_nas_v1_catalog_proto protoreflect.FileDescriptor
 
 const file_nas_v1_catalog_proto_rawDesc = "" +
 	"\n" +
-	"\x14nas/v1/catalog.proto\x12\x06nas.v1\"\xd6\x03\n" +
+	"\x14nas/v1/catalog.proto\x12\x06nas.v1\"\xd4\x04\n" +
 	"\n" +
 	"CatalogApp\x12\x15\n" +
 	"\x06app_id\x18\x01 \x01(\tR\x05appId\x12\x14\n" +
@@ -511,7 +695,24 @@ const file_nas_v1_catalog_proto_rawDesc = "" +
 	"\fcompose_yaml\x18\r \x01(\tR\vcomposeYaml\x12!\n" +
 	"\fdefault_port\x18\x0e \x01(\x05R\vdefaultPort\x12\x18\n" +
 	"\asources\x18\x0f \x03(\tR\asources\x12'\n" +
-	"\x0fcontainer_image\x18\x10 \x01(\tR\x0econtainerImage\"\x9c\x01\n" +
+	"\x0fcontainer_image\x18\x10 \x01(\tR\x0econtainerImage\x12E\n" +
+	"\x0fquestion_groups\x18\x11 \x03(\v2\x1c.nas.v1.CatalogQuestionGroupR\x0equestionGroups\x125\n" +
+	"\tquestions\x18\x12 \x03(\v2\x17.nas.v1.CatalogQuestionR\tquestions\"\x89\x02\n" +
+	"\x0fCatalogQuestion\x12\x1a\n" +
+	"\bvariable\x18\x01 \x01(\tR\bvariable\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x12\n" +
+	"\x04type\x18\x04 \x01(\tR\x04type\x12#\n" +
+	"\rdefault_value\x18\x05 \x01(\tR\fdefaultValue\x12\x1a\n" +
+	"\brequired\x18\x06 \x01(\bR\brequired\x12\x14\n" +
+	"\x05group\x18\a \x01(\tR\x05group\x12\x18\n" +
+	"\aoptions\x18\b \x03(\tR\aoptions\x12\x1d\n" +
+	"\n" +
+	"mount_path\x18\t \x01(\tR\tmountPath\"\x83\x01\n" +
+	"\x14CatalogQuestionGroup\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x125\n" +
+	"\tquestions\x18\x03 \x03(\v2\x17.nas.v1.CatalogQuestionR\tquestions\"\x9c\x01\n" +
 	"\x16ListCatalogAppsRequest\x12\x14\n" +
 	"\x05train\x18\x01 \x01(\tR\x05train\x12\x1a\n" +
 	"\bcategory\x18\x02 \x01(\tR\bcategory\x12\x14\n" +
@@ -548,22 +749,27 @@ func file_nas_v1_catalog_proto_rawDescGZIP() []byte {
 	return file_nas_v1_catalog_proto_rawDescData
 }
 
-var file_nas_v1_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_nas_v1_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_nas_v1_catalog_proto_goTypes = []any{
 	(*CatalogApp)(nil),              // 0: nas.v1.CatalogApp
-	(*ListCatalogAppsRequest)(nil),  // 1: nas.v1.ListCatalogAppsRequest
-	(*ListCatalogAppsResponse)(nil), // 2: nas.v1.ListCatalogAppsResponse
-	(*GetCatalogAppRequest)(nil),    // 3: nas.v1.GetCatalogAppRequest
-	(*SyncCatalogRequest)(nil),      // 4: nas.v1.SyncCatalogRequest
-	(*SyncCatalogResponse)(nil),     // 5: nas.v1.SyncCatalogResponse
+	(*CatalogQuestion)(nil),         // 1: nas.v1.CatalogQuestion
+	(*CatalogQuestionGroup)(nil),    // 2: nas.v1.CatalogQuestionGroup
+	(*ListCatalogAppsRequest)(nil),  // 3: nas.v1.ListCatalogAppsRequest
+	(*ListCatalogAppsResponse)(nil), // 4: nas.v1.ListCatalogAppsResponse
+	(*GetCatalogAppRequest)(nil),    // 5: nas.v1.GetCatalogAppRequest
+	(*SyncCatalogRequest)(nil),      // 6: nas.v1.SyncCatalogRequest
+	(*SyncCatalogResponse)(nil),     // 7: nas.v1.SyncCatalogResponse
 }
 var file_nas_v1_catalog_proto_depIdxs = []int32{
-	0, // 0: nas.v1.ListCatalogAppsResponse.apps:type_name -> nas.v1.CatalogApp
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	2, // 0: nas.v1.CatalogApp.question_groups:type_name -> nas.v1.CatalogQuestionGroup
+	1, // 1: nas.v1.CatalogApp.questions:type_name -> nas.v1.CatalogQuestion
+	1, // 2: nas.v1.CatalogQuestionGroup.questions:type_name -> nas.v1.CatalogQuestion
+	0, // 3: nas.v1.ListCatalogAppsResponse.apps:type_name -> nas.v1.CatalogApp
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_nas_v1_catalog_proto_init() }
@@ -577,7 +783,7 @@ func file_nas_v1_catalog_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nas_v1_catalog_proto_rawDesc), len(file_nas_v1_catalog_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

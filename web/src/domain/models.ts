@@ -464,6 +464,24 @@ export interface DirectoryList {
   entries: DirectoryEntry[];
 }
 
+export interface CatalogQuestion {
+  variable: string;
+  label: string;
+  description: string;
+  type: 'string' | 'int' | 'boolean' | 'hostpath' | 'select' | string;
+  defaultValue: string;
+  required: boolean;
+  group: string;
+  options?: string[];
+  mountPath?: string;
+}
+
+export interface CatalogQuestionGroup {
+  name: string;
+  description: string;
+  questions: CatalogQuestion[];
+}
+
 export interface CatalogApp {
   appId: string;
   title: string;
@@ -481,6 +499,8 @@ export interface CatalogApp {
   containerImage?: string;
   composeYaml?: string;
   defaultPort?: number;
+  questionGroups?: CatalogQuestionGroup[];
+  questions?: CatalogQuestion[];
 }
 
 // ---------------------------------------------------------------------------
