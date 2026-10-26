@@ -764,6 +764,49 @@ export function validateSshPublicKey(keyLine: string): boolean {
   );
 }
 
+/**
+ * Returns true if a dataset or any segment in its path starts with a dot.
+ * In UNIX and ZFS conventions, names starting with '.' (e.g. .nas-system, .system, .recycle)
+ * represent hidden internal datasets that should be hidden from views and selection lists.
+ */
+export function isDotDataset(dataset: ZfsDataset | string | null | undefined): boolean {
+  if (!dataset) return false;
+  if (typeof dataset === 'string') {
+    const raw = dataset.trim().replace(/^zfsPools\/[^/]+\/datasets\//, '');
+    const segments = raw.split('/');
+    return segments.some((seg) => seg.startsWith('.'));
+  }
+
+  if (dataset.datasetPath) {
+    const segments = dataset.datasetPath.split('/');
+    if (segments.some((seg) => seg.startsWith('.'))) {
+      return true;
+    }
+  }
+
+  if (dataset.name) {
+    const raw = dataset.name.replace(/^zfsPools\/[^/]+\/datasets\//, '');
+    const segments = raw.split('/');
+    if (segments.some((seg) => seg.startsWith('.'))) {
+      return true;
+    }
+  }
+
+  const rawId = (dataset as { id?: string }).id;
+  if (rawId && rawId.startsWith('.')) {
+    return true;
+  }
+
+  if (dataset.mountpoint) {
+    const segments = dataset.mountpoint.split('/');
+    if (segments.some((seg) => seg.startsWith('.'))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 import {
   mdiCloud,
   mdiFilmstrip,

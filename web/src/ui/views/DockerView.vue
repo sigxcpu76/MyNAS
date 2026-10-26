@@ -33,6 +33,7 @@ import {
   type AppCatalogTemplate,
   type CatalogApp,
   type DockerApp,
+  isDotDataset,
 } from '../../domain/models';
 import ComposeFormEditor from '../components/ComposeFormEditor.vue';
 import CodeMirrorEditor from '../components/CodeMirrorEditor.vue';
@@ -375,12 +376,15 @@ const isSavingDataset = ref(false);
 const availableDatasetNames = computed(() => {
   const mainPool = nasState.systemConfig?.mainPool || (nasState.dockerConfig?.availablePools?.[0] || 'tank');
   if (nasState.dockerConfig?.availableDatasets && nasState.dockerConfig.availableDatasets.length > 0) {
-    return nasState.dockerConfig.availableDatasets.filter(d => d.startsWith(`${mainPool}/`) || d === mainPool);
+    return nasState.dockerConfig.availableDatasets.filter(
+      (d) => (d.startsWith(`${mainPool}/`) || d === mainPool) && !isDotDataset(d)
+    );
   }
   const list: string[] = [];
   const poolDatasets = nasState.datasetsByPool[mainPool];
   if (poolDatasets && poolDatasets.length > 0) {
     for (const d of poolDatasets) {
+      if (isDotDataset(d)) continue;
       const dName = d.name.replace(/^zfsPools\/[^/]+\/datasets\//, '');
       list.push(`${mainPool}/${dName}`);
     }

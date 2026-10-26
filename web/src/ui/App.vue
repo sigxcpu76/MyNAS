@@ -33,6 +33,7 @@ import {
   stopEventStream,
 } from './store';
 import { navigateTo, getPathFromTab } from './router';
+import { isDotDataset } from '../domain/models';
 import LoginModal from './components/LoginModal.vue';
 import SystemPoolModal from './components/SystemPoolModal.vue';
 import ConfirmModal from './components/ConfirmModal.vue';
@@ -72,7 +73,7 @@ watch(
 const totalDatasetsCount = computed(() => {
   let count = 0;
   for (const list of Object.values(nasState.datasetsByPool)) {
-    count += list.length;
+    count += list.filter((d) => !isDotDataset(d)).length;
   }
   return count;
 });

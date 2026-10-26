@@ -21,6 +21,7 @@ import {
   formatBytes,
   gibToBytes,
   type ZfsDataset,
+  isDotDataset,
 } from '../../domain/models';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
@@ -106,6 +107,10 @@ const allDatasets = computed<Array<ZfsDataset & { poolName: string; isPoolRoot: 
     for (const ds of dss) {
       // Do not duplicate the pool root dataset
       if (ds === poolRootDs || ds.datasetPath === shortName || ds.name.endsWith('/datasets/root')) {
+        continue;
+      }
+      // Hide internal system datasets starting with a dot
+      if (isDotDataset(ds)) {
         continue;
       }
       result.push({ ...ds, poolName: shortName, isPoolRoot: false });

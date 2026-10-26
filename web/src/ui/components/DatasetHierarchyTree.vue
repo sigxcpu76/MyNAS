@@ -15,7 +15,7 @@ import {
 } from '@mdi/js';
 import MdiIcon from './MdiIcon.vue';
 import { nasState, refreshAllData, refreshZfsSubresources } from '../store';
-import type { ZfsDataset } from '../../domain/models';
+import { type ZfsDataset, isDotDataset } from '../../domain/models';
 
 export interface DatasetTreeNode {
   id: string;
@@ -145,6 +145,9 @@ const rawDatasetsList = computed(() => {
 
     for (const ds of dss) {
       if (ds === rootDs || ds.datasetPath === shortName || ds.name.endsWith('/datasets/root')) {
+        continue;
+      }
+      if (isDotDataset(ds)) {
         continue;
       }
       // Normalize mountpoint if needed

@@ -18,6 +18,7 @@ import {
 } from '../../domain/composeModel';
 import { nasState, notify } from '../store';
 import { generateNanosecondId } from '../../domain/id';
+import { isDotDataset } from '../../domain/models';
 import CodeMirrorEditor from './CodeMirrorEditor.vue';
 import MdiIcon from './MdiIcon.vue';
 import PathSelector from './PathSelector.vue';
@@ -148,6 +149,7 @@ const zfsDatasetPaths = computed(() => {
   for (const [pool, datasets] of Object.entries(nasState.datasetsByPool || {})) {
     const cleanPool = pool.replace(/^zfsPools\//, '');
     for (const d of datasets) {
+      if (isDotDataset(d)) continue;
       if (d.mountpoint && d.mountpoint !== 'none' && d.mountpoint !== 'legacy') {
         paths.push(d.mountpoint);
       } else {

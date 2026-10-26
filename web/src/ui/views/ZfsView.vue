@@ -39,6 +39,7 @@ import {
   type ZfsPool,
   type ZfsVdev,
   type ZfsVolume,
+  isDotDataset,
 } from '../../domain/models';
 import MdiIcon from '../components/MdiIcon.vue';
 import ZfsPoolGauge from '../components/ZfsPoolGauge.vue';
@@ -345,9 +346,10 @@ const activePool = computed(() =>
   nasState.pools.find((p) => p.name === nasState.selectedPoolName) || nasState.pools[0] || null
 );
 
-const activeDatasets = computed(() =>
-  activePool.value ? nasState.datasetsByPool[activePool.value.name] || [] : []
-);
+const activeDatasets = computed(() => {
+  const list = activePool.value ? nasState.datasetsByPool[activePool.value.name] || [] : [];
+  return list.filter((d) => !isDotDataset(d));
+});
 
 const activeVolumes = computed(() =>
   activePool.value ? nasState.volumesByPool[activePool.value.name] || [] : []

@@ -5,6 +5,7 @@
 
 import { reactive } from 'vue';
 import { aipClient, services } from '../container';
+import { isDotDataset } from '../domain/models';
 import type {
   CifsShare,
   Disk,
@@ -199,7 +200,7 @@ export async function refreshZfsSubresources(poolName: string): Promise<void> {
     services.zfs.listDatasets(poolName).catch(() => []),
     services.zfs.listVolumes(poolName).catch(() => []),
   ]);
-  nasState.datasetsByPool[poolName] = datasets;
+  nasState.datasetsByPool[poolName] = datasets.filter((d) => !isDotDataset(d));
   nasState.volumesByPool[poolName] = volumes;
 }
 
