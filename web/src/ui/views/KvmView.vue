@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { services } from '../../container';
 import {
   formatBytes,
+  type StorageImage,
   type VirtualMachine,
   type VirtualMachineCloudInit,
   type VirtualMachineConsoleSession,
@@ -10,7 +11,7 @@ import {
   type VirtualMachineNetworkInterface,
   type VirtualMachineSnapshot,
 } from '../../domain/models';
-import { confirmModal, nasState, notify } from '../store';
+import { confirmModal, nasState, notify, refreshIsos as storeRefreshIsos } from '../store';
 import NoVncModal from '../components/NoVncModal.vue';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
@@ -21,6 +22,7 @@ import {
   mdiConsole,
   mdiContentCopy,
   mdiDatabase,
+  mdiDisc,
   mdiEye,
   mdiHarddisk,
   mdiInformationOutline,
@@ -37,6 +39,7 @@ import {
   mdiSpeedometer,
   mdiStop,
   mdiTrashCan,
+  mdiUpload,
 } from '@mdi/js';
 
 // State
@@ -126,6 +129,7 @@ const wizardForm = reactive({
   biosType: 'ovmf',
   tpmVersion: 'v2.0',
   secureBoot: true,
+  bootIso: '',
 
   // Step 3: Disks
   diskBus: 'scsi',
@@ -217,6 +221,7 @@ function openCreateWizard() {
   wizardForm.biosType = 'ovmf';
   wizardForm.tpmVersion = 'v2.0';
   wizardForm.secureBoot = true;
+  wizardForm.bootIso = '';
   wizardForm.diskBus = 'scsi';
   wizardForm.diskPath = suggestedDiskPath.value;
   wizardForm.diskSizeGib = 32;
@@ -258,7 +263,7 @@ function openAddDiskModal() {
 
 // Lifecycle
 onMounted(async () => {
-  await refreshVms();
+  await Promise.all([refreshVms(), refreshIsos()]);
 });
 
 async function refreshVms() {
@@ -439,6 +444,64 @@ async function handleEjectMedia() {
   }
 }
 
+// ISO Repository Actions
+const isoFileInput = ref<HTMLInputElement | null>(null);
+const isUploadingIso = ref(false);
+
+function triggerIsoUpload() {
+  isoFileInput.value?.click();
+}
+
+async function refreshIsos() {
+  try {
+    await storeRefreshIsos();
+  } catch (err: any) {
+    console.error('Failed to refresh ISOs:', err);
+  }
+}
+
+async function handleUploadIso(e: Event) {
+  const target = e.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+
+  isUploadingIso.value = true;
+  try {
+    const uploaded = await services.kvm.uploadIso(file);
+    notify('success', `Uploaded ISO ${uploaded.name} (${uploaded.sizeFormatted})`);
+    await refreshIsos();
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to upload ISO');
+  } finally {
+    isUploadingIso.value = false;
+    if (isoFileInput.value) isoFileInput.value.value = '';
+  }
+}
+
+async function handleDeleteIso(iso: StorageImage) {
+  const confirmed = await confirmModal({
+    title: 'Delete ISO Image',
+    tone: 'danger',
+    message: `Are you sure you want to delete ISO "${iso.name}"?`,
+    details: `This will permanently remove ${iso.path} (${iso.sizeFormatted}) from the main pool.`,
+    confirmText: 'Delete ISO',
+  });
+  if (!confirmed) return;
+
+  try {
+    await services.kvm.deleteIso(iso.name);
+    notify('info', `Deleted ISO ${iso.name}`);
+    await refreshIsos();
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to delete ISO');
+  }
+}
+
+function copyIsoPath(path: string) {
+  navigator.clipboard.writeText(path);
+  notify('info', `Copied path to clipboard: ${path}`);
+}
+
 // Add Hardware
 async function handleAddDisk() {
   if (!inspectingVm.value) return;
@@ -610,6 +673,13 @@ async function handleWizardSubmit() {
     });
 
     notify('success', `Successfully deployed Proxmox-grade VM ${created.vmName}`);
+    if (wizardForm.bootIso) {
+      try {
+        await services.kvm.attachMedia(created.name, wizardForm.bootIso);
+      } catch (mediaErr: any) {
+        console.warn('Failed to attach boot media:', mediaErr);
+      }
+    }
     showCreateWizard.value = false;
     wizardStep.value = 1;
     await refreshVms();
@@ -931,6 +1001,112 @@ async function handleWizardSubmit() {
                     class="btn btn-xs btn-danger"
                     title="Delete VM"
                     @click="handleDeleteVm(vm)"
+                  >
+                    <MdiIcon :path="mdiTrashCan" size="13" />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ======================================================================= -->
+    <!-- ISOS REPOSITORY CARD -->
+    <!-- ======================================================================= -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <h2 class="card-title" style="font-size: 17px; display: flex; align-items: center; gap: 8px">
+            <MdiIcon :path="mdiDisc" size="20" style="color: var(--accent-primary)" />
+            ISOs Repository
+          </h2>
+          <p class="card-subtitle">
+            Bootable installer ISO and CD/DVD images stored on main pool dataset
+            <code class="mono">/nas/{{ mainPool }}/isos</code>.
+          </p>
+        </div>
+
+        <div style="display: flex; gap: 10px; align-items: center">
+          <input
+            ref="isoFileInput"
+            type="file"
+            accept=".iso,.img"
+            style="display: none"
+            @change="handleUploadIso"
+          />
+          <button class="btn btn-sm" @click="refreshIsos">
+            <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" /> Refresh
+          </button>
+          <button
+            class="btn btn-sm btn-primary"
+            :disabled="isUploadingIso"
+            @click="triggerIsoUpload"
+          >
+            <MdiIcon :path="mdiUpload" size="14" style="margin-right: 4px" />
+            {{ isUploadingIso ? 'Uploading ISO...' : 'Upload ISO' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- ISO Table -->
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>ISO Image Name</th>
+              <th>File Size</th>
+              <th>Absolute Path</th>
+              <th>Last Modified</th>
+              <th style="text-align: right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Skeleton Placeholders when Loading -->
+            <template v-if="nasState.loading && nasState.isos.length === 0">
+              <tr v-for="r in 2" :key="r">
+                <td><SkeletonBox width="160px" height="15px" /></td>
+                <td><SkeletonBox width="70px" height="15px" /></td>
+                <td><SkeletonBox width="260px" height="15px" /></td>
+                <td><SkeletonBox width="120px" height="15px" /></td>
+                <td style="text-align: right"><SkeletonBox width="60px" height="24px" rounded="4px" /></td>
+              </tr>
+            </template>
+
+            <tr v-else-if="nasState.isos.length === 0">
+              <td colspan="5" style="text-align: center; color: var(--text-secondary); padding: 36px">
+                No ISO images found in repository. Click <strong>"Upload ISO"</strong> to upload an installer image (.iso, .img).
+              </td>
+            </tr>
+
+            <tr v-for="iso in nasState.isos" :key="iso.name">
+              <td style="font-weight: 600">
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <MdiIcon :path="mdiDisc" size="16" style="color: var(--accent-primary)" />
+                  <span class="mono">{{ iso.name }}</span>
+                </div>
+              </td>
+              <td class="mono">{{ iso.sizeFormatted }}</td>
+              <td class="mono" style="font-size: 11px; color: var(--text-secondary)">
+                {{ iso.path }}
+              </td>
+              <td class="mono" style="font-size: 11px; color: var(--text-muted)">
+                {{ iso.modTime ? new Date(iso.modTime).toLocaleString() : '—' }}
+              </td>
+              <td style="text-align: right">
+                <div style="display: inline-flex; gap: 6px">
+                  <button
+                    class="btn btn-xs"
+                    title="Copy absolute path"
+                    @click="copyIsoPath(iso.path)"
+                  >
+                    <MdiIcon :path="mdiContentCopy" size="13" />
+                  </button>
+                  <button
+                    class="btn btn-xs btn-danger"
+                    title="Delete ISO"
+                    @click="handleDeleteIso(iso)"
                   >
                     <MdiIcon :path="mdiTrashCan" size="13" />
                   </button>
@@ -1392,13 +1568,25 @@ async function handleWizardSubmit() {
           </button>
         </div>
         <form @submit.prevent="handleAttachMedia" style="padding: 16px; display: flex; flex-direction: column; gap: 14px">
+          <div v-if="nasState.isos.length > 0" class="form-group">
+            <label>Select from ISOs Repository</label>
+            <select v-model="mediaForm.isoPath" class="select mono">
+              <option value="">-- Choose an ISO from repository --</option>
+              <option v-for="iso in nasState.isos" :key="iso.path" :value="iso.path">
+                {{ iso.name }} ({{ iso.sizeFormatted }})
+              </option>
+            </select>
+          </div>
           <div class="form-group">
             <label>ISO Image Path</label>
             <input v-model="mediaForm.isoPath" class="input mono" placeholder="/tank/isos/debian-12.iso" required />
+            <small style="color: var(--text-muted); font-size: 11px">
+              Select an ISO from repository above or enter custom path on host/pool.
+            </small>
           </div>
           <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px">
             <button type="button" class="btn" @click="showMediaModal = false">Cancel</button>
-            <button type="submit" class="btn btn-primary">Mount Media</button>
+            <button type="submit" class="btn btn-primary" :disabled="!mediaForm.isoPath.trim()">Mount Media</button>
           </div>
         </form>
       </div>
@@ -1649,6 +1837,18 @@ async function handleWizardSubmit() {
                 <option :value="true">Enabled</option>
                 <option :value="false">Disabled</option>
               </select>
+            </div>
+            <div class="form-group" style="grid-column: span 2">
+              <label>Boot / Installation Media (ISO Image)</label>
+              <select v-model="wizardForm.bootIso" class="select mono">
+                <option value="">-- No Boot Media / PXE Network Boot --</option>
+                <option v-for="iso in nasState.isos" :key="iso.path" :value="iso.path">
+                  {{ iso.name }} ({{ iso.sizeFormatted }})
+                </option>
+              </select>
+              <small style="color: var(--text-muted); font-size: 11px">
+                Select bootable ISO from repository (<code class="mono">/nas/{{ mainPool }}/isos</code>).
+              </small>
             </div>
           </div>
 

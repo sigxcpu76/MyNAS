@@ -133,6 +133,29 @@ export class AipClient {
     await this.request<unknown>('DELETE', this.buildUrl(resourcePath, query));
   }
 
+  async postMultipart<T>(resourcePath: string, formData: FormData): Promise<T> {
+    const url = this.buildUrl(resourcePath);
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+    };
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+    const response = await this.fetchImpl(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    if (!response.ok) {
+      const errPayload = await response.json().catch(() => ({}));
+      throw new AipHttpError(
+        response.status,
+        errPayload.message || errPayload.error || 'Upload failed'
+      );
+    }
+    return response.json();
+  }
+
   /**
    * Executes a Google AIP-136 custom method: `POST /v1/{resource}:{customVerb}`
    */

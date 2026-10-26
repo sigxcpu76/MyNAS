@@ -1,11 +1,19 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
-import { mdiArchiveOutline, mdiDatabaseCheck } from '@mdi/js';
+import { onMounted, reactive, ref } from 'vue';
+import {
+  mdiArchiveOutline,
+  mdiContentCopy,
+  mdiDatabaseCheck,
+  mdiRefresh,
+  mdiTrashCan,
+  mdiUpload,
+} from '@mdi/js';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import { services } from '../../container';
-import { confirmModal, nasState, notify } from '../store';
+import { confirmModal, nasState, notify, refreshLxcTemplates as storeRefreshTemplates } from '../store';
 import { generateNanosecondId, toZfsSafeSlug } from '../../domain/id';
+import { type StorageImage } from '../../domain/models';
 
 const showCreate = ref(false);
 const form = reactive({
@@ -51,6 +59,77 @@ function toggleCreate() {
 
 async function refreshLxc() {
   nasState.lxcContainers = await services.lxc.listContainers();
+}
+
+onMounted(async () => {
+  await Promise.all([refreshLxc(), refreshTemplates()]);
+});
+
+// Templates Repository Actions
+const templateFileInput = ref<HTMLInputElement | null>(null);
+const isUploadingTemplate = ref(false);
+
+function triggerTemplateUpload() {
+  templateFileInput.value?.click();
+}
+
+async function refreshTemplates() {
+  try {
+    await storeRefreshTemplates();
+  } catch (err: any) {
+    console.error('Failed to refresh templates:', err);
+  }
+}
+
+async function handleUploadTemplate(e: Event) {
+  const target = e.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+
+  isUploadingTemplate.value = true;
+  try {
+    const uploaded = await services.lxc.uploadTemplate(file);
+    notify('success', `Uploaded template ${uploaded.name} (${uploaded.sizeFormatted})`);
+    await refreshTemplates();
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to upload LXC template');
+  } finally {
+    isUploadingTemplate.value = false;
+    if (templateFileInput.value) templateFileInput.value.value = '';
+  }
+}
+
+async function handleDeleteTemplate(tmpl: StorageImage) {
+  const confirmed = await confirmModal({
+    title: 'Delete LXC Template',
+    tone: 'danger',
+    message: `Are you sure you want to delete template archive "${tmpl.name}"?`,
+    details: `This will permanently remove ${tmpl.path} (${tmpl.sizeFormatted}) from the main pool.`,
+    confirmText: 'Delete Template',
+  });
+  if (!confirmed) return;
+
+  try {
+    await services.lxc.deleteTemplate(tmpl.name);
+    notify('info', `Deleted LXC template ${tmpl.name}`);
+    await refreshTemplates();
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to delete LXC template');
+  }
+}
+
+function useTemplateForContainer(tmpl: StorageImage) {
+  form.templateArchive = tmpl.path;
+  if (!showCreate.value) {
+    toggleCreate();
+    form.templateArchive = tmpl.path;
+  }
+  notify('info', `Selected template: ${tmpl.name}`);
+}
+
+function copyTemplatePath(path: string) {
+  navigator.clipboard.writeText(path);
+  notify('info', `Copied path to clipboard: ${path}`);
 }
 
 async function handleCreate() {
@@ -190,14 +269,26 @@ async function handleDelete(name: string) {
           <input v-model.number="form.memoryLimitMib" type="number" min="128" step="128" class="input mono" />
         </div>
         <div class="form-group" style="grid-column: span 2">
-          <label>Template Archive (.tar.gz / .tar.xz) — Any Storage Pool (Optional)</label>
+          <label>Template Archive (.tar.gz / .tar.xz / .tar.zst) (Optional)</label>
+          <div v-if="nasState.lxcTemplates.length > 0" style="margin-bottom: 6px">
+            <select
+              class="select mono"
+              :value="form.templateArchive"
+              @change="(e) => form.templateArchive = (e.target as HTMLSelectElement).value"
+            >
+              <option value="">-- Select from Templates Repository --</option>
+              <option v-for="tmpl in nasState.lxcTemplates" :key="tmpl.path" :value="tmpl.path">
+                {{ tmpl.name }} ({{ tmpl.sizeFormatted }})
+              </option>
+            </select>
+          </div>
           <input
             v-model="form.templateArchive"
             class="input mono"
-            placeholder="/fastpool/archives/ubuntu-24.04.tar.xz or /tank/templates/alpine.tar.gz"
+            placeholder="/nas/tank/lxc-templates/debian-12.tar.xz or custom archive path"
           />
           <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px">
-            Template archives may reside on the main pool or any secondary pool.
+            Select a template from main pool repository (<code class="mono">/nas/{{ nasState.systemConfig?.mainPool || 'tank' }}/lxc-templates</code>) or specify custom archive path.
           </div>
         </div>
       </div>
@@ -332,6 +423,117 @@ async function handleDelete(name: string) {
                 </button>
                 <button class="btn btn-danger btn-sm" @click="handleDelete(lx.name)">
                   Del
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- LXC Templates Repository Card -->
+  <div class="card" style="margin-top: 20px">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title" style="font-size: 17px; display: flex; align-items: center; gap: 8px">
+          <MdiIcon :path="mdiArchiveOutline" size="20" style="color: var(--accent-primary)" />
+          LXC Templates Repository
+        </h2>
+        <p class="card-subtitle">
+          OS rootfs template archives stored on main pool dataset
+          <code class="mono">/nas/{{ nasState.systemConfig?.mainPool || 'tank' }}/lxc-templates</code>.
+        </p>
+      </div>
+
+      <div style="display: flex; gap: 10px; align-items: center">
+        <input
+          ref="templateFileInput"
+          type="file"
+          accept=".tar.gz,.tar.xz,.tar.zst,.tar,.tgz"
+          style="display: none"
+          @change="handleUploadTemplate"
+        />
+        <button class="btn btn-sm" @click="refreshTemplates">
+          <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" /> Refresh
+        </button>
+        <button
+          class="btn btn-sm btn-primary"
+          :disabled="isUploadingTemplate"
+          @click="triggerTemplateUpload"
+        >
+          <MdiIcon :path="mdiUpload" size="14" style="margin-right: 4px" />
+          {{ isUploadingTemplate ? 'Uploading Template...' : 'Upload Template' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Templates Table -->
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Template Archive Name</th>
+            <th>File Size</th>
+            <th>Absolute Path</th>
+            <th>Last Modified</th>
+            <th style="text-align: right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Skeleton Placeholders when Loading -->
+          <template v-if="nasState.loading && nasState.lxcTemplates.length === 0">
+            <tr v-for="r in 2" :key="r">
+              <td><SkeletonBox width="160px" height="15px" /></td>
+              <td><SkeletonBox width="70px" height="15px" /></td>
+              <td><SkeletonBox width="260px" height="15px" /></td>
+              <td><SkeletonBox width="120px" height="15px" /></td>
+              <td style="text-align: right"><SkeletonBox width="60px" height="24px" rounded="4px" /></td>
+            </tr>
+          </template>
+
+          <tr v-else-if="nasState.lxcTemplates.length === 0">
+            <td colspan="5" style="text-align: center; color: var(--text-secondary); padding: 36px">
+              No template archives found in repository. Click <strong>"Upload Template"</strong> to upload a rootfs archive (.tar.gz, .tar.xz, .tar.zst).
+            </td>
+          </tr>
+
+          <tr v-for="tmpl in nasState.lxcTemplates" :key="tmpl.name">
+            <td style="font-weight: 600">
+              <div style="display: flex; align-items: center; gap: 8px">
+                <MdiIcon :path="mdiArchiveOutline" size="16" style="color: var(--accent-primary)" />
+                <span class="mono">{{ tmpl.name }}</span>
+              </div>
+            </td>
+            <td class="mono">{{ tmpl.sizeFormatted }}</td>
+            <td class="mono" style="font-size: 11px; color: var(--text-secondary)">
+              {{ tmpl.path }}
+            </td>
+            <td class="mono" style="font-size: 11px; color: var(--text-muted)">
+              {{ tmpl.modTime ? new Date(tmpl.modTime).toLocaleString() : '—' }}
+            </td>
+            <td style="text-align: right">
+              <div style="display: inline-flex; gap: 6px">
+                <button
+                  class="btn btn-xs btn-primary"
+                  title="Use template to create container"
+                  @click="useTemplateForContainer(tmpl)"
+                >
+                  Use Template
+                </button>
+                <button
+                  class="btn btn-xs"
+                  title="Copy absolute path"
+                  @click="copyTemplatePath(tmpl.path)"
+                >
+                  <MdiIcon :path="mdiContentCopy" size="13" />
+                </button>
+                <button
+                  class="btn btn-xs btn-danger"
+                  title="Delete Template"
+                  @click="handleDeleteTemplate(tmpl)"
+                >
+                  <MdiIcon :path="mdiTrashCan" size="13" />
                 </button>
               </div>
             </td>

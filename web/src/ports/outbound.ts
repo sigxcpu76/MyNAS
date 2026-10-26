@@ -18,6 +18,7 @@ import type {
   LxcContainer,
   Prerequisite,
   PrerequisiteSummary,
+  StorageImage,
   SystemConfig,
   SystemTelemetry,
   User,
@@ -105,6 +106,9 @@ export interface KvmPort {
   rollbackSnapshot(snapName: string): Promise<VirtualMachine>;
   deleteSnapshot(snapName: string): Promise<void>;
   openVirtualMachineConsole(name: string): Promise<VirtualMachineConsoleSession>;
+  listIsos(): Promise<StorageImage[]>;
+  uploadIso(file: File): Promise<StorageImage>;
+  deleteIso(filename: string): Promise<void>;
 }
 
 export interface DockerPort {
@@ -144,6 +148,9 @@ export interface LxcPort {
   startContainer(name: string): Promise<LxcContainer>;
   stopContainer(name: string): Promise<LxcContainer>;
   freezeContainer(name: string): Promise<LxcContainer>;
+  listTemplates(): Promise<StorageImage[]>;
+  uploadTemplate(file: File): Promise<StorageImage>;
+  deleteTemplate(filename: string): Promise<void>;
 }
 
 export interface SharePort {

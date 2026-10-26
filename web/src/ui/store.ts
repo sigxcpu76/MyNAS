@@ -15,6 +15,7 @@ import type {
   Group,
   LxcContainer,
   Prerequisite,
+  StorageImage,
   SystemConfig,
   SystemTelemetry,
   User,
@@ -127,6 +128,8 @@ export const nasState = reactive({
   selectedPoolName: (cached?.pools && cached.pools.length > 0 ? cached.pools[0].name : '') as string,
 
   vms: [] as VirtualMachine[],
+  isos: [] as StorageImage[],
+  lxcTemplates: [] as StorageImage[],
   dockerContainers: [] as DockerContainer[],
   dockerApps: cached?.dockerApps || [],
   dockerConfig: null as DockerConfig | null,
@@ -192,6 +195,24 @@ export function notify(type: 'success' | 'error' | 'info', message: string): voi
     const idx = nasState.toasts.findIndex((t) => t.id === id);
     if (idx !== -1) nasState.toasts.splice(idx, 1);
   }, 4200);
+}
+
+export async function refreshIsos(): Promise<void> {
+  if (!getModuleAvailability('kvm').enabled) return;
+  try {
+    nasState.isos = await services.kvm.listIsos();
+  } catch (err) {
+    console.warn('Failed to refresh ISOs repository:', err);
+  }
+}
+
+export async function refreshLxcTemplates(): Promise<void> {
+  if (!getModuleAvailability('lxc').enabled) return;
+  try {
+    nasState.lxcTemplates = await services.lxc.listTemplates();
+  } catch (err) {
+    console.warn('Failed to refresh LXC templates repository:', err);
+  }
 }
 
 export async function refreshZfsSubresources(poolName: string): Promise<void> {
@@ -263,6 +284,13 @@ export async function refreshAllData(): Promise<void> {
     nasState.webdavShares = webdavShares;
     nasState.users = users;
     nasState.groups = groups;
+
+    if (kvmOk) {
+      refreshIsos().catch(() => {});
+    }
+    if (lxcOk) {
+      refreshLxcTemplates().catch(() => {});
+    }
 
     if (pools.length > 0 && zfsOk) {
       if (

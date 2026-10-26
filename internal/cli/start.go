@@ -257,7 +257,13 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 		return err
 	}
 
-	gateway, err := httpadapter.NewGateway(ctx, nasGRPC, kvmSvc, dockerSvc, webdavAdapter, uiFS, eventBus)
+	storageRepoSvc := application.NewStorageRepoService(zfsAdapter, "")
+	if activeMainPool != "" {
+		storageRepoSvc.SetMainPool(activeMainPool)
+		_ = storageRepoSvc.EnsureRepositories(ctx)
+	}
+
+	gateway, err := httpadapter.NewGateway(ctx, nasGRPC, kvmSvc, dockerSvc, storageRepoSvc, webdavAdapter, uiFS, eventBus)
 	if err != nil {
 		return err
 	}

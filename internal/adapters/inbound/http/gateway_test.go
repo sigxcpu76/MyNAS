@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -243,7 +244,8 @@ func setupTestServer(t *testing.T) *httptest.Server {
 		t.Fatalf("failed to load embedded UI FS: %v", err)
 	}
 	eventBus := application.NewEventBus()
-	gw, err := httpadapter.NewGateway(ctx, grpcSrv, kvmSvc, dockerSvc, webdavAdapter, uiFS, eventBus)
+	storageRepoSvc := application.NewStorageRepoService(nil, t.TempDir())
+	gw, err := httpadapter.NewGateway(ctx, grpcSrv, kvmSvc, dockerSvc, storageRepoSvc, webdavAdapter, uiFS, eventBus)
 	if err != nil {
 		t.Fatalf("failed to create gateway: %v", err)
 	}
@@ -423,4 +425,101 @@ func TestGoogleAIPGatewayEndToEnd(t *testing.T) {
 		t.Fatalf("GET /v1/filesystem:directories failed: status=%v err=%v", fsResp.StatusCode, err)
 	}
 	_ = fsResp.Body.Close()
+
+	// 9. ISOs Repository API
+	isoListResp, err := client.Get(srv.URL + "/v1/storage/isos")
+	if err != nil || isoListResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /v1/storage/isos failed: status=%v err=%v", isoListResp.StatusCode, err)
+	}
+	_ = isoListResp.Body.Close()
+
+	// Upload ISO
+	var isoBody bytes.Buffer
+	isoWriter := multipart.NewWriter(&isoBody)
+	part, err := isoWriter.CreateFormFile("file", "debian-12.8.0.iso")
+	if err != nil {
+		t.Fatalf("failed to create form file: %v", err)
+	}
+	_, _ = part.Write([]byte("fake-iso-bytes-data"))
+	_ = isoWriter.Close()
+
+	uploadReq, err := http.NewRequest(http.MethodPost, srv.URL+"/v1/storage/isos/upload", &isoBody)
+	if err != nil {
+		t.Fatalf("failed to create upload request: %v", err)
+	}
+	uploadReq.Header.Set("Content-Type", isoWriter.FormDataContentType())
+	uploadResp, err := client.Do(uploadReq)
+	if err != nil || uploadResp.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /v1/storage/isos/upload failed: status=%v err=%v", uploadResp.StatusCode, err)
+	}
+	_ = uploadResp.Body.Close()
+
+	// Verify listed
+	isoListResp2, err := client.Get(srv.URL + "/v1/storage/isos")
+	if err != nil || isoListResp2.StatusCode != http.StatusOK {
+		t.Fatalf("GET /v1/storage/isos after upload failed: status=%v err=%v", isoListResp2.StatusCode, err)
+	}
+	var isoListResult struct {
+		ISOs []domain.StorageImage `json:"isos"`
+	}
+	_ = json.NewDecoder(isoListResp2.Body).Decode(&isoListResult)
+	_ = isoListResp2.Body.Close()
+	if len(isoListResult.ISOs) == 0 || isoListResult.ISOs[0].Name != "debian-12.8.0.iso" {
+		t.Fatalf("expected debian-12.8.0.iso in list, got %+v", isoListResult.ISOs)
+	}
+
+	// Delete ISO
+	delReq, _ := http.NewRequest(http.MethodDelete, srv.URL+"/v1/storage/isos?filename=debian-12.8.0.iso", nil)
+	delResp, err := client.Do(delReq)
+	if err != nil || delResp.StatusCode != http.StatusOK {
+		t.Fatalf("DELETE /v1/storage/isos failed: status=%v err=%v", delResp.StatusCode, err)
+	}
+	_ = delResp.Body.Close()
+
+	// 10. LXC Templates Repository API
+	tmplListResp, err := client.Get(srv.URL + "/v1/storage/lxc-templates")
+	if err != nil || tmplListResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /v1/storage/lxc-templates failed: status=%v err=%v", tmplListResp.StatusCode, err)
+	}
+	_ = tmplListResp.Body.Close()
+
+	// Upload LXC Template
+	var tmplBody bytes.Buffer
+	tmplWriter := multipart.NewWriter(&tmplBody)
+	tPart, err := tmplWriter.CreateFormFile("file", "ubuntu-24.04-rootfs.tar.xz")
+	if err != nil {
+		t.Fatalf("failed to create tmpl form file: %v", err)
+	}
+	_, _ = tPart.Write([]byte("fake-tar-xz-bytes-data"))
+	_ = tmplWriter.Close()
+
+	tmplUpReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/storage/lxc-templates/upload", &tmplBody)
+	tmplUpReq.Header.Set("Content-Type", tmplWriter.FormDataContentType())
+	tmplUpResp, err := client.Do(tmplUpReq)
+	if err != nil || tmplUpResp.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /v1/storage/lxc-templates/upload failed: status=%v err=%v", tmplUpResp.StatusCode, err)
+	}
+	_ = tmplUpResp.Body.Close()
+
+	// Verify template listed
+	tmplListResp2, err := client.Get(srv.URL + "/v1/storage/lxc-templates")
+	if err != nil || tmplListResp2.StatusCode != http.StatusOK {
+		t.Fatalf("GET /v1/storage/lxc-templates after upload failed: status=%v err=%v", tmplListResp2.StatusCode, err)
+	}
+	var tmplListResult struct {
+		Templates []domain.StorageImage `json:"templates"`
+	}
+	_ = json.NewDecoder(tmplListResp2.Body).Decode(&tmplListResult)
+	_ = tmplListResp2.Body.Close()
+	if len(tmplListResult.Templates) == 0 || tmplListResult.Templates[0].Name != "ubuntu-24.04-rootfs.tar.xz" {
+		t.Fatalf("expected ubuntu-24.04-rootfs.tar.xz in list, got %+v", tmplListResult.Templates)
+	}
+
+	// Delete LXC Template
+	tDelReq, _ := http.NewRequest(http.MethodDelete, srv.URL+"/v1/storage/lxc-templates?filename=ubuntu-24.04-rootfs.tar.xz", nil)
+	tDelResp, err := client.Do(tDelReq)
+	if err != nil || tDelResp.StatusCode != http.StatusOK {
+		t.Fatalf("DELETE /v1/storage/lxc-templates failed: status=%v err=%v", tDelResp.StatusCode, err)
+	}
+	_ = tDelResp.Body.Close()
 }

@@ -283,6 +283,14 @@ export interface ZfsVolume {
   dedup?: boolean;
 }
 
+export interface StorageImage {
+  name: string;
+  path: string;
+  sizeBytes: number;
+  sizeFormatted: string;
+  modTime: string;
+}
+
 // ---------------------------------------------------------------------------
 // KVM Virtual Machines (`virtualMachines/{virtual_machine}`)
 // ---------------------------------------------------------------------------

@@ -26,6 +26,7 @@ import type {
   Prerequisite,
   PrerequisiteSummary,
   SmartParameter,
+  StorageImage,
   SystemConfig,
   SystemTelemetry,
   User,
@@ -1184,6 +1185,36 @@ export class HttpKvmAdapter implements KvmPort {
       expiresAt: raw.expiresAt ?? raw.expires_at ?? '',
     };
   }
+
+  async listIsos(): Promise<StorageImage[]> {
+    const res = await this.client.get<any>('storage/isos');
+    const items = res?.isos || [];
+    return items.map((raw: any) => ({
+      name: raw.name ?? '',
+      path: raw.path ?? '',
+      sizeBytes: Number(raw.sizeBytes ?? raw.size_bytes ?? 0),
+      sizeFormatted: raw.sizeFormatted ?? raw.size_formatted ?? '',
+      modTime: raw.modTime ?? raw.mod_time ?? '',
+    }));
+  }
+
+  async uploadIso(file: File): Promise<StorageImage> {
+    const fd = new FormData();
+    fd.append('file', file, file.name);
+    const res = await this.client.postMultipart<any>('storage/isos/upload', fd);
+    const raw = res?.iso ?? {};
+    return {
+      name: raw.name ?? '',
+      path: raw.path ?? '',
+      sizeBytes: Number(raw.sizeBytes ?? raw.size_bytes ?? 0),
+      sizeFormatted: raw.sizeFormatted ?? raw.size_formatted ?? '',
+      modTime: raw.modTime ?? raw.mod_time ?? '',
+    };
+  }
+
+  async deleteIso(filename: string): Promise<void> {
+    await this.client.delete('storage/isos', { filename });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1494,6 +1525,36 @@ export class HttpLxcAdapter implements LxcPort {
   async freezeContainer(name: string): Promise<LxcContainer> {
     const raw = await this.client.customMethod<any>(name, 'freeze', {});
     return mapLxcContainer(raw);
+  }
+
+  async listTemplates(): Promise<StorageImage[]> {
+    const res = await this.client.get<any>('storage/lxc-templates');
+    const items = res?.templates || [];
+    return items.map((raw: any) => ({
+      name: raw.name ?? '',
+      path: raw.path ?? '',
+      sizeBytes: Number(raw.sizeBytes ?? raw.size_bytes ?? 0),
+      sizeFormatted: raw.sizeFormatted ?? raw.size_formatted ?? '',
+      modTime: raw.modTime ?? raw.mod_time ?? '',
+    }));
+  }
+
+  async uploadTemplate(file: File): Promise<StorageImage> {
+    const fd = new FormData();
+    fd.append('file', file, file.name);
+    const res = await this.client.postMultipart<any>('storage/lxc-templates/upload', fd);
+    const raw = res?.template ?? {};
+    return {
+      name: raw.name ?? '',
+      path: raw.path ?? '',
+      sizeBytes: Number(raw.sizeBytes ?? raw.size_bytes ?? 0),
+      sizeFormatted: raw.sizeFormatted ?? raw.size_formatted ?? '',
+      modTime: raw.modTime ?? raw.mod_time ?? '',
+    };
+  }
+
+  async deleteTemplate(filename: string): Promise<void> {
+    await this.client.delete('storage/lxc-templates', { filename });
   }
 }
 

@@ -171,6 +171,32 @@ func (a *Adapter) SelectMainPool(ctx context.Context, poolName string, autoImpor
 		_ = os.MkdirAll(dir, 0755)
 	}
 
+	// Automatically ensure ISOs repository dataset on main pool
+	isosPath := fmt.Sprintf("%s/isos", cleanPool)
+	isosMount := fmt.Sprintf("%s/isos", strings.TrimRight(poolMount, "/"))
+	if _, err := a.zfsPort.GetDataset(ctx, cleanPool, "isos"); err != nil {
+		_, _ = a.zfsPort.CreateDataset(ctx, domain.ZfsDataset{
+			PoolID:      cleanPool,
+			ID:          "isos",
+			DatasetPath: isosPath,
+			Mountpoint:  isosMount,
+		})
+	}
+	_ = os.MkdirAll(isosMount, 0755)
+
+	// Automatically ensure LXC templates repository dataset on main pool
+	tmplPath := fmt.Sprintf("%s/lxc-templates", cleanPool)
+	tmplMount := fmt.Sprintf("%s/lxc-templates", strings.TrimRight(poolMount, "/"))
+	if _, err := a.zfsPort.GetDataset(ctx, cleanPool, "lxc-templates"); err != nil {
+		_, _ = a.zfsPort.CreateDataset(ctx, domain.ZfsDataset{
+			PoolID:      cleanPool,
+			ID:          "lxc-templates",
+			DatasetPath: tmplPath,
+			Mountpoint:  tmplMount,
+		})
+	}
+	_ = os.MkdirAll(tmplMount, 0755)
+
 	poolConfigFile := filepath.Join(mountpoint, "config", "config.yaml")
 
 	// If dataset existed and config.yaml exists on the pool, discover/load its configuration!

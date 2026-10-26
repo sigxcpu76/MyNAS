@@ -25,6 +25,7 @@ type Gateway struct {
 	grpcServer    nasv1.NasServiceServer
 	kvmService    *application.KvmService
 	dockerService *application.DockerService
+	storageRepo   *application.StorageRepoService
 	webdavHandler http.Handler
 	uiFS          fs.FS
 	eventBus      *application.EventBus
@@ -37,6 +38,7 @@ func NewGateway(
 	grpcServer nasv1.NasServiceServer,
 	kvmService *application.KvmService,
 	dockerService *application.DockerService,
+	storageRepo *application.StorageRepoService,
 	webdavHandler http.Handler,
 	uiFS fs.FS,
 	eventBus *application.EventBus,
@@ -61,17 +63,26 @@ func NewGateway(
 		grpcServer:    grpcServer,
 		kvmService:    kvmService,
 		dockerService: dockerService,
+		storageRepo:   storageRepo,
 		webdavHandler: webdavHandler,
 		uiFS:          uiFS,
 		eventBus:      eventBus,
 		shutdownCh:    make(chan struct{}),
 	}
 
-	// 1. Real-Time System Notification Stream (Server-Sent Events)
+	// 1. Storage Repositories (ISOs & LXC Templates)
+	mux.Handle("/v1/storage/isos/upload", corsMiddleware(http.HandlerFunc(g.handleUploadISO)))
+	mux.Handle("/v1/storage/isos", corsMiddleware(http.HandlerFunc(g.handleISOs)))
+	mux.Handle("/v1/storage/isos/", corsMiddleware(http.HandlerFunc(g.handleISOs)))
+	mux.Handle("/v1/storage/lxc-templates/upload", corsMiddleware(http.HandlerFunc(g.handleUploadLxcTemplate)))
+	mux.Handle("/v1/storage/lxc-templates", corsMiddleware(http.HandlerFunc(g.handleLxcTemplates)))
+	mux.Handle("/v1/storage/lxc-templates/", corsMiddleware(http.HandlerFunc(g.handleLxcTemplates)))
+
+	// 2. Real-Time System Notification Stream (Server-Sent Events)
 	mux.HandleFunc("/v1/events", g.handleEventsSSE)
 	mux.HandleFunc("/events", g.handleEventsSSE)
 
-	// 2. Google AIP REST/JSON API via gRPC-Gateway
+	// 3. Google AIP REST/JSON API via gRPC-Gateway
 	mux.Handle("/v1/", corsMiddleware(gwMux))
 
 	// 3. KVM noVNC WebSocket-to-RFB Proxy (/ws/novnc/{vmName}?token={token})
@@ -106,6 +117,149 @@ func NewGateway(
 	mux.HandleFunc("/", g.handleSPA)
 
 	return g, nil
+}
+
+func (g *Gateway) handleISOs(w http.ResponseWriter, r *http.Request) {
+	if g.storageRepo == nil {
+		http.Error(w, `{"error":"storage repository service unavailable"}`, http.StatusServiceUnavailable)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		isos, err := g.storageRepo.ListISOs(r.Context())
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"isos": isos})
+
+	case http.MethodDelete:
+		filename := r.URL.Query().Get("filename")
+		if filename == "" {
+			clean := strings.TrimPrefix(r.URL.Path, "/v1/storage/isos/")
+			clean = strings.TrimPrefix(clean, "/v1/storage/isos")
+			filename = strings.Trim(clean, "/")
+		}
+		if filename == "" {
+			http.Error(w, `{"error":"filename query parameter or path is required"}`, http.StatusBadRequest)
+			return
+		}
+		if err := g.storageRepo.DeleteISO(r.Context(), filename); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"success":true}`))
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (g *Gateway) handleUploadISO(w http.ResponseWriter, r *http.Request) {
+	if g.storageRepo == nil {
+		http.Error(w, `{"error":"storage repository service unavailable"}`, http.StatusServiceUnavailable)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Support up to 64GB streaming uploads with 32MB in-memory buffer
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"failed to parse multipart form: %v"}`, err), http.StatusBadRequest)
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, `{"error":"'file' field is required in multipart form"}`, http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	iso, err := g.storageRepo.SaveISO(r.Context(), header.Filename, file)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]any{"iso": iso})
+}
+
+func (g *Gateway) handleLxcTemplates(w http.ResponseWriter, r *http.Request) {
+	if g.storageRepo == nil {
+		http.Error(w, `{"error":"storage repository service unavailable"}`, http.StatusServiceUnavailable)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		templates, err := g.storageRepo.ListLxcTemplates(r.Context())
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"templates": templates})
+
+	case http.MethodDelete:
+		filename := r.URL.Query().Get("filename")
+		if filename == "" {
+			clean := strings.TrimPrefix(r.URL.Path, "/v1/storage/lxc-templates/")
+			clean = strings.TrimPrefix(clean, "/v1/storage/lxc-templates")
+			filename = strings.Trim(clean, "/")
+		}
+		if filename == "" {
+			http.Error(w, `{"error":"filename query parameter or path is required"}`, http.StatusBadRequest)
+			return
+		}
+		if err := g.storageRepo.DeleteLxcTemplate(r.Context(), filename); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"success":true}`))
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (g *Gateway) handleUploadLxcTemplate(w http.ResponseWriter, r *http.Request) {
+	if g.storageRepo == nil {
+		http.Error(w, `{"error":"storage repository service unavailable"}`, http.StatusServiceUnavailable)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"failed to parse multipart form: %v"}`, err), http.StatusBadRequest)
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, `{"error":"'file' field is required in multipart form"}`, http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	tmpl, err := g.storageRepo.SaveLxcTemplate(r.Context(), header.Filename, file)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]any{"template": tmpl})
 }
 
 func (g *Gateway) handleEventsSSE(w http.ResponseWriter, r *http.Request) {

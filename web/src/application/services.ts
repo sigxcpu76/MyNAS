@@ -20,6 +20,7 @@ import {
   type Prerequisite,
   type PrerequisiteSummary,
   ResourceNames,
+  type StorageImage,
   type SystemConfig,
   type SystemTelemetry,
   type DiscoveredPool,
@@ -463,6 +464,18 @@ export class KvmService {
   async openConsole(vmIdOrName: string): Promise<VirtualMachineConsoleSession> {
     return this.kvmPort.openVirtualMachineConsole(ResourceNames.virtualMachine(vmIdOrName));
   }
+
+  async listIsos(): Promise<StorageImage[]> {
+    return this.kvmPort.listIsos();
+  }
+
+  async uploadIso(file: File): Promise<StorageImage> {
+    return this.kvmPort.uploadIso(file);
+  }
+
+  async deleteIso(filename: string): Promise<void> {
+    return this.kvmPort.deleteIso(filename);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -655,6 +668,18 @@ export class LxcService {
 
   async freezeContainer(idOrName: string): Promise<LxcContainer> {
     return this.lxcPort.freezeContainer(ResourceNames.lxcContainer(idOrName));
+  }
+
+  async listTemplates(): Promise<StorageImage[]> {
+    return this.lxcPort.listTemplates();
+  }
+
+  async uploadTemplate(file: File): Promise<StorageImage> {
+    return this.lxcPort.uploadTemplate(file);
+  }
+
+  async deleteTemplate(filename: string): Promise<void> {
+    return this.lxcPort.deleteTemplate(filename);
   }
 }
 
