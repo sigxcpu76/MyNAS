@@ -1,11 +1,11 @@
-# AegisNAS (`nasctl`)
+# NaN — Not Another NAS (`nasctl`)
 
 [![CI Pipeline](https://github.com/sigxcpu/nas/actions/workflows/ci.yml/badge.svg)](https://github.com/sigxcpu/nas/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/sigxcpu/nas)](https://goreportcard.com/report/github.com/sigxcpu/nas)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/sigxcpu/nas)](https://golang.org)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-**AegisNAS** is a modern, single-binary storage appliance daemon and CLI (`nasctl`) designed from first principles for Linux systems. It embeds a responsive, dark-themed **Vue 3 Single-Page Application (SPA)**, exposes standard **Google AIP-compliant REST and gRPC APIs**, and directly manages **OpenZFS**, **Docker Compose Applications (TrueNAS SCALE architecture)**, **KVM Virtual Machines with HTML5 noVNC**, **LXC Containers**, **CIFS / WebDAV shares**, and **Linux PAM Identity**.
+**NaN** (**Not Another NAS**) is a modern, single-binary storage appliance daemon and CLI (`nasctl`) designed from first principles for Linux systems. It embeds a responsive, multi-theme **Vue 3 Single-Page Application (SPA)**, exposes standard **Google AIP-compliant REST and gRPC APIs**, and directly manages **OpenZFS**, **Docker Compose Applications (TrueNAS SCALE architecture)**, **KVM Virtual Machines with HTML5 noVNC**, **LXC Containers**, **CIFS / WebDAV shares**, and **Linux PAM Identity**.
 
 ---
 
@@ -40,9 +40,9 @@ Traditional Network-Attached Storage (NAS) operating systems (such as TrueNAS, U
 3. **Artificial User Abstraction**: Traditional appliances invent artificial `admin` accounts and proprietary user databases disconnected from the underlying operating system.
 4. **Scattered Management Tooling**: Administrators often find themselves switching between Docker UIs (Portainer), storage consoles (Cockpit), VM managers (virt-manager/Proxmox), and Samba configs.
 
-### The AegisNAS Philosophy
+### The NaN Philosophy
 
-- **Zero Middleware Bloat**: AegisNAS compiles into a **single, static Go binary (`nasctl`)** that embeds its entire Vue 3 web interface via `//go:embed`. There are no external databases, no Python runtimes, and no background database migrations.
+- **Zero Middleware Bloat**: NaN compiles into a **single, static Go binary (`nasctl`)** that embeds its entire Vue 3 web interface via `//go:embed`. There are no external databases, no Python runtimes, and no background database migrations.
 - **Truth from the Operating System**: The system is the source of truth. ZFS pools, datasets, block devices, containers, and Linux users are discovered live using native JSON output (`zpool list -j`, `zfs list -j`, `docker compose`), Linux `/sys` filesystem telemetry, and `/etc/passwd`.
 - **Standardized API Contract**: Every operation adheres strictly to **Google AIP (API Improvement Proposals)** for resource naming (`zfsPools/{pool}/datasets/{dataset}`, `dockerApps/{app}`), standard pagination (AIP-158), custom methods (AIP-136), and FieldMask updates (AIP-134).
 - **Pure Hexagonal Architecture**: Both the Go backend and Vue 3 frontend strictly decouple domain entities and use-case orchestrators from infrastructure protocols, ensuring full testability and maintainability.
@@ -53,7 +53,7 @@ Traditional Network-Attached Storage (NAS) operating systems (such as TrueNAS, U
 
 ```
 +---------------------------------------------------------------------------------+
-|                                 AegisNAS UI                                     |
+|                                   NaN UI                                        |
 |  [Disks]  [Pools]  [Datasets]  [Volumes]  [Apps]  [KVM]  [LXC]  [Shares]  [Auth]|
 +---------------------------------------------------------------------------------+
 |                        Google AIP gRPC & REST Gateway                           |
@@ -95,7 +95,7 @@ The storage subsystem provides an appliance-grade management interface with an e
 
 ### 2. Docker Compose Applications (TrueNAS SCALE Architecture)
 
-AegisNAS adopts the TrueNAS SCALE Electric Eel philosophy where containers are organized exclusively as **Apps**:
+NaN adopts the TrueNAS SCALE Electric Eel philosophy where containers are organized exclusively as **Apps**:
 
 - **Compose Descriptors as First-Class Citizens**: Each app is governed by a declarative `compose.yaml` describing multi-container stacks (e.g., Nextcloud Hub with application, PostgreSQL, and Redis cache).
 - **TrueNAS SCALE Application Catalog Live Sync**:
@@ -142,7 +142,7 @@ AegisNAS adopts the TrueNAS SCALE Electric Eel philosophy where containers are o
 
 ## Architecture & Design Principles
 
-AegisNAS implements a **Strict Hexagonal (Ports & Adapters)** architecture:
+NaN implements a **Strict Hexagonal (Ports & Adapters)** architecture:
 
 ```mermaid
 graph TD
@@ -204,11 +204,11 @@ For a full-featured deployment on Linux, the following packages are recommended:
 | **OpenSSH** | `openssh-server` | `openssh` |
 
 > [!NOTE]
-> AegisNAS starts cleanly even if some binaries are missing. Missing components will simply mark their respective modules as disabled on the Prerequisites status page.
+> NaN starts cleanly even if some binaries are missing. Missing components will simply mark their respective modules as disabled on the Prerequisites status page.
 
 ### Building from Source
 
-AegisNAS requires **Go 1.24+** and **Node.js 20+**:
+NaN requires **Go 1.24+** and **Node.js 20+**:
 
 ```bash
 # Clone the repository
@@ -267,7 +267,7 @@ The `nasctl` binary doubles as a full CLI client communicating with the running 
 
 ## API & Protocols
 
-AegisNAS follows the **Google API Improvement Proposals (AIP)** convention:
+NaN follows the **Google API Improvement Proposals (AIP)** convention:
 
 - **Protobuf Schemas**: Maintained modularly in [`proto/nas/v1/`](proto/nas/v1/) (`service.proto` and per-entity proto files).
 - **gRPC API**: Served on `:9090`.

@@ -40,6 +40,7 @@ import MdiIcon from './components/MdiIcon.vue';
 import ThemeSelector from './components/ThemeSelector.vue';
 import PrerequisitesTopBarButton from './components/PrerequisitesTopBarButton.vue';
 import PrerequisitesModal from './components/PrerequisitesModal.vue';
+import NanLogo from './components/NanLogo.vue';
 import OverviewView from './views/OverviewView.vue';
 import PrerequisitesView from './views/PrerequisitesView.vue';
 import DisksView from './views/DisksView.vue';
@@ -267,11 +268,7 @@ onMounted(() => {
     <!-- Sidebar Navigation -->
     <aside class="sidebar">
       <div class="brand-box">
-        <div class="brand-logo">AN</div>
-        <div>
-          <div class="brand-title">AegisNAS</div>
-          <div class="brand-subtitle">Storage Appliance</div>
-        </div>
+        <NanLogo :size="38" subtitle="Not Another NAS" />
       </div>
 
       <nav class="nav-list">
@@ -358,7 +355,7 @@ onMounted(() => {
         "
       >
         <div style="color: var(--accent-primary); font-weight: 600">
-          Aegis System Core
+          NaN System Core
         </div>
         <div>ZFS · KVM · Docker · LXC</div>
         <div>CIFS · WebDAV · Linux PAM</div>
@@ -446,7 +443,7 @@ onMounted(() => {
         >
           <div class="spinner" style="margin: 0 auto 16px auto; width: 34px; height: 34px; border-width: 3px"></div>
           <div style="font-weight: 700; font-size: 15px; color: var(--text-primary)">
-            Connecting to Aegis NAS...
+            Connecting to NaN (Not Another NAS)...
           </div>
           <div style="font-size: 12.5px; color: var(--text-secondary); margin-top: 6px">
             Synchronizing storage topology, services, and system configuration

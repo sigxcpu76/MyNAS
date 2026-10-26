@@ -1,5 +1,5 @@
 /**
- * Pure Domain Layer for AegisNAS Management Interface.
+ * Pure Domain Layer for NaN (Not Another NAS) Management Interface.
  * Defines Google AIP-compliant resource entities, value objects,
  * resource name builders/parsers, and formatting helpers.
  */

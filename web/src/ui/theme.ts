@@ -1,5 +1,5 @@
 /**
- * Theme Management Module for AegisNAS
+ * Theme Management Module for NaN (Not Another NAS)
  *
  * Provides 3 Dark and 3 Light themes with verified WCAG AA/AAA contrast ratios:
  *
@@ -117,7 +117,8 @@ export const THEMES: readonly ThemeDefinition[] = [
   },
 ] as const;
 
-export const THEME_STORAGE_KEY = 'aegis_nas_theme_v1';
+export const THEME_STORAGE_KEY = 'nan_theme_v1';
+export const LEGACY_THEME_STORAGE_KEY = 'aegis_nas_theme_v1';
 
 export const activeThemeId = ref<ThemeId>('tokyo-night');
 
@@ -158,7 +159,9 @@ export function initTheme(): void {
   let initialTheme: ThemeId = 'tokyo-night';
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+      const stored =
+        window.localStorage.getItem(THEME_STORAGE_KEY) ||
+        window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
       if (stored && THEMES.some((t) => t.id === stored)) {
         initialTheme = stored as ThemeId;
       }

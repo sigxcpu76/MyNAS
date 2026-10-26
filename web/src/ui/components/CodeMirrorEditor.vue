@@ -35,7 +35,7 @@ const editorContainer = ref<HTMLDivElement | null>(null);
 let view: EditorView | null = null;
 let isUpdatingFromProp = false;
 
-// Theme-adaptive styling leveraging Aegis CSS variables
+// Theme-adaptive styling leveraging NaN CSS variables
 const nasTheme = EditorView.theme({
   '&': {
     height: props.height,

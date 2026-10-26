@@ -918,11 +918,12 @@ function getTempClass(temp: number): string {
           <!-- Terminal / Logo Art Side -->
           <div class="fastfetch-logo">
             <pre class="ascii-art">
-   /\_/\  
-  ( o.o ) 
-   > ^ <  
- AegisNAS 
- ════════ </pre>
+ _  _       _  _ 
+| \| | __ _| \| |
+| .` |/ _` | .` |
+|_|\_|\__,_|_|\_|
+ Not Another NAS 
+═════════════════</pre>
             <div class="color-palette-dots">
               <span class="color-dot dot-1"></span>
               <span class="color-dot dot-2"></span>
@@ -938,7 +939,7 @@ function getTempClass(temp: number): string {
             <div class="fetch-row">
               <span class="fetch-key">Host:</span>
               <span class="fetch-val mono" style="font-weight: 600; color: var(--accent-primary)">
-                {{ telemetry?.host?.hostname || 'aegis-nas' }}
+                {{ telemetry?.host?.hostname || 'nan-nas' }}
               </span>
             </div>
 
@@ -1331,7 +1332,7 @@ function getTempClass(temp: number): string {
 
 .fastfetch-layout {
   display: grid;
-  grid-template-columns: 140px 1fr;
+  grid-template-columns: 154px 1fr;
   gap: 18px;
   align-items: flex-start;
 }

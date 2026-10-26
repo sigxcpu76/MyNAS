@@ -71,10 +71,13 @@ interface LocalCachePayload {
   lastRefreshed?: string;
 }
 
+const STORAGE_CACHE_KEY = 'nan_cache_v1';
+const LEGACY_CACHE_KEY = 'aegis_nas_cache_v1';
+
 function loadLocalCache(): LocalCachePayload | null {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      const raw = window.localStorage.getItem('aegis_nas_cache_v1');
+      const raw = window.localStorage.getItem(STORAGE_CACHE_KEY) || window.localStorage.getItem(LEGACY_CACHE_KEY);
       if (raw) return JSON.parse(raw);
     }
   } catch {
@@ -95,7 +98,7 @@ export function saveLocalCache(): void {
         dockerApps: nasState.dockerApps,
         lastRefreshed: nasState.lastRefreshed,
       };
-      window.localStorage.setItem('aegis_nas_cache_v1', JSON.stringify(data));
+      window.localStorage.setItem(STORAGE_CACHE_KEY, JSON.stringify(data));
     }
   } catch {
     // ignore

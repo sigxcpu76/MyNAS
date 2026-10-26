@@ -217,7 +217,7 @@ watch(
               </span>
             </div>
             <p style="font-size: 12.5px; color: var(--text-secondary); margin: 3px 0 0 0">
-              TrueNAS SCALE App Setup Wizard · Auto-configured for OpenZFS datasets and AegisNAS Docker Compose.
+              TrueNAS SCALE App Setup Wizard · Auto-configured for OpenZFS datasets and NaN Docker Compose.
             </p>
           </div>
         </div>
@@ -361,7 +361,7 @@ watch(
                   </div>
                   <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px">
                     <MdiIcon :path="mdiHarddisk" size="13" style="color: var(--accent-primary)" />
-                    <span>ZFS Dataset target path on AegisNAS host. Mounts internally into: <code>{{ q.mountPath || '/data' }}</code></span>
+                    <span>ZFS Dataset target path on NaN host. Mounts internally into: <code>{{ q.mountPath || '/data' }}</code></span>
                   </div>
                 </div>
 
@@ -474,7 +474,7 @@ watch(
           <div class="preview-footer-note">
             <MdiIcon :path="mdiInformationOutline" size="14" style="color: var(--accent-primary); flex-shrink: 0" />
             <span>
-              Includes <code>x-portals</code> for AegisNAS Web Portal integration and ZFS bind mounts.
+              Includes <code>x-portals</code> for NaN Web Portal integration and ZFS bind mounts.
             </span>
           </div>
         </div>

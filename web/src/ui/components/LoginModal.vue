@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { services } from '../../container';
 import { nasState, notify, refreshAllData, startEventStream } from '../store';
+import NanLogo from './NanLogo.vue';
 
 const username = ref('sigxcpu');
 const password = ref('admin123');
@@ -30,7 +31,7 @@ async function handleLogin() {
   <div class="modal-backdrop">
     <div class="modal-card" style="max-width: 440px">
       <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 18px">
-        <div class="brand-logo">AN</div>
+        <NanLogo :size="42" :show-text="false" />
         <div>
           <h2 style="font-size: 18px; font-weight: 700">Linux System Login</h2>
           <p class="card-subtitle">Authenticating against Linux PAM & `/etc/passwd` (`/v1/auth:login`)</p>

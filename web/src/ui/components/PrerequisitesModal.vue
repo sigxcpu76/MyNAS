@@ -359,7 +359,7 @@ function generateFallbackScript(): string {
       <!-- Modal Footer -->
       <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-subtle); padding-top: 14px; margin-top: 14px">
         <span style="font-size: 12px; color: var(--text-secondary)">
-          Verified by AegisNAS Host Checker Engine
+          Verified by NaN Host Checker Engine
         </span>
         <div style="display: flex; gap: 8px">
           <button class="btn btn-secondary" @click="emit('close')">
