@@ -31,7 +31,7 @@ export class RfbConsoleAdapter {
   private readonly websocketUrl?: string;
   private readonly onStatusChange?: ConsoleStatusCallback;
   private scaleMode: ScaleMode = 'fit';
-  private crisp: boolean = true;
+  private crisp: boolean = false;
 
   constructor(options: RfbConsoleOptions) {
     this.target = options.target;

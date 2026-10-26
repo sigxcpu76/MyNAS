@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import {
-  mdiEyeOutline,
   mdiFullscreen,
   mdiFullscreenExit,
   mdiOpenInNew,
@@ -39,7 +38,6 @@ const statusDetail = ref('Connecting to live QEMU VNC server...');
 const quickText = ref('');
 const isFullscreen = ref(false);
 const scaleMode = ref<ScaleMode>('fit');
-const isCrisp = ref(true);
 
 let adapter: RfbConsoleAdapter | null = null;
 
@@ -56,14 +54,8 @@ function sendQuickText() {
   adapter.focus();
 }
 
-function toggleCrisp() {
-  isCrisp.value = !isCrisp.value;
-  adapter?.setCrisp(isCrisp.value);
-}
-
 function handleScaleChange() {
   adapter?.setScaleMode(scaleMode.value);
-  adapter?.setCrisp(isCrisp.value);
 }
 
 function toggleFullscreen() {
@@ -93,13 +85,10 @@ onMounted(() => {
       token: props.token,
       websocketUrl: props.websocketUrl,
       scaleMode: scaleMode.value,
-      crisp: isCrisp.value,
+      crisp: false,
       onStatusChange: (status, detail) => {
         statusText.value = status;
         if (detail) statusDetail.value = detail;
-        if (status === 'CONNECTED') {
-          adapter?.setCrisp(isCrisp.value);
-        }
       },
     });
     adapter.connect();
@@ -154,17 +143,6 @@ onBeforeUnmount(() => {
           </select>
         </div>
 
-        <!-- Sharp Text Rendering Toggle -->
-        <button
-          class="btn btn-sm"
-          :class="isCrisp ? 'btn-sharp-active' : 'btn-secondary'"
-          :title="isCrisp ? 'Sharp pixelated text rendering is ON. Click for smooth bilinear filtering.' : 'Smooth rendering is ON. Click for sharp pixelated rendering.'"
-          @click="toggleCrisp"
-        >
-          <MdiIcon :path="mdiEyeOutline" size="14" style="margin-right: 4px" />
-          <span>{{ isCrisp ? 'Sharp: ON' : 'Sharp: OFF' }}</span>
-        </button>
-
         <!-- Fullscreen Button -->
         <button
           class="btn btn-secondary btn-sm"
@@ -204,8 +182,6 @@ onBeforeUnmount(() => {
       class="vnc-wrapper"
       :class="{
         'is-standalone': standalone,
-        'crisp-mode': isCrisp,
-        'smooth-mode': !isCrisp,
         'scale-fit-mode': scaleMode === 'fit',
         'scale-manual-mode': scaleMode !== 'fit',
       }"
@@ -316,16 +292,6 @@ onBeforeUnmount(() => {
   color: #f8fafc;
 }
 
-.btn-sharp-active {
-  background: rgba(16, 185, 129, 0.18);
-  border: 1px solid #10b981;
-  color: #34d399;
-}
-
-.btn-sharp-active:hover {
-  background: rgba(16, 185, 129, 0.28);
-}
-
 .vnc-wrapper {
   background: #000;
   border: 1px solid var(--border-strong, #334155);
@@ -384,17 +350,6 @@ onBeforeUnmount(() => {
 .vnc-wrapper.scale-manual-mode :deep(canvas) {
   max-width: none !important;
   max-height: none !important;
-}
-
-/* Crisp pixelated font/graphics rendering */
-.vnc-wrapper.crisp-mode :deep(canvas) {
-  image-rendering: -webkit-optimize-contrast !important;
-  image-rendering: crisp-edges !important;
-  image-rendering: pixelated !important;
-}
-
-.vnc-wrapper.smooth-mode :deep(canvas) {
-  image-rendering: auto !important;
 }
 
 .vnc-footer {

@@ -102,7 +102,7 @@ describe('RfbConsoleAdapter', () => {
     expect(rfb.scaleViewport).toBe(true);
   });
 
-  it('supports crisp vs smooth rendering toggling on canvas', () => {
+  it('defaults to sharp OFF (smooth image rendering) on canvas', () => {
     const canvas = document.createElement('canvas');
     container.appendChild(canvas);
 
@@ -116,8 +116,7 @@ describe('RfbConsoleAdapter', () => {
     const rfb = mockRFBInstances[0];
     rfb._trigger('connect');
 
-    adapter.setCrisp(true);
-    expect(canvas.style.imageRendering).toBe('pixelated');
+    expect(canvas.style.imageRendering).toBe('auto');
 
     adapter.setCrisp(false);
     expect(canvas.style.imageRendering).toBe('auto');
