@@ -98,6 +98,31 @@ export function generateRandomHighPort(usedPorts?: Set<number>): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+export const DEFAULT_COMPOSE_MEMORY_LIMIT = '512m';
+export const DEFAULT_COMPOSE_CPU_LIMIT = '1.0';
+
+export const COMPOSE_MEMORY_LIMIT_OPTIONS = [
+  '128m',
+  '256m',
+  '512m',
+  '1g',
+  '2g',
+  '4g',
+  '8g',
+  '16g',
+  '32g',
+] as const;
+
+export const COMPOSE_CPU_LIMIT_OPTIONS = [
+  '0.5',
+  '1.0',
+  '2',
+  '4',
+  '8',
+  '16',
+  '32',
+] as const;
+
 export function createDefaultService(name = 'app', image = ''): ComposeServiceModel {
   return {
     id: generateUid(),
@@ -112,8 +137,8 @@ export function createDefaultService(name = 'app', image = ''): ComposeServiceMo
     dependsOn: [],
     networkMode: '',
     networks: [],
-    memoryLimit: '',
-    cpuLimit: '',
+    memoryLimit: DEFAULT_COMPOSE_MEMORY_LIMIT,
+    cpuLimit: DEFAULT_COMPOSE_CPU_LIMIT,
     privileged: false,
     devices: [],
   };
@@ -216,8 +241,16 @@ export function composeYamlToForm(
       dependsOn: [],
       networkMode: svc.network_mode || '',
       networks: [],
-      memoryLimit: svc.mem_limit || svc.deploy?.resources?.limits?.memory || '',
-      cpuLimit: svc.cpus || svc.deploy?.resources?.limits?.cpus || '',
+      memoryLimit: svc.mem_limit
+        ? String(svc.mem_limit).trim()
+        : svc.deploy?.resources?.limits?.memory
+        ? String(svc.deploy.resources.limits.memory).trim()
+        : '',
+      cpuLimit: svc.cpus !== undefined && svc.cpus !== null && svc.cpus !== ''
+        ? (Number(svc.cpus) === 1 ? '1.0' : String(svc.cpus).trim())
+        : svc.deploy?.resources?.limits?.cpus !== undefined && svc.deploy?.resources?.limits?.cpus !== null && svc.deploy?.resources?.limits?.cpus !== ''
+        ? (Number(svc.deploy.resources.limits.cpus) === 1 ? '1.0' : String(svc.deploy.resources.limits.cpus).trim())
+        : '',
       privileged: Boolean(svc.privileged ?? false),
       devices: Array.isArray(svc.devices) ? svc.devices.map(String) : [],
     };

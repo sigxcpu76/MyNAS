@@ -10,6 +10,8 @@ import {
   type ComposeVolumeMountModel,
   composeYamlToForm,
   createDefaultService,
+  DEFAULT_COMPOSE_MEMORY_LIMIT,
+  DEFAULT_COMPOSE_CPU_LIMIT,
   formToComposeYaml,
   generateRandomHighPort,
   generateUid,
@@ -79,6 +81,52 @@ const bulkEnvText = ref('');
 const activeService = computed(() => {
   return form.services.find((s) => s.id === activeServiceId.value) || form.services[0];
 });
+
+// Resource Limit Select Options (128m, 256m, 512m, 1g, 2g, 4g, 8g, 16g, 32g & 0.5, 1.0, 2, 4, 8, 16, 32)
+const MEMORY_LIMIT_SELECT_OPTIONS = [
+  { value: '128m', label: '128m (128 MB)' },
+  { value: '256m', label: '256m (256 MB)' },
+  { value: '512m', label: '512m (512 MB — Default)' },
+  { value: '1g', label: '1g (1 GB)' },
+  { value: '2g', label: '2g (2 GB)' },
+  { value: '4g', label: '4g (4 GB)' },
+  { value: '8g', label: '8g (8 GB)' },
+  { value: '16g', label: '16g (16 GB)' },
+  { value: '32g', label: '32g (32 GB)' },
+];
+
+const CPU_LIMIT_SELECT_OPTIONS = [
+  { value: '0.5', label: '0.5 (Half Core)' },
+  { value: '1.0', label: '1.0 (1 Core — Default)' },
+  { value: '2', label: '2 (2 Cores)' },
+  { value: '4', label: '4 (4 Cores)' },
+  { value: '8', label: '8 (8 Cores)' },
+  { value: '16', label: '16 (16 Cores)' },
+  { value: '32', label: '32 (32 Cores)' },
+];
+
+function isCustomMemoryLimit(val?: string): boolean {
+  if (!val) return false;
+  return !MEMORY_LIMIT_SELECT_OPTIONS.some((o) => o.value === val);
+}
+
+function isCustomCpuLimit(val?: string): boolean {
+  if (!val) return false;
+  return !CPU_LIMIT_SELECT_OPTIONS.some((o) => o.value === val) && val !== '1';
+}
+
+// Ensure active service has memoryLimit and cpuLimit initialized
+watch(
+  activeService,
+  (svc) => {
+    if (svc) {
+      if (!svc.memoryLimit) svc.memoryLimit = DEFAULT_COMPOSE_MEMORY_LIMIT;
+      if (!svc.cpuLimit) svc.cpuLimit = DEFAULT_COMPOSE_CPU_LIMIT;
+      else if (svc.cpuLimit === '1') svc.cpuLimit = '1.0';
+    }
+  },
+  { immediate: true }
+);
 
 // Other services available for depends_on
 const otherServices = computed(() => {
@@ -1258,26 +1306,42 @@ function copyYaml() {
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px">
               <div>
                 <label class="form-label">Memory Limit</label>
-                <input
+                <select
                   v-model="activeService.memoryLimit"
-                  type="text"
                   class="form-input mono"
-                  placeholder="e.g. 512m, 1g, 2g"
-                />
+                >
+                  <option v-for="opt in MEMORY_LIMIT_SELECT_OPTIONS" :key="opt.value" :value="opt.value">
+                    {{ opt.label }}
+                  </option>
+                  <option
+                    v-if="isCustomMemoryLimit(activeService.memoryLimit)"
+                    :value="activeService.memoryLimit"
+                  >
+                    {{ activeService.memoryLimit }} (Custom)
+                  </option>
+                </select>
                 <span style="font-size: 11px; color: var(--text-secondary)">
-                  Maps to <code>mem_limit</code> in Compose.
+                  Maps to <code>mem_limit</code> in Compose (default 512m).
                 </span>
               </div>
               <div>
                 <label class="form-label">CPU Limit</label>
-                <input
+                <select
                   v-model="activeService.cpuLimit"
-                  type="text"
                   class="form-input mono"
-                  placeholder="e.g. 1.0, 2.5"
-                />
+                >
+                  <option v-for="opt in CPU_LIMIT_SELECT_OPTIONS" :key="opt.value" :value="opt.value">
+                    {{ opt.label }}
+                  </option>
+                  <option
+                    v-if="isCustomCpuLimit(activeService.cpuLimit)"
+                    :value="activeService.cpuLimit"
+                  >
+                    {{ activeService.cpuLimit }} Cores (Custom)
+                  </option>
+                </select>
                 <span style="font-size: 11px; color: var(--text-secondary)">
-                  Fractional CPU cores (maps to <code>cpus</code>).
+                  Fractional CPU cores (maps to <code>cpus</code>, default 1.0).
                 </span>
               </div>
             </div>

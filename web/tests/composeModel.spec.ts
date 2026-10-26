@@ -282,4 +282,27 @@ services:
     expect(assignedPort).toBeGreaterThanOrEqual(32000);
     expect(assignedPort).toBeLessThanOrEqual(65000);
   });
+
+  it('starts new services with default memoryLimit (512m) and cpuLimit (1.0)', () => {
+    const svc = createDefaultService('test-service');
+    expect(svc.memoryLimit).toBe('512m');
+    expect(svc.cpuLimit).toBe('1.0');
+
+    const appForm = createDefaultAppForm('testapp', 'Test App');
+    expect(appForm.services[0].memoryLimit).toBe('512m');
+    expect(appForm.services[0].cpuLimit).toBe('1.0');
+  });
+
+  it('serializes default 512m and 1.0 limits to YAML correctly and parses back', () => {
+    const appForm = createDefaultAppForm('res-test', 'Resource Limit Test');
+    appForm.services[0].image = 'redis:alpine';
+    const yaml = formToComposeYaml(appForm);
+
+    expect(yaml).toContain('mem_limit: 512m');
+    expect(yaml).toContain('cpus: 1');
+
+    const parsed = composeYamlToForm(yaml, 'res-test');
+    expect(parsed.services[0].memoryLimit).toBe('512m');
+    expect(parsed.services[0].cpuLimit).toBe('1.0');
+  });
 });
