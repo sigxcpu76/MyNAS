@@ -6,12 +6,14 @@ import {
   mdiFullscreenExit,
   mdiKeyboardOutline,
   mdiOpenInNew,
+  mdiRefresh,
 } from '@mdi/js';
 import MdiIcon from './MdiIcon.vue';
 import {
   RfbConsoleAdapter,
   type ScaleMode,
 } from '../../adapters/novnc/rfbConsoleAdapter';
+import { services } from '../../container';
 
 const props = withDefaults(
   defineProps<{
@@ -42,6 +44,7 @@ const quickText = ref('');
 const isFullscreen = ref(false);
 const scaleMode = ref<ScaleMode>('fit');
 const showKeysMenu = ref(false);
+const reconnecting = ref(false);
 
 let adapter: RfbConsoleAdapter | null = null;
 
@@ -94,24 +97,55 @@ function handleDocumentClick(e: MouseEvent) {
   }
 }
 
+async function handleReconnect() {
+  if (reconnecting.value) return;
+  reconnecting.value = true;
+  statusText.value = 'CONNECTING';
+  statusDetail.value = 'Reconnecting to live QEMU VNC server...';
+
+  try {
+    // Request a fresh console session token for this VM
+    const freshSession = await services.kvm.openConsole(props.vmName);
+    if (adapter) {
+      adapter.updateCredentials(freshSession.token, freshSession.websocketUrl);
+      adapter.connect();
+    } else if (screenRef.value) {
+      initAdapter(freshSession.token, freshSession.websocketUrl);
+    }
+  } catch (err: any) {
+    // If requesting fresh token fails, attempt reconnect with existing credentials
+    if (adapter) {
+      adapter.connect();
+    } else {
+      statusText.value = 'ERROR';
+      statusDetail.value = err?.message || 'Failed to reconnect';
+    }
+  } finally {
+    reconnecting.value = false;
+  }
+}
+
+function initAdapter(token: string, wsUrl?: string) {
+  if (!screenRef.value) return;
+  adapter = new RfbConsoleAdapter({
+    target: screenRef.value,
+    vmName: props.vmName,
+    token,
+    websocketUrl: wsUrl || props.websocketUrl,
+    scaleMode: scaleMode.value,
+    crisp: false,
+    onStatusChange: (status, detail) => {
+      statusText.value = status;
+      if (detail) statusDetail.value = detail;
+    },
+  });
+  adapter.connect();
+}
+
 onMounted(() => {
   document.addEventListener('fullscreenchange', handleFullscreenChange);
   document.addEventListener('click', handleDocumentClick);
-  if (screenRef.value) {
-    adapter = new RfbConsoleAdapter({
-      target: screenRef.value,
-      vmName: props.vmName,
-      token: props.token,
-      websocketUrl: props.websocketUrl,
-      scaleMode: scaleMode.value,
-      crisp: false,
-      onStatusChange: (status, detail) => {
-        statusText.value = status;
-        if (detail) statusDetail.value = detail;
-      },
-    });
-    adapter.connect();
-  }
+  initAdapter(props.token, props.websocketUrl);
 });
 
 onBeforeUnmount(() => {
@@ -209,6 +243,26 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
+        <!-- Reconnect Button -->
+        <button
+          class="btn btn-sm"
+          :class="{
+            'btn-warning': statusText === 'DISCONNECTED' || statusText === 'ERROR',
+            'btn-secondary': statusText === 'CONNECTED' || statusText === 'CONNECTING',
+          }"
+          :disabled="reconnecting || statusText === 'CONNECTING'"
+          title="Reconnect to live QEMU VNC server"
+          @click="handleReconnect"
+        >
+          <MdiIcon
+            :path="mdiRefresh"
+            size="14"
+            :class="{ 'spin-icon': reconnecting || statusText === 'CONNECTING' }"
+            style="margin-right: 4px"
+          />
+          <span>{{ reconnecting ? 'Reconnecting...' : 'Reconnect' }}</span>
+        </button>
+
         <!-- Fullscreen Button -->
         <button
           class="btn btn-secondary btn-sm"
@@ -257,6 +311,26 @@ onBeforeUnmount(() => {
         class="vnc-screen-container"
         tabindex="0"
       ></div>
+
+      <!-- Disconnected / Error Overlay with Direct Reconnect Prompt -->
+      <div
+        v-if="statusText === 'DISCONNECTED' || statusText === 'ERROR'"
+        class="vnc-disconnected-overlay"
+      >
+        <div class="disconnected-card">
+          <MdiIcon :path="mdiRefresh" size="30" style="color: var(--warning-text, #f59e0b); margin-bottom: 8px" />
+          <h4 class="disconnected-title">VNC Connection Closed</h4>
+          <p class="disconnected-detail">{{ statusDetail }}</p>
+          <button
+            class="btn btn-primary btn-sm"
+            :disabled="reconnecting"
+            @click="handleReconnect"
+          >
+            <MdiIcon :path="mdiRefresh" size="14" :class="{ 'spin-icon': reconnecting }" style="margin-right: 5px" />
+            {{ reconnecting ? 'Reconnecting...' : 'Reconnect Now' }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Footer: Linux TTY Shortcut Pills and Quick Text Bar -->
@@ -323,7 +397,7 @@ onBeforeUnmount(() => {
         <input
           v-model="quickText"
           type="text"
-          class="input mono"
+          class="input mono input-sm"
           style="flex: 1"
           placeholder="Paste or type text to send directly to guest machine..."
         />
@@ -544,6 +618,57 @@ onBeforeUnmount(() => {
 .vnc-wrapper.scale-manual-mode :deep(canvas) {
   max-width: none !important;
   max-height: none !important;
+}
+
+.vnc-disconnected-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(3px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 20;
+}
+
+.disconnected-card {
+  background: var(--bg-surface, #1e293b);
+  border: 1px solid var(--border-strong, #334155);
+  border-radius: 10px;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 380px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+}
+
+.disconnected-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary, #f8fafc);
+}
+
+.disconnected-detail {
+  margin: 8px 0 16px 0;
+  font-size: 12.5px;
+  color: var(--text-secondary, #94a3b8);
+  font-family: monospace;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin-icon {
+  animation: spin 1s linear infinite;
 }
 
 .vnc-footer {

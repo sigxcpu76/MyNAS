@@ -144,6 +144,21 @@ describe('RfbConsoleAdapter', () => {
     expect(rfb.sendKey).toHaveBeenCalledWith(0xff0d, 'Enter', false);
   });
 
+  it('updates credentials and reconnects with new token', () => {
+    const adapter = new RfbConsoleAdapter({
+      target: container,
+      vmName: 'debian-server',
+      token: 'tok-old',
+    });
+
+    adapter.connect();
+    expect(mockRFBInstances[0].url).toContain('token=tok-old');
+
+    adapter.updateCredentials('tok-new', '/ws/novnc/debian-server?token=tok-new');
+    adapter.connect();
+    expect(mockRFBInstances[1].url).toContain('token=tok-new');
+  });
+
   it('sends Linux guest shortcuts: Alt-F1..F3 and Ctrl-Alt-F1..F3', () => {
     const adapter = new RfbConsoleAdapter({
       target: container,

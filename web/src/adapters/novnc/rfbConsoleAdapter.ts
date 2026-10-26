@@ -27,8 +27,8 @@ export class RfbConsoleAdapter {
   private rfb: RFB | null = null;
   private readonly target: HTMLElement;
   private readonly vmName: string;
-  private readonly token: string;
-  private readonly websocketUrl?: string;
+  private token: string;
+  private websocketUrl?: string;
   private readonly onStatusChange?: ConsoleStatusCallback;
   private scaleMode: ScaleMode = 'fit';
   private crisp: boolean = false;
@@ -131,6 +131,11 @@ export class RfbConsoleAdapter {
   setScaleMode(mode: ScaleMode): void {
     this.scaleMode = mode;
     this.applyScaleMode();
+  }
+
+  updateCredentials(token: string, websocketUrl?: string): void {
+    this.token = token;
+    this.websocketUrl = websocketUrl;
   }
 
   setCrisp(crisp: boolean): void {
