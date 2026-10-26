@@ -171,7 +171,7 @@ function goToPool(poolName: string) {
                   <MdiIcon
                     :path="d.type === 'NVME' ? mdiFlash : (d.rotational ? mdiHarddisk : mdiServer)"
                     size="18"
-                    :style="{ color: d.type === 'NVME' ? '#c084fc' : (d.rotational ? '#f59e0b' : '#38bdf8') }"
+                    :style="{ color: d.type === 'NVME' ? 'var(--purple-text)' : (d.rotational ? 'var(--warning-text)' : 'var(--accent-primary)') }"
                   />
                   <div>
                     <div class="mono" style="font-weight: 700; font-size: 13px; color: var(--text-primary)">
@@ -219,7 +219,7 @@ function goToPool(poolName: string) {
               <!-- Temperature -->
               <td>
                 <div v-if="d.temperatureCelsius > 0" style="display: flex; align-items: center; gap: 4px">
-                  <MdiIcon :path="mdiThermometer" size="14" style="color: #38bdf8" />
+                  <MdiIcon :path="mdiThermometer" size="14" style="color: var(--accent-primary)" />
                   <span class="badge mono" :class="getTempBadgeClass(d.temperatureCelsius)" style="font-size: 11px">
                     {{ d.temperatureCelsius.toFixed(1) }}°C
                   </span>
@@ -300,7 +300,7 @@ function goToPool(poolName: string) {
             <MdiIcon
               :path="selectedDisk.type === 'NVME' ? mdiFlash : (selectedDisk.rotational ? mdiHarddisk : mdiServer)"
               size="22"
-              :style="{ color: selectedDisk.type === 'NVME' ? '#c084fc' : (selectedDisk.rotational ? '#f59e0b' : '#38bdf8') }"
+              :style="{ color: selectedDisk.type === 'NVME' ? 'var(--purple-text)' : (selectedDisk.rotational ? 'var(--warning-text)' : 'var(--accent-primary)') }"
             />
             <div>
               <h3 class="card-title" style="margin: 0; font-size: 15px">
@@ -380,7 +380,7 @@ function goToPool(poolName: string) {
             </div>
             <div v-if="selectedDisk.totalBytesWritten" class="stat-col">
               <span class="stat-label">Total Written</span>
-              <span class="stat-value mono" style="font-size: 13px; color: #a78bfa">
+              <span class="stat-value mono" style="font-size: 13px; color: var(--purple-text)">
                 {{ formatBytes(selectedDisk.totalBytesWritten) }}
               </span>
             </div>
@@ -584,9 +584,9 @@ function goToPool(poolName: string) {
 }
 
 .badge-purple {
-  background: rgba(168, 85, 247, 0.15);
-  color: #c084fc;
-  border: 1px solid rgba(168, 85, 247, 0.3);
+  background: var(--accent-bg-subtle);
+  color: var(--purple-text);
+  border: 1px solid var(--border-subtle);
 }
 
 .modal-nav-tabs {
@@ -594,7 +594,7 @@ function goToPool(poolName: string) {
   gap: 4px;
   padding: 0 20px;
   border-bottom: 1px solid var(--border-subtle);
-  background: rgba(15, 23, 42, 0.4);
+  background: var(--bg-elevated);
 }
 
 .modal-nav-tab {
@@ -624,7 +624,7 @@ function goToPool(poolName: string) {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 8px;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   padding: 10px 12px;
@@ -650,11 +650,11 @@ function goToPool(poolName: string) {
 }
 
 .text-sky {
-  color: #38bdf8;
+  color: var(--accent-primary);
 }
 
 .text-emerald {
-  color: #34d399;
+  color: var(--success-text);
 }
 
 .modal-overlay {
@@ -663,6 +663,7 @@ function goToPool(poolName: string) {
   left: 0;
   right: 0;
   bottom: 0;
+  background: var(--modal-backdrop);
   background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(4px);
   display: flex;

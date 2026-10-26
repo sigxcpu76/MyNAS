@@ -185,7 +185,7 @@ function selectFolderEntry(entry: DirectoryEntry) {
         </div>
 
         <!-- Breadcrumbs Navigation Bar -->
-        <div style="background: var(--bg-surface-elevated, #161b22); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-shrink: 0">
+        <div style="background: var(--bg-elevated); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-shrink: 0">
           <div style="display: flex; align-items: center; gap: 4px; overflow-x: auto; font-size: 12.5px" class="mono">
             <template v-for="(crumb, idx) in pathBreadcrumbs" :key="crumb.path">
               <span v-if="idx > 0" style="color: var(--text-secondary); opacity: 0.5">/</span>
@@ -233,7 +233,7 @@ function selectFolderEntry(entry: DirectoryEntry) {
               @click="navigateTo(entry.path)"
             >
               <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; text-overflow: ellipsis">
-                <MdiIcon :path="mdiFolderOutline" size="18" style="color: #f59e0b; flex-shrink: 0" />
+                <MdiIcon :path="mdiFolderOutline" size="18" style="color: var(--warning-text); flex-shrink: 0" />
                 <span class="mono" style="font-size: 12.5px; color: var(--text-primary)">
                   {{ entry.name }}
                 </span>

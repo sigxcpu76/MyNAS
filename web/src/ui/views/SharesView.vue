@@ -275,8 +275,9 @@ async function handleDeleteWebdav(name: string) {
           padding: 12px;
           margin-bottom: 12px;
           border-radius: 8px;
-          border: 1px solid rgba(239, 68, 68, 0.45);
-          color: #f87171;
+          background: var(--danger-bg);
+          border: 1px solid var(--danger-border);
+          color: var(--danger-text);
           font-size: 12.5px;
         "
       >
@@ -531,7 +532,7 @@ async function handleDeleteWebdav(name: string) {
           <tbody>
             <tr v-for="w in nasState.webdavShares" :key="w.name">
               <td>
-                <div class="mono" style="font-weight: 600; color: #34d399">{{ w.urlPrefix }}</div>
+                <div class="mono" style="font-weight: 600; color: var(--success-text)">{{ w.urlPrefix }}</div>
                 <div class="mono" style="font-size: 11px; color: var(--accent-primary)">
                   {{ w.path }}
                 </div>

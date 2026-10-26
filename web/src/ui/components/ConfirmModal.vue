@@ -32,27 +32,27 @@ const iconColor = computed(() => {
   if (!activeModal.value) return 'var(--accent-primary)';
   switch (activeModal.value.tone) {
     case 'danger':
-      return '#ef4444';
+      return 'var(--danger-text)';
     case 'warning':
-      return '#f59e0b';
+      return 'var(--warning-text)';
     case 'info':
-      return '#38bdf8';
+      return 'var(--info-text)';
     default:
       return 'var(--accent-primary)';
   }
 });
 
 const iconBg = computed(() => {
-  if (!activeModal.value) return 'rgba(56, 189, 248, 0.12)';
+  if (!activeModal.value) return 'var(--accent-bg-subtle)';
   switch (activeModal.value.tone) {
     case 'danger':
-      return 'rgba(239, 68, 68, 0.15)';
+      return 'var(--danger-bg)';
     case 'warning':
-      return 'rgba(245, 158, 11, 0.15)';
+      return 'var(--warning-bg)';
     case 'info':
-      return 'rgba(56, 189, 248, 0.12)';
+      return 'var(--info-bg)';
     default:
-      return 'rgba(56, 189, 248, 0.12)';
+      return 'var(--accent-bg-subtle)';
   }
 });
 
@@ -278,22 +278,22 @@ onUnmounted(() => {
 }
 
 .confirm-details-box.tone-danger {
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.35);
-  color: #fca5a5;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  color: var(--danger-text);
 }
 
 .confirm-details-box.tone-warning {
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  color: #fde68a;
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  color: var(--warning-text);
 }
 
 .confirm-details-box.tone-info,
 .confirm-details-box.tone-primary {
-  background: rgba(56, 189, 248, 0.08);
-  border: 1px solid rgba(56, 189, 248, 0.25);
-  color: var(--text-secondary);
+  background: var(--info-bg);
+  border: 1px solid var(--info-border);
+  color: var(--text-primary);
 }
 
 .confirm-prompt-group {

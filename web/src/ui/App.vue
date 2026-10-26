@@ -37,6 +37,7 @@ import LoginModal from './components/LoginModal.vue';
 import SystemPoolModal from './components/SystemPoolModal.vue';
 import ConfirmModal from './components/ConfirmModal.vue';
 import MdiIcon from './components/MdiIcon.vue';
+import ThemeSelector from './components/ThemeSelector.vue';
 import OverviewView from './views/OverviewView.vue';
 import PrerequisitesView from './views/PrerequisitesView.vue';
 import DisksView from './views/DisksView.vue';
@@ -284,7 +285,7 @@ onMounted(() => {
                 <span
                   v-if="item.badge !== undefined"
                   class="nav-badge"
-                  :style="item.disabled ? 'background: rgba(239,68,68,0.2); color: #f87171' : ''"
+                  :style="item.disabled ? 'background: var(--danger-bg); color: var(--danger-text)' : ''"
                 >
                   {{ item.badge }}
                 </span>
@@ -333,7 +334,7 @@ onMounted(() => {
             <span
               v-if="item.badge !== undefined"
               class="nav-badge"
-              :style="item.disabled ? 'background: rgba(239,68,68,0.2); color: #f87171' : ''"
+              :style="item.disabled ? 'background: var(--danger-bg); color: var(--danger-text)' : ''"
             >
               {{ item.badge }}
             </span>
@@ -405,6 +406,8 @@ onMounted(() => {
         </div>
 
         <div style="display: flex; align-items: center; gap: 10px">
+          <ThemeSelector />
+
           <button
             class="btn btn-sm"
             :disabled="nasState.loading"
@@ -449,9 +452,9 @@ onMounted(() => {
             class="system-pool-banner"
           >
             <div style="display: flex; align-items: center; gap: 12px">
-              <MdiIcon :path="mdiAlertCircle" size="26" style="color: #f59e0b; flex-shrink: 0" />
+              <MdiIcon :path="mdiAlertCircle" size="26" style="color: var(--warning-text); flex-shrink: 0" />
               <div>
-                <div style="font-weight: 700; font-size: 14px; color: #fbbf24">
+                <div style="font-weight: 700; font-size: 14px; color: var(--warning-text)">
                   Main ZFS Storage Pool Unconfigured — Non-ZFS Modules Paused
                 </div>
                 <div style="font-size: 12.5px; color: var(--text-secondary); margin-top: 2px">
@@ -467,11 +470,11 @@ onMounted(() => {
           <div
             v-if="nasState.initialLoaded && !activeModuleStatus.enabled"
             class="card"
-            style="border-color: rgba(239, 68, 68, 0.45)"
+            style="border-color: var(--danger-border)"
           >
             <div class="card-header">
               <div>
-                <h3 class="card-title" style="color: #f87171">
+                <h3 class="card-title" style="color: var(--danger-text)">
                   Module Disabled — Required Host Binaries / Libraries Missing
                 </h3>
                 <p class="card-subtitle">
@@ -579,9 +582,9 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  background: rgba(245, 158, 11, 0.08);
-  border: 1px solid rgba(245, 158, 11, 0.3);
-  border-left: 4px solid #f59e0b;
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  border-left: 4px solid var(--warning);
   border-radius: 8px;
   padding: 14px 18px;
   margin-bottom: 18px;

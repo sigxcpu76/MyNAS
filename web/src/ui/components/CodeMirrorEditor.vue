@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { EditorState } from '@codemirror/state';
+import { Compartment, EditorState } from '@codemirror/state';
 import { EditorView, basicSetup } from 'codemirror';
 import { yaml } from '@codemirror/lang-yaml';
 import { oneDark } from '@codemirror/theme-one-dark';
+import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { autocompletion } from '@codemirror/autocomplete';
 import { lintGutter, linter } from '@codemirror/lint';
 import { dockerComposeCompletionSource, dockerComposeLinter } from './dockerComposeCompletions';
+import { isDarkMode } from '../theme';
 
 const props = withDefaults(
   defineProps<{
@@ -33,61 +35,61 @@ const editorContainer = ref<HTMLDivElement | null>(null);
 let view: EditorView | null = null;
 let isUpdatingFromProp = false;
 
-// Custom Theme to blend with NAS Dark Theme
-const nasDarkTheme = EditorView.theme({
+// Theme-adaptive styling leveraging Aegis CSS variables
+const nasTheme = EditorView.theme({
   '&': {
     height: props.height,
     minHeight: props.minHeight,
     maxHeight: '100%',
     fontSize: '13px',
     fontFamily: 'var(--font-mono, JetBrains Mono, monospace)',
-    backgroundColor: '#070b14',
-    color: '#e2e8f0',
+    backgroundColor: 'var(--input-bg, #16161e)',
+    color: 'var(--text-primary, #c0caf5)',
     borderRadius: '8px',
-    border: '1px solid #334155',
+    border: '1px solid var(--border-strong, #3b4261)',
   },
   '.cm-content': {
-    caretColor: '#38bdf8',
+    caretColor: 'var(--accent-primary, #7aa2f7)',
     padding: '12px 14px',
     lineHeight: '1.55',
   },
   '.cm-cursor, .cm-dropCursor': {
-    borderLeftColor: '#38bdf8',
+    borderLeftColor: 'var(--accent-primary, #7aa2f7)',
     borderLeftWidth: '2px',
   },
   '&.cm-focused': {
     outline: 'none',
-    borderColor: '#38bdf8',
-    boxShadow: '0 0 0 2px rgba(56, 189, 248, 0.25)',
+    borderColor: 'var(--accent-primary, #7aa2f7)',
+    boxShadow: '0 0 0 2px var(--focus-ring, rgba(122, 162, 247, 0.25))',
   },
   '.cm-gutters': {
-    backgroundColor: '#0a0f1d',
-    color: '#64748b',
-    borderRight: '1px solid #1e293b',
+    backgroundColor: 'var(--bg-elevated, #24283b)',
+    color: 'var(--text-muted, #787c99)',
+    borderRight: '1px solid var(--border-subtle, #24283b)',
     borderRadius: '8px 0 0 8px',
   },
   '.cm-activeLine': {
-    backgroundColor: 'rgba(56, 189, 248, 0.06)',
+    backgroundColor: 'var(--accent-bg-subtle, rgba(122, 162, 247, 0.06))',
   },
   '.cm-activeLineGutter': {
-    backgroundColor: 'rgba(56, 189, 248, 0.12)',
-    color: '#38bdf8',
+    backgroundColor: 'var(--accent-bg-subtle, rgba(122, 162, 247, 0.12))',
+    color: 'var(--accent-primary, #7aa2f7)',
   },
   '.cm-scroller': {
     overflow: 'auto',
     scrollbarWidth: 'thin',
-    scrollbarColor: '#334155 #070b14',
+    scrollbarColor: 'var(--scrollbar-thumb) var(--scrollbar-track)',
   },
   '.cm-selectionBackground, ::selection': {
-    backgroundColor: '#1e3a8a !important',
+    backgroundColor: 'var(--accent-bg-subtle, rgba(122, 162, 247, 0.25)) !important',
   },
   // Tooltip & completion popup styling
   '.cm-tooltip': {
-    backgroundColor: '#0f172a',
-    border: '1px solid #334155',
+    backgroundColor: 'var(--bg-surface, #1f2335)',
+    border: '1px solid var(--border-strong, #3b4261)',
     borderRadius: '6px',
-    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)',
-    color: '#f8fafc',
+    boxShadow: 'var(--modal-shadow)',
+    color: 'var(--text-primary, #c0caf5)',
   },
   '.cm-tooltip-autocomplete': {
     '& > ul > li': {
@@ -96,16 +98,22 @@ const nasDarkTheme = EditorView.theme({
       fontFamily: 'var(--font-mono, monospace)',
     },
     '& > ul > li[aria-selected]': {
-      backgroundColor: 'rgba(56, 189, 248, 0.2)',
-      color: '#38bdf8',
+      backgroundColor: 'var(--accent-bg-subtle)',
+      color: 'var(--accent-primary)',
     },
   },
   '.cm-completionDetail': {
     fontStyle: 'italic',
-    color: '#94a3b8',
+    color: 'var(--text-secondary)',
     marginLeft: '10px',
   },
 });
+
+const highlightCompartment = new Compartment();
+
+function getHighlightExtension(dark: boolean) {
+  return dark ? oneDark : syntaxHighlighting(defaultHighlightStyle, { fallback: true });
+}
 
 onMounted(() => {
   if (!editorContainer.value) return;
@@ -115,8 +123,8 @@ onMounted(() => {
     extensions: [
       basicSetup,
       yaml(),
-      oneDark,
-      nasDarkTheme,
+      highlightCompartment.of(getHighlightExtension(isDarkMode.value)),
+      nasTheme,
       EditorView.lineWrapping,
       EditorState.readOnly.of(props.readOnly),
       autocompletion({
@@ -139,6 +147,15 @@ onMounted(() => {
     state,
     parent: editorContainer.value,
   });
+});
+
+// Dynamically reconfigure highlight style on theme mode change
+watch(isDarkMode, (newDark) => {
+  if (view) {
+    view.dispatch({
+      effects: highlightCompartment.reconfigure(getHighlightExtension(newDark)),
+    });
+  }
 });
 
 // Watch for external prop updates

@@ -80,9 +80,9 @@ async function handleLogin() {
         <div
           v-if="errorMsg"
           style="
-            color: #f87171;
-            background: rgba(239, 68, 68, 0.12);
-            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: var(--danger-text);
+            background: var(--danger-bg);
+            border: 1px solid var(--danger-border);
             padding: 8px 10px;
             border-radius: 6px;
             font-size: 12.5px;

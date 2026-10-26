@@ -541,7 +541,7 @@ async function handleRefresh() {
             <MdiIcon
               :path="item.node.isPoolRoot ? mdiHarddisk : (item.isExpanded ? mdiFolderOpenOutline : mdiFolderOutline)"
               size="16"
-              :style="{ color: item.node.isPoolRoot ? '#38bdf8' : (isNodeSelected(item.node) ? '#38bdf8' : 'var(--text-secondary)') }"
+              :style="{ color: item.node.isPoolRoot ? 'var(--accent-primary)' : (isNodeSelected(item.node) ? 'var(--accent-primary)' : 'var(--text-secondary)') }"
             />
           </span>
 
@@ -574,7 +574,7 @@ async function handleRefresh() {
     <!-- Active Selection Footer -->
     <div v-if="selectedIdentifier" class="dataset-tree-footer">
       <span style="font-size: 11px; color: var(--text-secondary)">Selected Dataset:</span>
-      <span class="mono font-semibold" style="color: #38bdf8; font-size: 11.5px">
+      <span class="mono font-semibold" style="color: var(--accent-primary); font-size: 11.5px">
         {{ selectedIdentifier }}
       </span>
     </div>
@@ -670,16 +670,16 @@ async function handleRefresh() {
 }
 
 .tree-node-row:hover {
-  background: rgba(56, 189, 248, 0.08);
+  background: var(--accent-bg-subtle);
 }
 
 .node-selected {
-  background: rgba(56, 189, 248, 0.15) !important;
-  border-left: 3px solid #38bdf8;
+  background: var(--accent-bg-subtle) !important;
+  border-left: 3px solid var(--accent-primary);
 }
 
 .node-pool-root {
-  background: rgba(255, 255, 255, 0.015);
+  background: var(--table-hover);
 }
 
 .chevron-btn {
@@ -692,11 +692,11 @@ async function handleRefresh() {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--text-secondary);
 }
 
 .chevron-btn:hover {
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .chevron-placeholder {
@@ -726,12 +726,12 @@ async function handleRefresh() {
 .node-name {
   font-size: 12px;
   white-space: nowrap;
-  color: var(--text-primary, #f1f5f9);
+  color: var(--text-primary);
 }
 
 .node-mountpoint {
   font-size: 11px;
-  color: var(--text-secondary, #64748b);
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -739,20 +739,20 @@ async function handleRefresh() {
 
 .node-usage {
   font-size: 11px;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--text-secondary);
   white-space: nowrap;
   padding-right: 4px;
 }
 
 .node-selected-check {
-  color: #38bdf8;
+  color: var(--accent-primary);
   display: flex;
   align-items: center;
 }
 
 .tree-children-container {
   padding-left: 18px;
-  border-left: 1px dashed rgba(255, 255, 255, 0.08);
+  border-left: 1px dashed var(--border-subtle);
   margin-left: 18px;
 }
 

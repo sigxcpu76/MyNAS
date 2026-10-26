@@ -134,6 +134,21 @@ func runBufGenerate(rootDir string, verbose bool) error {
 		return fmt.Errorf("buf binary not found in PATH: please install buf (https://buf.build/docs/installation)")
 	}
 
+	requiredPlugins := []struct {
+		name    string
+		install string
+	}{
+		{name: "protoc-gen-go", install: "go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"},
+		{name: "protoc-gen-go-grpc", install: "go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest"},
+		{name: "protoc-gen-grpc-gateway", install: "go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@v2.32.0"},
+	}
+
+	for _, p := range requiredPlugins {
+		if _, err := exec.LookPath(p.name); err != nil {
+			return fmt.Errorf("required protobuf plugin %q not found in PATH.\nTo install it, run:\n  %s", p.name, p.install)
+		}
+	}
+
 	cmd := exec.Command(bufBin, "generate")
 	cmd.Dir = rootDir
 	if verbose {

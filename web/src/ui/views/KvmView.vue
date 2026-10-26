@@ -650,7 +650,7 @@ async function handleWizardSubmit() {
       <div class="card">
         <div class="card-header" style="margin-bottom: 6px">
           <span class="card-subtitle">RAM Allocated</span>
-          <MdiIcon :path="mdiServer" size="18" style="color: #38bdf8" />
+          <MdiIcon :path="mdiServer" size="18" style="color: var(--accent-primary)" />
         </div>
         <div style="font-size: 24px; font-weight: 700; color: var(--text-primary)">
           {{ formatBytes(totalMemoryMib * 1024 * 1024) }}
@@ -733,7 +733,7 @@ async function handleWizardSubmit() {
                 >
                   <span
                     v-if="vm.state === 'RUNNING'"
-                    style="width: 7px; height: 7px; border-radius: 50%; background: #4ade80; display: inline-block"
+                    style="width: 7px; height: 7px; border-radius: 50%; background: var(--success); display: inline-block"
                   ></span>
                   {{ vm.state }}
                 </span>
@@ -1026,7 +1026,7 @@ async function handleWizardSubmit() {
 
               <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px">
                 <div class="card-subtitle">QEMU Guest Agent</div>
-                <div style="font-size: 22px; font-weight: 700; margin-top: 4px" :style="{ color: inspectingVm.agentRunning ? '#4ade80' : 'var(--text-secondary)' }">
+                <div style="font-size: 22px; font-weight: 700; margin-top: 4px" :style="{ color: inspectingVm.agentRunning ? 'var(--success-text)' : 'var(--text-secondary)' }">
                   {{ inspectingVm.agentRunning ? 'RUNNING' : 'DISCONNECTED' }}
                 </div>
                 <div class="text-muted" style="font-size: 11px; margin-top: 4px">

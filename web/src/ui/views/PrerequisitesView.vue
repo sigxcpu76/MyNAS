@@ -168,14 +168,14 @@ onMounted(() => {
           <span
             v-if="missingCount > 0"
             class="count-badge"
-            style="background: #ef4444; color: #fff"
+            style="background: var(--danger); color: #fff"
           >
             {{ missingCount }}
           </span>
           <span
             v-else
             class="count-badge"
-            style="background: rgba(34, 197, 94, 0.2); color: #22c55e"
+            style="background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border)"
           >
             0
           </span>
@@ -200,7 +200,7 @@ onMounted(() => {
         <div v-if="summary?.remediationScript" class="remediation-box">
           <div class="remediation-header">
             <div style="display: flex; align-items: center; gap: 8px">
-              <MdiIcon :path="mdiLinux" size="20" style="color: #60a5fa" />
+              <MdiIcon :path="mdiLinux" size="20" style="color: var(--accent-primary)" />
               <span style="font-weight: 700; font-size: 14px">
                 Compliance Remediation Command for {{ linuxFlavor?.prettyName || 'Host Distribution' }}
               </span>
@@ -224,9 +224,9 @@ onMounted(() => {
 
         <!-- Fully Compliant Banner when 0 missing -->
         <div v-if="missingList.length === 0" class="compliant-banner">
-          <MdiIcon :path="mdiCheckCircle" size="36" style="color: #22c55e" />
+          <MdiIcon :path="mdiCheckCircle" size="36" style="color: var(--success-text)" />
           <div>
-            <h3 style="margin: 0 0 4px 0; font-size: 16px; color: #22c55e">
+            <h3 style="margin: 0 0 4px 0; font-size: 16px; color: var(--success-text)">
               System Is 100% Compliant!
             </h3>
             <p style="margin: 0; font-size: 13px; color: var(--text-secondary)">
@@ -263,7 +263,7 @@ onMounted(() => {
                   <span class="badge badge-neutral">{{ item.category }}</span>
                 </td>
                 <td class="mono" style="font-size: 12px">{{ item.kind }}</td>
-                <td class="mono" style="font-size: 12.5px; color: #f87171">
+                <td class="mono" style="font-size: 12.5px; color: var(--danger-text)">
                   {{ item.binaryOrPath }}
                 </td>
                 <td>
@@ -324,7 +324,7 @@ onMounted(() => {
                   <span class="badge badge-neutral">{{ item.category }}</span>
                 </td>
                 <td class="mono" style="font-size: 12px">{{ item.kind }}</td>
-                <td class="mono" style="font-size: 12.5px; color: #22c55e">
+                <td class="mono" style="font-size: 12.5px; color: var(--success-text)">
                   {{ item.binaryOrPath }}
                 </td>
                 <td>
@@ -405,9 +405,9 @@ onMounted(() => {
 }
 
 .remediation-box {
-  background: #0f172a;
-  border: 1px solid #1e293b;
-  border-left: 4px solid #3b82f6;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-left: 4px solid var(--accent-primary);
   border-radius: 8px;
   padding: 14px 18px;
   margin-bottom: 16px;
@@ -421,15 +421,15 @@ onMounted(() => {
 }
 
 .terminal-command {
-  background: #020617;
-  border: 1px solid #1e293b;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   padding: 12px 14px;
   overflow-x: auto;
 }
 
 .terminal-command code {
-  color: #38bdf8;
+  color: var(--accent-primary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
   line-height: 1.45;
@@ -440,8 +440,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 16px;
-  background: rgba(34, 197, 94, 0.08);
-  border: 1px solid rgba(34, 197, 94, 0.25);
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
   border-radius: 8px;
   padding: 18px 22px;
   margin-bottom: 14px;
@@ -450,11 +450,11 @@ onMounted(() => {
 .code-pill {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11.5px;
-  background: var(--bg-base, #0b1120);
-  color: #fbbf24;
+  background: var(--warning-bg);
+  color: var(--warning-text);
   padding: 4px 8px;
   border-radius: 4px;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--warning-border);
   display: inline-block;
   white-space: pre-wrap;
 }

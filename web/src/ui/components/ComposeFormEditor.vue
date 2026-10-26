@@ -553,12 +553,12 @@ function copyYaml() {
 
         <!-- Mode Toggle: Form vs Raw YAML -->
         <div style="display: flex; align-items: center; gap: 8px">
-          <div style="display: flex; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border-subtle); border-radius: 6px; overflow: hidden">
+          <div style="display: flex; background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: 6px; overflow: hidden">
             <button
               class="btn btn-sm"
               :style="{
                 background: editorMode === 'form' ? 'var(--accent-primary)' : 'transparent',
-                color: editorMode === 'form' ? '#fff' : 'var(--text-secondary)',
+                color: editorMode === 'form' ? 'var(--accent-contrast)' : 'var(--text-secondary)',
                 border: 'none',
                 borderRadius: 0,
                 padding: '6px 14px',
@@ -572,7 +572,7 @@ function copyYaml() {
               class="btn btn-sm"
               :style="{
                 background: editorMode === 'raw' ? 'var(--accent-primary)' : 'transparent',
-                color: editorMode === 'raw' ? '#fff' : 'var(--text-secondary)',
+                color: editorMode === 'raw' ? 'var(--accent-contrast)' : 'var(--text-secondary)',
                 border: 'none',
                 borderRadius: 0,
                 padding: '6px 14px',
@@ -842,7 +842,7 @@ function copyYaml() {
               style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; margin-bottom: 14px; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px"
             >
               <div style="display: flex; align-items: center; gap: 8px">
-                <MdiIcon :path="mdiOpenInNew" size="18" style="color: #38bdf8; flex-shrink: 0" />
+                <MdiIcon :path="mdiOpenInNew" size="18" style="color: var(--accent-primary); flex-shrink: 0" />
                 <div>
                   <div style="font-size: 12.5px; font-weight: 600; color: var(--text-primary)">
                     Open Web UI Management Port
@@ -932,31 +932,31 @@ function copyYaml() {
                       <div v-if="getHostPortStatus(p)" style="display: inline-flex; align-items: center">
                         <span
                           v-if="getHostPortStatus(p)?.isDuplicate"
-                          class="badge"
-                          style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; padding: 2px 7px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px"
+                          class="badge badge-warning"
+                          style="padding: 2px 7px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px"
                           title="Port duplicate: mapped multiple times in this application"
                         >
                           <MdiIcon :path="mdiAlert" size="13" /> Duplicate
                         </span>
                         <span
                           v-else-if="getHostPortStatus(p)?.checking"
-                          class="badge"
-                          style="background: rgba(148, 163, 184, 0.15); color: var(--text-secondary); padding: 2px 7px; font-size: 11px"
+                          class="badge badge-neutral"
+                          style="padding: 2px 7px; font-size: 11px"
                         >
                           Checking...
                         </span>
                         <span
                           v-else-if="getHostPortStatus(p)?.available"
-                          class="badge"
-                          style="background: rgba(34, 197, 94, 0.15); color: #22c55e; padding: 2px 7px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px"
+                          class="badge badge-success"
+                          style="padding: 2px 7px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px"
                           title="Host port is free and ready to bind"
                         >
                           <MdiIcon :path="mdiCheckCircle" size="13" /> Available
                         </span>
                         <span
                           v-else-if="getHostPortStatus(p)?.available === false"
-                          class="badge"
-                          style="background: rgba(239, 68, 68, 0.15); color: #ef4444; padding: 2px 7px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px"
+                          class="badge badge-danger"
+                          style="padding: 2px 7px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px"
                           :title="`Port conflict: in use by ${getHostPortStatus(p)?.inUseBy}`"
                         >
                           <MdiIcon :path="mdiAlertCircle" size="13" /> In Use: {{ getHostPortStatus(p)?.inUseBy }}
@@ -1115,7 +1115,7 @@ function copyYaml() {
                           border: 'none',
                           cursor: 'pointer',
                           background: !isNamedVolumeMount(v.source) ? 'var(--accent-primary)' : 'transparent',
-                          color: !isNamedVolumeMount(v.source) ? '#fff' : 'var(--text-secondary)',
+                          color: !isNamedVolumeMount(v.source) ? 'var(--accent-contrast)' : 'var(--text-secondary)',
                           fontWeight: !isNamedVolumeMount(v.source) ? '600' : 'normal',
                         }"
                         @click="setMountType(v, 'bind')"
@@ -1131,7 +1131,7 @@ function copyYaml() {
                           border: 'none',
                           cursor: 'pointer',
                           background: isNamedVolumeMount(v.source) ? 'var(--accent-primary)' : 'transparent',
-                          color: isNamedVolumeMount(v.source) ? '#fff' : 'var(--text-secondary)',
+                          color: isNamedVolumeMount(v.source) ? 'var(--accent-contrast)' : 'var(--text-secondary)',
                           fontWeight: isNamedVolumeMount(v.source) ? '600' : 'normal',
                         }"
                         @click="setMountType(v, 'volume')"

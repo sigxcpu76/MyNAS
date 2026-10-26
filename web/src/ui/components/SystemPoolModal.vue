@@ -121,7 +121,7 @@ onMounted(() => {
 
       <div class="modal-body">
         <div class="info-banner">
-          <MdiIcon :path="mdiAlertCircle" size="20" style="color: #60a5fa; flex-shrink: 0" />
+          <MdiIcon :path="mdiAlertCircle" size="20" style="color: var(--accent-primary); flex-shrink: 0" />
           <div style="font-size: 13px; color: var(--text-secondary)">
             Until a main pool is selected, non-ZFS services (KVM, Docker, LXC, CIFS, WebDAV) remain paused.
             Selecting an imported pool that previously hosted NAS datasets (<code>.nas-system</code>) will
@@ -182,7 +182,7 @@ onMounted(() => {
             <div>
               <span
                 v-if="mainPool === p.poolName"
-                style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #22c55e; font-weight: 600; padding: 4px 8px"
+                style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--success-text); font-weight: 600; padding: 4px 8px"
               >
                 <MdiIcon :path="mdiCheck" size="16" />
                 Active

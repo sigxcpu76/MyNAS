@@ -183,7 +183,7 @@ onMounted(async () => {
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px">
         <div>
           <div style="display: flex; align-items: center; gap: 10px">
-            <MdiIcon :path="mdiHarddisk" size="24" style="color: #a855f7" />
+            <MdiIcon :path="mdiHarddisk" size="24" style="color: var(--purple-text)" />
             <h2 class="card-title" style="font-size: 19px; margin: 0">ZFS Block Volumes (ZVols)</h2>
             <span class="badge badge-purple" style="font-size: 12px">
               {{ allVolumes.length }} {{ allVolumes.length === 1 ? 'Volume' : 'Volumes' }}
@@ -262,7 +262,7 @@ onMounted(async () => {
               <!-- Volume Name -->
               <td>
                 <div style="display: flex; align-items: center; gap: 8px">
-                  <MdiIcon :path="mdiHarddisk" size="18" style="color: #a855f7; flex-shrink: 0" />
+                  <MdiIcon :path="mdiHarddisk" size="18" style="color: var(--purple-text); flex-shrink: 0" />
                   <div>
                     <div class="mono font-semibold" style="font-size: 13.5px; color: var(--text-primary)">
                       {{ v.volumePath || v.name.replace(/^zfsPools\/[^/]+\/volumes\//, '') }}
@@ -280,7 +280,7 @@ onMounted(async () => {
 
               <!-- Device Path -->
               <td>
-                <span class="mono" style="font-size: 12px; color: #c084fc" :title="v.devicePath">
+                <span class="mono" style="font-size: 12px; color: var(--purple-text)" :title="v.devicePath">
                   {{ v.devicePath || '-' }}
                 </span>
               </td>
@@ -366,7 +366,7 @@ onMounted(async () => {
       <div class="modal-container" style="max-width: 580px; width: 100%">
         <div class="modal-header">
           <div style="display: flex; align-items: center; gap: 10px">
-            <MdiIcon :path="mdiHarddisk" size="20" style="color: #a855f7" />
+            <MdiIcon :path="mdiHarddisk" size="20" style="color: var(--purple-text)" />
             <h3 class="card-title" style="margin: 0">Create New ZFS Volume (ZVol)</h3>
           </div>
           <button class="btn btn-sm btn-icon" @click="showCreateVolume = false">
@@ -454,7 +454,7 @@ onMounted(async () => {
       <div class="modal-container" style="max-width: 540px; width: 100%">
         <div class="modal-header">
           <div style="display: flex; align-items: center; gap: 10px">
-            <MdiIcon :path="mdiPencil" size="18" style="color: #a855f7" />
+            <MdiIcon :path="mdiPencil" size="18" style="color: var(--purple-text)" />
             <h3 class="card-title" style="margin: 0">
               Edit Volume: <span class="mono">{{ editingVolume.volumePath || editingVolume.name }}</span>
             </h3>
@@ -539,9 +539,9 @@ onMounted(async () => {
 }
 
 .badge-purple {
-  background: rgba(168, 85, 247, 0.15);
-  color: #c084fc;
-  border: 1px solid rgba(168, 85, 247, 0.3);
+  background: var(--accent-bg-subtle);
+  color: var(--purple-text);
+  border: 1px solid var(--border-subtle);
 }
 
 .modal-overlay {
@@ -550,7 +550,7 @@ onMounted(async () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
+  background: var(--modal-backdrop);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;

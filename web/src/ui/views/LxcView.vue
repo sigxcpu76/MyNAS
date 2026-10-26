@@ -235,7 +235,7 @@ async function handleDelete(name: string) {
             <td class="mono">
               {{ lx.distribution }} / {{ lx.release }} ({{ lx.architecture }})
             </td>
-            <td class="mono" style="color: #34d399">
+            <td class="mono" style="color: var(--success-text)">
               {{ lx.ipv4Address || '—' }}
             </td>
             <td class="mono" style="font-size: 12px">

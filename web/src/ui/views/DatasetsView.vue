@@ -530,7 +530,7 @@ onMounted(async () => {
                   <MdiIcon
                     :path="node.isPoolRoot ? mdiDatabase : mdiFolderOutline"
                     size="16"
-                    :style="{ color: node.isPoolRoot ? 'var(--accent-primary)' : '#38bdf8', flexShrink: 0 }"
+                    :style="{ color: 'var(--accent-primary)', flexShrink: 0 }"
                   />
 
                   <div style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
@@ -567,7 +567,7 @@ onMounted(async () => {
                   <div class="mono" style="font-weight: 700; font-size: 13px">{{ formatBytes(node.usedBytes) }}</div>
                   <div style="font-size: 11px; color: var(--text-secondary); margin-top: 1px">
                     Quota: {{ node.quotaBytes && node.quotaBytes > 0 ? formatBytes(node.quotaBytes) : 'Unlimited' }}
-                    <span v-if="node.reservationBytes && node.reservationBytes > 0" style="margin-left: 4px; color: #38bdf8">
+                    <span v-if="node.reservationBytes && node.reservationBytes > 0" style="margin-left: 4px; color: var(--accent-primary)">
                       | Res: {{ formatBytes(node.reservationBytes) }}
                     </span>
                   </div>
@@ -598,7 +598,7 @@ onMounted(async () => {
               <!-- Snapshots -->
               <td>
                 <div class="mono" style="font-size: 12px">{{ node.snapshotsCount || 0 }} snap{{ node.snapshotsCount === 1 ? '' : 's' }}</div>
-                <div v-if="node.lastSnapshot" class="mono" style="font-size: 10.5px; color: #34d399; margin-top: 2px" :title="node.lastSnapshot">
+                <div v-if="node.lastSnapshot" class="mono" style="font-size: 10.5px; color: var(--success-text); margin-top: 2px" :title="node.lastSnapshot">
                   {{ node.lastSnapshot.split('@')[1] || node.lastSnapshot }}
                 </div>
               </td>
@@ -822,7 +822,7 @@ onMounted(async () => {
       <div class="modal-container" style="max-width: 440px; width: 100%">
         <div class="modal-header">
           <div style="display: flex; align-items: center; gap: 8px">
-            <MdiIcon :path="mdiCamera" size="18" style="color: #34d399" />
+            <MdiIcon :path="mdiCamera" size="18" style="color: var(--success-text)" />
             <h3 class="card-title" style="margin: 0">Take Snapshot</h3>
           </div>
           <button class="btn btn-sm btn-icon" @click="snapshotModalDataset = null">
@@ -928,9 +928,9 @@ onMounted(async () => {
 }
 
 .badge-purple {
-  background: rgba(168, 85, 247, 0.15);
-  color: #c084fc;
-  border: 1px solid rgba(168, 85, 247, 0.3);
+  background: var(--accent-bg-subtle);
+  color: var(--purple-text);
+  border: 1px solid var(--border-subtle);
 }
 
 .modal-overlay {
@@ -939,7 +939,7 @@ onMounted(async () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
+  background: var(--modal-backdrop);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;

@@ -969,7 +969,7 @@ function viewPoolDatasets(poolName: string) {
 
           <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted)">
             <span>Free: <strong class="mono" style="color: var(--text-secondary)">{{ formatBytes(p.freeBytes) }}</strong></span>
-            <span>Frag: <strong class="mono" style="color: #c084fc">{{ p.fragmentationPercent }}%</strong></span>
+            <span>Frag: <strong class="mono" style="color: var(--purple-text)">{{ p.fragmentationPercent }}%</strong></span>
           </div>
         </div>
 
@@ -1213,16 +1213,16 @@ function viewPoolDatasets(poolName: string) {
                   <button type="button" class="btn btn-xs btn-primary-outline" @click="addBuilderVdev('data')">
                     <MdiIcon :path="mdiPlus" size="12" /> Data VDEV
                   </button>
-                  <button type="button" class="btn btn-xs" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3)" @click="addBuilderVdev('cache')">
+                  <button type="button" class="btn btn-xs" style="background: var(--accent-bg-subtle); color: var(--purple-text); border: 1px solid var(--border-subtle)" @click="addBuilderVdev('cache')">
                     <MdiIcon :path="mdiFlash" size="12" /> + Cache (L2ARC)
                   </button>
-                  <button type="button" class="btn btn-xs" style="background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3)" @click="addBuilderVdev('log')">
+                  <button type="button" class="btn btn-xs" style="background: var(--warning-bg); color: var(--warning-text); border: 1px solid var(--warning-border)" @click="addBuilderVdev('log')">
                     <MdiIcon :path="mdiPlus" size="12" /> + Log (SLOG)
                   </button>
                   <button type="button" class="btn btn-xs btn-neutral" @click="addBuilderVdev('spare')">
                     <MdiIcon :path="mdiPlus" size="12" /> + Hot Spare
                   </button>
-                  <button type="button" class="btn btn-xs" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3)" @click="addBuilderVdev('special')">
+                  <button type="button" class="btn btn-xs" style="background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border)" @click="addBuilderVdev('special')">
                     <MdiIcon :path="mdiPlus" size="12" /> + Special
                   </button>
                 </div>
@@ -1615,16 +1615,16 @@ function viewPoolDatasets(poolName: string) {
                   <button type="button" class="btn btn-xs btn-primary-outline" @click="addEditBuilderVdev('data')">
                     <MdiIcon :path="mdiPlus" size="12" /> Data VDEV
                   </button>
-                  <button type="button" class="btn btn-xs" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3)" @click="addEditBuilderVdev('cache')">
+                  <button type="button" class="btn btn-xs" style="background: var(--accent-bg-subtle); color: var(--purple-text); border: 1px solid var(--border-subtle)" @click="addEditBuilderVdev('cache')">
                     <MdiIcon :path="mdiFlash" size="12" /> + Cache (L2ARC)
                   </button>
-                  <button type="button" class="btn btn-xs" style="background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3)" @click="addEditBuilderVdev('log')">
+                  <button type="button" class="btn btn-xs" style="background: var(--warning-bg); color: var(--warning-text); border: 1px solid var(--warning-border)" @click="addEditBuilderVdev('log')">
                     <MdiIcon :path="mdiPlus" size="12" /> + Log (SLOG)
                   </button>
                   <button type="button" class="btn btn-xs btn-neutral" @click="addEditBuilderVdev('spare')">
                     <MdiIcon :path="mdiPlus" size="12" /> + Hot Spare
                   </button>
-                  <button type="button" class="btn btn-xs" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3)" @click="addEditBuilderVdev('special')">
+                  <button type="button" class="btn btn-xs" style="background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border)" @click="addEditBuilderVdev('special')">
                     <MdiIcon :path="mdiPlus" size="12" /> + Special
                   </button>
                 </div>
@@ -2061,23 +2061,23 @@ function viewPoolDatasets(poolName: string) {
 }
 
 .vdev-builder-card.is-data {
-  border-left: 3px solid #38bdf8;
+  border-left: 3px solid var(--accent-primary);
 }
 
 .vdev-builder-card.is-cache {
-  border-left: 3px solid #c084fc;
+  border-left: 3px solid var(--purple-text);
 }
 
 .vdev-builder-card.is-log {
-  border-left: 3px solid #facc15;
+  border-left: 3px solid var(--warning-text);
 }
 
 .vdev-builder-card.is-spare {
-  border-left: 3px solid #94a3b8;
+  border-left: 3px solid var(--text-secondary);
 }
 
 .vdev-builder-card.is-special {
-  border-left: 3px solid #34d399;
+  border-left: 3px solid var(--success-text);
 }
 
 .vdev-builder-card.drag-hover {
@@ -2150,17 +2150,19 @@ function viewPoolDatasets(poolName: string) {
 }
 
 .vdev-validation-bar.ok {
-  background: rgba(16, 185, 129, 0.12);
-  color: #34d399;
+  background: var(--success-bg);
+  color: var(--success-text);
+  border: 1px solid var(--success-border);
 }
 
 .vdev-validation-bar.warn {
-  background: rgba(234, 179, 8, 0.12);
-  color: #facc15;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  border: 1px solid var(--warning-border);
 }
 
 .vdev-validation-bar.info {
-  background: rgba(148, 163, 184, 0.08);
+  background: var(--bg-elevated);
   color: var(--text-muted);
 }
 
@@ -2313,9 +2315,9 @@ function viewPoolDatasets(poolName: string) {
 }
 
 .badge-purple {
-  background: rgba(168, 85, 247, 0.15);
-  color: #c084fc;
-  border: 1px solid rgba(168, 85, 247, 0.3);
+  background: var(--accent-bg-subtle);
+  color: var(--purple-text);
+  border: 1px solid var(--border-subtle);
 }
 
 .badge-main-pool {

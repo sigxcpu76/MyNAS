@@ -862,7 +862,7 @@ onUnmounted(() => {
       "
     >
       <div style="display: flex; align-items: center; gap: 12px">
-        <MdiIcon :path="mdiAlertCircleOutline" size="24" style="color: #f59e0b; flex-shrink: 0" />
+        <MdiIcon :path="mdiAlertCircleOutline" size="24" style="color: var(--warning-text); flex-shrink: 0" />
         <div>
           <div style="font-weight: 700; font-size: 14px; color: var(--text-primary)">
             Docker Storage Dataset Not Configured
@@ -895,7 +895,7 @@ onUnmounted(() => {
         <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600">
           Running Apps
         </div>
-        <div style="font-size: 26px; font-weight: 700; color: #10b981; margin-top: 4px">
+        <div style="font-size: 26px; font-weight: 700; color: var(--success-text); margin-top: 4px">
           {{ runningCount }}
         </div>
         <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px">
@@ -907,7 +907,7 @@ onUnmounted(() => {
         <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600">
           App Memory Usage
         </div>
-        <div style="font-size: 26px; font-weight: 700; color: #3b82f6; margin-top: 4px">
+        <div style="font-size: 26px; font-weight: 700; color: var(--accent-primary); margin-top: 4px">
           {{ totalMemoryUsageMib }} MiB
         </div>
         <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px">
@@ -1033,19 +1033,19 @@ onUnmounted(() => {
                 >
                   <span
                     v-if="app.state === 'RUNNING'"
-                    style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, 0.6)"
+                    style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px rgba(34, 197, 94, 0.4)"
                   ></span>
                   <span
                     v-else-if="app.state === 'PARTIALLY_RUNNING'"
-                    style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #f59e0b; box-shadow: 0 0 8px rgba(245, 158, 11, 0.6)"
+                    style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--warning); box-shadow: 0 0 8px rgba(245, 158, 11, 0.4)"
                   ></span>
                   <span
                     v-else-if="app.state === 'ERROR'"
-                    style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 8px rgba(239, 68, 68, 0.6)"
+                    style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 8px rgba(239, 68, 68, 0.4)"
                   ></span>
                   <span
                     v-else
-                    style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #64748b"
+                    style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--text-muted)"
                   ></span>
                 </div>
 
@@ -1069,7 +1069,7 @@ onUnmounted(() => {
               <div v-if="getPrimaryWebUiUrl(app)" style="display: inline-flex; align-items: center; gap: 2px">
                 <button
                   class="btn btn-sm"
-                  style="padding: 3px 8px; font-size: 11.5px; color: #10b981; border-color: rgba(16, 185, 129, 0.3); display: inline-flex; align-items: center; gap: 4px"
+                  style="padding: 3px 8px; font-size: 11.5px; color: var(--success-text); border-color: var(--success-border); display: inline-flex; align-items: center; gap: 4px"
                   :title="`Open Web UI (${getPrimaryWebUiUrl(app)})`"
                   @click="openWebPortal(getPrimaryWebUiUrl(app))"
                 >
@@ -1080,7 +1080,7 @@ onUnmounted(() => {
                   v-if="(app.portals && app.portals.length > 1) || getAppPorts(app).length > 1"
                   type="button"
                   class="btn btn-sm btn-icon webui-port-trigger"
-                  style="padding: 3px 4px; font-size: 11px; color: #10b981; border-color: rgba(16, 185, 129, 0.3)"
+                  style="padding: 3px 4px; font-size: 11px; color: var(--success-text); border-color: var(--success-border)"
                   title="View all portals and ports"
                   @click.stop="togglePortMenu(app.appId)"
                 >
@@ -1094,11 +1094,11 @@ onUnmounted(() => {
               <div
                 v-if="activePortMenuAppId === app.appId"
                 class="webui-port-dropdown"
-                style="position: absolute; top: calc(100% - 4px); left: 16px; z-index: 100; min-width: 230px; background: var(--bg-surface, #0f172a); border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.15)); border-radius: 6px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); padding: 6px; display: flex; flex-direction: column; gap: 2px"
+                style="position: absolute; top: calc(100% - 4px); left: 16px; z-index: 100; min-width: 230px; background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: 6px; box-shadow: var(--modal-shadow); padding: 6px; display: flex; flex-direction: column; gap: 2px"
               >
                 <!-- Application Portals from Manifest -->
                 <template v-if="app.portals && app.portals.length > 0">
-                  <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); padding: 4px 8px; border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08)); margin-bottom: 2px">
+                  <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); padding: 4px 8px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 2px">
                     Application Portals
                   </div>
                   <button
@@ -1113,7 +1113,7 @@ onUnmounted(() => {
                       <span style="font-weight: 600; font-size: 12px; color: var(--text-primary)">
                         {{ portal.name }}
                       </span>
-                      <span class="mono" style="font-size: 10.5px; color: #38bdf8">
+                      <span class="mono" style="font-size: 10.5px; color: var(--accent-primary)">
                         {{ portal.protocol }}://:{{ portal.port }}{{ portal.path }}
                       </span>
                     </div>
@@ -1124,7 +1124,7 @@ onUnmounted(() => {
                 <!-- Container Exposed Ports -->
                 <div
                   v-if="getAppPorts(app).length > 0"
-                  style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); padding: 4px 8px; border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08)); margin-top: 4px; margin-bottom: 2px"
+                  style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); padding: 4px 8px; border-bottom: 1px solid var(--border-subtle); margin-top: 4px; margin-bottom: 2px"
                 >
                   Container Ports
                 </div>
@@ -1136,7 +1136,7 @@ onUnmounted(() => {
                   style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 5px 8px; text-align: left; font-size: 12px"
                   @click="openPortUrl(p.hostPort)"
                 >
-                  <span class="mono font-semibold" style="color: #38bdf8">
+                  <span class="mono font-semibold" style="color: var(--accent-primary)">
                     :{{ p.containerPort }}
                   </span>
                   <span style="color: var(--text-secondary); font-size: 11px">
@@ -1201,7 +1201,7 @@ onUnmounted(() => {
                 <button
                   v-if="app.state === 'RUNNING'"
                   class="btn btn-sm btn-icon"
-                  style="flex-shrink: 0; color: #38bdf8"
+                  style="flex-shrink: 0; color: var(--accent-primary)"
                   title="Open Shell Terminal"
                   aria-label="Open Shell Terminal"
                   @click="openTerminalForApp(app)"
@@ -1444,7 +1444,7 @@ onUnmounted(() => {
                   <button
                     v-if="c.state === 'RUNNING'"
                     class="btn btn-sm btn-icon"
-                    style="color: #38bdf8; padding: 2px 6px"
+                    style="color: var(--accent-primary); padding: 2px 6px"
                     title="Open Shell Terminal"
                     aria-label="Open Shell Terminal"
                     @click="openTerminalForContainer(inspectedApp, c)"
@@ -1977,19 +1977,19 @@ onUnmounted(() => {
           <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12.5px" class="mono">
             <div>
               <span style="color: var(--text-secondary)">ZFS Dataset:</span>
-              <span style="color: #38bdf8; margin-left: 6px">{{ selectedDatasetToSave }}</span>
+              <span style="color: var(--accent-primary); margin-left: 6px">{{ selectedDatasetToSave }}</span>
             </div>
             <div>
               <span style="color: var(--text-secondary)">Mountpoint:</span>
-              <span style="color: #38bdf8; margin-left: 6px">/nas/{{ selectedDatasetToSave.replace(/^\//, '') }}</span>
+              <span style="color: var(--accent-primary); margin-left: 6px">/nas/{{ selectedDatasetToSave.replace(/^\//, '') }}</span>
             </div>
             <div>
               <span style="color: var(--text-secondary)">App Volumes:</span>
-              <span style="color: #38bdf8; margin-left: 6px">/nas/{{ selectedDatasetToSave.replace(/^\//, '') }}/appdata</span>
+              <span style="color: var(--accent-primary); margin-left: 6px">/nas/{{ selectedDatasetToSave.replace(/^\//, '') }}/appdata</span>
             </div>
             <div>
               <span style="color: var(--text-secondary)">Docker Data Root:</span>
-              <span style="color: #38bdf8; margin-left: 6px">/nas/{{ selectedDatasetToSave.replace(/^\//, '') }}/docker</span>
+              <span style="color: var(--accent-primary); margin-left: 6px">/nas/{{ selectedDatasetToSave.replace(/^\//, '') }}/docker</span>
             </div>
           </div>
         </div>

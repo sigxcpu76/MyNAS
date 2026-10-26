@@ -198,7 +198,7 @@ watch(
               class="app-icon-img"
               @error="($event.target as HTMLElement).style.display = 'none'"
             />
-            <MdiIcon :path="mdiDocker" size="28" style="color: #38bdf8" />
+            <MdiIcon :path="mdiDocker" size="28" style="color: var(--accent-primary)" />
           </div>
 
           <div>
@@ -206,13 +206,13 @@ watch(
               <h2 style="font-size: 19px; font-weight: 700; color: var(--text-primary); margin: 0">
                 {{ app.title || app.appId }}
               </h2>
-              <span class="badge badge-primary" style="font-size: 11px">
+              <span class="badge badge-info" style="font-size: 11px">
                 {{ app.train || 'community' }}
               </span>
               <span v-if="app.appVersion || app.version" class="badge badge-neutral" style="font-size: 11px">
                 v{{ app.appVersion || app.version }}
               </span>
-              <span v-if="activeWebPort" class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 11px">
+              <span v-if="activeWebPort" class="badge badge-info" style="font-size: 11px">
                 Portal Port: {{ activeWebPort }}
               </span>
             </div>
@@ -311,7 +311,7 @@ watch(
                   <span class="badge badge-neutral" style="font-size: 10px; text-transform: uppercase">
                     {{ q.type }}
                   </span>
-                  <span v-if="q.mountPath" class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 10px">
+                  <span v-if="q.mountPath" class="badge badge-success" style="font-size: 10px">
                     mount: {{ q.mountPath }}
                   </span>
                 </div>
@@ -360,7 +360,7 @@ watch(
                     </button>
                   </div>
                   <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px">
-                    <MdiIcon :path="mdiHarddisk" size="13" style="color: #38bdf8" />
+                    <MdiIcon :path="mdiHarddisk" size="13" style="color: var(--accent-primary)" />
                     <span>ZFS Dataset target path on AegisNAS host. Mounts internally into: <code>{{ q.mountPath || '/data' }}</code></span>
                   </div>
                 </div>
@@ -447,7 +447,7 @@ watch(
         <div v-if="showLivePreview" class="wizard-preview-pane">
           <div class="preview-header">
             <div style="display: flex; align-items: center; gap: 6px">
-              <MdiIcon :path="mdiCodeBraces" size="16" style="color: #38bdf8" />
+              <MdiIcon :path="mdiCodeBraces" size="16" style="color: var(--accent-primary)" />
               <span style="font-size: 12.5px; font-weight: 600; color: var(--text-primary)">
                 Live Docker Compose Descriptor
               </span>
@@ -472,7 +472,7 @@ watch(
           </div>
 
           <div class="preview-footer-note">
-            <MdiIcon :path="mdiInformationOutline" size="14" style="color: #38bdf8; flex-shrink: 0" />
+            <MdiIcon :path="mdiInformationOutline" size="14" style="color: var(--accent-primary); flex-shrink: 0" />
             <span>
               Includes <code>x-portals</code> for AegisNAS Web Portal integration and ZFS bind mounts.
             </span>
@@ -692,7 +692,7 @@ watch(
 }
 
 .required-star {
-  color: #ef4444;
+  color: var(--danger-text);
   font-weight: 700;
 }
 
@@ -723,7 +723,7 @@ watch(
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   overflow: hidden;
@@ -734,7 +734,7 @@ watch(
   justify-content: space-between;
   align-items: center;
   padding: 10px 14px;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
@@ -750,7 +750,7 @@ watch(
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--bg-surface);
   border-top: 1px solid var(--border-subtle);
   font-size: 11.5px;
   color: var(--text-secondary);
@@ -758,7 +758,7 @@ watch(
 }
 
 .preview-footer-note code {
-  color: #38bdf8;
+  color: var(--accent-primary);
   font-size: 11px;
 }
 
@@ -793,7 +793,7 @@ watch(
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #334155;
+  background-color: var(--border-strong);
   transition: 0.2s;
   border-radius: 20px;
 }
@@ -811,7 +811,7 @@ watch(
 }
 
 input:checked + .switch-slider {
-  background-color: var(--accent-primary, #0284c7);
+  background-color: var(--accent-primary);
 }
 
 input:checked + .switch-slider:before {

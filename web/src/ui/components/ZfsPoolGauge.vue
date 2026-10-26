@@ -31,15 +31,15 @@ const innerDashOffset = computed(
 
 // Colors
 const capacityColor = computed(() => {
-  if (capClamped.value >= 90) return '#ef4444'; // Red
-  if (capClamped.value >= 75) return '#f59e0b'; // Amber
-  return '#38bdf8'; // Sky Blue
+  if (capClamped.value >= 90) return 'var(--danger)';
+  if (capClamped.value >= 75) return 'var(--warning)';
+  return 'var(--accent-primary)';
 });
 
 const fragmentationColor = computed(() => {
-  if (fragClamped.value >= 60) return '#f97316'; // Orange
-  if (fragClamped.value >= 30) return '#ec4899'; // Pink / Fuchsia
-  return '#a855f7'; // Violet / Purple
+  if (fragClamped.value >= 60) return 'var(--warning)';
+  if (fragClamped.value >= 30) return 'var(--accent-secondary)';
+  return 'var(--purple-text)';
 });
 </script>
 
@@ -52,7 +52,7 @@ const fragmentationColor = computed(() => {
         :cy="center"
         :r="outerRadius"
         fill="none"
-        stroke="rgba(255, 255, 255, 0.08)"
+        stroke="var(--gauge-track)"
         stroke-width="9"
       />
       <circle
@@ -60,7 +60,7 @@ const fragmentationColor = computed(() => {
         :cy="center"
         :r="innerRadius"
         fill="none"
-        stroke="rgba(255, 255, 255, 0.05)"
+        stroke="var(--gauge-track)"
         stroke-width="8"
       />
 
@@ -165,7 +165,7 @@ const fragmentationColor = computed(() => {
   font-family: inherit;
   font-size: 20px;
   font-weight: 800;
-  fill: #f8fafc;
+  fill: var(--text-primary);
 }
 
 .gauge-text-label {
@@ -173,7 +173,7 @@ const fragmentationColor = computed(() => {
   font-size: 8.5px;
   font-weight: 700;
   letter-spacing: 0.8px;
-  fill: #94a3b8;
+  fill: var(--text-secondary);
 }
 
 .gauge-text-frag {
