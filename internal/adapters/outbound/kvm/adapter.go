@@ -856,14 +856,40 @@ func (a *Adapter) CloneVM(ctx context.Context, id, newID, newName, targetPool st
 	return &cp, nil
 }
 
+func (a *Adapter) findCdromTarget(ctx context.Context, id string) string {
+	out, err := exec.CommandContext(ctx, "virsh", "domblklist", id, "--details").Output()
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(string(out), "\n")
+	for _, l := range lines {
+		fields := strings.Fields(l)
+		if len(fields) >= 3 && fields[1] == "cdrom" {
+			return fields[2]
+		}
+	}
+	return ""
+}
+
 func (a *Adapter) AttachMedia(ctx context.Context, id, deviceTarget, isoPath string) (*domain.VirtualMachine, error) {
 	if a.isRealDomain(ctx, id) {
 		dev := deviceTarget
 		if dev == "" {
-			dev = "sda"
+			dev = a.findCdromTarget(ctx, id)
+			if dev == "" {
+				dev = "sdz"
+			}
 		}
 		out, err := exec.CommandContext(ctx, "virsh", "change-media", id, dev, isoPath, "--insert").CombinedOutput()
 		if err != nil {
+			// If tray is already occupied, try --update
+			if _, errUp := exec.CommandContext(ctx, "virsh", "change-media", id, dev, isoPath, "--update").CombinedOutput(); errUp == nil {
+				return a.getDomainFromVirsh(ctx, id)
+			}
+			// If device doesn't exist, attach as new cdrom device
+			if _, errAtt := exec.CommandContext(ctx, "virsh", "attach-disk", id, isoPath, dev, "--type", "cdrom", "--mode", "readonly", "--config").CombinedOutput(); errAtt == nil {
+				return a.getDomainFromVirsh(ctx, id)
+			}
 			a.logError("change_media_insert", id, err, out)
 			return nil, fmt.Errorf("virsh change-media failed: %s: %w", strings.TrimSpace(string(out)), err)
 		}
@@ -886,7 +912,10 @@ func (a *Adapter) EjectMedia(ctx context.Context, id, deviceTarget string) (*dom
 	if a.isRealDomain(ctx, id) {
 		dev := deviceTarget
 		if dev == "" {
-			dev = "sda"
+			dev = a.findCdromTarget(ctx, id)
+			if dev == "" {
+				dev = "sdz"
+			}
 		}
 		out, err := exec.CommandContext(ctx, "virsh", "change-media", id, dev, "--eject").CombinedOutput()
 		if err != nil {
@@ -1027,6 +1056,30 @@ func (a *Adapter) DeleteSnapshot(ctx context.Context, vmID, snapID string) error
 	return nil
 }
 
+func findQemuEmulator() string {
+	candidates := []string{
+		"qemu-system-x86_64",
+		"qemu-kvm",
+		"/usr/bin/qemu-system-x86_64",
+		"/bin/qemu-system-x86_64",
+		"/usr/libexec/qemu-kvm",
+		"/usr/bin/qemu-kvm",
+		"/usr/sbin/qemu-system-x86_64",
+	}
+	for _, c := range candidates {
+		if strings.HasPrefix(c, "/") {
+			if _, err := os.Stat(c); err == nil {
+				return c
+			}
+		} else {
+			if p, err := exec.LookPath(c); err == nil {
+				return p
+			}
+		}
+	}
+	return ""
+}
+
 func buildDomainXML(vm domain.VirtualMachine) string {
 	var sb strings.Builder
 	domainType := "kvm"
@@ -1108,8 +1161,12 @@ func buildDomainXML(vm domain.VirtualMachine) string {
     <apic/>
   </features>
   <devices>
-    <emulator>/usr/sbin/qemu-system-x86_64</emulator>
-    <controller type='scsi' model='virtio-scsi'/>
+`)
+	if emu := findQemuEmulator(); emu != "" {
+		sb.WriteString(fmt.Sprintf(`    <emulator>%s</emulator>
+`, emu))
+	}
+	sb.WriteString(`    <controller type='scsi' model='virtio-scsi'/>
 `)
 
 	diskLetter := 'a'
@@ -1159,10 +1216,17 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 		sb.WriteString(fmt.Sprintf(`    <disk type='file' device='cdrom'>
       <driver name='qemu' type='raw'/>
       <source file='%s'/>
-      <target dev='sda' bus='sata'/>
+      <target dev='sdz' bus='sata'/>
       <readonly/>
     </disk>
 `, vm.CdromIsoImage))
+	} else {
+		sb.WriteString(`    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <target dev='sdz' bus='sata'/>
+      <readonly/>
+    </disk>
+`)
 	}
 
 	for _, iface := range vm.NetworkIfaces {

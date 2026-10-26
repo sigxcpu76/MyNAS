@@ -92,3 +92,73 @@ func TestRealLibvirtDomainLifecycle(t *testing.T) {
 		t.Errorf("DeleteVM failed: %v", err)
 	}
 }
+
+func TestRealLibvirtDomainWithCdromLifecycle(t *testing.T) {
+	ctx := context.Background()
+	tempDir := t.TempDir()
+	adapter := kvm.NewAdapterWithStateDir(tempDir)
+
+	if _, err := adapter.ListVMs(ctx); err != nil {
+		t.Skipf("virsh/libvirt not available on this host: %v", err)
+	}
+
+	vmID := "nasctl-ci-test-cdrom"
+	diskPath := tempDir + "/ci-disk.raw"
+	isoPath := tempDir + "/ci-boot.iso"
+	if err := os.WriteFile(isoPath, []byte("fake-iso-boot-content"), 0644); err != nil {
+		t.Fatalf("failed to write dummy iso: %v", err)
+	}
+
+	// Create real VM with both hard disk and boot ISO
+	vm, err := adapter.CreateVM(ctx, domain.VirtualMachine{
+		ID:            vmID,
+		VMName:        "NASCTL Real Test CDROM VM",
+		MemoryMiB:     256,
+		VCPUs:         1,
+		CdromIsoImage: isoPath,
+		Disks: []domain.VirtualMachineDisk{
+			{
+				ID:        "sda",
+				Bus:       "scsi",
+				DiskPath:  diskPath,
+				SizeBytes: 10 * 1024 * 1024,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to create real VM with CDROM: %v", err)
+	}
+	defer func() {
+		_ = adapter.DeleteVM(ctx, vmID)
+		_ = os.Remove(diskPath)
+		_ = os.Remove(isoPath)
+	}()
+
+	if vm.CdromIsoImage != isoPath {
+		t.Errorf("expected CdromIsoImage %q, got %q", isoPath, vm.CdromIsoImage)
+	}
+
+	// Test AttachMedia and EjectMedia
+	newIsoPath := tempDir + "/ci-new.iso"
+	if err := os.WriteFile(newIsoPath, []byte("fake-new-iso"), 0644); err != nil {
+		t.Fatalf("failed to write new dummy iso: %v", err)
+	}
+	defer os.Remove(newIsoPath)
+
+	attached, err := adapter.AttachMedia(ctx, vmID, "", newIsoPath)
+	if err != nil {
+		t.Errorf("AttachMedia failed: %v", err)
+	} else if attached.CdromIsoImage != newIsoPath {
+		t.Errorf("expected attached ISO %q, got %q", newIsoPath, attached.CdromIsoImage)
+	}
+
+	ejected, err := adapter.EjectMedia(ctx, vmID, "")
+	if err != nil {
+		t.Errorf("EjectMedia failed: %v", err)
+	} else if ejected.CdromIsoImage != "" {
+		t.Errorf("expected empty CdromIsoImage after eject, got %q", ejected.CdromIsoImage)
+	}
+
+	_, _ = adapter.StopVM(ctx, vmID, true)
+	_ = adapter.DeleteVM(ctx, vmID)
+}
