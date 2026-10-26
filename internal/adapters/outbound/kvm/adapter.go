@@ -63,6 +63,7 @@ func NewAdapterWithStateDir(stateDir string) *Adapter {
 
 	go func() {
 		_ = EnsureHostPermissions()
+		_ = EnsureHostBridging()
 	}()
 
 	return a
@@ -1285,9 +1286,10 @@ func findQemuEmulator() string {
 // resolveHostNetworkTarget determines the libvirt interface type ('bridge', 'direct', or 'user')
 // and target device name for a given network bridge/device specification.
 // If target is an existing Linux bridge (e.g. br0, vmbr0), it uses type 'bridge'.
+// If target is enslaved to a Linux bridge (e.g. ens3 in br0), it uses type 'bridge' with the master bridge.
 // If target is an ethernet/physical device (e.g. ens3, eth0), it uses type 'direct' with mode='bridge' (macvtap).
 // If target is empty or not found (e.g. legacy default 'virbr0'), it automatically discovers
-// the host's default route LAN interface (e.g. ens3) and uses type 'direct' mode='bridge'.
+// the host's bridge (br0) or default route LAN interface.
 func resolveHostNetworkTarget(target string) (netType string, devName string) {
 	target = strings.TrimSpace(target)
 
@@ -1300,6 +1302,13 @@ func resolveHostNetworkTarget(target string) (netType string, devName string) {
 	if target != "" {
 		if isLinuxBridge(target) {
 			return "bridge", target
+		}
+		// If target is enslaved to a Linux bridge (e.g. ens3 is enslaved to br0)
+		if masterLink, err := os.Readlink(filepath.Join("/sys/class/net", target, "master")); err == nil {
+			masterName := filepath.Base(masterLink)
+			if isLinuxBridge(masterName) {
+				return "bridge", masterName
+			}
 		}
 		// If target is a real non-loopback network interface (e.g. ens3, eth0)
 		if ifi, err := net.InterfaceByName(target); err == nil && (ifi.Flags&net.FlagLoopback == 0) {
@@ -1314,8 +1323,17 @@ func resolveHostNetworkTarget(target string) (netType string, devName string) {
 		}
 	}
 
-	// 3. Fall back to host's primary default route interface (e.g. ens3 on physical LAN)
+	// 3. Fall back to host's primary default route interface (e.g. br0 or ens3 on physical LAN)
 	if defIface := getDefaultRouteInterface(); defIface != "" {
+		if isLinuxBridge(defIface) {
+			return "bridge", defIface
+		}
+		if masterLink, err := os.Readlink(filepath.Join("/sys/class/net", defIface, "master")); err == nil {
+			masterName := filepath.Base(masterLink)
+			if isLinuxBridge(masterName) {
+				return "bridge", masterName
+			}
+		}
 		if ifi, err := net.InterfaceByName(defIface); err == nil && (ifi.Flags&net.FlagLoopback == 0) {
 			return "direct", defIface
 		}
@@ -1348,6 +1366,138 @@ func resolveHostNetworkTarget(target string) (netType string, devName string) {
 	}
 
 	return "user", ""
+}
+
+// EnsureHostBridging ensures that if a Linux bridge (such as br0) has a physical uplink interface
+// (e.g. ens3 in nested virtualization or environments with MAC anti-spoofing),
+// ebtables L2 SNAT and DNAT rules are configured so that nested VMs can bidirectionally
+// communicate on the host's LAN (ARP, unicast, IP) and access the default gateway and Internet.
+func EnsureHostBridging() error {
+	if os.Geteuid() != 0 {
+		return nil
+	}
+
+	// 1. Enable IPv4 packet forwarding
+	_ = exec.Command("sysctl", "-w", "net.ipv4.ip_forward=1").Run()
+
+	// 2. Check for standard bridges
+	bridges := []string{"br0", "vmbr0"}
+	var activeBridge string
+	for _, b := range bridges {
+		if isLinuxBridge(b) {
+			activeBridge = b
+			break
+		}
+	}
+	if activeBridge == "" {
+		return nil
+	}
+
+	// 3. Find physical uplink port enslaved to the active bridge
+	brifDir := filepath.Join("/sys/class/net", activeBridge, "brif")
+	entries, err := os.ReadDir(brifDir)
+	if err != nil {
+		return nil
+	}
+
+	var uplink string
+	var uplinkMAC string
+	for _, e := range entries {
+		name := e.Name()
+		if strings.HasPrefix(name, "vnet") || strings.HasPrefix(name, "tap") || strings.HasPrefix(name, "veth") {
+			continue
+		}
+		macBytes, err := os.ReadFile(filepath.Join("/sys/class/net", name, "address"))
+		if err == nil {
+			uplink = name
+			uplinkMAC = strings.TrimSpace(string(macBytes))
+			break
+		}
+	}
+
+	if uplink == "" || uplinkMAC == "" {
+		return nil
+	}
+
+	// 4. Find primary IPv4 on the bridge
+	var hostIP string
+	if ifi, err := net.InterfaceByName(activeBridge); err == nil {
+		if addrs, err := ifi.Addrs(); err == nil {
+			for _, addr := range addrs {
+				if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
+					if ip4 := ipNet.IP.To4(); ip4 != nil {
+						hostIP = ip4.String()
+						break
+					}
+				}
+			}
+		}
+	}
+
+	if hostIP == "" {
+		return nil
+	}
+
+	// 5. Ensure ebtables rules
+	if _, err := exec.LookPath("ebtables"); err == nil {
+		rules := [][]string{
+			{"-t", "nat", "-A", "POSTROUTING", "!", "-s", uplinkMAC, "-o", uplink, "-j", "snat", "--to-src", uplinkMAC, "--snat-arp"},
+			{"-t", "nat", "-A", "PREROUTING", "-p", "IPv4", "-d", uplinkMAC, "-i", uplink, "!", "--ip-dst", hostIP, "-j", "dnat", "--to-dst", "ff:ff:ff:ff:ff:ff"},
+			{"-t", "nat", "-A", "PREROUTING", "-p", "ARP", "-d", uplinkMAC, "-i", uplink, "!", "--arp-ip-dst", hostIP, "-j", "dnat", "--to-dst", "ff:ff:ff:ff:ff:ff"},
+			{"-t", "nat", "-A", "PREROUTING", "-p", "IPv6", "-d", uplinkMAC, "-i", uplink, "-j", "dnat", "--to-dst", "ff:ff:ff:ff:ff:ff"},
+		}
+
+		checkRules := [][]string{
+			{"-t", "nat", "-C", "POSTROUTING", "!", "-s", uplinkMAC, "-o", uplink, "-j", "snat", "--to-src", uplinkMAC, "--snat-arp"},
+			{"-t", "nat", "-C", "PREROUTING", "-p", "IPv4", "-d", uplinkMAC, "-i", uplink, "!", "--ip-dst", hostIP, "-j", "dnat", "--to-dst", "ff:ff:ff:ff:ff:ff"},
+			{"-t", "nat", "-C", "PREROUTING", "-p", "ARP", "-d", uplinkMAC, "-i", uplink, "!", "--arp-ip-dst", hostIP, "-j", "dnat", "--to-dst", "ff:ff:ff:ff:ff:ff"},
+			{"-t", "nat", "-C", "PREROUTING", "-p", "IPv6", "-d", uplinkMAC, "-i", uplink, "-j", "dnat", "--to-dst", "ff:ff:ff:ff:ff:ff"},
+		}
+
+		for i, cr := range checkRules {
+			if err := exec.Command("ebtables", cr...).Run(); err != nil {
+				_ = exec.Command("ebtables", rules[i]...).Run()
+			}
+		}
+
+		// Save rules for persistent reload across boots
+		if ebtablesSave, err := exec.LookPath("ebtables-save"); err == nil {
+			if out, err := exec.Command(ebtablesSave).Output(); err == nil && len(out) > 0 {
+				_ = os.WriteFile("/etc/mynas-ebtables.rules", out, 0644)
+			}
+		}
+
+		// Ensure systemd service exists and is enabled
+		servicePath := "/etc/systemd/system/mynas-ebtables.service"
+		if _, err := os.Stat(servicePath); os.IsNotExist(err) {
+			unitContent := `[Unit]
+Description=MyNAS ebtables rules for VM bridging
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c "test -f /etc/mynas-ebtables.rules && /usr/sbin/ebtables-restore < /etc/mynas-ebtables.rules || true"
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+`
+			_ = os.WriteFile(servicePath, []byte(unitContent), 0644)
+			_ = exec.Command("systemctl", "daemon-reload").Run()
+			_ = exec.Command("systemctl", "enable", "mynas-ebtables.service").Run()
+		}
+	}
+
+	// 6. If host has no functional IPv6 transit, reject forwarded IPv6 to avoid 120s connection timeouts
+	if _, err := exec.LookPath("ip6tables"); err == nil {
+		if exec.Command("ping6", "-c", "1", "-W", "1", "2606:4700:4700::1111").Run() != nil {
+			if err := exec.Command("ip6tables", "-C", "FORWARD", "-j", "REJECT", "--reject-with", "icmp6-no-route").Run(); err != nil {
+				_ = exec.Command("ip6tables", "-I", "FORWARD", "-j", "REJECT", "--reject-with", "icmp6-no-route").Run()
+			}
+		}
+	}
+
+	return nil
 }
 
 func isLinuxBridge(name string) bool {

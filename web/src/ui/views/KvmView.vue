@@ -208,7 +208,9 @@ const suggestedDiskPath = computed(() => {
 
 const defaultBridge = computed<string>(() => {
   const net = nasState.systemTelemetry?.network;
-  if (!net || !Array.isArray(net)) return 'ens3';
+  if (!net || !Array.isArray(net)) return 'br0';
+  const br = net.find((n: NetworkInterfaceTelemetry) => n.name === 'br0' || n.name === 'vmbr0');
+  if (br) return br.name;
   const def = net.find((n: NetworkInterfaceTelemetry) => n.isDefault);
   if (def) return def.name;
   const firstEth = net.find(
@@ -220,7 +222,7 @@ const defaultBridge = computed<string>(() => {
       !n.name.startsWith('lxc')
   );
   if (firstEth) return firstEth.name;
-  return 'ens3';
+  return 'br0';
 });
 
 function onVmNameInput() {
