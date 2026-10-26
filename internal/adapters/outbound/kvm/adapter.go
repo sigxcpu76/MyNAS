@@ -725,7 +725,15 @@ func (a *Adapter) UpdateVM(ctx context.Context, vm domain.VirtualMachine, fields
 	defer a.mu.Unlock()
 	existing, ok := a.vms[vm.ID]
 	if !ok {
-		return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, vm.ID)
+		if a.hasVirsh() {
+			if dom, err := a.getDomainFromVirsh(ctx, vm.ID); err == nil && dom != nil {
+				existing = *dom
+				ok = true
+			}
+		}
+		if !ok {
+			return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, vm.ID)
+		}
 	}
 
 	if vm.VCPUs > 0 {
@@ -746,6 +754,10 @@ func (a *Adapter) UpdateVM(ctx context.Context, vm domain.VirtualMachine, fields
 	if vm.BalloonMinMiB > 0 {
 		existing.BalloonMinMiB = vm.BalloonMinMiB
 	}
+	if vm.Hugepages != "" {
+		existing.Hugepages = vm.Hugepages
+	}
+	existing.NUMA = vm.NUMA
 	if vm.MachineType != "" {
 		existing.MachineType = vm.MachineType
 	}
@@ -756,6 +768,9 @@ func (a *Adapter) UpdateVM(ctx context.Context, vm domain.VirtualMachine, fields
 		existing.TPMVersion = vm.TPMVersion
 	}
 	existing.SecureBoot = vm.SecureBoot
+	if vm.DisplayType != "" {
+		existing.DisplayType = vm.DisplayType
+	}
 	if len(vm.Disks) > 0 {
 		existing.Disks = vm.Disks
 	}
@@ -782,7 +797,10 @@ func (a *Adapter) UpdateVM(ctx context.Context, vm domain.VirtualMachine, fields
 		xmlStr := buildDomainXML(existing)
 		cmd := exec.CommandContext(ctx, "virsh", "define", "/dev/stdin")
 		cmd.Stdin = strings.NewReader(xmlStr)
-		_ = cmd.Run()
+		if out, err := cmd.CombinedOutput(); err != nil {
+			a.logError("define", vm.ID, err, out)
+			return nil, fmt.Errorf("failed to update VM definition in libvirt: %s: %w", strings.TrimSpace(string(out)), err)
+		}
 	}
 
 	a.vms[vm.ID] = existing
@@ -1759,10 +1777,7 @@ func buildDomainXML(vm domain.VirtualMachine) string {
     <graphics type='vnc' port='-1' autoport='yes' listen='127.0.0.1'>
       <listen type='address' address='127.0.0.1'/>
     </graphics>
-    <video>
-      <model type='vga'/>
-    </video>
-    <serial type='pty'>
+` + buildVideoXML(vm.DisplayType) + `    <serial type='pty'>
       <target type='isa-serial' port='0'/>
     </serial>
     <console type='pty'>
@@ -1784,6 +1799,30 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 
 	sb.WriteString(`</domain>`)
 	return sb.String()
+}
+
+func buildVideoXML(displayType string) string {
+	videoModel := "virtio"
+	if displayType != "" {
+		switch displayType {
+		case "virtio-gpu", "virtio":
+			videoModel = "virtio"
+		case "vga":
+			videoModel = "vga"
+		case "qxl":
+			videoModel = "qxl"
+		case "bochs":
+			videoModel = "bochs"
+		case "none":
+			return ""
+		default:
+			videoModel = displayType
+		}
+	}
+	return fmt.Sprintf(`    <video>
+      <model type='%s'/>
+    </video>
+`, videoModel)
 }
 
 func generateMAC() string {

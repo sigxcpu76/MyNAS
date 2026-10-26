@@ -30,6 +30,7 @@ import {
   mdiMagnify,
   mdiNetwork,
   mdiPause,
+  mdiPencil,
   mdiPlay,
   mdiPlus,
   mdiPower,
@@ -105,6 +106,36 @@ const nicForm = reactive({
   model: 'virtio',
   bridge: 'virbr0',
   vlanTag: 0,
+});
+
+// Edit Hardware Modals
+const showEditCpuModal = ref(false);
+const editCpuForm = reactive({
+  vcpus: 2,
+  sockets: 1,
+  cores: 2,
+  cpuType: 'host',
+  numa: false,
+});
+
+const showEditMemoryModal = ref(false);
+const editMemoryForm = reactive({
+  memoryMib: 4096,
+  balloonMinMib: 2048,
+  hugepages: 'off',
+});
+
+const showEditPlatformModal = ref(false);
+const editPlatformForm = reactive({
+  machineType: 'q35',
+  biosType: 'seabios',
+  tpmVersion: 'none',
+  secureBoot: false,
+});
+
+const showEditDisplayModal = ref(false);
+const editDisplayForm = reactive({
+  displayType: 'virtio-gpu',
 });
 
 // Clone Form
@@ -643,6 +674,122 @@ async function handleAddNic() {
     await refreshVms();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to add network device');
+  }
+}
+
+// Hardware Edit Handlers
+function openEditCpuModal() {
+  if (!inspectingVm.value) return;
+  editCpuForm.sockets = inspectingVm.value.sockets || 1;
+  editCpuForm.cores = inspectingVm.value.cores || inspectingVm.value.vcpus || 1;
+  editCpuForm.vcpus = inspectingVm.value.vcpus || (editCpuForm.sockets * editCpuForm.cores);
+  editCpuForm.cpuType = inspectingVm.value.cpuType || 'host';
+  editCpuForm.numa = Boolean(inspectingVm.value.numa);
+  showEditCpuModal.value = true;
+}
+
+async function handleUpdateCpu() {
+  if (!inspectingVm.value) return;
+  const vcpus = editCpuForm.sockets * editCpuForm.cores;
+  try {
+    await services.kvm.updateVirtualMachine(
+      inspectingVm.value.name,
+      {
+        vcpus,
+        sockets: editCpuForm.sockets,
+        cores: editCpuForm.cores,
+        cpuType: editCpuForm.cpuType,
+        numa: editCpuForm.numa,
+      },
+      ['vcpus', 'sockets', 'cores', 'cpu_type', 'numa']
+    );
+    notify('success', `Updated CPU configuration for ${inspectingVm.value.vmName}`);
+    showEditCpuModal.value = false;
+    await refreshVms();
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to update CPU settings');
+  }
+}
+
+function openEditMemoryModal() {
+  if (!inspectingVm.value) return;
+  editMemoryForm.memoryMib = inspectingVm.value.memoryMib || 2048;
+  editMemoryForm.balloonMinMib = inspectingVm.value.balloonMinMib || editMemoryForm.memoryMib;
+  editMemoryForm.hugepages = inspectingVm.value.hugepages || 'off';
+  showEditMemoryModal.value = true;
+}
+
+async function handleUpdateMemory() {
+  if (!inspectingVm.value) return;
+  try {
+    await services.kvm.updateVirtualMachine(
+      inspectingVm.value.name,
+      {
+        memoryMib: editMemoryForm.memoryMib,
+        balloonMinMib: editMemoryForm.balloonMinMib,
+        hugepages: editMemoryForm.hugepages,
+      },
+      ['memory_mib', 'balloon_min_mib', 'hugepages']
+    );
+    notify('success', `Updated memory configuration for ${inspectingVm.value.vmName}`);
+    showEditMemoryModal.value = false;
+    await refreshVms();
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to update memory settings');
+  }
+}
+
+function openEditPlatformModal() {
+  if (!inspectingVm.value) return;
+  editPlatformForm.machineType = inspectingVm.value.machineType || 'q35';
+  editPlatformForm.biosType = inspectingVm.value.biosType || 'ovmf';
+  editPlatformForm.tpmVersion = inspectingVm.value.tpmVersion || 'none';
+  editPlatformForm.secureBoot = Boolean(inspectingVm.value.secureBoot);
+  showEditPlatformModal.value = true;
+}
+
+async function handleUpdatePlatform() {
+  if (!inspectingVm.value) return;
+  try {
+    await services.kvm.updateVirtualMachine(
+      inspectingVm.value.name,
+      {
+        machineType: editPlatformForm.machineType,
+        biosType: editPlatformForm.biosType,
+        tpmVersion: editPlatformForm.tpmVersion,
+        secureBoot: editPlatformForm.secureBoot,
+      },
+      ['machine_type', 'bios_type', 'tpm_version', 'secure_boot']
+    );
+    notify('success', `Updated platform / BIOS configuration for ${inspectingVm.value.vmName}`);
+    showEditPlatformModal.value = false;
+    await refreshVms();
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to update platform settings');
+  }
+}
+
+function openEditDisplayModal() {
+  if (!inspectingVm.value) return;
+  editDisplayForm.displayType = inspectingVm.value.displayType || 'virtio-gpu';
+  showEditDisplayModal.value = true;
+}
+
+async function handleUpdateDisplay() {
+  if (!inspectingVm.value) return;
+  try {
+    await services.kvm.updateVirtualMachine(
+      inspectingVm.value.name,
+      {
+        displayType: editDisplayForm.displayType,
+      },
+      ['display_type']
+    );
+    notify('success', `Updated display configuration for ${inspectingVm.value.vmName}`);
+    showEditDisplayModal.value = false;
+    await refreshVms();
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to update display settings');
   }
 }
 
@@ -1433,31 +1580,45 @@ async function handleWizardSubmit() {
                 </thead>
                 <tbody>
                   <!-- Processors -->
-                  <tr>
+                  <tr @dblclick="openEditCpuModal" style="cursor: pointer" title="Double click to edit processors">
                     <td class="font-semibold">Processors</td>
                     <td class="mono" style="font-size: 12px">
                       {{ inspectingVm.vcpus }} vCPU ({{ inspectingVm.sockets || 1 }} sockets, {{ inspectingVm.cores || inspectingVm.vcpus }} cores) [Type: {{ inspectingVm.cpuType || 'host' }}]
+                      <span v-if="inspectingVm.numa" class="badge badge-neutral" style="margin-left: 6px; font-size: 10px">NUMA</span>
                     </td>
-                    <td style="text-align: right"><span class="text-muted">-</span></td>
+                    <td style="text-align: right">
+                      <button class="btn btn-xs" @click.stop="openEditCpuModal">
+                        <MdiIcon :path="mdiPencil" size="12" /> Edit
+                      </button>
+                    </td>
                   </tr>
 
                   <!-- Memory -->
-                  <tr>
+                  <tr @dblclick="openEditMemoryModal" style="cursor: pointer" title="Double click to edit memory">
                     <td class="font-semibold">Memory</td>
                     <td class="mono" style="font-size: 12px">
                       {{ formatBytes(inspectingVm.memoryMib * 1024 * 1024) }}
                       (Ballooning Min: {{ formatBytes((inspectingVm.balloonMinMib || inspectingVm.memoryMib) * 1024 * 1024) }}, Hugepages: {{ inspectingVm.hugepages || 'off' }})
                     </td>
-                    <td style="text-align: right"><span class="text-muted">-</span></td>
+                    <td style="text-align: right">
+                      <button class="btn btn-xs" @click.stop="openEditMemoryModal">
+                        <MdiIcon :path="mdiPencil" size="12" /> Edit
+                      </button>
+                    </td>
                   </tr>
 
                   <!-- Machine & BIOS -->
-                  <tr>
+                  <tr @dblclick="openEditPlatformModal" style="cursor: pointer" title="Double click to edit machine & BIOS">
                     <td class="font-semibold">Machine & BIOS</td>
                     <td class="mono" style="font-size: 12px">
                       BIOS: {{ (inspectingVm.biosType || 'seabios').toUpperCase() }} | Machine: {{ inspectingVm.machineType || 'q35' }} | TPM: {{ inspectingVm.tpmVersion || 'none' }}
+                      <span v-if="inspectingVm.secureBoot" class="badge badge-neutral" style="margin-left: 6px; font-size: 10px">Secure Boot</span>
                     </td>
-                    <td style="text-align: right"><span class="text-muted">-</span></td>
+                    <td style="text-align: right">
+                      <button class="btn btn-xs" @click.stop="openEditPlatformModal">
+                        <MdiIcon :path="mdiPencil" size="12" /> Edit
+                      </button>
+                    </td>
                   </tr>
 
                   <!-- Hard Disks -->
@@ -1515,12 +1676,16 @@ async function handleWizardSubmit() {
                   </tr>
 
                   <!-- Display -->
-                  <tr>
+                  <tr @dblclick="openEditDisplayModal" style="cursor: pointer" title="Double click to edit display">
                     <td class="font-semibold">Display / Graphics</td>
                     <td class="mono" style="font-size: 12px">
                       {{ inspectingVm.displayType || 'virtio-gpu' }} (VNC Display: {{ inspectingVm.vncDisplay || '127.0.0.1:5900' }})
                     </td>
-                    <td style="text-align: right"><span class="text-muted">-</span></td>
+                    <td style="text-align: right">
+                      <button class="btn btn-xs" @click.stop="openEditDisplayModal">
+                        <MdiIcon :path="mdiPencil" size="12" /> Edit
+                      </button>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -1813,6 +1978,179 @@ async function handleWizardSubmit() {
           <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px">
             <button type="button" class="btn" @click="showAddNicModal = false">Cancel</button>
             <button type="submit" class="btn btn-primary">Add Device</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ======================================================================= -->
+    <!-- EDIT PROCESSORS MODAL -->
+    <!-- ======================================================================= -->
+    <div v-if="showEditCpuModal" class="modal-backdrop" @click.self="showEditCpuModal = false">
+      <div class="modal-card" style="max-width: 480px">
+        <div class="modal-header">
+          <h3 class="modal-title">Edit Processors ({{ inspectingVm?.vmName }})</h3>
+          <button class="btn btn-sm" @click="showEditCpuModal = false">
+            <MdiIcon :path="mdiClose" size="16" />
+          </button>
+        </div>
+        <form @submit.prevent="handleUpdateCpu" style="padding: 16px; display: flex; flex-direction: column; gap: 14px">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Sockets</label>
+              <input v-model.number="editCpuForm.sockets" type="number" min="1" max="16" class="input mono" required />
+            </div>
+            <div class="form-group">
+              <label>Cores (per socket)</label>
+              <input v-model.number="editCpuForm.cores" type="number" min="1" max="128" class="input mono" required />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Total vCPUs</label>
+            <input :value="editCpuForm.sockets * editCpuForm.cores" class="input mono" disabled />
+          </div>
+          <div class="form-group">
+            <label>CPU Type / Emulation Model</label>
+            <select v-model="editCpuForm.cpuType" class="select mono">
+              <option value="host">host (Pass-through host CPU flags - Recommended)</option>
+              <option value="kvm64">kvm64 (Default QEMU 64-bit)</option>
+              <option value="qemu64">qemu64 (Legacy QEMU)</option>
+              <option value="x86-64-v2-AES">x86-64-v2-AES (Modern Generic x86-64)</option>
+              <option value="EPYC">EPYC (AMD EPYC)</option>
+            </select>
+          </div>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px">
+            <input v-model="editCpuForm.numa" type="checkbox" />
+            Enable NUMA (Non-Uniform Memory Access)
+          </label>
+          <div class="text-muted" style="font-size: 11px">
+            Note: Changes to CPU topology and model take effect on next VM restart.
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px">
+            <button type="button" class="btn" @click="showEditCpuModal = false">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ======================================================================= -->
+    <!-- EDIT MEMORY MODAL -->
+    <!-- ======================================================================= -->
+    <div v-if="showEditMemoryModal" class="modal-backdrop" @click.self="showEditMemoryModal = false">
+      <div class="modal-card" style="max-width: 480px">
+        <div class="modal-header">
+          <h3 class="modal-title">Edit Memory ({{ inspectingVm?.vmName }})</h3>
+          <button class="btn btn-sm" @click="showEditMemoryModal = false">
+            <MdiIcon :path="mdiClose" size="16" />
+          </button>
+        </div>
+        <form @submit.prevent="handleUpdateMemory" style="padding: 16px; display: flex; flex-direction: column; gap: 14px">
+          <div class="form-group">
+            <label>Memory Size (MiB)</label>
+            <input v-model.number="editMemoryForm.memoryMib" type="number" min="256" step="256" class="input mono" required />
+            <span class="helper">{{ formatBytes(editMemoryForm.memoryMib * 1024 * 1024) }}</span>
+          </div>
+          <div class="form-group">
+            <label>Minimum Memory / Ballooning (MiB)</label>
+            <input v-model.number="editMemoryForm.balloonMinMib" type="number" min="256" step="256" class="input mono" required />
+            <span class="helper">Dynamically freed memory with virtio-balloon</span>
+          </div>
+          <div class="form-group">
+            <label>Hugepages</label>
+            <select v-model="editMemoryForm.hugepages" class="select mono">
+              <option value="off">off (Standard 4KB paging)</option>
+              <option value="2MB">2MB (Pre-allocated Hugepages)</option>
+              <option value="1GB">1GB (Gigabyte Hugepages)</option>
+            </select>
+          </div>
+          <div class="text-muted" style="font-size: 11px">
+            Note: Memory modifications take effect immediately or on next VM restart.
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px">
+            <button type="button" class="btn" @click="showEditMemoryModal = false">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ======================================================================= -->
+    <!-- EDIT PLATFORM / MACHINE & BIOS MODAL -->
+    <!-- ======================================================================= -->
+    <div v-if="showEditPlatformModal" class="modal-backdrop" @click.self="showEditPlatformModal = false">
+      <div class="modal-card" style="max-width: 500px">
+        <div class="modal-header">
+          <h3 class="modal-title">Edit Machine & BIOS ({{ inspectingVm?.vmName }})</h3>
+          <button class="btn btn-sm" @click="showEditPlatformModal = false">
+            <MdiIcon :path="mdiClose" size="16" />
+          </button>
+        </div>
+        <form @submit.prevent="handleUpdatePlatform" style="padding: 16px; display: flex; flex-direction: column; gap: 14px">
+          <div class="form-group">
+            <label>Machine Chipset Architecture</label>
+            <select v-model="editPlatformForm.machineType" class="select mono">
+              <option value="q35">q35 (Modern PCIe / SATA Architecture - Recommended)</option>
+              <option value="i440fx">i440fx (Legacy PCI / IDE Architecture)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>BIOS / Firmware</label>
+            <select v-model="editPlatformForm.biosType" class="select mono">
+              <option value="ovmf">OVMF (UEFI - Modern GPT Boot)</option>
+              <option value="seabios">SeaBIOS (Standard Legacy MBR/BIOS)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>vTPM (Trusted Platform Module)</label>
+            <select v-model="editPlatformForm.tpmVersion" class="select mono">
+              <option value="none">None (Disabled)</option>
+              <option value="v2.0">v2.0 (swtpm Software TPM - Required for Windows 11)</option>
+            </select>
+          </div>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px" :style="{ opacity: editPlatformForm.biosType === 'ovmf' ? 1 : 0.5 }">
+            <input v-model="editPlatformForm.secureBoot" type="checkbox" :disabled="editPlatformForm.biosType !== 'ovmf'" />
+            Enable UEFI Secure Boot (Requires OVMF)
+          </label>
+          <div class="text-muted" style="font-size: 11px">
+            Note: Changing machine chipset or BIOS type requires a full VM restart and can alter device bus addresses.
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px">
+            <button type="button" class="btn" @click="showEditPlatformModal = false">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ======================================================================= -->
+    <!-- EDIT DISPLAY MODAL -->
+    <!-- ======================================================================= -->
+    <div v-if="showEditDisplayModal" class="modal-backdrop" @click.self="showEditDisplayModal = false">
+      <div class="modal-card" style="max-width: 480px">
+        <div class="modal-header">
+          <h3 class="modal-title">Edit Display Adapter ({{ inspectingVm?.vmName }})</h3>
+          <button class="btn btn-sm" @click="showEditDisplayModal = false">
+            <MdiIcon :path="mdiClose" size="16" />
+          </button>
+        </div>
+        <form @submit.prevent="handleUpdateDisplay" style="padding: 16px; display: flex; flex-direction: column; gap: 14px">
+          <div class="form-group">
+            <label>Display Device / GPU</label>
+            <select v-model="editDisplayForm.displayType" class="select mono">
+              <option value="virtio-gpu">VirtIO GPU (virtio-gpu - High Performance 2D/3D)</option>
+              <option value="vga">Standard VGA (Compatibility)</option>
+              <option value="qxl">QXL (SPICE / Enhanced 2D)</option>
+              <option value="bochs">Bochs (Basic Display)</option>
+              <option value="none">None (Headless / Serial Only)</option>
+            </select>
+          </div>
+          <div class="text-muted" style="font-size: 11px">
+            Note: Changes to display adapter take effect on next VM restart.
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px">
+            <button type="button" class="btn" @click="showEditDisplayModal = false">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Changes</button>
           </div>
         </form>
       </div>
