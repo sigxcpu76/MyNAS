@@ -1,6 +1,7 @@
 package kvm
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -227,6 +228,7 @@ type domainXML struct {
 			Type   string `xml:"type,attr"`
 			Source struct {
 				Bridge  string `xml:"bridge,attr"`
+				Dev     string `xml:"dev,attr"`
 				Network string `xml:"network,attr"`
 			} `xml:"source"`
 			Mac struct {
@@ -412,6 +414,11 @@ func (a *Adapter) getDomainFromVirsh(ctx context.Context, name string) (*domain.
 		return nil, fmt.Errorf("failed to parse domain XML for %q: %w", name, err)
 	}
 
+	cpuType := doc.CPU.Model
+	if doc.CPU.Mode == "host-passthrough" || cpuType == "qemu64" || cpuType == "" {
+		cpuType = "host"
+	}
+
 	vm := domain.VirtualMachine{
 		ID:               doc.Name,
 		VMName:           doc.Name,
@@ -422,7 +429,7 @@ func (a *Adapter) getDomainFromVirsh(ctx context.Context, name string) (*domain.
 		VCPUs:            doc.VCPU.Value,
 		Sockets:          doc.CPU.Topology.Sockets,
 		Cores:            doc.CPU.Topology.Cores,
-		CPUType:          doc.CPU.Model,
+		CPUType:          cpuType,
 		MachineType:      doc.OS.Type.Machine,
 		SerialConsoleURL: fmt.Sprintf("/ws/serial/%s", doc.Name),
 	}
@@ -461,10 +468,14 @@ func (a *Adapter) getDomainFromVirsh(ctx context.Context, name string) (*domain.
 	}
 
 	for idx, iface := range doc.Devices.Interfaces {
+		brName := iface.Source.Bridge
+		if brName == "" {
+			brName = iface.Source.Dev
+		}
 		nic := domain.VirtualMachineNetworkInterface{
 			ID:         fmt.Sprintf("net%d", idx),
 			Model:      iface.Model.Type,
-			Bridge:     iface.Source.Bridge,
+			Bridge:     brName,
 			MacAddress: iface.Mac.Address,
 			VlanTag:    iface.Vlan.Tag.ID,
 			Firewall:   true,
@@ -602,11 +613,15 @@ func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*doma
 		a.sanitizeAndEnsureDisks(&vm)
 
 		if len(vm.NetworkIfaces) == 0 {
+			_, defDev := resolveHostNetworkTarget("")
+			if defDev == "" {
+				defDev = "br0"
+			}
 			vm.NetworkIfaces = []domain.VirtualMachineNetworkInterface{
 				{
 					ID:         "net0",
 					Model:      "virtio",
-					Bridge:     "virbr0",
+					Bridge:     defDev,
 					MacAddress: generateMAC(),
 					Firewall:   true,
 				},
@@ -629,8 +644,14 @@ func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*doma
 		startCmd := exec.CommandContext(ctx, "virsh", "start", vm.ID)
 		startOut, err := startCmd.CombinedOutput()
 		if err != nil {
-			// Auto-heal if start failed (CPU mode unsupported, non-existent disk zvol bind error, etc.)
+			// Auto-heal if start failed (CPU mode unsupported, non-existent disk zvol bind error, macvtap unprivileged error, etc.)
 			if createdVM, getErr := a.getDomainFromVirsh(ctx, vm.ID); getErr == nil {
+				createdVM.CPUType = "host"
+				if strings.Contains(string(startOut), "macvtap") || strings.Contains(string(startOut), "Operation not permitted") || strings.Contains(string(startOut), "bridge helper") {
+					for i := range createdVM.NetworkIfaces {
+						createdVM.NetworkIfaces[i].Bridge = "user"
+					}
+				}
 				a.sanitizeAndEnsureDisks(createdVM)
 				redefStr := buildDomainXML(*createdVM)
 				redefCmd := exec.CommandContext(ctx, "virsh", "define", "/dev/stdin")
@@ -674,8 +695,13 @@ func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*doma
 
 	if len(vm.NetworkIfaces) == 0 {
 		bridge := vm.NetworkBridge
-		if bridge == "" {
-			bridge = "virbr0"
+		if bridge == "" || bridge == "virbr0" {
+			_, defDev := resolveHostNetworkTarget("")
+			if defDev != "" {
+				bridge = defDev
+			} else {
+				bridge = "br0"
+			}
 		}
 		vm.NetworkIfaces = []domain.VirtualMachineNetworkInterface{
 			{
@@ -784,8 +810,14 @@ func (a *Adapter) StartVM(ctx context.Context, id string) (*domain.VirtualMachin
 	if a.isRealDomain(ctx, id) {
 		out, err := exec.CommandContext(ctx, "virsh", "start", id).CombinedOutput()
 		if err != nil {
-			// Auto-heal if start failed (CPU mode unsupported, non-existent disk zvol bind error, etc.)
+			// Auto-heal if start failed (CPU mode unsupported, non-existent disk zvol bind error, macvtap unprivileged error, etc.)
 			if vm, getErr := a.getDomainFromVirsh(ctx, id); getErr == nil {
+				vm.CPUType = "host"
+				if strings.Contains(string(out), "macvtap") || strings.Contains(string(out), "Operation not permitted") || strings.Contains(string(out), "bridge helper") {
+					for i := range vm.NetworkIfaces {
+						vm.NetworkIfaces[i].Bridge = "user"
+					}
+				}
 				a.sanitizeAndEnsureDisks(vm)
 				xmlStr := buildDomainXML(*vm)
 				redefCmd := exec.CommandContext(ctx, "virsh", "define", "/dev/stdin")
@@ -1250,6 +1282,94 @@ func findQemuEmulator() string {
 	return ""
 }
 
+// resolveHostNetworkTarget determines the libvirt interface type ('bridge', 'direct', or 'user')
+// and target device name for a given network bridge/device specification.
+// If target is an existing Linux bridge (e.g. br0, vmbr0), it uses type 'bridge'.
+// If target is an ethernet/physical device (e.g. ens3, eth0), it uses type 'direct' with mode='bridge' (macvtap).
+// If target is empty or not found (e.g. legacy default 'virbr0'), it automatically discovers
+// the host's default route LAN interface (e.g. ens3) and uses type 'direct' mode='bridge'.
+func resolveHostNetworkTarget(target string) (netType string, devName string) {
+	target = strings.TrimSpace(target)
+
+	// Unprivileged non-root users (such as local test runs without CAP_NET_ADMIN) cannot create macvtap or bridge devices
+	if os.Geteuid() != 0 {
+		return "user", ""
+	}
+
+	// 1. If target is explicitly specified
+	if target != "" {
+		if isLinuxBridge(target) {
+			return "bridge", target
+		}
+		// If target is a real non-loopback network interface (e.g. ens3, eth0)
+		if ifi, err := net.InterfaceByName(target); err == nil && (ifi.Flags&net.FlagLoopback == 0) {
+			return "direct", target
+		}
+	}
+
+	// 2. Look for dedicated standard VM bridges (e.g. br0, vmbr0, virbr0)
+	for _, brCandidate := range []string{"br0", "vmbr0", "virbr0"} {
+		if isLinuxBridge(brCandidate) {
+			return "bridge", brCandidate
+		}
+	}
+
+	// 3. Fall back to host's primary default route interface (e.g. ens3 on physical LAN)
+	if defIface := getDefaultRouteInterface(); defIface != "" {
+		if ifi, err := net.InterfaceByName(defIface); err == nil && (ifi.Flags&net.FlagLoopback == 0) {
+			return "direct", defIface
+		}
+	}
+
+	// 4. Any other non-docker, non-veth bridge
+	if entries, err := os.ReadDir("/sys/class/net"); err == nil {
+		for _, e := range entries {
+			name := e.Name()
+			if strings.HasPrefix(name, "docker") || strings.HasPrefix(name, "br-") || strings.HasPrefix(name, "veth") || strings.HasPrefix(name, "lxc") {
+				continue
+			}
+			if isLinuxBridge(name) {
+				return "bridge", name
+			}
+		}
+	}
+
+	// 5. Any active physical/ethernet non-loopback, non-virtual interface
+	if ifaces, err := net.Interfaces(); err == nil {
+		for _, ifi := range ifaces {
+			if ifi.Flags&net.FlagLoopback != 0 || ifi.Flags&net.FlagUp == 0 {
+				continue
+			}
+			if strings.HasPrefix(ifi.Name, "veth") || strings.HasPrefix(ifi.Name, "docker") || strings.HasPrefix(ifi.Name, "br-") || strings.HasPrefix(ifi.Name, "lxc") {
+				continue
+			}
+			return "direct", ifi.Name
+		}
+	}
+
+	return "user", ""
+}
+
+func isLinuxBridge(name string) bool {
+	info, err := os.Stat(filepath.Join("/sys/class/net", name, "bridge"))
+	return err == nil && info.IsDir()
+}
+
+func getDefaultRouteInterface() string {
+	data, err := os.ReadFile("/proc/net/route")
+	if err != nil {
+		return ""
+	}
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) >= 2 && fields[1] == "00000000" {
+			return fields[0]
+		}
+	}
+	return ""
+}
+
 // ForcedDomainType specifies that KVM hardware acceleration is strictly enforced;
 // software emulation (qemu TCG) is disallowed.
 const ForcedDomainType = "kvm"
@@ -1299,10 +1419,10 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 `, vm.VCPUs))
 
 	cpuMode := "host-passthrough"
-	if vm.CPUType != "" && vm.CPUType != "host" {
+	if vm.CPUType != "" && vm.CPUType != "host" && vm.CPUType != "qemu64" {
 		cpuMode = "custom"
 	}
-	sb.WriteString(fmt.Sprintf(`  <cpu mode='%s'>
+	sb.WriteString(fmt.Sprintf(`  <cpu mode='%s' check='none'>
     <topology sockets='%d' cores='%d' threads='1'/>
 `, cpuMode, sockets, cores))
 	if cpuMode == "custom" {
@@ -1408,43 +1528,39 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 	}
 
 	for _, iface := range vm.NetworkIfaces {
-		bridge := iface.Bridge
+		target := iface.Bridge
 		model := iface.Model
 		if model == "" {
 			model = "virtio"
 		}
-		hasBridge := false
-		if bridge != "" {
-			if _, err := net.InterfaceByName(bridge); err == nil {
-				hasBridge = true
-			}
-		}
-		if hasBridge {
+		netType, dev := resolveHostNetworkTarget(target)
+		switch netType {
+		case "bridge":
 			sb.WriteString(fmt.Sprintf(`    <interface type='bridge'>
       <source bridge='%s'/>
       <model type='%s'/>
-`, bridge, model))
-			if iface.MacAddress != "" {
-				sb.WriteString(fmt.Sprintf(`      <mac address='%s'/>
-`, iface.MacAddress))
-			}
-			if iface.VlanTag > 0 {
-				sb.WriteString(fmt.Sprintf(`      <vlan><tag id='%d'/></vlan>
-`, iface.VlanTag))
-			}
-			sb.WriteString(`    </interface>
-`)
-		} else {
+`, dev, model))
+		case "direct":
+			sb.WriteString(fmt.Sprintf(`    <interface type='direct'>
+      <source dev='%s' mode='bridge'/>
+      <model type='%s'/>
+`, dev, model))
+		default:
 			sb.WriteString(fmt.Sprintf(`    <interface type='user'>
       <model type='%s'/>
 `, model))
-			if iface.MacAddress != "" {
-				sb.WriteString(fmt.Sprintf(`      <mac address='%s'/>
-`, iface.MacAddress))
-			}
-			sb.WriteString(`    </interface>
-`)
 		}
+
+		if iface.MacAddress != "" {
+			sb.WriteString(fmt.Sprintf(`      <mac address='%s'/>
+`, iface.MacAddress))
+		}
+		if iface.VlanTag > 0 && netType == "bridge" {
+			sb.WriteString(fmt.Sprintf(`      <vlan><tag id='%d'/></vlan>
+`, iface.VlanTag))
+		}
+		sb.WriteString(`    </interface>
+`)
 	}
 
 	if vm.TPMVersion == "v2.0" {

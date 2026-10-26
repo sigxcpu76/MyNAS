@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { services } from '../../container';
 import {
   formatBytes,
+  type NetworkInterfaceTelemetry,
   type StorageImage,
   type VirtualMachine,
   type VirtualMachineCloudInit,
@@ -205,6 +206,23 @@ const suggestedDiskPath = computed(() => {
   return generateZvolDiskPath(mainPool.value, wizardForm.vmId || wizardForm.vmName || 'vm', 0);
 });
 
+const defaultBridge = computed<string>(() => {
+  const net = nasState.systemTelemetry?.network;
+  if (!net || !Array.isArray(net)) return 'ens3';
+  const def = net.find((n: NetworkInterfaceTelemetry) => n.isDefault);
+  if (def) return def.name;
+  const firstEth = net.find(
+    (n: NetworkInterfaceTelemetry) =>
+      !n.name.startsWith('lo') &&
+      !n.name.startsWith('docker') &&
+      !n.name.startsWith('br-') &&
+      !n.name.startsWith('veth') &&
+      !n.name.startsWith('lxc')
+  );
+  if (firstEth) return firstEth.name;
+  return 'ens3';
+});
+
 function onVmNameInput() {
   wizardForm.vmId = toZfsSafeSlug(wizardForm.vmName);
   wizardForm.diskPath = suggestedDiskPath.value;
@@ -236,7 +254,7 @@ function openCreateWizard() {
   wizardForm.balloonMinMib = 2048;
   wizardForm.hugepages = 'off';
   wizardForm.netModel = 'virtio';
-  wizardForm.netBridge = 'virbr0';
+  wizardForm.netBridge = defaultBridge.value || 'ens3';
   wizardForm.vlanTag = 0;
   wizardForm.firewall = true;
   wizardStep.value = 1;
@@ -1396,7 +1414,7 @@ async function handleWizardSubmit() {
                 <button class="btn btn-xs" @click="openAddDiskModal">
                   <MdiIcon :path="mdiPlus" size="13" /> Add Hard Disk
                 </button>
-                <button class="btn btn-xs" @click="showAddNicModal = true">
+                <button class="btn btn-xs" @click="nicForm.bridge = defaultBridge; showAddNicModal = true">
                   <MdiIcon :path="mdiPlus" size="13" /> Add Network Device
                 </button>
               </div>
@@ -1782,8 +1800,9 @@ async function handleWizardSubmit() {
             </select>
           </div>
           <div class="form-group">
-            <label>Bridge</label>
-            <input v-model="nicForm.bridge" class="input mono" placeholder="virbr0" required />
+            <label>Bridge / LAN Interface</label>
+            <input v-model="nicForm.bridge" class="input mono" :placeholder="defaultBridge || 'ens3'" required />
+            <span class="helper">Bridge (e.g. vmbr0) or host physical interface (e.g. ens3) for direct LAN bridging</span>
           </div>
           <div class="form-group">
             <label>VLAN Tag (0 = Untagged)</label>
@@ -2057,8 +2076,9 @@ async function handleWizardSubmit() {
               </select>
             </div>
             <div class="form-group">
-              <label>Bridge</label>
-              <input v-model="wizardForm.netBridge" class="input mono" placeholder="virbr0" required />
+              <label>Bridge / LAN Interface</label>
+              <input v-model="wizardForm.netBridge" class="input mono" :placeholder="defaultBridge || 'ens3'" required />
+              <span class="helper">Bridge (e.g. vmbr0) or host physical interface (e.g. ens3) to bridge directly to physical LAN</span>
             </div>
             <div class="form-group">
               <label>VLAN Tag (0 = Untagged)</label>
