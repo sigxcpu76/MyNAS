@@ -420,6 +420,13 @@ func (a *Adapter) getDomainFromVirsh(ctx context.Context, name string) (*domain.
 		cpuType = "host"
 	}
 
+	machType := doc.OS.Type.Machine
+	if machType == "pc" || strings.HasPrefix(machType, "pc-i440fx") || machType == "i440fx" {
+		machType = "i440fx"
+	} else if machType == "q35" || strings.HasPrefix(machType, "pc-q35") {
+		machType = "q35"
+	}
+
 	vm := domain.VirtualMachine{
 		ID:               doc.Name,
 		VMName:           doc.Name,
@@ -431,7 +438,7 @@ func (a *Adapter) getDomainFromVirsh(ctx context.Context, name string) (*domain.
 		Sockets:          doc.CPU.Topology.Sockets,
 		Cores:            doc.CPU.Topology.Cores,
 		CPUType:          cpuType,
-		MachineType:      doc.OS.Type.Machine,
+		MachineType:      machType,
 		SerialConsoleURL: fmt.Sprintf("/ws/serial/%s", doc.Name),
 	}
 	if vm.Sockets <= 0 {
@@ -1600,10 +1607,7 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 	sb.WriteString(`  </cpu>
 `)
 
-	mach := vm.MachineType
-	if mach == "" {
-		mach = "q35"
-	}
+	mach := normalizeMachineTypeForLibvirt(vm.MachineType)
 	sb.WriteString("  <os")
 	if vm.BiosType == "ovmf" {
 		sb.WriteString(" firmware='efi'")
@@ -1799,6 +1803,17 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 
 	sb.WriteString(`</domain>`)
 	return sb.String()
+}
+
+func normalizeMachineTypeForLibvirt(mach string) string {
+	mach = strings.TrimSpace(strings.ToLower(mach))
+	if mach == "" || mach == "q35" || strings.HasPrefix(mach, "pc-q35") {
+		return "q35"
+	}
+	if mach == "i440fx" || mach == "pc-i440fx" || mach == "pc" {
+		return "pc"
+	}
+	return mach
 }
 
 func buildVideoXML(displayType string) string {

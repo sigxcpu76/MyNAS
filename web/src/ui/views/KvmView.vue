@@ -741,7 +741,13 @@ async function handleUpdateMemory() {
 
 function openEditPlatformModal() {
   if (!inspectingVm.value) return;
-  editPlatformForm.machineType = inspectingVm.value.machineType || 'q35';
+  let mach = inspectingVm.value.machineType || 'q35';
+  if (mach === 'pc' || mach.startsWith('pc-i440fx')) {
+    mach = 'i440fx';
+  } else if (mach.startsWith('pc-q35')) {
+    mach = 'q35';
+  }
+  editPlatformForm.machineType = mach;
   editPlatformForm.biosType = inspectingVm.value.biosType || 'ovmf';
   editPlatformForm.tpmVersion = inspectingVm.value.tpmVersion || 'none';
   editPlatformForm.secureBoot = Boolean(inspectingVm.value.secureBoot);

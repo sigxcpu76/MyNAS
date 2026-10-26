@@ -259,3 +259,43 @@ func TestVmRebootAndStopForcedOptions(t *testing.T) {
 		t.Fatalf("StopVM (forced) failed: %v", err)
 	}
 }
+
+func TestI440FXMachineTypeNormalization(t *testing.T) {
+	ctx := context.Background()
+	tempDir := t.TempDir()
+	adapter := kvm.NewAdapterWithStateDir(tempDir)
+
+	if _, err := adapter.ListVMs(ctx); err != nil {
+		t.Skipf("virsh/libvirt not available on this host: %v", err)
+	}
+
+	vmID := "nasctl-ci-test-i440fx"
+	diskPath := tempDir + "/ci-i440fx.raw"
+
+	vm, err := adapter.CreateVM(ctx, domain.VirtualMachine{
+		ID:          vmID,
+		VMName:      "Test i440FX Machine Type",
+		MemoryMiB:   256,
+		VCPUs:       1,
+		MachineType: "i440fx",
+		Disks: []domain.VirtualMachineDisk{
+			{
+				ID:        "sda",
+				Bus:       "scsi",
+				DiskPath:  diskPath,
+				SizeBytes: 10 * 1024 * 1024,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateVM with machine_type=i440fx failed: %v", err)
+	}
+	defer func() {
+		_ = adapter.DeleteVM(ctx, vmID)
+		_ = os.Remove(diskPath)
+	}()
+
+	if vm.MachineType != "i440fx" {
+		t.Errorf("expected machine_type i440fx, got %s", vm.MachineType)
+	}
+}
