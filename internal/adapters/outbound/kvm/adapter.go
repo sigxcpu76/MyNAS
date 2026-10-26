@@ -590,6 +590,10 @@ func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*doma
 		return nil, err
 	}
 
+	if hasAccel, desc := domain.HasKVMHardwareAcceleration(); !hasAccel {
+		return nil, fmt.Errorf("KVM hardware acceleration is required: %s", desc)
+	}
+
 	if a.hasVirsh() {
 		if _, err := a.getDomainFromVirsh(ctx, vm.ID); err == nil {
 			return nil, fmt.Errorf("%w: virtual machine %q already exists in libvirt", domain.ErrAlreadyExists, vm.ID)
@@ -1246,24 +1250,16 @@ func findQemuEmulator() string {
 	return ""
 }
 
-func detectDomainType() string {
-	if _, err := os.Stat("/dev/kvm"); err == nil {
-		return "kvm"
-	}
-	out, err := exec.Command("virsh", "capabilities").Output()
-	if err == nil && strings.Contains(string(out), "<domain type='kvm'/>") {
-		return "kvm"
-	}
-	return "qemu"
-}
+// ForcedDomainType specifies that KVM hardware acceleration is strictly enforced;
+// software emulation (qemu TCG) is disallowed.
+const ForcedDomainType = "kvm"
 
 func buildDomainXML(vm domain.VirtualMachine) string {
 	var sb strings.Builder
-	domainType := detectDomainType()
 
 	sb.WriteString(fmt.Sprintf(`<domain type='%s' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
   <name>%s</name>
-`, domainType, vm.ID))
+`, ForcedDomainType, vm.ID))
 	if vm.UUID != "" {
 		sb.WriteString(fmt.Sprintf(`  <uuid>%s</uuid>
 `, vm.UUID))
@@ -1302,31 +1298,19 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 	sb.WriteString(fmt.Sprintf(`  <vcpu placement='static'>%d</vcpu>
 `, vm.VCPUs))
 
-	if domainType == "qemu" {
-		cpuModel := vm.CPUType
-		if cpuModel == "" || cpuModel == "host" {
-			cpuModel = "qemu64"
-		}
-		sb.WriteString(fmt.Sprintf(`  <cpu mode='custom'>
-    <topology sockets='%d' cores='%d' threads='1'/>
-    <model fallback='allow'>%s</model>
-  </cpu>
-`, sockets, cores, cpuModel))
-	} else {
-		cpuMode := "host-passthrough"
-		if vm.CPUType != "" && vm.CPUType != "host" {
-			cpuMode = "custom"
-		}
-		sb.WriteString(fmt.Sprintf(`  <cpu mode='%s'>
+	cpuMode := "host-passthrough"
+	if vm.CPUType != "" && vm.CPUType != "host" {
+		cpuMode = "custom"
+	}
+	sb.WriteString(fmt.Sprintf(`  <cpu mode='%s'>
     <topology sockets='%d' cores='%d' threads='1'/>
 `, cpuMode, sockets, cores))
-		if cpuMode == "custom" {
-			sb.WriteString(fmt.Sprintf(`    <model fallback='allow'>%s</model>
+	if cpuMode == "custom" {
+		sb.WriteString(fmt.Sprintf(`    <model fallback='allow'>%s</model>
 `, vm.CPUType))
-		}
-		sb.WriteString(`  </cpu>
-`)
 	}
+	sb.WriteString(`  </cpu>
+`)
 
 	mach := vm.MachineType
 	if mach == "" {

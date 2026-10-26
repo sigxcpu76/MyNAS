@@ -2,6 +2,8 @@ package domain
 
 import (
 	"fmt"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -202,3 +204,50 @@ type ConsoleSession struct {
 	Resolution   string
 	ExpiresAt    string
 }
+
+// HasCPUVirtualization checks /proc/cpuinfo for hardware virtualization extensions:
+// "vmx" for Intel VT-x, or "svm" for AMD-V.
+func HasCPUVirtualization() (bool, string) {
+	data, err := os.ReadFile("/proc/cpuinfo")
+	if err != nil {
+		return false, "failed to read /proc/cpuinfo: " + err.Error()
+	}
+	content := string(data)
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "flags") || strings.HasPrefix(line, "Features") {
+			fields := strings.Fields(line)
+			for _, f := range fields {
+				switch f {
+				case "vmx":
+					return true, "Intel VT-x (VMX)"
+				case "svm":
+					return true, "AMD-V (SVM)"
+				}
+			}
+		}
+	}
+	return false, "hardware virtualization extension (VMX/SVM) not present in /proc/cpuinfo"
+}
+
+// HasKVMDevice checks if the /dev/kvm character device node is present on the host.
+func HasKVMDevice() bool {
+	st, err := os.Stat("/dev/kvm")
+	if err != nil {
+		return false
+	}
+	return st.Mode()&os.ModeDevice != 0
+}
+
+// HasKVMHardwareAcceleration returns true only if both hardware virtualization (VMX/SVM)
+// and the /dev/kvm device node are present and functional.
+func HasKVMHardwareAcceleration() (bool, string) {
+	hasVirt, virtDesc := HasCPUVirtualization()
+	if !hasVirt {
+		return false, virtDesc
+	}
+	if !HasKVMDevice() {
+		return false, fmt.Sprintf("CPU supports %s, but /dev/kvm device node is missing (kvm_intel/kvm_amd kernel module not loaded)", virtDesc)
+	}
+	return true, fmt.Sprintf("KVM acceleration active with %s via /dev/kvm", virtDesc)
+}
+

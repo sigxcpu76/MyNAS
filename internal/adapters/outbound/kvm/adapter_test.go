@@ -163,7 +163,7 @@ func TestRealLibvirtDomainWithCdromLifecycle(t *testing.T) {
 	_ = adapter.DeleteVM(ctx, vmID)
 }
 
-func TestQemuSoftwareEmulationCpuCompatibility(t *testing.T) {
+func TestForcedKvmHardwareAccelerationDomainCreation(t *testing.T) {
 	ctx := context.Background()
 	tempDir := t.TempDir()
 	adapter := kvm.NewAdapterWithStateDir(tempDir)
@@ -172,13 +172,13 @@ func TestQemuSoftwareEmulationCpuCompatibility(t *testing.T) {
 		t.Skipf("virsh/libvirt not available on this host: %v", err)
 	}
 
-	vmID := "nasctl-ci-test-qemu-emu"
-	diskPath := tempDir + "/qemu-emu.raw"
+	vmID := "nasctl-ci-test-kvm-forced"
+	diskPath := tempDir + "/kvm-forced.raw"
 
-	// Define VM with CPUType "host"
+	// Define VM with forced KVM acceleration
 	vm, err := adapter.CreateVM(ctx, domain.VirtualMachine{
 		ID:        vmID,
-		VMName:    "NASCTL QEMU Emulation Test",
+		VMName:    "NASCTL Forced KVM Acceleration Test",
 		MemoryMiB: 256,
 		VCPUs:     1,
 		CPUType:   "host",

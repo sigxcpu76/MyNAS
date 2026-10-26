@@ -78,3 +78,34 @@ func TestPrerequisitesReport(t *testing.T) {
 		}
 	}
 }
+
+func TestKvmModuleGating(t *testing.T) {
+	ctx := context.Background()
+	checker := prereq.NewSystemChecker()
+	_, _ = checker.CheckAll(ctx)
+
+	// Without main pool
+	enabled, reason := checker.IsModuleEnabled("kvm")
+	if enabled {
+		t.Fatalf("expected KVM to be paused without main pool")
+	}
+	t.Logf("KVM without main pool: %s", reason)
+
+	// Set main pool
+	checker.SetMainPool("tank")
+
+	hasVirt, _ := domain.HasCPUVirtualization()
+	hasDev := domain.HasKVMDevice()
+
+	enabledWithPool, reasonWithPool := checker.IsModuleEnabled("kvm")
+	t.Logf("KVM with main pool (hasVirt=%v, hasDev=%v): enabled=%v, reason=%s",
+		hasVirt, hasDev, enabledWithPool, reasonWithPool)
+
+	if !hasVirt && enabledWithPool {
+		t.Fatalf("expected KVM module to be disabled when VMX/SVM is not present")
+	}
+	if !hasDev && enabledWithPool {
+		t.Fatalf("expected KVM module to be disabled when /dev/kvm is not present")
+	}
+}
+

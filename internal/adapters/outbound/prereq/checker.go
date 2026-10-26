@@ -280,6 +280,15 @@ func (c *SystemChecker) IsModuleEnabled(module string) (bool, string) {
 		}
 	}
 
+	if module == "kvm" && !c.testAllInstalled {
+		if hasVirt, _ := domain.HasCPUVirtualization(); !hasVirt {
+			return false, "module \"KVM\" is disabled: CPU hardware virtualization (VMX/SVM) is not present on this host"
+		}
+		if !domain.HasKVMDevice() {
+			return false, "module \"KVM\" is disabled: /dev/kvm character device is not available on this host"
+		}
+	}
+
 	reqIDs := c.moduleSpecMap[module]
 	if len(reqIDs) == 0 {
 		return true, "enabled"
@@ -303,6 +312,15 @@ func (c *SystemChecker) IsModuleEnabled(module string) (bool, string) {
 func (c *SystemChecker) HasHostPrerequisites(module string) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+
+	if module == "kvm" && !c.testAllInstalled {
+		if hasVirt, _ := domain.HasCPUVirtualization(); !hasVirt {
+			return false
+		}
+		if !domain.HasKVMDevice() {
+			return false
+		}
+	}
 
 	reqIDs := c.moduleSpecMap[module]
 	if len(reqIDs) == 0 {
@@ -399,6 +417,32 @@ func (c *SystemChecker) CheckAll(ctx context.Context) ([]domain.Prerequisite, er
 		}
 
 		if spec.Kind == "KERNEL_MODULE" {
+			if spec.ID == "kvm-dev" {
+				hasVirt, virtDesc := domain.HasCPUVirtualization()
+				if !hasVirt {
+					p.Status = domain.StatusMissing
+					p.Version = "not-supported"
+					p.Details = "CPU hardware virtualization (VMX/SVM) is not present in /proc/cpuinfo; KVM hardware acceleration is disabled"
+					p.InstallHint = "Enable Intel VT-x (VMX) or AMD-V (SVM) in system BIOS or hypervisor nested virtualization settings"
+					results = append(results, p)
+					continue
+				}
+				if domain.HasKVMDevice() {
+					p.Status = domain.StatusInstalled
+					p.BinaryOrPath = "/dev/kvm"
+					p.Version = "kvm-accelerated"
+					p.Details = fmt.Sprintf("KVM hardware acceleration active via /dev/kvm (%s)", virtDesc)
+				} else {
+					p.Status = domain.StatusMissing
+					p.BinaryOrPath = "/dev/kvm"
+					p.Version = "missing"
+					p.Details = fmt.Sprintf("CPU supports %s but /dev/kvm device node is missing (load kvm_intel/kvm_amd kernel module)", virtDesc)
+					p.InstallHint = "Run 'sudo modprobe kvm_intel' (or kvm_amd) and ensure user belongs to kvm group"
+				}
+				results = append(results, p)
+				continue
+			}
+
 			modName := strings.TrimPrefix(spec.Target, "/dev/")
 			modSysPath := filepath.Join("/sys/module", modName)
 			if info, err := os.Stat(modSysPath); err == nil && info.IsDir() {
@@ -516,7 +560,9 @@ func (c *SystemChecker) GetReport(ctx context.Context) (domain.PrerequisitesRepo
 			}
 
 			if item.ID == "kvm-dev" {
-				needKvmMod = true
+				if hasVirt, _ := domain.HasCPUVirtualization(); hasVirt {
+					needKvmMod = true
+				}
 			}
 			if item.ID == "libvirt" || item.ID == "virsh" {
 				needServices["libvirtd"] = struct{}{}

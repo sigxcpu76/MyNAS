@@ -97,3 +97,18 @@ func TestShareAndIdentityValidation(t *testing.T) {
 		t.Fatalf("expected ErrInvalidArgument for malformed SSH public key, got: %v", err)
 	}
 }
+
+func TestKvmHardwareVirtualizationChecks(t *testing.T) {
+	hasVirt, desc := domain.HasCPUVirtualization()
+	t.Logf("Host CPU Virtualization: %v (%s)", hasVirt, desc)
+
+	hasKvm := domain.HasKVMDevice()
+	t.Logf("Host /dev/kvm present: %v", hasKvm)
+
+	hasAccel, accelDesc := domain.HasKVMHardwareAcceleration()
+	t.Logf("Host KVM hardware acceleration: %v (%s)", hasAccel, accelDesc)
+
+	if hasVirt && hasKvm && !hasAccel {
+		t.Fatalf("expected hardware acceleration to be true when both CPU virt and /dev/kvm exist")
+	}
+}
