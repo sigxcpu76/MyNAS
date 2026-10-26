@@ -186,6 +186,59 @@ export class RfbConsoleAdapter {
     }
   }
 
+  sendAltFx(fKeyNum: number): void {
+    if (!this.rfb) return;
+    const fKeysym = 0xffbd + fKeyNum;
+    const fCode = `F${fKeyNum}`;
+    this.rfb.sendKey(0xffe9, 'AltLeft', true);
+    this.rfb.sendKey(fKeysym, fCode, true);
+    this.rfb.sendKey(fKeysym, fCode, false);
+    this.rfb.sendKey(0xffe9, 'AltLeft', false);
+  }
+
+  sendCtrlAltFx(fKeyNum: number): void {
+    if (!this.rfb) return;
+    const fKeysym = 0xffbd + fKeyNum;
+    const fCode = `F${fKeyNum}`;
+    this.rfb.sendKey(0xffe3, 'ControlLeft', true);
+    this.rfb.sendKey(0xffe9, 'AltLeft', true);
+    this.rfb.sendKey(fKeysym, fCode, true);
+    this.rfb.sendKey(fKeysym, fCode, false);
+    this.rfb.sendKey(0xffe9, 'AltLeft', false);
+    this.rfb.sendKey(0xffe3, 'ControlLeft', false);
+  }
+
+  sendLinuxShortcut(
+    shortcut:
+      | 'alt-f1'
+      | 'alt-f2'
+      | 'alt-f3'
+      | 'ctrl-alt-f1'
+      | 'ctrl-alt-f2'
+      | 'ctrl-alt-f3'
+  ): void {
+    switch (shortcut) {
+      case 'alt-f1':
+        this.sendAltFx(1);
+        break;
+      case 'alt-f2':
+        this.sendAltFx(2);
+        break;
+      case 'alt-f3':
+        this.sendAltFx(3);
+        break;
+      case 'ctrl-alt-f1':
+        this.sendCtrlAltFx(1);
+        break;
+      case 'ctrl-alt-f2':
+        this.sendCtrlAltFx(2);
+        break;
+      case 'ctrl-alt-f3':
+        this.sendCtrlAltFx(3);
+        break;
+    }
+  }
+
   sendText(text: string): void {
     if (!this.rfb || !text) return;
     for (const char of text) {

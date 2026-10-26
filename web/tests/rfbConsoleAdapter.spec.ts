@@ -143,4 +143,69 @@ describe('RfbConsoleAdapter', () => {
     expect(rfb.sendKey).toHaveBeenCalledWith(0xff0d, 'Enter', true);
     expect(rfb.sendKey).toHaveBeenCalledWith(0xff0d, 'Enter', false);
   });
+
+  it('sends Linux guest shortcuts: Alt-F1..F3 and Ctrl-Alt-F1..F3', () => {
+    const adapter = new RfbConsoleAdapter({
+      target: container,
+      vmName: 'debian-server',
+      token: 'tok-abc',
+    });
+
+    adapter.connect();
+    const rfb = mockRFBInstances[0];
+
+    // 1. Alt-F1
+    rfb.sendKey.mockClear();
+    adapter.sendLinuxShortcut('alt-f1');
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffe9, 'AltLeft', true);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffbe, 'F1', true);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffbe, 'F1', false);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffe9, 'AltLeft', false);
+
+    // 2. Alt-F2
+    rfb.sendKey.mockClear();
+    adapter.sendLinuxShortcut('alt-f2');
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffe9, 'AltLeft', true);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffbf, 'F2', true);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffbf, 'F2', false);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffe9, 'AltLeft', false);
+
+    // 3. Alt-F3
+    rfb.sendKey.mockClear();
+    adapter.sendLinuxShortcut('alt-f3');
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffe9, 'AltLeft', true);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffc0, 'F3', true);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffc0, 'F3', false);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffe9, 'AltLeft', false);
+
+    // 4. Ctrl-Alt-F1
+    rfb.sendKey.mockClear();
+    adapter.sendLinuxShortcut('ctrl-alt-f1');
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffe3, 'ControlLeft', true);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffe9, 'AltLeft', true);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffbe, 'F1', true);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffbe, 'F1', false);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffe9, 'AltLeft', false);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffe3, 'ControlLeft', false);
+
+    // 5. Ctrl-Alt-F2
+    rfb.sendKey.mockClear();
+    adapter.sendLinuxShortcut('ctrl-alt-f2');
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffe3, 'ControlLeft', true);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffe9, 'AltLeft', true);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffbf, 'F2', true);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffbf, 'F2', false);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffe9, 'AltLeft', false);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffe3, 'ControlLeft', false);
+
+    // 6. Ctrl-Alt-F3
+    rfb.sendKey.mockClear();
+    adapter.sendLinuxShortcut('ctrl-alt-f3');
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffe3, 'ControlLeft', true);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffe9, 'AltLeft', true);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffc0, 'F3', true);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffc0, 'F3', false);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffe9, 'AltLeft', false);
+    expect(rfb.sendKey).toHaveBeenCalledWith(0xffe3, 'ControlLeft', false);
+  });
 });

@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import {
+  mdiChevronDown,
   mdiFullscreen,
   mdiFullscreenExit,
+  mdiKeyboardOutline,
   mdiOpenInNew,
 } from '@mdi/js';
 import MdiIcon from './MdiIcon.vue';
@@ -33,16 +35,26 @@ const emit = defineEmits<{
 
 const screenRef = ref<HTMLDivElement | null>(null);
 const wrapperRef = ref<HTMLDivElement | null>(null);
+const keysMenuRef = ref<HTMLDivElement | null>(null);
 const statusText = ref<'CONNECTING' | 'CONNECTED' | 'DISCONNECTED' | 'ERROR'>('CONNECTING');
 const statusDetail = ref('Connecting to live QEMU VNC server...');
 const quickText = ref('');
 const isFullscreen = ref(false);
 const scaleMode = ref<ScaleMode>('fit');
+const showKeysMenu = ref(false);
 
 let adapter: RfbConsoleAdapter | null = null;
 
 function sendCtrlAltDel() {
   adapter?.sendCtrlAltDel();
+  adapter?.focus();
+}
+
+function sendShortcut(
+  shortcut: 'alt-f1' | 'alt-f2' | 'alt-f3' | 'ctrl-alt-f1' | 'ctrl-alt-f2' | 'ctrl-alt-f3'
+) {
+  adapter?.sendLinuxShortcut(shortcut);
+  showKeysMenu.value = false;
   adapter?.focus();
 }
 
@@ -76,8 +88,15 @@ function handleFullscreenChange() {
   isFullscreen.value = !!document.fullscreenElement;
 }
 
+function handleDocumentClick(e: MouseEvent) {
+  if (keysMenuRef.value && !keysMenuRef.value.contains(e.target as Node)) {
+    showKeysMenu.value = false;
+  }
+}
+
 onMounted(() => {
   document.addEventListener('fullscreenchange', handleFullscreenChange);
+  document.addEventListener('click', handleDocumentClick);
   if (screenRef.value) {
     adapter = new RfbConsoleAdapter({
       target: screenRef.value,
@@ -97,6 +116,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  document.removeEventListener('click', handleDocumentClick);
   adapter?.disconnect();
   adapter = null;
 });
@@ -141,6 +161,52 @@ onBeforeUnmount(() => {
             <option value="150">150%</option>
             <option value="200">200%</option>
           </select>
+        </div>
+
+        <!-- Send Keys Dropdown (Linux TTY & Virtual Terminals) -->
+        <div ref="keysMenuRef" class="keys-dropdown-container">
+          <button
+            class="btn btn-secondary btn-sm"
+            type="button"
+            title="Send Linux virtual console keys (Alt+F1..F3, Ctrl+Alt+F1..F3)"
+            @click.stop="showKeysMenu = !showKeysMenu"
+          >
+            <MdiIcon :path="mdiKeyboardOutline" size="14" style="margin-right: 4px" />
+            <span>Send Keys</span>
+            <MdiIcon :path="mdiChevronDown" size="13" style="margin-left: 2px; opacity: 0.8" />
+          </button>
+
+          <div v-if="showKeysMenu" class="keys-dropdown-menu" @click.stop>
+            <div class="keys-menu-group-header">Linux Console / Installer (Alt+Fn)</div>
+            <button type="button" class="keys-menu-item" @click="sendShortcut('alt-f1')">
+              <kbd class="shortcut-kbd">Alt + F1</kbd>
+              <span class="shortcut-desc">TTY 1 (Main / Installer)</span>
+            </button>
+            <button type="button" class="keys-menu-item" @click="sendShortcut('alt-f2')">
+              <kbd class="shortcut-kbd">Alt + F2</kbd>
+              <span class="shortcut-desc">TTY 2 (Shell Console)</span>
+            </button>
+            <button type="button" class="keys-menu-item" @click="sendShortcut('alt-f3')">
+              <kbd class="shortcut-kbd">Alt + F3</kbd>
+              <span class="shortcut-desc">TTY 3 (Debug Log)</span>
+            </button>
+
+            <div class="keys-menu-divider"></div>
+
+            <div class="keys-menu-group-header">Desktop / X11 (Ctrl+Alt+Fn)</div>
+            <button type="button" class="keys-menu-item" @click="sendShortcut('ctrl-alt-f1')">
+              <kbd class="shortcut-kbd">Ctrl + Alt + F1</kbd>
+              <span class="shortcut-desc">VT 1 (GDM / Console)</span>
+            </button>
+            <button type="button" class="keys-menu-item" @click="sendShortcut('ctrl-alt-f2')">
+              <kbd class="shortcut-kbd">Ctrl + Alt + F2</kbd>
+              <span class="shortcut-desc">VT 2 (Desktop / GUI)</span>
+            </button>
+            <button type="button" class="keys-menu-item" @click="sendShortcut('ctrl-alt-f3')">
+              <kbd class="shortcut-kbd">Ctrl + Alt + F3</kbd>
+              <span class="shortcut-desc">VT 3</span>
+            </button>
+          </div>
         </div>
 
         <!-- Fullscreen Button -->
@@ -193,26 +259,83 @@ onBeforeUnmount(() => {
       ></div>
     </div>
 
-    <!-- Quick Text Input Bar -->
-    <form
-      class="vnc-footer"
-      @submit.prevent="sendQuickText"
-    >
-      <input
-        v-model="quickText"
-        type="text"
-        class="input mono"
-        style="flex: 1"
-        placeholder="Paste or type text to send directly to guest machine..."
-      />
-      <button
-        type="submit"
-        class="btn btn-secondary btn-sm"
-        :disabled="statusText !== 'CONNECTED'"
+    <!-- Footer: Linux TTY Shortcut Pills and Quick Text Bar -->
+    <div class="vnc-footer">
+      <div class="linux-shortcuts-bar">
+        <span class="shortcuts-tag">Linux TTY:</span>
+        <div class="shortcuts-pills">
+          <button
+            type="button"
+            class="btn-shortcut"
+            title="Send Alt+F1 (TTY1 - Main / Installer)"
+            @click="sendShortcut('alt-f1')"
+          >
+            Alt+F1
+          </button>
+          <button
+            type="button"
+            class="btn-shortcut"
+            title="Send Alt+F2 (TTY2 - Shell Prompt)"
+            @click="sendShortcut('alt-f2')"
+          >
+            Alt+F2
+          </button>
+          <button
+            type="button"
+            class="btn-shortcut"
+            title="Send Alt+F3 (TTY3 - Log)"
+            @click="sendShortcut('alt-f3')"
+          >
+            Alt+F3
+          </button>
+          <span class="shortcuts-divider"></span>
+          <button
+            type="button"
+            class="btn-shortcut"
+            title="Send Ctrl+Alt+F1 (VT1 - Console)"
+            @click="sendShortcut('ctrl-alt-f1')"
+          >
+            Ctrl+Alt+F1
+          </button>
+          <button
+            type="button"
+            class="btn-shortcut"
+            title="Send Ctrl+Alt+F2 (VT2 - Desktop / GUI)"
+            @click="sendShortcut('ctrl-alt-f2')"
+          >
+            Ctrl+Alt+F2
+          </button>
+          <button
+            type="button"
+            class="btn-shortcut"
+            title="Send Ctrl+Alt+F3 (VT3)"
+            @click="sendShortcut('ctrl-alt-f3')"
+          >
+            Ctrl+Alt+F3
+          </button>
+        </div>
+      </div>
+
+      <form
+        class="quick-text-form"
+        @submit.prevent="sendQuickText"
       >
-        Send Text + Enter
-      </button>
-    </form>
+        <input
+          v-model="quickText"
+          type="text"
+          class="input mono"
+          style="flex: 1"
+          placeholder="Paste or type text to send directly to guest machine..."
+        />
+        <button
+          type="submit"
+          class="btn btn-secondary btn-sm"
+          :disabled="statusText !== 'CONNECTED'"
+        >
+          Send Text + Enter
+        </button>
+      </form>
+    </div>
   </div>
 </template>
 
@@ -292,6 +415,77 @@ onBeforeUnmount(() => {
   color: #f8fafc;
 }
 
+.keys-dropdown-container {
+  position: relative;
+  display: inline-block;
+}
+
+.keys-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--bg-surface, #1e293b);
+  border: 1px solid var(--border-strong, #334155);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+  z-index: 1000;
+  min-width: 270px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.keys-menu-group-header {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-muted, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 6px 10px 3px 10px;
+}
+
+.keys-menu-divider {
+  height: 1px;
+  background: var(--border-subtle, #334155);
+  margin: 4px 0;
+}
+
+.keys-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: var(--text-primary, #f8fafc);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.keys-menu-item:hover {
+  background: var(--bg-surface-hover, #334155);
+}
+
+.shortcut-kbd {
+  font-family: monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: var(--bg-primary, #0f172a);
+  border: 1px solid var(--border-color, #475569);
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: var(--accent-primary, #38bdf8);
+}
+
+.shortcut-desc {
+  font-size: 11.5px;
+  color: var(--text-secondary, #94a3b8);
+}
+
 .vnc-wrapper {
   background: #000;
   border: 1px solid var(--border-strong, #334155);
@@ -309,7 +503,7 @@ onBeforeUnmount(() => {
 .vnc-wrapper.is-standalone {
   flex: 1;
   min-height: 360px;
-  height: calc(100vh - 125px);
+  height: calc(100vh - 150px);
   max-height: none;
 }
 
@@ -353,6 +547,61 @@ onBeforeUnmount(() => {
 }
 
 .vnc-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.linux-shortcuts-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.shortcuts-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.shortcuts-pills {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.btn-shortcut {
+  background: var(--bg-secondary, #1e293b);
+  border: 1px solid var(--border-color, #334155);
+  color: var(--text-secondary, #cbd5e1);
+  font-family: monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-shortcut:hover {
+  background: var(--bg-surface-hover, #334155);
+  border-color: var(--accent-primary, #38bdf8);
+  color: var(--accent-primary, #38bdf8);
+}
+
+.shortcuts-divider {
+  display: inline-block;
+  width: 1px;
+  height: 14px;
+  background: var(--border-subtle, #334155);
+  margin: 0 4px;
+}
+
+.quick-text-form {
   display: flex;
   gap: 8px;
   align-items: center;
