@@ -1,4 +1,5 @@
 import type { CatalogApp, CatalogQuestion, CatalogQuestionGroup } from './models';
+import { toZfsSafeSlug } from './id';
 
 /**
  * Returns default answers for an application based on its question groups / questions.
@@ -20,7 +21,8 @@ export function getQuestionsDefaultAnswers(
       if (!defVal) {
         const parts = q.variable.split('.');
         const leaf = parts[parts.length - 1] || 'data';
-        defVal = `/nas/${appsPool}/appdata/${app.appId}/${leaf}`;
+        const cleanId = toZfsSafeSlug(app.appId) || 'app';
+        defVal = `/nas/${appsPool}/apps/${cleanId}/${leaf}`;
       }
     }
     answers[q.variable] = defVal;
@@ -157,9 +159,9 @@ export function generateComposeFromQuestions(
   answers: Record<string, string>,
   appsPool = 'tank'
 ): string {
-  const serviceName = (app.appId || 'app').toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+  const serviceName = toZfsSafeSlug(app.appId || 'app') || 'app';
   const image = app.containerImage || `${serviceName}:latest`;
-  const appdataPath = `/nas/${appsPool}/appdata`;
+  const appdataPath = `/nas/${appsPool}/apps`;
 
   const flat = getAllAppQuestions(app);
   const ports: string[] = [];

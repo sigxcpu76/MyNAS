@@ -5,10 +5,11 @@ import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import { services } from '../../container';
 import { confirmModal, nasState, notify } from '../store';
-import { generateNanosecondId } from '../../domain/id';
+import { generateNanosecondId, toZfsSafeSlug } from '../../domain/id';
 
 const showCreate = ref(false);
 const form = reactive({
+  containerName: '',
   containerId: '',
   distribution: 'debian',
   release: 'bookworm',
@@ -20,13 +21,24 @@ const form = reactive({
   templateArchive: '',
 });
 
+function onContainerNameInput() {
+  form.containerId = toZfsSafeSlug(form.containerName);
+}
+
+function onDistributionChange() {
+  if (!form.containerName) {
+    form.containerId = toZfsSafeSlug(`${form.distribution}-${form.release}`);
+  }
+}
+
 function toggleCreate() {
   if (showCreate.value) {
     showCreate.value = false;
   } else {
-    form.containerId = generateNanosecondId();
+    form.containerName = 'Debian Container';
     form.distribution = 'debian';
     form.release = 'bookworm';
+    form.containerId = toZfsSafeSlug(form.containerName);
     form.architecture = 'amd64';
     form.memoryLimitMib = 1024;
     form.cpuCores = 2;
@@ -43,7 +55,9 @@ async function refreshLxc() {
 
 async function handleCreate() {
   try {
-    const created = await services.lxc.createContainer(form.containerId, {
+    const targetId = toZfsSafeSlug(form.containerId || form.containerName || `${form.distribution}-${form.release}`) || 'container';
+    const created = await services.lxc.createContainer(targetId, {
+      containerName: form.containerName || targetId,
       distribution: form.distribution,
       release: form.release,
       architecture: form.architecture,
@@ -53,7 +67,8 @@ async function handleCreate() {
       autostart: form.autostart,
       templateArchive: form.templateArchive.trim() || undefined,
     });
-    notify('success', `Created LXC system container ${created.containerName}`);
+    notify('success', `Created LXC system container ${created.containerName || targetId}`);
+    form.containerName = '';
     form.containerId = '';
     form.templateArchive = '';
     showCreate.value = false;
@@ -127,13 +142,28 @@ async function handleDelete(name: string) {
     >
       <div class="form-grid">
         <div class="form-group">
-          <label>Container Name (`lxc_container_id`)</label>
-          <input v-model="form.containerId" class="input mono" placeholder="1761411800123456789" required />
-          <small style="color: var(--text-muted); font-size: 11px">Unique nanosecond timestamp ID</small>
+          <label>Container Name</label>
+          <input
+            v-model="form.containerName"
+            class="input"
+            placeholder="e.g. Debian Web Server"
+            @input="onContainerNameInput"
+          />
+          <small style="color: var(--text-muted); font-size: 11px">Human readable name</small>
+        </div>
+        <div class="form-group">
+          <label>Container ID (`lxc_container_id`)</label>
+          <input
+            v-model="form.containerId"
+            class="input mono"
+            placeholder="e.g. debian-web-server"
+            required
+          />
+          <small style="color: var(--text-muted); font-size: 11px">ZFS-safe slug computed from entity name</small>
         </div>
         <div class="form-group">
           <label>Distribution</label>
-          <select v-model="form.distribution" class="select">
+          <select v-model="form.distribution" class="select" @change="onDistributionChange">
             <option value="debian">debian</option>
             <option value="ubuntu">ubuntu</option>
             <option value="alpine">alpine</option>
@@ -179,7 +209,7 @@ async function handleDelete(name: string) {
             <MdiIcon :path="mdiDatabaseCheck" size="13" /> MAIN POOL ({{ nasState.systemConfig?.mainPool || 'tank' }})
           </span>
           <span class="mono" style="margin-left: 8px; color: var(--text-muted)">
-            /nas/{{ nasState.systemConfig?.mainPool || 'tank' }}/lxc/{{ form.containerId || '&lt;id&gt;' }}/rootfs
+            /nas/{{ nasState.systemConfig?.mainPool || 'tank' }}/containers/{{ form.containerId || '&lt;id&gt;' }}/rootfs
           </span>
         </div>
       </div>

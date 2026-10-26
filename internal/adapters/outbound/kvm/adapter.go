@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sigxcpu/nas/internal/config"
 	"github.com/sigxcpu/nas/internal/domain"
 )
 
@@ -28,6 +29,7 @@ type consoleTicket struct {
 type Adapter struct {
 	mu        sync.RWMutex
 	logger    *slog.Logger
+	mainPool  string
 	stateDir  string
 	vms       map[string]domain.VirtualMachine
 	tickets   map[string]consoleTicket
@@ -64,6 +66,26 @@ func (a *Adapter) SetLogger(l *slog.Logger) {
 	if l != nil {
 		a.logger = l
 	}
+}
+
+// SetMainPool sets the main ZFS storage pool used for rooting VM storage (/vms/<vm_id>).
+func (a *Adapter) SetMainPool(pool string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.mainPool = strings.TrimPrefix(strings.TrimSpace(pool), "zfsPools/")
+}
+
+func (a *Adapter) getMainPool() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.mainPool != "" {
+		return a.mainPool
+	}
+	p := config.GetGlobal().System.MainPool
+	if p != "" {
+		return strings.TrimPrefix(strings.TrimSpace(p), "zfsPools/")
+	}
+	return "tank"
 }
 
 func (a *Adapter) logError(op string, vmID string, err error, output []byte) {
@@ -513,7 +535,8 @@ func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*doma
 	if len(vm.Disks) == 0 {
 		diskPath := vm.DiskPath
 		if diskPath == "" {
-			diskPath = fmt.Sprintf("/nas/tank/vms/%s.raw", domain.GenerateVMDiskName(vm.ID, 0))
+			mainPool := a.getMainPool()
+			diskPath = domain.GenerateZvolDiskPath(mainPool, vm.ID, 0)
 		}
 		sizeGiB := vm.DiskSizeGiB
 		if sizeGiB <= 0 {

@@ -27,7 +27,7 @@ import {
   mdiStorefrontOutline,
 } from '@mdi/js';
 import { services } from '../../container';
-import { generateNanosecondId } from '../../domain/id';
+import { generateNanosecondId, toZfsSafeSlug } from '../../domain/id';
 import {
   APP_CATALOG_TEMPLATES,
   type AppCatalogTemplate,
@@ -315,8 +315,8 @@ async function importFromCatalog(app: CatalogApp) {
       isQuestionWizardOpen.value = true;
       notify('info', `Opened Setup Wizard for "${detailed.title || detailed.appId}"`);
     } else {
-      installAppId.value = detailed.appId;
       installTitle.value = detailed.title || detailed.appId;
+      installAppId.value = toZfsSafeSlug(installTitle.value);
       const resolvedImg = detailed.containerImage || `${detailed.appId}:latest`;
       installComposeYaml.value =
         detailed.composeYaml ||
@@ -335,8 +335,8 @@ async function importFromCatalog(app: CatalogApp) {
 }
 
 function handleWizardOpenInEditor(data: { appId: string; title: string; composeYaml: string }) {
-  installAppId.value = data.appId;
   installTitle.value = data.title;
+  installAppId.value = toZfsSafeSlug(data.appId || data.title);
   installComposeYaml.value = data.composeYaml;
   activeInstallTemplate.value = null;
   installEditorKey.value++;
@@ -353,8 +353,8 @@ function handleWizardDeploy(data: { appId: string; title: string; composeYaml: s
 function handleWizardSkip() {
   if (!wizardCatalogApp.value) return;
   const app = wizardCatalogApp.value;
-  installAppId.value = app.appId;
   installTitle.value = app.title || app.appId;
+  installAppId.value = toZfsSafeSlug(installTitle.value);
   const resolvedImg = app.containerImage || `${app.appId}:latest`;
   installComposeYaml.value =
     app.composeYaml ||
@@ -446,13 +446,12 @@ function openInstallModal() {
 function selectCatalogTemplate(tmpl: AppCatalogTemplate | null) {
   activeInstallTemplate.value = tmpl;
   if (tmpl) {
-    installAppId.value = tmpl.id;
+    installAppId.value = toZfsSafeSlug(tmpl.name || tmpl.id);
     installTitle.value = tmpl.name;
     installComposeYaml.value = tmpl.composeYaml;
   } else {
-    const nanoId = generateNanosecondId();
-    installAppId.value = nanoId;
-    installTitle.value = `custom-app-${nanoId}`;
+    installTitle.value = 'Custom Web App';
+    installAppId.value = toZfsSafeSlug(installTitle.value);
     installComposeYaml.value = `services:
   web:
     image: nginx:alpine
@@ -469,7 +468,7 @@ const isDeployingApp = ref(false);
 async function handleDeployApp(data: { appId: string; title: string; composeYaml: string }) {
   if (isDeployingApp.value) return;
   isDeployingApp.value = true;
-  const targetId = data.appId.trim() || generateNanosecondId();
+  const targetId = toZfsSafeSlug(data.appId || data.title) || 'app';
   notify('info', `Deploying "${targetId}"... Pulling container images and starting stack.`);
   try {
     await services.apps.createApp(targetId, data.composeYaml, data.title || targetId);

@@ -1316,6 +1316,18 @@ func (a *Adapter) CreateApp(ctx context.Context, app domain.DockerApp) (*domain.
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	if app.ID == "" && app.Name != "" {
+		app.ID = domain.ToZfsSafeSlug(app.Name)
+	} else if app.ID != "" {
+		app.ID = domain.ToZfsSafeSlug(app.ID)
+	}
+	if app.ID == "" {
+		app.ID = "app-" + domain.GenerateNanosecondID()
+	}
+	if app.Name == "" {
+		app.Name = app.ID
+	}
+
 	// When no host is specified in mapping, pick a random high port in 32000+ range
 	app.ComposeYAML = a.NormalizeComposePorts(ctx, app.ComposeYAML)
 
@@ -2242,7 +2254,7 @@ func (a *Adapter) GetConfig(ctx context.Context) (*domain.DockerConfig, error) {
 				cfg.Mountpoint = fmt.Sprintf("%s/%s", strings.TrimRight(poolMount, "/"), datasetSuffix)
 			}
 			if cfg.AppdataPath == "" || strings.HasPrefix(cfg.AppdataPath, "/tank") || (!strings.HasPrefix(cfg.AppdataPath, "/nas/") && cfg.Pool != "") {
-				cfg.AppdataPath = filepath.Join(cfg.Mountpoint, "appdata")
+				cfg.AppdataPath = cfg.Mountpoint
 			}
 			if cfg.DockerDataRoot == "" || strings.HasPrefix(cfg.DockerDataRoot, "/tank") || (!strings.HasPrefix(cfg.DockerDataRoot, "/nas/") && cfg.Pool != "") {
 				cfg.DockerDataRoot = filepath.Join(cfg.Mountpoint, "docker")
@@ -2272,12 +2284,12 @@ func (a *Adapter) GetConfig(ctx context.Context) (*domain.DockerConfig, error) {
 		Dataset:           defaultDataset,
 		Pool:              defaultPool,
 		Mountpoint:        defaultMountpoint,
-		AppdataPath:       filepath.Join(defaultMountpoint, "appdata"),
+		AppdataPath:       defaultMountpoint,
 		DockerDataRoot:    filepath.Join(defaultMountpoint, "docker"),
 		AvailableDatasets: availableDatasets,
 		AvailablePools:    availablePools,
 		DatasetSelected:   hasMainPool,
-		AppdataDataset:    filepath.Join(defaultMountpoint, "appdata"),
+		AppdataDataset:    defaultMountpoint,
 		PoolSelected:      hasMainPool,
 	}, nil
 }
@@ -2320,7 +2332,7 @@ func (a *Adapter) UpdateConfig(ctx context.Context, cfg domain.DockerConfig) (*d
 		}
 	}
 	mountpoint := fmt.Sprintf("%s/%s", strings.TrimRight(poolMount, "/"), datasetID)
-	appdataDir := filepath.Join(mountpoint, "appdata")
+	appdataDir := mountpoint
 	dockerDataDir := filepath.Join(mountpoint, "docker")
 
 	// Create dataset in ZFS engine if possible

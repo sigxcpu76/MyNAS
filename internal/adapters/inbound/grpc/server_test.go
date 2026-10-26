@@ -279,7 +279,7 @@ func TestDockerConfigAndFilesystemGRPC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateDockerConfig failed: %v", err)
 	}
-	if updated.GetPool() != "tank" || updated.GetDataset() != "tank/apps" || !strings.HasSuffix(updated.GetAppdataPath(), "/apps/appdata") {
+	if updated.GetPool() != "tank" || updated.GetDataset() != "tank/apps" || !strings.HasSuffix(updated.GetAppdataPath(), "/apps") {
 		t.Fatalf("unexpected updated config: %v", updated)
 	}
 

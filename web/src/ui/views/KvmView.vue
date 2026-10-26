@@ -14,7 +14,7 @@ import { confirmModal, nasState, notify } from '../store';
 import NoVncModal from '../components/NoVncModal.vue';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
-import { generateNanosecondId, generateVMDiskName, generateZvolDiskPath } from '../../domain/id';
+import { generateNanosecondId, generateVMDiskName, generateZvolDiskPath, toZfsSafeSlug } from '../../domain/id';
 import {
   mdiClose,
   mdiCog,
@@ -194,16 +194,21 @@ const availablePools = computed(() => {
 const mainPool = computed(() => nasState.systemConfig?.mainPool || 'tank');
 
 const suggestedDiskName = computed(() => {
-  return generateVMDiskName(wizardForm.vmId || 'vm', 0);
+  return generateVMDiskName(wizardForm.vmId || wizardForm.vmName || 'vm', 0);
 });
 
 const suggestedDiskPath = computed(() => {
-  return generateZvolDiskPath(mainPool.value, wizardForm.vmId || 'vm', 0);
+  return generateZvolDiskPath(mainPool.value, wizardForm.vmId || wizardForm.vmName || 'vm', 0);
 });
 
+function onVmNameInput() {
+  wizardForm.vmId = toZfsSafeSlug(wizardForm.vmName);
+  wizardForm.diskPath = suggestedDiskPath.value;
+}
+
 function openCreateWizard() {
-  wizardForm.vmId = generateNanosecondId();
-  wizardForm.vmName = `vm-${wizardForm.vmId}`;
+  wizardForm.vmName = 'Debian Server';
+  wizardForm.vmId = toZfsSafeSlug(wizardForm.vmName);
   wizardForm.osVariant = 'debian12';
   wizardForm.description = '';
   wizardForm.autostart = true;
@@ -548,13 +553,9 @@ async function handleDeleteVm(vm: VirtualMachine) {
 
 // Wizard submit
 async function handleWizardSubmit() {
-  if (!wizardForm.vmId.trim()) {
-    notify('error', 'VM Domain ID is required');
-    return;
-  }
-
+  const targetId = toZfsSafeSlug(wizardForm.vmId || wizardForm.vmName) || 'vm';
   const vcpus = wizardForm.sockets * wizardForm.cores;
-  const diskPath = wizardForm.diskPath.trim();
+  const diskPath = wizardForm.diskPath.trim() || generateZvolDiskPath(mainPool.value, targetId, 0);
   const primaryDisk: VirtualMachineDisk = {
     id: `${wizardForm.diskBus}0`,
     bus: wizardForm.diskBus,
@@ -580,8 +581,8 @@ async function handleWizardSubmit() {
     .filter(Boolean);
 
   try {
-    const created = await services.kvm.createVirtualMachine(wizardForm.vmId.trim(), {
-      vmName: wizardForm.vmName || wizardForm.vmId.trim(),
+    const created = await services.kvm.createVirtualMachine(targetId, {
+      vmName: wizardForm.vmName || targetId,
       description: wizardForm.description,
       osVariant: wizardForm.osVariant,
       autostart: wizardForm.autostart,
@@ -1578,13 +1579,25 @@ async function handleWizardSubmit() {
           <!-- Step 1: General -->
           <div v-if="wizardStep === 1" class="form-grid">
             <div class="form-group">
-              <label>VM Domain ID (`virtual_machine_id`)</label>
-              <input v-model="wizardForm.vmId" class="input mono" placeholder="1761411800123456789" required />
-              <small style="color: var(--text-muted); font-size: 11px">Unique nanosecond timestamp ID</small>
+              <label>VM Name</label>
+              <input
+                v-model="wizardForm.vmName"
+                class="input"
+                placeholder="e.g. Debian Server"
+                @input="onVmNameInput"
+                required
+              />
+              <small style="color: var(--text-muted); font-size: 11px">Human readable name</small>
             </div>
             <div class="form-group">
-              <label>Display Name</label>
-              <input v-model="wizardForm.vmName" class="input" placeholder="Ubuntu Production Server" />
+              <label>VM Domain ID (`virtual_machine_id`)</label>
+              <input
+                v-model="wizardForm.vmId"
+                class="input mono"
+                placeholder="e.g. debian-server"
+                required
+              />
+              <small style="color: var(--text-muted); font-size: 11px">ZFS-safe slug computed from VM name</small>
             </div>
             <div class="form-group">
               <label>Operating System</label>
@@ -1655,7 +1668,7 @@ async function handleWizardSubmit() {
               <input v-model.number="wizardForm.diskSizeGib" type="number" min="1" class="input mono" required />
             </div>
             <div class="form-group" style="grid-column: span 2">
-              <label>Backing Storage Path (Raw image, QCOW2 or ZFS ZVol)</label>
+              <label>Backing Storage Path (Raw image, QCOW2 or ZFS ZVol on Main Pool)</label>
               <input
                 v-model="wizardForm.diskPath"
                 list="zvol-list-wiz"
@@ -1665,7 +1678,7 @@ async function handleWizardSubmit() {
               <datalist id="zvol-list-wiz">
                 <option v-for="zpath in availableZvols" :key="zpath" :value="zpath" />
               </datalist>
-              <small style="color: var(--text-muted); font-size: 11px">Standard disk naming: <code class="mono">{{ suggestedDiskName }}</code></small>
+              <small style="color: var(--text-muted); font-size: 11px">Rooted to main pool: <code class="mono">{{ suggestedDiskPath }}</code></small>
             </div>
             <div class="form-group">
               <label style="display: flex; align-items: center; gap: 8px; font-size: 13px">

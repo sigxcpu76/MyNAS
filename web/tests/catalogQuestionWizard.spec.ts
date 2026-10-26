@@ -43,7 +43,7 @@ describe('CatalogQuestionWizard Component', () => {
             label: 'Data Storage',
             description: 'Main storage directory',
             type: 'hostpath',
-            defaultValue: '/nas/tank/appdata/actual-budget/data',
+            defaultValue: '/nas/tank/apps/actual-budget/data',
             required: true,
             group: 'Persistent Storage & Datasets',
             mountPath: '/data',

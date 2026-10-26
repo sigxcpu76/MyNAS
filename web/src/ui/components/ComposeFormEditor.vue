@@ -17,7 +17,7 @@ import {
   generateUid,
 } from '../../domain/composeModel';
 import { nasState, notify } from '../store';
-import { generateNanosecondId } from '../../domain/id';
+import { generateNanosecondId, toZfsSafeSlug } from '../../domain/id';
 import { isDotDataset } from '../../domain/models';
 import CodeMirrorEditor from './CodeMirrorEditor.vue';
 import MdiIcon from './MdiIcon.vue';
@@ -162,11 +162,11 @@ const zfsDatasetPaths = computed(() => {
 
 const appsPoolName = computed(() => nasState.dockerConfig?.pool || nasState.systemConfig?.mainPool || 'tank');
 const appsPoolAppdataDir = computed(
-  () => nasState.dockerConfig?.appdataDataset || `/nas/${appsPoolName.value}/apps/appdata`
+  () => nasState.dockerConfig?.appdataDataset || `/nas/${appsPoolName.value}/apps`
 );
 
 function defaultAppdataMount(appId: string, subfolder = 'data'): string {
-  const cleanId = appId.trim() || generateNanosecondId();
+  const cleanId = toZfsSafeSlug(appId.trim()) || 'app';
   return `${appsPoolAppdataDir.value}/${cleanId}/${subfolder}`;
 }
 
@@ -1202,10 +1202,10 @@ function copyYaml() {
                       <option value="">Choose preset / dataset...</option>
                       <optgroup label="App Data Presets">
                         <option :value="defaultAppdataMount(form.appId, 'data')">
-                          App Data (/nas/{{ appsPoolName }}/apps/appdata/{{ form.appId || 'app' }}/data)
+                          App Data (/nas/{{ appsPoolName }}/apps/{{ form.appId || 'app' }}/data)
                         </option>
                         <option :value="defaultAppdataMount(form.appId, 'config')">
-                          App Config (/nas/{{ appsPoolName }}/apps/appdata/{{ form.appId || 'app' }}/config)
+                          App Config (/nas/{{ appsPoolName }}/apps/{{ form.appId || 'app' }}/config)
                         </option>
                       </optgroup>
                       <optgroup label="Shared Media & Downloads">

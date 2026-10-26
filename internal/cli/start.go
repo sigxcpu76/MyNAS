@@ -211,6 +211,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	if activeMainPool != "" {
 		dockerAdapter.SetMainPool(activeMainPool)
 		lxcAdapter.SetMainPool(activeMainPool)
+		kvmAdapter.SetMainPool(activeMainPool)
 	}
 	if cfg, err := dockerAdapter.GetConfig(ctx); err == nil && cfg != nil && cfg.Pool != "" {
 		catalogAdapter.SetAppsPool(cfg.Pool)

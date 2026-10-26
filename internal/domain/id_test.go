@@ -8,6 +8,30 @@ import (
 	"github.com/sigxcpu/nas/internal/domain"
 )
 
+func TestToZfsSafeSlug(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"Nextcloud Hub 28!", "nextcloud-hub-28"},
+		{"My Ubuntu VM (v2.0)", "my-ubuntu-vm-v2-0"},
+		{"---hello---world---", "hello-world"},
+		{".hidden.app.", "hidden-app"},
+		{"My_VM_01", "my_vm_01"},
+		{"  Custom App Title  ", "custom-app-title"},
+		{"", ""},
+		{"   ", ""},
+		{"1761411800123456789", "1761411800123456789"},
+	}
+
+	for _, tc := range tests {
+		got := domain.ToZfsSafeSlug(tc.input)
+		if got != tc.expected {
+			t.Errorf("ToZfsSafeSlug(%q) = %q; want %q", tc.input, got, tc.expected)
+		}
+	}
+}
+
 func TestGenerateNanosecondID(t *testing.T) {
 	// 1. Basic format
 	id := domain.GenerateNanosecondID()
@@ -47,29 +71,35 @@ func TestGenerateNanosecondID(t *testing.T) {
 	t.Logf("Generated %d unique nanosecond-level IDs in %v", count, time.Duration(t1-t0))
 
 	// 3. Disk naming helper
-	vmID := domain.GenerateNanosecondID()
+	vmID := "my-ubuntu-vm"
 	diskName := domain.GenerateVMDiskName(vmID, 0)
-	expectedDiskName := "vm-" + vmID + "-disk-0"
+	expectedDiskName := "vm-my-ubuntu-vm-disk-0"
 	if diskName != expectedDiskName {
 		t.Fatalf("expected %q, got %q", expectedDiskName, diskName)
 	}
 
 	zvolPath := domain.GenerateZvolDiskPath("mypool", vmID, 0)
-	expectedZvol := "/dev/zvol/mypool/vm-" + vmID + "-disk-0"
+	expectedZvol := "/dev/zvol/mypool/vms/my-ubuntu-vm"
 	if zvolPath != expectedZvol {
 		t.Fatalf("expected %q, got %q", expectedZvol, zvolPath)
 	}
 
-	// 4. LXC rootfs helper
-	lxcRootfs := domain.GenerateLxcRootfsPath("mypool", vmID)
-	expectedLxc := "/nas/mypool/lxc/" + vmID + "/rootfs"
+	zvolPath1 := domain.GenerateZvolDiskPath("mypool", vmID, 1)
+	expectedZvol1 := "/dev/zvol/mypool/vms/my-ubuntu-vm-disk-1"
+	if zvolPath1 != expectedZvol1 {
+		t.Fatalf("expected %q, got %q", expectedZvol1, zvolPath1)
+	}
+
+	// 4. LXC containers rootfs helper
+	lxcRootfs := domain.GenerateLxcRootfsPath("mypool", "debian-noble")
+	expectedLxc := "/nas/mypool/containers/debian-noble/rootfs"
 	if lxcRootfs != expectedLxc {
 		t.Fatalf("expected %q, got %q", expectedLxc, lxcRootfs)
 	}
 
-	// 5. Docker appdata helper
-	appdataPath := domain.GenerateAppdataPath("mypool", vmID)
-	expectedAppdata := "/nas/mypool/apps/appdata/" + vmID
+	// 5. Docker apps helper
+	appdataPath := domain.GenerateAppdataPath("mypool", "Nextcloud Hub")
+	expectedAppdata := "/nas/mypool/apps/nextcloud-hub"
 	if appdataPath != expectedAppdata {
 		t.Fatalf("expected %q, got %q", expectedAppdata, appdataPath)
 	}

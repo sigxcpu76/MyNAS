@@ -57,6 +57,19 @@ func (a *Adapter) SetMainPool(pool string) {
 func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*domain.LxcContainer, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
+	if c.ID == "" && c.ContainerName != "" {
+		c.ID = domain.ToZfsSafeSlug(c.ContainerName)
+	} else if c.ID != "" {
+		c.ID = domain.ToZfsSafeSlug(c.ID)
+	}
+	if c.ID == "" {
+		c.ID = domain.GenerateNanosecondID()
+	}
+	if c.ContainerName == "" {
+		c.ContainerName = c.ID
+	}
+
 	if _, exists := a.containers[c.ID]; exists {
 		return nil, fmt.Errorf("%w: lxc container %q", domain.ErrAlreadyExists, c.ID)
 	}

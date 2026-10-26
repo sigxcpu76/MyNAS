@@ -60,7 +60,7 @@ func ParseQuestionsYAML(data []byte, appID, appsPool, appdataPath string) ([]dom
 		appsPool = "tank"
 	}
 	if appdataPath == "" {
-		appdataPath = fmt.Sprintf("/nas/%s/appdata", appsPool)
+		appdataPath = fmt.Sprintf("/nas/%s/apps", appsPool)
 	}
 
 	var flatList []domain.CatalogQuestion
@@ -204,7 +204,7 @@ func normalizeQuestionType(rawType string) string {
 func formatDefaultValue(val any, qType, varPath, appID, appdataPath string) string {
 	if qType == "hostpath" {
 		if valStr, ok := val.(string); ok && valStr != "" && strings.HasPrefix(valStr, "/") {
-			// Replace /mnt/<pool> with /nas/<pool>/appdata/<app>
+			// Replace /mnt/<pool> with /nas/<pool>/apps/<app>
 			return strings.ReplaceAll(valStr, "/mnt/", "/nas/")
 		}
 		leaf := "data"
@@ -302,7 +302,7 @@ func GenerateComposeFromQuestions(app domain.CatalogApp, answers map[string]stri
 		appsPool = "tank"
 	}
 	if appdataPath == "" {
-		appdataPath = fmt.Sprintf("/nas/%s/appdata", appsPool)
+		appdataPath = fmt.Sprintf("/nas/%s/apps", appsPool)
 	}
 
 	serviceName := app.AppID
@@ -435,7 +435,7 @@ func GetCuratedQuestions(app domain.CatalogApp, appsPool, appdataPath string) ([
 		appsPool = "tank"
 	}
 	if appdataPath == "" {
-		appdataPath = fmt.Sprintf("/nas/%s/appdata", appsPool)
+		appdataPath = fmt.Sprintf("/nas/%s/apps", appsPool)
 	}
 
 	defaultPort := app.DefaultPort

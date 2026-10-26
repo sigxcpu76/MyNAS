@@ -219,7 +219,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 		config: domain.DockerConfig{
 			Pool:            "tank",
 			Dataset:         "tank/apps",
-			AppdataPath:     "/nas/tank/apps/appdata",
+			AppdataPath:     "/nas/tank/apps",
 			DatasetSelected: true,
 		},
 	}

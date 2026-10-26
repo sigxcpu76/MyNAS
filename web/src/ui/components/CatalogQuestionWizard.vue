@@ -35,6 +35,7 @@ import CodeMirrorEditor from './CodeMirrorEditor.vue';
 import MdiIcon from './MdiIcon.vue';
 import PathSelector from './PathSelector.vue';
 import { notify } from '../store';
+import { toZfsSafeSlug } from '../../domain/id';
 
 const props = withDefaults(
   defineProps<{
@@ -136,10 +137,12 @@ function generateRandomPassword(variable: string) {
   notify('info', 'Generated secure random password');
 }
 
+const cleanAppId = computed(() => toZfsSafeSlug(props.app.appId || props.app.title) || 'app');
+
 function resetStoragePath(variable: string) {
   const parts = variable.split('.');
   const leaf = parts[parts.length - 1] || 'data';
-  answers[variable] = `/nas/${props.appsPool}/appdata/${props.app.appId}/${leaf}`;
+  answers[variable] = `/nas/${props.appsPool}/apps/${cleanAppId.value}/${leaf}`;
 }
 
 async function copyYaml() {
@@ -157,7 +160,7 @@ async function copyYaml() {
 
 function handleOpenInEditor() {
   emit('openInEditor', {
-    appId: props.app.appId,
+    appId: cleanAppId.value,
     title: props.app.title || props.app.appId,
     composeYaml: compiledComposeYaml.value,
   });
@@ -165,7 +168,7 @@ function handleOpenInEditor() {
 
 function handleDeploy() {
   emit('deploy', {
-    appId: props.app.appId,
+    appId: cleanAppId.value,
     title: props.app.title || props.app.appId,
     composeYaml: compiledComposeYaml.value,
   });
@@ -345,14 +348,14 @@ watch(
                     <div style="flex: 1">
                       <PathSelector
                         v-model="answers[q.variable]"
-                        :placeholder="`/nas/${appsPool}/appdata/${app.appId}/...`"
+                        :placeholder="`/nas/${appsPool}/apps/${cleanAppId}/...`"
                         :root-hint="`/nas/${appsPool}`"
                       />
                     </div>
                     <button
                       class="btn btn-sm"
                       style="padding: 6px 10px; font-size: 11.5px; white-space: nowrap"
-                      title="Reset path to default dataset under /nas/<pool>/appdata/"
+                      title="Reset path to default dataset under /nas/<pool>/apps/"
                       @click="resetStoragePath(q.variable)"
                     >
                       <MdiIcon :path="mdiRefresh" size="14" />
