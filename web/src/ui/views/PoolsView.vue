@@ -30,6 +30,7 @@ import {
   type ZfsVdev,
 } from '../../domain/models';
 import MdiIcon from '../components/MdiIcon.vue';
+import SkeletonBox from '../components/SkeletonBox.vue';
 import { confirmModal, nasState, notify, refreshAllData } from '../store';
 import { navigateTo } from '../router';
 
@@ -851,9 +852,40 @@ function viewPoolDatasets(poolName: string) {
       </div>
     </div>
 
-    <!-- Pools Grid Cards -->
+    <!-- Moving Skeleton Placeholders when Loading -->
+    <div v-if="nasState.loading && nasState.pools.length === 0" class="pools-grid">
+      <div v-for="i in 2" :key="i" class="card pool-card" style="padding: 20px">
+        <div class="pool-card-header" style="margin-bottom: 16px">
+          <div style="display: flex; align-items: center; gap: 10px">
+            <SkeletonBox width="28px" height="28px" circle />
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <SkeletonBox width="120px" height="18px" />
+              <SkeletonBox width="80px" height="12px" />
+            </div>
+          </div>
+          <SkeletonBox width="65px" height="22px" rounded="12px" />
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px">
+          <div style="display: flex; justify-content: space-between">
+            <SkeletonBox width="90px" height="14px" />
+            <SkeletonBox width="110px" height="14px" />
+          </div>
+          <SkeletonBox width="100%" height="10px" rounded="5px" />
+          <div style="display: flex; justify-content: space-between">
+            <SkeletonBox width="140px" height="12px" />
+            <SkeletonBox width="80px" height="12px" />
+          </div>
+        </div>
+        <div style="border-top: 1px solid var(--border-subtle); padding-top: 14px; display: flex; justify-content: space-between; align-items: center">
+          <SkeletonBox width="130px" height="20px" rounded="10px" />
+          <SkeletonBox width="80px" height="28px" rounded="6px" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty State (Finished loading and 0 pools found) -->
     <div
-      v-if="nasState.pools.length === 0"
+      v-else-if="nasState.pools.length === 0"
       class="card"
       style="padding: 48px 24px; text-align: center; color: var(--text-secondary)"
     >

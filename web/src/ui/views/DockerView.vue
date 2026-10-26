@@ -39,6 +39,7 @@ import CodeMirrorEditor from '../components/CodeMirrorEditor.vue';
 import DockerTerminalModal, { type TerminalContainerOption } from '../components/DockerTerminalModal.vue';
 import CatalogQuestionWizard from '../components/CatalogQuestionWizard.vue';
 import MdiIcon from '../components/MdiIcon.vue';
+import SkeletonBox from '../components/SkeletonBox.vue';
 import { askModal, nasState, notify } from '../store';
 
 // =============================================================================
@@ -976,9 +977,49 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <!-- Applications Loading Skeleton View -->
+    <div v-if="nasState.loading && nasState.dockerApps.length === 0" class="card" style="padding: 0; overflow-x: auto">
+      <table class="data-table" style="width: 100%; border-collapse: collapse">
+        <thead>
+          <tr style="border-bottom: 1px solid var(--border-subtle); text-align: left; font-size: 11.5px; color: var(--text-secondary); text-transform: uppercase">
+            <th style="padding: 10px 14px; width: 280px">Application</th>
+            <th style="padding: 10px 14px; width: 130px">Web UI</th>
+            <th style="padding: 10px 14px; width: 85px">CPU</th>
+            <th style="padding: 10px 14px; width: 105px">Memory</th>
+            <th style="padding: 10px 14px; width: 210px">Network (1s)</th>
+            <th style="padding: 10px 14px; min-width: 240px; text-align: right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="r in 4" :key="r" style="border-bottom: 1px solid var(--border-subtle)">
+            <td style="padding: 10px 14px">
+              <div style="display: flex; align-items: center; gap: 10px">
+                <SkeletonBox width="16px" height="16px" circle />
+                <div style="display: flex; flex-direction: column; gap: 4px">
+                  <SkeletonBox width="140px" height="15px" />
+                  <SkeletonBox width="90px" height="11px" />
+                </div>
+              </div>
+            </td>
+            <td style="padding: 10px 14px"><SkeletonBox width="75px" height="20px" rounded="10px" /></td>
+            <td style="padding: 10px 14px"><SkeletonBox width="45px" height="14px" /></td>
+            <td style="padding: 10px 14px"><SkeletonBox width="60px" height="14px" /></td>
+            <td style="padding: 10px 14px"><SkeletonBox width="110px" height="14px" /></td>
+            <td style="padding: 10px 14px; text-align: right">
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <SkeletonBox width="28px" height="28px" rounded="6px" />
+                <SkeletonBox width="28px" height="28px" rounded="6px" />
+                <SkeletonBox width="28px" height="28px" rounded="6px" />
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
     <!-- Empty State -->
     <div
-      v-if="filteredApps.length === 0"
+      v-else-if="filteredApps.length === 0"
       class="card"
       style="text-align: center; padding: 48px 24px"
     >

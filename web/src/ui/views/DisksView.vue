@@ -18,6 +18,7 @@ import {
 } from '@mdi/js';
 import { formatBytes, type Disk } from '../../domain/models';
 import MdiIcon from '../components/MdiIcon.vue';
+import SkeletonBox from '../components/SkeletonBox.vue';
 import { nasState, notify, refreshAllData } from '../store';
 import { navigateTo } from '../router';
 
@@ -38,7 +39,7 @@ const storageDisks = computed(() => {
       !isSystemDisk(d) &&
       !d.diskId.startsWith('zd') &&
       d.transport !== 'zvol' &&
-      !d.devicePath.includes('/zd')
+      !d.devicePath?.includes('/zd')
   );
 });
 
@@ -107,7 +108,10 @@ function goToPool(poolName: string) {
           <div style="display: flex; align-items: center; gap: 10px">
             <MdiIcon :path="mdiHarddisk" size="24" style="color: var(--accent-primary)" />
             <h2 class="card-title" style="font-size: 19px; margin: 0">Storage Disks</h2>
-            <span class="badge badge-info" style="font-size: 12px">
+            <span v-if="nasState.loading && nasState.disks.length === 0" style="display: inline-flex">
+              <SkeletonBox width="60px" height="20px" rounded="10px" />
+            </span>
+            <span v-else class="badge badge-info" style="font-size: 12px">
               {{ storageDisks.length }} {{ storageDisks.length === 1 ? 'Drive' : 'Drives' }}
             </span>
           </div>
@@ -153,7 +157,32 @@ function goToPool(poolName: string) {
             </tr>
           </thead>
           <tbody>
-            <tr v-if="filteredDisks.length === 0">
+            <!-- Moving Skeleton Placeholders when Loading -->
+            <template v-if="nasState.loading && nasState.disks.length === 0">
+              <tr v-for="r in 5" :key="r">
+                <td>
+                  <div style="display: flex; align-items: center; gap: 8px">
+                    <SkeletonBox width="18px" height="18px" circle />
+                    <SkeletonBox width="85px" height="15px" />
+                  </div>
+                </td>
+                <td>
+                  <div style="display: flex; flex-direction: column; gap: 4px">
+                    <SkeletonBox width="150px" height="15px" />
+                    <SkeletonBox width="100px" height="11px" />
+                  </div>
+                </td>
+                <td><SkeletonBox width="50px" height="20px" rounded="10px" /></td>
+                <td><SkeletonBox width="70px" height="15px" /></td>
+                <td><SkeletonBox width="55px" height="20px" rounded="10px" /></td>
+                <td><SkeletonBox width="65px" height="20px" rounded="10px" /></td>
+                <td><SkeletonBox width="80px" height="15px" /></td>
+                <td><SkeletonBox width="95px" height="15px" /></td>
+                <td style="text-align: right"><SkeletonBox width="60px" height="26px" rounded="6px" /></td>
+              </tr>
+            </template>
+
+            <tr v-else-if="filteredDisks.length === 0">
               <td colspan="9" style="text-align: center; color: var(--text-secondary); padding: 36px">
                 <div v-if="searchQuery">
                   No storage disks match filter "<strong>{{ searchQuery }}</strong>".

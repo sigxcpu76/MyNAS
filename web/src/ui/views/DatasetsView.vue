@@ -23,6 +23,7 @@ import {
   type ZfsDataset,
 } from '../../domain/models';
 import MdiIcon from '../components/MdiIcon.vue';
+import SkeletonBox from '../components/SkeletonBox.vue';
 import { confirmModal, nasState, notify, refreshAllData, refreshZfsSubresources } from '../store';
 
 const selectedPool = ref<string>('all');
@@ -497,7 +498,31 @@ onMounted(async () => {
             </tr>
           </thead>
           <tbody>
-            <tr v-if="visibleNodes.length === 0">
+            <!-- Moving Skeleton Placeholders when Loading -->
+            <template v-if="nasState.loading && visibleNodes.length === 0">
+              <tr v-for="r in 5" :key="r">
+                <td>
+                  <div style="display: flex; align-items: center; gap: 8px" :style="{ paddingLeft: `${(r - 1) % 3 * 16}px` }">
+                    <SkeletonBox width="16px" height="16px" rounded="3px" />
+                    <SkeletonBox :width="`${120 + ((r * 25) % 60)}px`" height="15px" />
+                  </div>
+                </td>
+                <td><SkeletonBox width="60px" height="20px" rounded="10px" /></td>
+                <td><SkeletonBox width="120px" height="14px" /></td>
+                <td><SkeletonBox width="90px" height="14px" /></td>
+                <td><SkeletonBox width="110px" height="14px" /></td>
+                <td><SkeletonBox width="45px" height="20px" rounded="10px" /></td>
+                <td style="text-align: right">
+                  <div style="display: inline-flex; gap: 6px; justify-content: flex-end">
+                    <SkeletonBox width="26px" height="26px" rounded="4px" />
+                    <SkeletonBox width="26px" height="26px" rounded="4px" />
+                    <SkeletonBox width="26px" height="26px" rounded="4px" />
+                  </div>
+                </td>
+              </tr>
+            </template>
+
+            <tr v-else-if="visibleNodes.length === 0">
               <td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 36px">
                 <div v-if="searchQuery">
                   No datasets match filter "<strong>{{ searchQuery }}</strong>".

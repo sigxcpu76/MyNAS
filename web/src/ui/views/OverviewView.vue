@@ -6,6 +6,8 @@ import { nasState, refreshTelemetry } from '../store';
 import { navigateTo } from '../router';
 import { isDarkMode } from '../theme';
 import EChart from '../components/EChart.vue';
+import OverviewSkeleton from '../components/OverviewSkeleton.vue';
+import SkeletonBox from '../components/SkeletonBox.vue';
 
 // ---------------------------------------------------------------------------
 // Telemetry & Periodic Polling
@@ -605,7 +607,8 @@ function getTempClass(temp: number): string {
 </script>
 
 <template>
-  <div class="overview-dashboard">
+  <OverviewSkeleton v-if="!telemetry && (!nasState.initialLoaded || nasState.loading)" />
+  <div v-else class="overview-dashboard">
     <!-- Top KPI Row -->
     <div class="grid-4">
       <div class="card">
@@ -693,7 +696,44 @@ function getTempClass(temp: number): string {
         </button>
       </div>
 
-      <div v-if="nasState.pools.length === 0" class="card" style="text-align: center; padding: 36px 20px">
+      <!-- Moving Skeleton Placeholders for Storage Pools when Loading -->
+      <div v-if="nasState.loading && nasState.pools.length === 0" class="pool-cards-grid">
+        <div v-for="p in 2" :key="p" class="card pool-telemetry-card">
+          <div class="card-header" style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px; margin-bottom: 12px">
+            <div style="display: flex; align-items: center; gap: 8px">
+              <SkeletonBox width="110px" height="18px" />
+              <SkeletonBox width="60px" height="20px" rounded="10px" />
+            </div>
+            <SkeletonBox width="65px" height="20px" rounded="10px" />
+          </div>
+          <div class="pool-charts-container">
+            <div class="pool-chart-box">
+              <SkeletonBox width="90px" height="13px" style="margin-bottom: 10px" />
+              <div class="donut-skeleton-wrap" style="position: relative; width: 110px; height: 110px; display: flex; align-items: center; justify-content: center">
+                <SkeletonBox width="110px" height="110px" circle />
+                <div style="position: absolute; width: 60px; height: 60px; border-radius: 50%; background: var(--bg-base)"></div>
+              </div>
+              <div style="display: flex; gap: 10px; margin-top: 10px">
+                <SkeletonBox width="70px" height="12px" />
+                <SkeletonBox width="70px" height="12px" />
+              </div>
+            </div>
+            <div class="pool-chart-box">
+              <SkeletonBox width="95px" height="13px" style="margin-bottom: 10px" />
+              <div class="donut-skeleton-wrap" style="position: relative; width: 110px; height: 110px; display: flex; align-items: center; justify-content: center">
+                <SkeletonBox width="110px" height="110px" circle />
+                <div style="position: absolute; width: 60px; height: 60px; border-radius: 50%; background: var(--bg-base)"></div>
+              </div>
+              <div style="display: flex; gap: 10px; margin-top: 10px">
+                <SkeletonBox width="70px" height="12px" />
+                <SkeletonBox width="70px" height="12px" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="nasState.pools.length === 0" class="card" style="text-align: center; padding: 36px 20px">
         <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px">No ZFS Storage Pools Configured</div>
         <p class="card-subtitle" style="max-width: 500px; margin: 0 auto 16px auto">
           Initialize or import your first ZFS storage pool to enable datasets, volumes, KVM images, and application containers.
@@ -1098,7 +1138,16 @@ function getTempClass(temp: number): string {
           <h3 class="card-title">KVM Virtual Machines</h3>
           <button class="btn btn-sm" @click="navigateTo('kvm')">Open KVM</button>
         </div>
-        <div v-if="nasState.vms.length === 0" class="card-subtitle" style="padding: 12px 0">
+        <div v-if="nasState.loading && nasState.vms.length === 0" style="padding: 6px 0; display: flex; flex-direction: column; gap: 10px">
+          <div v-for="s in 3" :key="s" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border-subtle)">
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <SkeletonBox width="110px" height="15px" />
+              <SkeletonBox width="150px" height="11px" />
+            </div>
+            <SkeletonBox width="60px" height="20px" rounded="10px" />
+          </div>
+        </div>
+        <div v-else-if="nasState.vms.length === 0" class="card-subtitle" style="padding: 12px 0">
           No virtual machines created yet.
         </div>
         <div
@@ -1121,7 +1170,16 @@ function getTempClass(temp: number): string {
           <h3 class="card-title">Containers & Stacks</h3>
           <button class="btn btn-sm" @click="navigateTo('docker')">Manage Apps</button>
         </div>
-        <div v-if="nasState.dockerApps.length === 0 && nasState.lxcContainers.length === 0" class="card-subtitle" style="padding: 12px 0">
+        <div v-if="nasState.loading && nasState.dockerApps.length === 0 && nasState.lxcContainers.length === 0" style="padding: 6px 0; display: flex; flex-direction: column; gap: 10px">
+          <div v-for="s in 3" :key="s" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border-subtle)">
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <SkeletonBox width="120px" height="15px" />
+              <SkeletonBox width="140px" height="11px" />
+            </div>
+            <SkeletonBox width="65px" height="20px" rounded="10px" />
+          </div>
+        </div>
+        <div v-else-if="nasState.dockerApps.length === 0 && nasState.lxcContainers.length === 0" class="card-subtitle" style="padding: 12px 0">
           No apps or containers running.
         </div>
         <div
@@ -1157,7 +1215,16 @@ function getTempClass(temp: number): string {
           <h3 class="card-title">CIFS & WebDAV Shares</h3>
           <button class="btn btn-sm" @click="navigateTo('shares')">Shares</button>
         </div>
-        <div v-if="nasState.cifsShares.length === 0 && nasState.webdavShares.length === 0" class="card-subtitle" style="padding: 12px 0">
+        <div v-if="nasState.loading && nasState.cifsShares.length === 0 && nasState.webdavShares.length === 0" style="padding: 6px 0; display: flex; flex-direction: column; gap: 10px">
+          <div v-for="s in 3" :key="s" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border-subtle)">
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <SkeletonBox width="130px" height="15px" />
+              <SkeletonBox width="160px" height="11px" />
+            </div>
+            <SkeletonBox width="60px" height="20px" rounded="10px" />
+          </div>
+        </div>
+        <div v-else-if="nasState.cifsShares.length === 0 && nasState.webdavShares.length === 0" class="card-subtitle" style="padding: 12px 0">
           No file shares configured.
         </div>
         <div

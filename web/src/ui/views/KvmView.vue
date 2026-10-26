@@ -13,6 +13,7 @@ import {
 import { confirmModal, nasState, notify } from '../store';
 import NoVncModal from '../components/NoVncModal.vue';
 import MdiIcon from '../components/MdiIcon.vue';
+import SkeletonBox from '../components/SkeletonBox.vue';
 import { generateNanosecondId, generateVMDiskName, generateZvolDiskPath } from '../../domain/id';
 import {
   mdiClose,
@@ -723,6 +724,42 @@ async function handleWizardSubmit() {
             </tr>
           </thead>
           <tbody>
+            <!-- Moving Skeleton Placeholders when Loading -->
+            <template v-if="nasState.loading && nasState.vms.length === 0">
+              <tr v-for="r in 4" :key="r">
+                <td><SkeletonBox width="70px" height="20px" rounded="10px" /></td>
+                <td>
+                  <div style="display: flex; flex-direction: column; gap: 4px">
+                    <SkeletonBox width="140px" height="15px" />
+                    <SkeletonBox width="100px" height="11px" />
+                  </div>
+                </td>
+                <td><SkeletonBox width="60px" height="14px" /></td>
+                <td><SkeletonBox width="75px" height="14px" /></td>
+                <td><SkeletonBox width="90px" height="14px" /></td>
+                <td><SkeletonBox width="110px" height="14px" /></td>
+                <td><SkeletonBox width="85px" height="14px" /></td>
+                <td style="text-align: right">
+                  <div style="display: inline-flex; gap: 6px; justify-content: flex-end">
+                    <SkeletonBox width="26px" height="26px" rounded="4px" />
+                    <SkeletonBox width="65px" height="26px" rounded="4px" />
+                    <SkeletonBox width="26px" height="26px" rounded="4px" />
+                  </div>
+                </td>
+              </tr>
+            </template>
+
+            <tr v-else-if="filteredVms.length === 0">
+              <td colspan="8" style="text-align: center; color: var(--text-secondary); padding: 36px">
+                <div v-if="searchQuery">
+                  No virtual machines match filter "<strong>{{ searchQuery }}</strong>".
+                </div>
+                <div v-else>
+                  No virtual machines created yet. Click <strong>"Create VM"</strong> to get started.
+                </div>
+              </td>
+            </tr>
+
             <tr v-for="vm in filteredVms" :key="vm.name">
               <!-- State -->
               <td>

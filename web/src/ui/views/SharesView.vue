@@ -2,6 +2,7 @@
 import { computed, reactive, ref } from 'vue';
 import { services } from '../../container';
 import type { CifsShare, WebdavShare } from '../../domain/models';
+import SkeletonBox from '../components/SkeletonBox.vue';
 import { confirmModal, getModuleAvailability, nasState, notify } from '../store';
 
 const cifsModuleStatus = computed(() => getModuleAvailability('cifs'));
@@ -392,6 +393,42 @@ async function handleDeleteWebdav(name: string) {
             </tr>
           </thead>
           <tbody>
+            <!-- Moving Skeleton Placeholders when Loading -->
+            <template v-if="nasState.loading && nasState.cifsShares.length === 0">
+              <tr v-for="r in 3" :key="r">
+                <td>
+                  <div style="display: flex; flex-direction: column; gap: 4px">
+                    <SkeletonBox width="140px" height="15px" />
+                    <SkeletonBox width="190px" height="11px" />
+                  </div>
+                </td>
+                <td>
+                  <div style="display: flex; flex-direction: column; gap: 4px">
+                    <SkeletonBox width="110px" height="13px" />
+                    <SkeletonBox width="90px" height="13px" />
+                  </div>
+                </td>
+                <td>
+                  <div style="display: flex; gap: 6px">
+                    <SkeletonBox width="45px" height="20px" rounded="10px" />
+                    <SkeletonBox width="45px" height="20px" rounded="10px" />
+                  </div>
+                </td>
+                <td>
+                  <div style="display: inline-flex; gap: 6px">
+                    <SkeletonBox width="26px" height="26px" rounded="4px" />
+                    <SkeletonBox width="26px" height="26px" rounded="4px" />
+                  </div>
+                </td>
+              </tr>
+            </template>
+
+            <tr v-else-if="nasState.cifsShares.length === 0">
+              <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 32px">
+                No Samba / CIFS shares configured. Click <strong>"New CIFS Share"</strong> to add one.
+              </td>
+            </tr>
+
             <tr v-for="s in nasState.cifsShares" :key="s.name">
               <td>
                 <div class="mono" style="font-weight: 600">//nas/{{ s.shareName }}</div>
@@ -530,6 +567,37 @@ async function handleDeleteWebdav(name: string) {
             </tr>
           </thead>
           <tbody>
+            <!-- Moving Skeleton Placeholders when Loading -->
+            <template v-if="nasState.loading && nasState.webdavShares.length === 0">
+              <tr v-for="r in 3" :key="r">
+                <td>
+                  <div style="display: flex; flex-direction: column; gap: 4px">
+                    <SkeletonBox width="100px" height="15px" />
+                    <SkeletonBox width="170px" height="11px" />
+                  </div>
+                </td>
+                <td>
+                  <div style="display: flex; flex-direction: column; gap: 4px">
+                    <SkeletonBox width="110px" height="13px" />
+                    <SkeletonBox width="80px" height="13px" />
+                  </div>
+                </td>
+                <td><SkeletonBox width="60px" height="20px" rounded="10px" /></td>
+                <td>
+                  <div style="display: inline-flex; gap: 6px">
+                    <SkeletonBox width="26px" height="26px" rounded="4px" />
+                    <SkeletonBox width="26px" height="26px" rounded="4px" />
+                  </div>
+                </td>
+              </tr>
+            </template>
+
+            <tr v-else-if="nasState.webdavShares.length === 0">
+              <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 32px">
+                No WebDAV HTTP shares configured. Click <strong>"New WebDAV Share"</strong> to add one.
+              </td>
+            </tr>
+
             <tr v-for="w in nasState.webdavShares" :key="w.name">
               <td>
                 <div class="mono" style="font-weight: 600; color: var(--success-text)">{{ w.urlPrefix }}</div>

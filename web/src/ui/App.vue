@@ -41,6 +41,7 @@ import ThemeSelector from './components/ThemeSelector.vue';
 import PrerequisitesTopBarButton from './components/PrerequisitesTopBarButton.vue';
 import PrerequisitesModal from './components/PrerequisitesModal.vue';
 import NanLogo from './components/NanLogo.vue';
+import OverviewSkeleton from './components/OverviewSkeleton.vue';
 import OverviewView from './views/OverviewView.vue';
 import PrerequisitesView from './views/PrerequisitesView.vue';
 import DisksView from './views/DisksView.vue';
@@ -435,19 +436,16 @@ onMounted(() => {
       </header>
 
       <main class="content-container">
-        <!-- Initial Loading State (Before first fetch completes and no cache available) -->
+        <!-- Initial Loading State: Moving Skeleton Placeholders -->
         <div
           v-if="!nasState.initialLoaded && !nasState.systemConfig"
-          class="card"
-          style="padding: 48px 24px; text-align: center; margin: 40px auto; max-width: 520px; border: 1px solid var(--border-subtle)"
+          class="initial-skeleton-wrap"
         >
-          <div class="spinner" style="margin: 0 auto 16px auto; width: 34px; height: 34px; border-width: 3px"></div>
-          <div style="font-weight: 700; font-size: 15px; color: var(--text-primary)">
-            Connecting to NaN (Not Another NAS)...
+          <div class="sync-status-chip">
+            <div class="spinner" style="width: 14px; height: 14px; border-width: 2px"></div>
+            <span>Connecting to NaN (Not Another NAS) · Synchronizing topology...</span>
           </div>
-          <div style="font-size: 12.5px; color: var(--text-secondary); margin-top: 6px">
-            Synchronizing storage topology, services, and system configuration
-          </div>
+          <OverviewSkeleton />
         </div>
 
         <template v-else>
@@ -599,6 +597,27 @@ onMounted(() => {
   border-radius: 8px;
   padding: 14px 18px;
   margin-bottom: 18px;
+}
+
+.initial-skeleton-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.sync-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  align-self: flex-start;
+  box-shadow: var(--card-shadow);
 }
 </style>
 

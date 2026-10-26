@@ -2,6 +2,7 @@
 import { reactive, ref } from 'vue';
 import { mdiArchiveOutline, mdiDatabaseCheck } from '@mdi/js';
 import MdiIcon from '../components/MdiIcon.vue';
+import SkeletonBox from '../components/SkeletonBox.vue';
 import { services } from '../../container';
 import { confirmModal, nasState, notify } from '../store';
 import { generateNanosecondId } from '../../domain/id';
@@ -210,6 +211,35 @@ async function handleDelete(name: string) {
           </tr>
         </thead>
         <tbody>
+          <!-- Moving Skeleton Placeholders when Loading -->
+          <template v-if="nasState.loading && nasState.lxcContainers.length === 0">
+            <tr v-for="r in 3" :key="r">
+              <td>
+                <div style="display: flex; flex-direction: column; gap: 4px">
+                  <SkeletonBox width="130px" height="15px" />
+                  <SkeletonBox width="90px" height="11px" />
+                </div>
+              </td>
+              <td><SkeletonBox width="65px" height="20px" rounded="10px" /></td>
+              <td><SkeletonBox width="100px" height="14px" /></td>
+              <td><SkeletonBox width="95px" height="14px" /></td>
+              <td><SkeletonBox width="140px" height="14px" /></td>
+              <td><SkeletonBox width="110px" height="14px" /></td>
+              <td>
+                <div style="display: inline-flex; gap: 6px">
+                  <SkeletonBox width="26px" height="26px" rounded="4px" />
+                  <SkeletonBox width="26px" height="26px" rounded="4px" />
+                </div>
+              </td>
+            </tr>
+          </template>
+
+          <tr v-else-if="nasState.lxcContainers.length === 0">
+            <td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 36px">
+              No LXC system containers found. Click <strong>"Create Container"</strong> above to provision one.
+            </td>
+          </tr>
+
           <tr v-for="lx in nasState.lxcContainers" :key="lx.name">
             <td>
               <div style="font-weight: 600">{{ lx.containerName }}</div>
