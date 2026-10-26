@@ -14,6 +14,7 @@ export const TAB_ROUTES: Record<NavTab, string> = {
   lxc: '/lxc',
   shares: '/shares',
   identity: '/users',
+  'vnc-console': '/vnc-console',
 };
 
 export const ROUTE_ALIASES: Record<string, NavTab> = {
@@ -36,6 +37,9 @@ export const ROUTE_ALIASES: Record<string, NavTab> = {
   '/kvm': 'kvm',
   '/vms': 'kvm',
   '/vm': 'kvm',
+  '/vnc-console': 'vnc-console',
+  '/console/vnc': 'vnc-console',
+  '/kvm/console': 'vnc-console',
   '/apps': 'docker',
   '/docker': 'docker',
   '/lxc': 'lxc',
@@ -95,7 +99,9 @@ export function initRouter(): void {
   nasState.activeTab = initialTab;
 
   // Set initial canonical path if at root or non-canonical
-  const canonicalPath = currentPath === '/' ? '/' : getPathFromTab(initialTab);
+  const search = window.location.search || '';
+  const hash = window.location.hash || '';
+  const canonicalPath = (currentPath === '/' ? '/' : getPathFromTab(initialTab)) + search + hash;
   if (window.history && window.history.replaceState) {
     window.history.replaceState({ tab: initialTab }, '', canonicalPath);
   }

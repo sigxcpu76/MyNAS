@@ -14,6 +14,9 @@ describe('SPA History Router', () => {
     expect(getTabFromPath('/zfs')).toBe('zfs');
     expect(getTabFromPath('/kvm')).toBe('kvm');
     expect(getTabFromPath('/vms')).toBe('kvm');
+    expect(getTabFromPath('/vnc-console')).toBe('vnc-console');
+    expect(getTabFromPath('/console/vnc')).toBe('vnc-console');
+    expect(getTabFromPath('/kvm/console')).toBe('vnc-console');
     expect(getTabFromPath('/prerequisites')).toBe('prerequisites');
     expect(getTabFromPath('/prereqs')).toBe('prerequisites');
     expect(getTabFromPath('/shares')).toBe('shares');
@@ -34,6 +37,7 @@ describe('SPA History Router', () => {
     expect(getPathFromTab('lxc')).toBe('/lxc');
     expect(getPathFromTab('shares')).toBe('/shares');
     expect(getPathFromTab('identity')).toBe('/users');
+    expect(getPathFromTab('vnc-console')).toBe('/vnc-console');
     expect(getPathFromTab('prerequisites')).toBe('/prerequisites');
     expect(getPathFromTab('overview')).toBe('/overview');
   });
@@ -59,5 +63,14 @@ describe('SPA History Router', () => {
     window.dispatchEvent(new PopStateEvent('popstate', { state: { tab: 'zfs' } }));
 
     expect(nasState.activeTab).toBe('zfs');
+  });
+
+  it('preserves query parameters on initial route initialization for detached consoles', () => {
+    window.history.replaceState(null, '', '/vnc-console?vm=debian-server&token=secret-token');
+    initRouter();
+
+    expect(nasState.activeTab).toBe('vnc-console');
+    expect(window.location.pathname).toBe('/vnc-console');
+    expect(window.location.search).toBe('?vm=debian-server&token=secret-token');
   });
 });

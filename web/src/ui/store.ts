@@ -38,7 +38,8 @@ export type NavTab =
   | 'docker'
   | 'lxc'
   | 'shares'
-  | 'identity';
+  | 'identity'
+  | 'vnc-console';
 
 export type ManagedModule = 'zfs' | 'kvm' | 'docker' | 'lxc' | 'cifs';
 

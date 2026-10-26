@@ -11,12 +11,16 @@ export type ConsoleStatusCallback = (
   detail?: string
 ) => void;
 
+export type ScaleMode = 'fit' | '1:1' | '125' | '150' | '200';
+
 export interface RfbConsoleOptions {
   target: HTMLElement;
   vmName: string;
   token: string;
   websocketUrl?: string;
   onStatusChange?: ConsoleStatusCallback;
+  scaleMode?: ScaleMode;
+  crisp?: boolean;
 }
 
 export class RfbConsoleAdapter {
@@ -26,6 +30,8 @@ export class RfbConsoleAdapter {
   private readonly token: string;
   private readonly websocketUrl?: string;
   private readonly onStatusChange?: ConsoleStatusCallback;
+  private scaleMode: ScaleMode = 'fit';
+  private crisp: boolean = true;
 
   constructor(options: RfbConsoleOptions) {
     this.target = options.target;
@@ -33,6 +39,12 @@ export class RfbConsoleAdapter {
     this.token = options.token;
     this.websocketUrl = options.websocketUrl;
     this.onStatusChange = options.onStatusChange;
+    if (options.scaleMode) {
+      this.scaleMode = options.scaleMode;
+    }
+    if (options.crisp !== undefined) {
+      this.crisp = options.crisp;
+    }
   }
 
   static buildWebSocketUrl(vmName: string, token: string, explicitUrl?: string): string {
@@ -72,12 +84,15 @@ export class RfbConsoleAdapter {
         wsProtocols: ['binary'],
       });
 
-      this.rfb.scaleViewport = true;
       this.rfb.resizeSession = false;
       this.rfb.focusOnClick = true;
 
+      this.applyScaleMode();
+
       this.rfb.addEventListener('connect', () => {
         this.onStatusChange?.('CONNECTED', `Connected to ${this.vmName}`);
+        this.applyScaleMode();
+        this.setCrisp(this.crisp);
       });
 
       this.rfb.addEventListener('disconnect', (e: any) => {
@@ -98,12 +113,63 @@ export class RfbConsoleAdapter {
       this.rfb.addEventListener('credentialsrequired', () => {
         this.onStatusChange?.('ERROR', 'VNC password required');
       });
+
+      if (typeof window !== 'undefined') {
+        window.addEventListener('resize', this.handleWindowResize);
+      }
     } catch (err: any) {
       this.onStatusChange?.('ERROR', err?.message || 'Failed to initialize noVNC client');
     }
   }
 
+  private handleWindowResize = (): void => {
+    if (this.scaleMode !== 'fit') {
+      this.applyScaleMode();
+    }
+  };
+
+  setScaleMode(mode: ScaleMode): void {
+    this.scaleMode = mode;
+    this.applyScaleMode();
+  }
+
+  setCrisp(crisp: boolean): void {
+    this.crisp = crisp;
+    const canvas = this.target.querySelector('canvas');
+    if (canvas) {
+      if (crisp) {
+        canvas.style.imageRendering = 'pixelated';
+      } else {
+        canvas.style.imageRendering = 'auto';
+      }
+    }
+  }
+
+  private applyScaleMode(): void {
+    if (!this.rfb) return;
+
+    if (this.scaleMode === 'fit') {
+      this.rfb.scaleViewport = true;
+      this.rfb.clipViewport = false;
+    } else {
+      this.rfb.scaleViewport = false;
+      this.rfb.clipViewport = false;
+      const factor =
+        this.scaleMode === '125' ? 1.25 :
+        this.scaleMode === '150' ? 1.5 :
+        this.scaleMode === '200' ? 2.0 : 1.0;
+
+      const rfbAny = this.rfb as any;
+      if (rfbAny._display) {
+        rfbAny._display.scale = factor;
+      }
+    }
+  }
+
   disconnect(): void {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('resize', this.handleWindowResize);
+    }
     if (this.rfb) {
       try {
         this.rfb.disconnect();

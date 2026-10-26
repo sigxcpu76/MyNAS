@@ -37,6 +37,7 @@ import { isDotDataset } from '../domain/models';
 import LoginModal from './components/LoginModal.vue';
 import SystemPoolModal from './components/SystemPoolModal.vue';
 import ConfirmModal from './components/ConfirmModal.vue';
+import VncConsoleStandalone from './components/VncConsoleStandalone.vue';
 import MdiIcon from './components/MdiIcon.vue';
 import ThemeSelector from './components/ThemeSelector.vue';
 import PrerequisitesTopBarButton from './components/PrerequisitesTopBarButton.vue';
@@ -266,7 +267,23 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="app-shell">
+  <div v-if="nasState.activeTab === 'vnc-console'" class="detached-console-view">
+    <VncConsoleStandalone />
+    <LoginModal v-if="!nasState.authenticated" />
+    <ConfirmModal />
+    <div class="toast-stack">
+      <div
+        v-for="t in nasState.toasts"
+        :key="t.id"
+        class="toast"
+        :class="`toast-${t.type}`"
+      >
+        {{ t.message }}
+      </div>
+    </div>
+  </div>
+
+  <div v-else class="app-shell">
     <!-- Sidebar Navigation -->
     <aside class="sidebar">
       <div class="brand-box">
@@ -619,6 +636,15 @@ onMounted(() => {
   color: var(--text-secondary);
   align-self: flex-start;
   box-shadow: var(--card-shadow);
+}
+
+.detached-console-view {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--bg-primary, #0f172a);
 }
 </style>
 
