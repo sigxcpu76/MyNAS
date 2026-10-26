@@ -506,6 +506,22 @@ func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*doma
 		startCmd := exec.CommandContext(ctx, "virsh", "start", vm.ID)
 		startOut, err := startCmd.CombinedOutput()
 		if err != nil {
+			// Auto-heal if start failed due to unsupported CPU mode (e.g. host-passthrough on qemu domain)
+			if strings.Contains(string(startOut), "CPU mode") || strings.Contains(string(startOut), "not supported by hypervisor") {
+				if createdVM, getErr := a.getDomainFromVirsh(ctx, vm.ID); getErr == nil {
+					xmlStr := buildDomainXML(*createdVM)
+					redefCmd := exec.CommandContext(ctx, "virsh", "define", "/dev/stdin")
+					redefCmd.Stdin = strings.NewReader(xmlStr)
+					if _, redefErr := redefCmd.CombinedOutput(); redefErr == nil {
+						if retryOut, retryErr := exec.CommandContext(ctx, "virsh", "start", vm.ID).CombinedOutput(); retryErr == nil {
+							return a.getDomainFromVirsh(ctx, vm.ID)
+						} else {
+							startOut = retryOut
+							err = retryErr
+						}
+					}
+				}
+			}
 			a.logError("start", vm.ID, err, startOut)
 			return nil, fmt.Errorf("libvirt start failed: %s: %w", strings.TrimSpace(string(startOut)), err)
 		}
@@ -667,6 +683,22 @@ func (a *Adapter) StartVM(ctx context.Context, id string) (*domain.VirtualMachin
 	if a.isRealDomain(ctx, id) {
 		out, err := exec.CommandContext(ctx, "virsh", "start", id).CombinedOutput()
 		if err != nil {
+			// Auto-heal if start failed due to unsupported CPU mode (e.g. host-passthrough on qemu domain)
+			if strings.Contains(string(out), "CPU mode") || strings.Contains(string(out), "not supported by hypervisor") {
+				if vm, getErr := a.getDomainFromVirsh(ctx, id); getErr == nil {
+					xmlStr := buildDomainXML(*vm)
+					redefCmd := exec.CommandContext(ctx, "virsh", "define", "/dev/stdin")
+					redefCmd.Stdin = strings.NewReader(xmlStr)
+					if _, redefErr := redefCmd.CombinedOutput(); redefErr == nil {
+						if retryOut, retryErr := exec.CommandContext(ctx, "virsh", "start", id).CombinedOutput(); retryErr == nil {
+							return a.getDomainFromVirsh(ctx, id)
+						} else {
+							out = retryOut
+							err = retryErr
+						}
+					}
+				}
+			}
 			a.logError("start", id, err, out)
 			return nil, fmt.Errorf("virsh start failed: %s: %w", strings.TrimSpace(string(out)), err)
 		}
@@ -1080,12 +1112,20 @@ func findQemuEmulator() string {
 	return ""
 }
 
+func detectDomainType() string {
+	if _, err := os.Stat("/dev/kvm"); err == nil {
+		return "kvm"
+	}
+	out, err := exec.Command("virsh", "capabilities").Output()
+	if err == nil && strings.Contains(string(out), "<domain type='kvm'/>") {
+		return "kvm"
+	}
+	return "qemu"
+}
+
 func buildDomainXML(vm domain.VirtualMachine) string {
 	var sb strings.Builder
-	domainType := "kvm"
-	if _, err := os.Stat("/dev/kvm"); err != nil {
-		domainType = "qemu"
-	}
+	domainType := detectDomainType()
 
 	sb.WriteString(fmt.Sprintf(`<domain type='%s' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
   <name>%s</name>
@@ -1124,20 +1164,35 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 			cores = 1
 		}
 	}
-	cpuMode := "host-passthrough"
-	if vm.CPUType != "" && vm.CPUType != "host" {
-		cpuMode = "custom"
-	}
+
 	sb.WriteString(fmt.Sprintf(`  <vcpu placement='static'>%d</vcpu>
-  <cpu mode='%s'>
+`, vm.VCPUs))
+
+	if domainType == "qemu" {
+		cpuModel := vm.CPUType
+		if cpuModel == "" || cpuModel == "host" {
+			cpuModel = "qemu64"
+		}
+		sb.WriteString(fmt.Sprintf(`  <cpu mode='custom'>
     <topology sockets='%d' cores='%d' threads='1'/>
-`, vm.VCPUs, cpuMode, sockets, cores))
-	if cpuMode == "custom" {
-		sb.WriteString(fmt.Sprintf(`    <model fallback='forbid'>%s</model>
+    <model fallback='allow'>%s</model>
+  </cpu>
+`, sockets, cores, cpuModel))
+	} else {
+		cpuMode := "host-passthrough"
+		if vm.CPUType != "" && vm.CPUType != "host" {
+			cpuMode = "custom"
+		}
+		sb.WriteString(fmt.Sprintf(`  <cpu mode='%s'>
+    <topology sockets='%d' cores='%d' threads='1'/>
+`, cpuMode, sockets, cores))
+		if cpuMode == "custom" {
+			sb.WriteString(fmt.Sprintf(`    <model fallback='allow'>%s</model>
 `, vm.CPUType))
-	}
-	sb.WriteString(`  </cpu>
+		}
+		sb.WriteString(`  </cpu>
 `)
+	}
 
 	mach := vm.MachineType
 	if mach == "" {

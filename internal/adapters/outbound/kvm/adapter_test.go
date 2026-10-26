@@ -162,3 +162,45 @@ func TestRealLibvirtDomainWithCdromLifecycle(t *testing.T) {
 	_, _ = adapter.StopVM(ctx, vmID, true)
 	_ = adapter.DeleteVM(ctx, vmID)
 }
+
+func TestQemuSoftwareEmulationCpuCompatibility(t *testing.T) {
+	ctx := context.Background()
+	tempDir := t.TempDir()
+	adapter := kvm.NewAdapterWithStateDir(tempDir)
+
+	if _, err := adapter.ListVMs(ctx); err != nil {
+		t.Skipf("virsh/libvirt not available on this host: %v", err)
+	}
+
+	vmID := "nasctl-ci-test-qemu-emu"
+	diskPath := tempDir + "/qemu-emu.raw"
+
+	// Define VM with CPUType "host"
+	vm, err := adapter.CreateVM(ctx, domain.VirtualMachine{
+		ID:        vmID,
+		VMName:    "NASCTL QEMU Emulation Test",
+		MemoryMiB: 256,
+		VCPUs:     1,
+		CPUType:   "host",
+		Disks: []domain.VirtualMachineDisk{
+			{
+				ID:        "sda",
+				Bus:       "scsi",
+				DiskPath:  diskPath,
+				SizeBytes: 10 * 1024 * 1024,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to create VM: %v", err)
+	}
+	defer func() {
+		_, _ = adapter.StopVM(ctx, vmID, true)
+		_ = adapter.DeleteVM(ctx, vmID)
+		_ = os.Remove(diskPath)
+	}()
+
+	if vm.State != "RUNNING" {
+		t.Errorf("expected RUNNING, got %s", vm.State)
+	}
+}
