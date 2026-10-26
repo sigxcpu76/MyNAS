@@ -435,6 +435,582 @@ func (x *DiscoverPoolsResponse) GetPools() []*DiscoveredPool {
 	return nil
 }
 
+type CpuTelemetry struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Model              string                 `protobuf:"bytes,1,opt,name=model,proto3" json:"model,omitempty"`
+	PhysicalCores      int32                  `protobuf:"varint,2,opt,name=physical_cores,json=physicalCores,proto3" json:"physical_cores,omitempty"`
+	LogicalCores       int32                  `protobuf:"varint,3,opt,name=logical_cores,json=logicalCores,proto3" json:"logical_cores,omitempty"`
+	UsagePercent       float64                `protobuf:"fixed64,4,opt,name=usage_percent,json=usagePercent,proto3" json:"usage_percent,omitempty"`
+	Load1              float64                `protobuf:"fixed64,5,opt,name=load1,proto3" json:"load1,omitempty"`
+	Load5              float64                `protobuf:"fixed64,6,opt,name=load5,proto3" json:"load5,omitempty"`
+	Load15             float64                `protobuf:"fixed64,7,opt,name=load15,proto3" json:"load15,omitempty"`
+	TemperatureCelsius float64                `protobuf:"fixed64,8,opt,name=temperature_celsius,json=temperatureCelsius,proto3" json:"temperature_celsius,omitempty"`
+	CoreTemperatures   []float64              `protobuf:"fixed64,9,rep,packed,name=core_temperatures,json=coreTemperatures,proto3" json:"core_temperatures,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *CpuTelemetry) Reset() {
+	*x = CpuTelemetry{}
+	mi := &file_nas_v1_system_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CpuTelemetry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CpuTelemetry) ProtoMessage() {}
+
+func (x *CpuTelemetry) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_system_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CpuTelemetry.ProtoReflect.Descriptor instead.
+func (*CpuTelemetry) Descriptor() ([]byte, []int) {
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *CpuTelemetry) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *CpuTelemetry) GetPhysicalCores() int32 {
+	if x != nil {
+		return x.PhysicalCores
+	}
+	return 0
+}
+
+func (x *CpuTelemetry) GetLogicalCores() int32 {
+	if x != nil {
+		return x.LogicalCores
+	}
+	return 0
+}
+
+func (x *CpuTelemetry) GetUsagePercent() float64 {
+	if x != nil {
+		return x.UsagePercent
+	}
+	return 0
+}
+
+func (x *CpuTelemetry) GetLoad1() float64 {
+	if x != nil {
+		return x.Load1
+	}
+	return 0
+}
+
+func (x *CpuTelemetry) GetLoad5() float64 {
+	if x != nil {
+		return x.Load5
+	}
+	return 0
+}
+
+func (x *CpuTelemetry) GetLoad15() float64 {
+	if x != nil {
+		return x.Load15
+	}
+	return 0
+}
+
+func (x *CpuTelemetry) GetTemperatureCelsius() float64 {
+	if x != nil {
+		return x.TemperatureCelsius
+	}
+	return 0
+}
+
+func (x *CpuTelemetry) GetCoreTemperatures() []float64 {
+	if x != nil {
+		return x.CoreTemperatures
+	}
+	return nil
+}
+
+type MemoryTelemetry struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	TotalBytes     int64                  `protobuf:"varint,1,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`
+	FreeBytes      int64                  `protobuf:"varint,2,opt,name=free_bytes,json=freeBytes,proto3" json:"free_bytes,omitempty"`
+	AvailableBytes int64                  `protobuf:"varint,3,opt,name=available_bytes,json=availableBytes,proto3" json:"available_bytes,omitempty"`
+	UsedBytes      int64                  `protobuf:"varint,4,opt,name=used_bytes,json=usedBytes,proto3" json:"used_bytes,omitempty"`
+	ZfsArcBytes    int64                  `protobuf:"varint,5,opt,name=zfs_arc_bytes,json=zfsArcBytes,proto3" json:"zfs_arc_bytes,omitempty"`
+	ZfsArcMaxBytes int64                  `protobuf:"varint,6,opt,name=zfs_arc_max_bytes,json=zfsArcMaxBytes,proto3" json:"zfs_arc_max_bytes,omitempty"`
+	BuffersBytes   int64                  `protobuf:"varint,7,opt,name=buffers_bytes,json=buffersBytes,proto3" json:"buffers_bytes,omitempty"`
+	CachedBytes    int64                  `protobuf:"varint,8,opt,name=cached_bytes,json=cachedBytes,proto3" json:"cached_bytes,omitempty"`
+	ServicesBytes  int64                  `protobuf:"varint,9,opt,name=services_bytes,json=servicesBytes,proto3" json:"services_bytes,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *MemoryTelemetry) Reset() {
+	*x = MemoryTelemetry{}
+	mi := &file_nas_v1_system_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MemoryTelemetry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MemoryTelemetry) ProtoMessage() {}
+
+func (x *MemoryTelemetry) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_system_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MemoryTelemetry.ProtoReflect.Descriptor instead.
+func (*MemoryTelemetry) Descriptor() ([]byte, []int) {
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *MemoryTelemetry) GetTotalBytes() int64 {
+	if x != nil {
+		return x.TotalBytes
+	}
+	return 0
+}
+
+func (x *MemoryTelemetry) GetFreeBytes() int64 {
+	if x != nil {
+		return x.FreeBytes
+	}
+	return 0
+}
+
+func (x *MemoryTelemetry) GetAvailableBytes() int64 {
+	if x != nil {
+		return x.AvailableBytes
+	}
+	return 0
+}
+
+func (x *MemoryTelemetry) GetUsedBytes() int64 {
+	if x != nil {
+		return x.UsedBytes
+	}
+	return 0
+}
+
+func (x *MemoryTelemetry) GetZfsArcBytes() int64 {
+	if x != nil {
+		return x.ZfsArcBytes
+	}
+	return 0
+}
+
+func (x *MemoryTelemetry) GetZfsArcMaxBytes() int64 {
+	if x != nil {
+		return x.ZfsArcMaxBytes
+	}
+	return 0
+}
+
+func (x *MemoryTelemetry) GetBuffersBytes() int64 {
+	if x != nil {
+		return x.BuffersBytes
+	}
+	return 0
+}
+
+func (x *MemoryTelemetry) GetCachedBytes() int64 {
+	if x != nil {
+		return x.CachedBytes
+	}
+	return 0
+}
+
+func (x *MemoryTelemetry) GetServicesBytes() int64 {
+	if x != nil {
+		return x.ServicesBytes
+	}
+	return 0
+}
+
+type HostHardwareInfo struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Hostname           string                 `protobuf:"bytes,1,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	OsName             string                 `protobuf:"bytes,2,opt,name=os_name,json=osName,proto3" json:"os_name,omitempty"`
+	OsVersion          string                 `protobuf:"bytes,3,opt,name=os_version,json=osVersion,proto3" json:"os_version,omitempty"`
+	KernelVersion      string                 `protobuf:"bytes,4,opt,name=kernel_version,json=kernelVersion,proto3" json:"kernel_version,omitempty"`
+	Architecture       string                 `protobuf:"bytes,5,opt,name=architecture,proto3" json:"architecture,omitempty"`
+	UptimeSeconds      int64                  `protobuf:"varint,6,opt,name=uptime_seconds,json=uptimeSeconds,proto3" json:"uptime_seconds,omitempty"`
+	MotherboardVendor  string                 `protobuf:"bytes,7,opt,name=motherboard_vendor,json=motherboardVendor,proto3" json:"motherboard_vendor,omitempty"`
+	MotherboardName    string                 `protobuf:"bytes,8,opt,name=motherboard_name,json=motherboardName,proto3" json:"motherboard_name,omitempty"`
+	MotherboardVersion string                 `protobuf:"bytes,9,opt,name=motherboard_version,json=motherboardVersion,proto3" json:"motherboard_version,omitempty"`
+	BiosVendor         string                 `protobuf:"bytes,10,opt,name=bios_vendor,json=biosVendor,proto3" json:"bios_vendor,omitempty"`
+	BiosVersion        string                 `protobuf:"bytes,11,opt,name=bios_version,json=biosVersion,proto3" json:"bios_version,omitempty"`
+	BiosDate           string                 `protobuf:"bytes,12,opt,name=bios_date,json=biosDate,proto3" json:"bios_date,omitempty"`
+	Gpus               []string               `protobuf:"bytes,13,rep,name=gpus,proto3" json:"gpus,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *HostHardwareInfo) Reset() {
+	*x = HostHardwareInfo{}
+	mi := &file_nas_v1_system_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HostHardwareInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HostHardwareInfo) ProtoMessage() {}
+
+func (x *HostHardwareInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_system_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HostHardwareInfo.ProtoReflect.Descriptor instead.
+func (*HostHardwareInfo) Descriptor() ([]byte, []int) {
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *HostHardwareInfo) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
+func (x *HostHardwareInfo) GetOsName() string {
+	if x != nil {
+		return x.OsName
+	}
+	return ""
+}
+
+func (x *HostHardwareInfo) GetOsVersion() string {
+	if x != nil {
+		return x.OsVersion
+	}
+	return ""
+}
+
+func (x *HostHardwareInfo) GetKernelVersion() string {
+	if x != nil {
+		return x.KernelVersion
+	}
+	return ""
+}
+
+func (x *HostHardwareInfo) GetArchitecture() string {
+	if x != nil {
+		return x.Architecture
+	}
+	return ""
+}
+
+func (x *HostHardwareInfo) GetUptimeSeconds() int64 {
+	if x != nil {
+		return x.UptimeSeconds
+	}
+	return 0
+}
+
+func (x *HostHardwareInfo) GetMotherboardVendor() string {
+	if x != nil {
+		return x.MotherboardVendor
+	}
+	return ""
+}
+
+func (x *HostHardwareInfo) GetMotherboardName() string {
+	if x != nil {
+		return x.MotherboardName
+	}
+	return ""
+}
+
+func (x *HostHardwareInfo) GetMotherboardVersion() string {
+	if x != nil {
+		return x.MotherboardVersion
+	}
+	return ""
+}
+
+func (x *HostHardwareInfo) GetBiosVendor() string {
+	if x != nil {
+		return x.BiosVendor
+	}
+	return ""
+}
+
+func (x *HostHardwareInfo) GetBiosVersion() string {
+	if x != nil {
+		return x.BiosVersion
+	}
+	return ""
+}
+
+func (x *HostHardwareInfo) GetBiosDate() string {
+	if x != nil {
+		return x.BiosDate
+	}
+	return ""
+}
+
+func (x *HostHardwareInfo) GetGpus() []string {
+	if x != nil {
+		return x.Gpus
+	}
+	return nil
+}
+
+type NetworkInterfaceTelemetry struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Name              string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	IpAddresses       []string               `protobuf:"bytes,2,rep,name=ip_addresses,json=ipAddresses,proto3" json:"ip_addresses,omitempty"`
+	MacAddress        string                 `protobuf:"bytes,3,opt,name=mac_address,json=macAddress,proto3" json:"mac_address,omitempty"`
+	IsUp              bool                   `protobuf:"varint,4,opt,name=is_up,json=isUp,proto3" json:"is_up,omitempty"`
+	SpeedMbps         int64                  `protobuf:"varint,5,opt,name=speed_mbps,json=speedMbps,proto3" json:"speed_mbps,omitempty"`
+	RxBytes           int64                  `protobuf:"varint,6,opt,name=rx_bytes,json=rxBytes,proto3" json:"rx_bytes,omitempty"`
+	TxBytes           int64                  `protobuf:"varint,7,opt,name=tx_bytes,json=txBytes,proto3" json:"tx_bytes,omitempty"`
+	RxRateBytesPerSec int64                  `protobuf:"varint,8,opt,name=rx_rate_bytes_per_sec,json=rxRateBytesPerSec,proto3" json:"rx_rate_bytes_per_sec,omitempty"`
+	TxRateBytesPerSec int64                  `protobuf:"varint,9,opt,name=tx_rate_bytes_per_sec,json=txRateBytesPerSec,proto3" json:"tx_rate_bytes_per_sec,omitempty"`
+	IsDefault         bool                   `protobuf:"varint,10,opt,name=is_default,json=isDefault,proto3" json:"is_default,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *NetworkInterfaceTelemetry) Reset() {
+	*x = NetworkInterfaceTelemetry{}
+	mi := &file_nas_v1_system_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NetworkInterfaceTelemetry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NetworkInterfaceTelemetry) ProtoMessage() {}
+
+func (x *NetworkInterfaceTelemetry) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_system_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NetworkInterfaceTelemetry.ProtoReflect.Descriptor instead.
+func (*NetworkInterfaceTelemetry) Descriptor() ([]byte, []int) {
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *NetworkInterfaceTelemetry) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *NetworkInterfaceTelemetry) GetIpAddresses() []string {
+	if x != nil {
+		return x.IpAddresses
+	}
+	return nil
+}
+
+func (x *NetworkInterfaceTelemetry) GetMacAddress() string {
+	if x != nil {
+		return x.MacAddress
+	}
+	return ""
+}
+
+func (x *NetworkInterfaceTelemetry) GetIsUp() bool {
+	if x != nil {
+		return x.IsUp
+	}
+	return false
+}
+
+func (x *NetworkInterfaceTelemetry) GetSpeedMbps() int64 {
+	if x != nil {
+		return x.SpeedMbps
+	}
+	return 0
+}
+
+func (x *NetworkInterfaceTelemetry) GetRxBytes() int64 {
+	if x != nil {
+		return x.RxBytes
+	}
+	return 0
+}
+
+func (x *NetworkInterfaceTelemetry) GetTxBytes() int64 {
+	if x != nil {
+		return x.TxBytes
+	}
+	return 0
+}
+
+func (x *NetworkInterfaceTelemetry) GetRxRateBytesPerSec() int64 {
+	if x != nil {
+		return x.RxRateBytesPerSec
+	}
+	return 0
+}
+
+func (x *NetworkInterfaceTelemetry) GetTxRateBytesPerSec() int64 {
+	if x != nil {
+		return x.TxRateBytesPerSec
+	}
+	return 0
+}
+
+func (x *NetworkInterfaceTelemetry) GetIsDefault() bool {
+	if x != nil {
+		return x.IsDefault
+	}
+	return false
+}
+
+type SystemTelemetry struct {
+	state         protoimpl.MessageState       `protogen:"open.v1"`
+	Cpu           *CpuTelemetry                `protobuf:"bytes,1,opt,name=cpu,proto3" json:"cpu,omitempty"`
+	Memory        *MemoryTelemetry             `protobuf:"bytes,2,opt,name=memory,proto3" json:"memory,omitempty"`
+	Host          *HostHardwareInfo            `protobuf:"bytes,3,opt,name=host,proto3" json:"host,omitempty"`
+	Network       []*NetworkInterfaceTelemetry `protobuf:"bytes,4,rep,name=network,proto3" json:"network,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SystemTelemetry) Reset() {
+	*x = SystemTelemetry{}
+	mi := &file_nas_v1_system_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SystemTelemetry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SystemTelemetry) ProtoMessage() {}
+
+func (x *SystemTelemetry) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_system_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SystemTelemetry.ProtoReflect.Descriptor instead.
+func (*SystemTelemetry) Descriptor() ([]byte, []int) {
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *SystemTelemetry) GetCpu() *CpuTelemetry {
+	if x != nil {
+		return x.Cpu
+	}
+	return nil
+}
+
+func (x *SystemTelemetry) GetMemory() *MemoryTelemetry {
+	if x != nil {
+		return x.Memory
+	}
+	return nil
+}
+
+func (x *SystemTelemetry) GetHost() *HostHardwareInfo {
+	if x != nil {
+		return x.Host
+	}
+	return nil
+}
+
+func (x *SystemTelemetry) GetNetwork() []*NetworkInterfaceTelemetry {
+	if x != nil {
+		return x.Network
+	}
+	return nil
+}
+
+type GetSystemTelemetryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSystemTelemetryRequest) Reset() {
+	*x = GetSystemTelemetryRequest{}
+	mi := &file_nas_v1_system_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSystemTelemetryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSystemTelemetryRequest) ProtoMessage() {}
+
+func (x *GetSystemTelemetryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_system_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSystemTelemetryRequest.ProtoReflect.Descriptor instead.
+func (*GetSystemTelemetryRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{12}
+}
+
 var File_nas_v1_system_proto protoreflect.FileDescriptor
 
 const file_nas_v1_system_proto_rawDesc = "" +
@@ -470,7 +1046,68 @@ const file_nas_v1_system_proto_rawDesc = "" +
 	"\x14auto_import_existing\x18\x02 \x01(\bR\x12autoImportExisting\"\x16\n" +
 	"\x14DiscoverPoolsRequest\"E\n" +
 	"\x15DiscoverPoolsResponse\x12,\n" +
-	"\x05pools\x18\x01 \x03(\v2\x16.nas.v1.DiscoveredPoolR\x05poolsB2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
+	"\x05pools\x18\x01 \x03(\v2\x16.nas.v1.DiscoveredPoolR\x05pools\"\xb7\x02\n" +
+	"\fCpuTelemetry\x12\x14\n" +
+	"\x05model\x18\x01 \x01(\tR\x05model\x12%\n" +
+	"\x0ephysical_cores\x18\x02 \x01(\x05R\rphysicalCores\x12#\n" +
+	"\rlogical_cores\x18\x03 \x01(\x05R\flogicalCores\x12#\n" +
+	"\rusage_percent\x18\x04 \x01(\x01R\fusagePercent\x12\x14\n" +
+	"\x05load1\x18\x05 \x01(\x01R\x05load1\x12\x14\n" +
+	"\x05load5\x18\x06 \x01(\x01R\x05load5\x12\x16\n" +
+	"\x06load15\x18\a \x01(\x01R\x06load15\x12/\n" +
+	"\x13temperature_celsius\x18\b \x01(\x01R\x12temperatureCelsius\x12+\n" +
+	"\x11core_temperatures\x18\t \x03(\x01R\x10coreTemperatures\"\xd7\x02\n" +
+	"\x0fMemoryTelemetry\x12\x1f\n" +
+	"\vtotal_bytes\x18\x01 \x01(\x03R\n" +
+	"totalBytes\x12\x1d\n" +
+	"\n" +
+	"free_bytes\x18\x02 \x01(\x03R\tfreeBytes\x12'\n" +
+	"\x0favailable_bytes\x18\x03 \x01(\x03R\x0eavailableBytes\x12\x1d\n" +
+	"\n" +
+	"used_bytes\x18\x04 \x01(\x03R\tusedBytes\x12\"\n" +
+	"\rzfs_arc_bytes\x18\x05 \x01(\x03R\vzfsArcBytes\x12)\n" +
+	"\x11zfs_arc_max_bytes\x18\x06 \x01(\x03R\x0ezfsArcMaxBytes\x12#\n" +
+	"\rbuffers_bytes\x18\a \x01(\x03R\fbuffersBytes\x12!\n" +
+	"\fcached_bytes\x18\b \x01(\x03R\vcachedBytes\x12%\n" +
+	"\x0eservices_bytes\x18\t \x01(\x03R\rservicesBytes\"\xd8\x03\n" +
+	"\x10HostHardwareInfo\x12\x1a\n" +
+	"\bhostname\x18\x01 \x01(\tR\bhostname\x12\x17\n" +
+	"\aos_name\x18\x02 \x01(\tR\x06osName\x12\x1d\n" +
+	"\n" +
+	"os_version\x18\x03 \x01(\tR\tosVersion\x12%\n" +
+	"\x0ekernel_version\x18\x04 \x01(\tR\rkernelVersion\x12\"\n" +
+	"\farchitecture\x18\x05 \x01(\tR\farchitecture\x12%\n" +
+	"\x0euptime_seconds\x18\x06 \x01(\x03R\ruptimeSeconds\x12-\n" +
+	"\x12motherboard_vendor\x18\a \x01(\tR\x11motherboardVendor\x12)\n" +
+	"\x10motherboard_name\x18\b \x01(\tR\x0fmotherboardName\x12/\n" +
+	"\x13motherboard_version\x18\t \x01(\tR\x12motherboardVersion\x12\x1f\n" +
+	"\vbios_vendor\x18\n" +
+	" \x01(\tR\n" +
+	"biosVendor\x12!\n" +
+	"\fbios_version\x18\v \x01(\tR\vbiosVersion\x12\x1b\n" +
+	"\tbios_date\x18\f \x01(\tR\bbiosDate\x12\x12\n" +
+	"\x04gpus\x18\r \x03(\tR\x04gpus\"\xe0\x02\n" +
+	"\x19NetworkInterfaceTelemetry\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
+	"\fip_addresses\x18\x02 \x03(\tR\vipAddresses\x12\x1f\n" +
+	"\vmac_address\x18\x03 \x01(\tR\n" +
+	"macAddress\x12\x13\n" +
+	"\x05is_up\x18\x04 \x01(\bR\x04isUp\x12\x1d\n" +
+	"\n" +
+	"speed_mbps\x18\x05 \x01(\x03R\tspeedMbps\x12\x19\n" +
+	"\brx_bytes\x18\x06 \x01(\x03R\arxBytes\x12\x19\n" +
+	"\btx_bytes\x18\a \x01(\x03R\atxBytes\x120\n" +
+	"\x15rx_rate_bytes_per_sec\x18\b \x01(\x03R\x11rxRateBytesPerSec\x120\n" +
+	"\x15tx_rate_bytes_per_sec\x18\t \x01(\x03R\x11txRateBytesPerSec\x12\x1d\n" +
+	"\n" +
+	"is_default\x18\n" +
+	" \x01(\bR\tisDefault\"\xd5\x01\n" +
+	"\x0fSystemTelemetry\x12&\n" +
+	"\x03cpu\x18\x01 \x01(\v2\x14.nas.v1.CpuTelemetryR\x03cpu\x12/\n" +
+	"\x06memory\x18\x02 \x01(\v2\x17.nas.v1.MemoryTelemetryR\x06memory\x12,\n" +
+	"\x04host\x18\x03 \x01(\v2\x18.nas.v1.HostHardwareInfoR\x04host\x12;\n" +
+	"\anetwork\x18\x04 \x03(\v2!.nas.v1.NetworkInterfaceTelemetryR\anetwork\"\x1b\n" +
+	"\x19GetSystemTelemetryRequestB2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
 
 var (
 	file_nas_v1_system_proto_rawDescOnce sync.Once
@@ -484,7 +1121,7 @@ func file_nas_v1_system_proto_rawDescGZIP() []byte {
 	return file_nas_v1_system_proto_rawDescData
 }
 
-var file_nas_v1_system_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_nas_v1_system_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_nas_v1_system_proto_goTypes = []any{
 	(*DiscoveredPool)(nil),            // 0: nas.v1.DiscoveredPool
 	(*SystemConfig)(nil),              // 1: nas.v1.SystemConfig
@@ -493,18 +1130,28 @@ var file_nas_v1_system_proto_goTypes = []any{
 	(*SelectMainPoolRequest)(nil),     // 4: nas.v1.SelectMainPoolRequest
 	(*DiscoverPoolsRequest)(nil),      // 5: nas.v1.DiscoverPoolsRequest
 	(*DiscoverPoolsResponse)(nil),     // 6: nas.v1.DiscoverPoolsResponse
-	(*fieldmaskpb.FieldMask)(nil),     // 7: google.protobuf.FieldMask
+	(*CpuTelemetry)(nil),              // 7: nas.v1.CpuTelemetry
+	(*MemoryTelemetry)(nil),           // 8: nas.v1.MemoryTelemetry
+	(*HostHardwareInfo)(nil),          // 9: nas.v1.HostHardwareInfo
+	(*NetworkInterfaceTelemetry)(nil), // 10: nas.v1.NetworkInterfaceTelemetry
+	(*SystemTelemetry)(nil),           // 11: nas.v1.SystemTelemetry
+	(*GetSystemTelemetryRequest)(nil), // 12: nas.v1.GetSystemTelemetryRequest
+	(*fieldmaskpb.FieldMask)(nil),     // 13: google.protobuf.FieldMask
 }
 var file_nas_v1_system_proto_depIdxs = []int32{
-	0, // 0: nas.v1.SystemConfig.discovered_pools:type_name -> nas.v1.DiscoveredPool
-	1, // 1: nas.v1.UpdateSystemConfigRequest.system_config:type_name -> nas.v1.SystemConfig
-	7, // 2: nas.v1.UpdateSystemConfigRequest.update_mask:type_name -> google.protobuf.FieldMask
-	0, // 3: nas.v1.DiscoverPoolsResponse.pools:type_name -> nas.v1.DiscoveredPool
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	0,  // 0: nas.v1.SystemConfig.discovered_pools:type_name -> nas.v1.DiscoveredPool
+	1,  // 1: nas.v1.UpdateSystemConfigRequest.system_config:type_name -> nas.v1.SystemConfig
+	13, // 2: nas.v1.UpdateSystemConfigRequest.update_mask:type_name -> google.protobuf.FieldMask
+	0,  // 3: nas.v1.DiscoverPoolsResponse.pools:type_name -> nas.v1.DiscoveredPool
+	7,  // 4: nas.v1.SystemTelemetry.cpu:type_name -> nas.v1.CpuTelemetry
+	8,  // 5: nas.v1.SystemTelemetry.memory:type_name -> nas.v1.MemoryTelemetry
+	9,  // 6: nas.v1.SystemTelemetry.host:type_name -> nas.v1.HostHardwareInfo
+	10, // 7: nas.v1.SystemTelemetry.network:type_name -> nas.v1.NetworkInterfaceTelemetry
+	8,  // [8:8] is the sub-list for method output_type
+	8,  // [8:8] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_nas_v1_system_proto_init() }
@@ -518,7 +1165,7 @@ func file_nas_v1_system_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nas_v1_system_proto_rawDesc), len(file_nas_v1_system_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

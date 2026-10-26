@@ -28,6 +28,7 @@ type SystemPort interface {
 	GetConfig(ctx context.Context) (*domain.SystemConfig, error)
 	SelectMainPool(ctx context.Context, poolName string, autoImportExisting bool) (*domain.SystemConfig, error)
 	DiscoverPools(ctx context.Context) ([]domain.DiscoveredPool, error)
+	GetTelemetry(ctx context.Context) (*domain.SystemTelemetry, error)
 }
 
 type DiskPort interface {

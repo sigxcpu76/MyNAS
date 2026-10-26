@@ -404,4 +404,16 @@ func TestSystemConfigAndPoolSelection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExportZfsPool failed: %v", err)
 	}
+
+	// 6. Test GetSystemTelemetry gRPC endpoint
+	telemResp, err := srv.GetSystemTelemetry(ctx, &nasv1.GetSystemTelemetryRequest{})
+	if err != nil {
+		t.Fatalf("GetSystemTelemetry failed: %v", err)
+	}
+	if telemResp.GetHost().GetHostname() == "" {
+		t.Errorf("expected non-empty host telemetry in gRPC response")
+	}
+	if telemResp.GetMemory().GetTotalBytes() <= 0 {
+		t.Errorf("expected memory total bytes > 0 in gRPC response")
+	}
 }

@@ -49,3 +49,70 @@ message DiscoverPoolsRequest {}
 message DiscoverPoolsResponse {
   repeated DiscoveredPool pools = 1;
 }
+
+// =============================================================================
+// Real-Time System Telemetry & Hardware Metadata
+// =============================================================================
+
+message CpuTelemetry {
+  string model = 1;
+  int32 physical_cores = 2;
+  int32 logical_cores = 3;
+  double usage_percent = 4;
+  double load1 = 5;
+  double load5 = 6;
+  double load15 = 7;
+  double temperature_celsius = 8;
+  repeated double core_temperatures = 9;
+}
+
+message MemoryTelemetry {
+  int64 total_bytes = 1;
+  int64 free_bytes = 2;
+  int64 available_bytes = 3;
+  int64 used_bytes = 4;
+  int64 zfs_arc_bytes = 5;
+  int64 zfs_arc_max_bytes = 6;
+  int64 buffers_bytes = 7;
+  int64 cached_bytes = 8;
+  int64 services_bytes = 9;
+}
+
+message HostHardwareInfo {
+  string hostname = 1;
+  string os_name = 2;
+  string os_version = 3;
+  string kernel_version = 4;
+  string architecture = 5;
+  int64 uptime_seconds = 6;
+  string motherboard_vendor = 7;
+  string motherboard_name = 8;
+  string motherboard_version = 9;
+  string bios_vendor = 10;
+  string bios_version = 11;
+  string bios_date = 12;
+  repeated string gpus = 13;
+}
+
+message NetworkInterfaceTelemetry {
+  string name = 1;
+  repeated string ip_addresses = 2;
+  string mac_address = 3;
+  bool is_up = 4;
+  int64 speed_mbps = 5;
+  int64 rx_bytes = 6;
+  int64 tx_bytes = 7;
+  int64 rx_rate_bytes_per_sec = 8;
+  int64 tx_rate_bytes_per_sec = 9;
+  bool is_default = 10;
+}
+
+message SystemTelemetry {
+  CpuTelemetry cpu = 1;
+  MemoryTelemetry memory = 2;
+  HostHardwareInfo host = 3;
+  repeated NetworkInterfaceTelemetry network = 4;
+}
+
+message GetSystemTelemetryRequest {}
+

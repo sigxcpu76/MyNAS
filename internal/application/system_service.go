@@ -32,6 +32,10 @@ func (s *SystemService) DiscoverPools(ctx context.Context) ([]domain.DiscoveredP
 	return s.port.DiscoverPools(ctx)
 }
 
+func (s *SystemService) GetTelemetry(ctx context.Context) (*domain.SystemTelemetry, error) {
+	return s.port.GetTelemetry(ctx)
+}
+
 func (s *SystemService) RequireMainPool() error {
 	cfg := config.GetGlobal()
 	if cfg.System.MainPool == "" {

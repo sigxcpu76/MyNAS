@@ -26,6 +26,7 @@ const (
 	NasService_UpdateSystemConfig_FullMethodName             = "/nas.v1.NasService/UpdateSystemConfig"
 	NasService_SelectMainPool_FullMethodName                 = "/nas.v1.NasService/SelectMainPool"
 	NasService_DiscoverPools_FullMethodName                  = "/nas.v1.NasService/DiscoverPools"
+	NasService_GetSystemTelemetry_FullMethodName             = "/nas.v1.NasService/GetSystemTelemetry"
 	NasService_ListPrerequisites_FullMethodName              = "/nas.v1.NasService/ListPrerequisites"
 	NasService_GetPrerequisite_FullMethodName                = "/nas.v1.NasService/GetPrerequisite"
 	NasService_CheckPrerequisites_FullMethodName             = "/nas.v1.NasService/CheckPrerequisites"
@@ -141,6 +142,7 @@ type NasServiceClient interface {
 	UpdateSystemConfig(ctx context.Context, in *UpdateSystemConfigRequest, opts ...grpc.CallOption) (*SystemConfig, error)
 	SelectMainPool(ctx context.Context, in *SelectMainPoolRequest, opts ...grpc.CallOption) (*SystemConfig, error)
 	DiscoverPools(ctx context.Context, in *DiscoverPoolsRequest, opts ...grpc.CallOption) (*DiscoverPoolsResponse, error)
+	GetSystemTelemetry(ctx context.Context, in *GetSystemTelemetryRequest, opts ...grpc.CallOption) (*SystemTelemetry, error)
 	ListPrerequisites(ctx context.Context, in *ListPrerequisitesRequest, opts ...grpc.CallOption) (*ListPrerequisitesResponse, error)
 	GetPrerequisite(ctx context.Context, in *GetPrerequisiteRequest, opts ...grpc.CallOption) (*Prerequisite, error)
 	CheckPrerequisites(ctx context.Context, in *CheckPrerequisitesRequest, opts ...grpc.CallOption) (*CheckPrerequisitesResponse, error)
@@ -302,6 +304,16 @@ func (c *nasServiceClient) DiscoverPools(ctx context.Context, in *DiscoverPoolsR
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DiscoverPoolsResponse)
 	err := c.cc.Invoke(ctx, NasService_DiscoverPools_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) GetSystemTelemetry(ctx context.Context, in *GetSystemTelemetryRequest, opts ...grpc.CallOption) (*SystemTelemetry, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SystemTelemetry)
+	err := c.cc.Invoke(ctx, NasService_GetSystemTelemetry_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1294,6 +1306,7 @@ type NasServiceServer interface {
 	UpdateSystemConfig(context.Context, *UpdateSystemConfigRequest) (*SystemConfig, error)
 	SelectMainPool(context.Context, *SelectMainPoolRequest) (*SystemConfig, error)
 	DiscoverPools(context.Context, *DiscoverPoolsRequest) (*DiscoverPoolsResponse, error)
+	GetSystemTelemetry(context.Context, *GetSystemTelemetryRequest) (*SystemTelemetry, error)
 	ListPrerequisites(context.Context, *ListPrerequisitesRequest) (*ListPrerequisitesResponse, error)
 	GetPrerequisite(context.Context, *GetPrerequisiteRequest) (*Prerequisite, error)
 	CheckPrerequisites(context.Context, *CheckPrerequisitesRequest) (*CheckPrerequisitesResponse, error)
@@ -1418,6 +1431,9 @@ func (UnimplementedNasServiceServer) SelectMainPool(context.Context, *SelectMain
 }
 func (UnimplementedNasServiceServer) DiscoverPools(context.Context, *DiscoverPoolsRequest) (*DiscoverPoolsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DiscoverPools not implemented")
+}
+func (UnimplementedNasServiceServer) GetSystemTelemetry(context.Context, *GetSystemTelemetryRequest) (*SystemTelemetry, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSystemTelemetry not implemented")
 }
 func (UnimplementedNasServiceServer) ListPrerequisites(context.Context, *ListPrerequisitesRequest) (*ListPrerequisitesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListPrerequisites not implemented")
@@ -1835,6 +1851,24 @@ func _NasService_DiscoverPools_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NasServiceServer).DiscoverPools(ctx, req.(*DiscoverPoolsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_GetSystemTelemetry_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSystemTelemetryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).GetSystemTelemetry(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_GetSystemTelemetry_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).GetSystemTelemetry(ctx, req.(*GetSystemTelemetryRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -3615,6 +3649,10 @@ var NasService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DiscoverPools",
 			Handler:    _NasService_DiscoverPools_Handler,
+		},
+		{
+			MethodName: "GetSystemTelemetry",
+			Handler:    _NasService_GetSystemTelemetry_Handler,
 		},
 		{
 			MethodName: "ListPrerequisites",

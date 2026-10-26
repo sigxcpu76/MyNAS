@@ -19,6 +19,7 @@ import type {
   Prerequisite,
   PrerequisiteSummary,
   SystemConfig,
+  SystemTelemetry,
   User,
   VirtualMachine,
   VirtualMachineConsoleSession,
@@ -42,6 +43,7 @@ export interface SystemPort {
   updateSystemConfig(config: Partial<SystemConfig>): Promise<SystemConfig>;
   selectMainPool(poolName: string, autoImportExisting?: boolean): Promise<SystemConfig>;
   discoverPools(): Promise<DiscoveredPool[]>;
+  getTelemetry(): Promise<SystemTelemetry>;
 }
 
 export interface PrerequisitePort {

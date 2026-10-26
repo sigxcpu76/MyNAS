@@ -21,6 +21,7 @@ import {
   type PrerequisiteSummary,
   ResourceNames,
   type SystemConfig,
+  type SystemTelemetry,
   type DiscoveredPool,
   type User,
   validateSshPublicKey,
@@ -102,6 +103,10 @@ export class SystemService {
 
   async discoverPools(): Promise<DiscoveredPool[]> {
     return this.systemPort.discoverPools();
+  }
+
+  async getTelemetry(): Promise<SystemTelemetry> {
+    return this.systemPort.getTelemetry();
   }
 }
 

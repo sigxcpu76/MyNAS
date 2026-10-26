@@ -74,6 +74,12 @@ service NasService {
     };
   }
 
+  rpc GetSystemTelemetry(GetSystemTelemetryRequest) returns (SystemTelemetry) {
+    option (google.api.http) = {
+      get: "/v1/system/telemetry"
+    };
+  }
+
   // ---------------------------------------------------------------------------
   // Prerequisites (AIP-131 Get, AIP-132 List, AIP-136 Custom :check)
   // ---------------------------------------------------------------------------

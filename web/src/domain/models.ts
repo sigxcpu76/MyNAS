@@ -84,6 +84,70 @@ export interface SystemConfig {
 }
 
 // ---------------------------------------------------------------------------
+// System Telemetry & Fastfetch Hardware Metadata
+// ---------------------------------------------------------------------------
+
+export interface CpuTelemetry {
+  model: string;
+  physicalCores: number;
+  logicalCores: number;
+  usagePercent: number;
+  load1: number;
+  load5: number;
+  load15: number;
+  temperatureCelsius: number;
+  coreTemperatures?: number[];
+}
+
+export interface MemoryTelemetry {
+  totalBytes: number;
+  freeBytes: number;
+  availableBytes: number;
+  usedBytes: number;
+  zfsArcBytes: number;
+  zfsArcMaxBytes: number;
+  buffersBytes: number;
+  cachedBytes: number;
+  servicesBytes: number;
+}
+
+export interface HostHardwareInfo {
+  hostname: string;
+  osName: string;
+  osVersion: string;
+  kernelVersion: string;
+  architecture: string;
+  uptimeSeconds: number;
+  motherboardVendor: string;
+  motherboardName: string;
+  motherboardVersion: string;
+  biosVendor: string;
+  biosVersion: string;
+  biosDate: string;
+  gpus: string[];
+}
+
+export interface NetworkInterfaceTelemetry {
+  name: string;
+  ipAddresses: string[];
+  macAddress: string;
+  isUp: boolean;
+  speedMbps: number;
+  rxBytes: number;
+  txBytes: number;
+  rxRateBytesPerSec: number;
+  txRateBytesPerSec: number;
+  isDefault?: boolean;
+}
+
+export interface SystemTelemetry {
+  cpu: CpuTelemetry;
+  memory: MemoryTelemetry;
+  host: HostHardwareInfo;
+  network: NetworkInterfaceTelemetry[];
+}
+
+// ---------------------------------------------------------------------------
 // Physical Disks & Storage Hardware (`disks/{disk}`)
 // ---------------------------------------------------------------------------
 
@@ -671,6 +735,19 @@ export function gibToBytes(gib: number): number {
 export function bytesToGib(bytes: number, decimals = 1): number {
   if (!bytes || bytes <= 0) return 0;
   return parseFloat((bytes / (1024 * 1024 * 1024)).toFixed(decimals));
+}
+
+export function formatUptime(totalSeconds: number): string {
+  if (!totalSeconds || totalSeconds <= 0) return '0m';
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0 || days > 0) parts.push(`${hours}h`);
+  parts.push(`${minutes}m`);
+  return parts.join(' ');
 }
 
 const RESOURCE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$/;

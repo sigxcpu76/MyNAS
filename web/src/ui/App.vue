@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import {
   mdiAccountGroup,
   mdiAlertCircle,
@@ -38,6 +38,8 @@ import SystemPoolModal from './components/SystemPoolModal.vue';
 import ConfirmModal from './components/ConfirmModal.vue';
 import MdiIcon from './components/MdiIcon.vue';
 import ThemeSelector from './components/ThemeSelector.vue';
+import PrerequisitesTopBarButton from './components/PrerequisitesTopBarButton.vue';
+import PrerequisitesModal from './components/PrerequisitesModal.vue';
 import OverviewView from './views/OverviewView.vue';
 import PrerequisitesView from './views/PrerequisitesView.vue';
 import DisksView from './views/DisksView.vue';
@@ -52,6 +54,18 @@ import IdentityView from './views/IdentityView.vue';
 
 const storageExpanded = ref(true);
 const showPoolModal = ref(false);
+const showPrerequisitesModal = ref(false);
+
+watch(
+  () => nasState.activeTab,
+  (tab: string) => {
+    if (tab === 'prerequisites') {
+      showPrerequisitesModal.value = true;
+      navigateTo('overview', true);
+    }
+  },
+  { immediate: true }
+);
 
 const totalDatasetsCount = computed(() => {
   let count = 0;
@@ -110,13 +124,6 @@ const navItems = computed<NavItem[]>(() => {
   const lxc = getModuleAvailability('lxc');
   return [
     { id: 'overview', label: 'Overview Dashboard', icon: mdiViewDashboard, path: '/' },
-    {
-      id: 'prerequisites',
-      label: 'System Prerequisites',
-      icon: mdiShieldCheck,
-      badge: nasState.prerequisites.length,
-      path: getPathFromTab('prerequisites'),
-    },
     {
       id: 'storage-pools',
       label: 'Storage',
@@ -406,6 +413,7 @@ onMounted(() => {
         </div>
 
         <div style="display: flex; align-items: center; gap: 10px">
+          <PrerequisitesTopBarButton @click="showPrerequisitesModal = true" />
           <ThemeSelector />
 
           <button
@@ -482,8 +490,8 @@ onMounted(() => {
                   shared libraries, or kernel modules were not detected on the host.
                 </p>
               </div>
-              <button class="btn btn-primary btn-sm" @click="navigateTo('prerequisites')">
-                View Prerequisites Page
+              <button class="btn btn-primary btn-sm" @click="showPrerequisitesModal = true">
+                Inspect Prerequisites & Fix
               </button>
             </div>
             <div class="table-wrap">
@@ -532,6 +540,12 @@ onMounted(() => {
 
     <!-- System Storage Pool Configuration Modal -->
     <SystemPoolModal v-if="showPoolModal" @close="showPoolModal = false" />
+
+    <!-- Host Prerequisites & Fix Instructions Modal -->
+    <PrerequisitesModal
+      v-if="showPrerequisitesModal"
+      @close="showPrerequisitesModal = false"
+    />
 
     <!-- Confirmation / Question / Alert Modal -->
     <ConfirmModal />

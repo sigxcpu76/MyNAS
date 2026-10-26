@@ -21,12 +21,14 @@ type Adapter struct {
 	prereqChecker ports.PrerequisiteCheckerPort
 	cachedConfig  *domain.SystemConfig
 	cachedTime    time.Time
+	telemetry     *TelemetryCollector
 }
 
 func NewAdapter(zfsPort ports.ZfsEnginePort, prereqChecker ports.PrerequisiteCheckerPort) *Adapter {
 	a := &Adapter{
 		zfsPort:       zfsPort,
 		prereqChecker: prereqChecker,
+		telemetry:     NewTelemetryCollector(),
 	}
 
 	// Sync initial main pool from config
@@ -290,4 +292,11 @@ func listUnimportedHostPools(ctx context.Context) ([]string, error) {
 		}
 	}
 	return pools, nil
+}
+
+func (a *Adapter) GetTelemetry(ctx context.Context) (*domain.SystemTelemetry, error) {
+	if a.telemetry == nil {
+		a.telemetry = NewTelemetryCollector()
+	}
+	return a.telemetry.Collect(ctx)
 }

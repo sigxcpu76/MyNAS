@@ -27,6 +27,7 @@ import type {
   PrerequisiteSummary,
   SmartParameter,
   SystemConfig,
+  SystemTelemetry,
   User,
   VirtualMachine,
   VirtualMachineCloudInit,
@@ -169,6 +170,67 @@ export function mapSystemConfig(raw: any): SystemConfig {
     configFilePath: raw?.configFilePath ?? raw?.config_file_path ?? '',
     autoDiscover: Boolean(raw?.autoDiscover ?? raw?.auto_discover ?? true),
     discoveredPools: pools,
+  };
+}
+
+export function mapSystemTelemetry(raw: any): SystemTelemetry {
+  const cpu = raw?.cpu ?? {};
+  const mem = raw?.memory ?? {};
+  const host = raw?.host ?? {};
+  const network = Array.isArray(raw?.network) ? raw.network : [];
+
+  return {
+    cpu: {
+      model: cpu.model ?? '',
+      physicalCores: Number(cpu.physicalCores ?? cpu.physical_cores ?? 0),
+      logicalCores: Number(cpu.logicalCores ?? cpu.logical_cores ?? 0),
+      usagePercent: Number(cpu.usagePercent ?? cpu.usage_percent ?? 0),
+      load1: Number(cpu.load1 ?? 0),
+      load5: Number(cpu.load5 ?? 0),
+      load15: Number(cpu.load15 ?? 0),
+      temperatureCelsius: Number(cpu.temperatureCelsius ?? cpu.temperature_celsius ?? 0),
+      coreTemperatures: Array.isArray(cpu.coreTemperatures ?? cpu.core_temperatures)
+        ? (cpu.coreTemperatures ?? cpu.core_temperatures).map(Number)
+        : [],
+    },
+    memory: {
+      totalBytes: normalizeInt64(mem.totalBytes ?? mem.total_bytes),
+      freeBytes: normalizeInt64(mem.freeBytes ?? mem.free_bytes),
+      availableBytes: normalizeInt64(mem.availableBytes ?? mem.available_bytes),
+      usedBytes: normalizeInt64(mem.usedBytes ?? mem.used_bytes),
+      zfsArcBytes: normalizeInt64(mem.zfsArcBytes ?? mem.zfs_arc_bytes),
+      zfsArcMaxBytes: normalizeInt64(mem.zfsArcMaxBytes ?? mem.zfs_arc_max_bytes),
+      buffersBytes: normalizeInt64(mem.buffersBytes ?? mem.buffers_bytes),
+      cachedBytes: normalizeInt64(mem.cachedBytes ?? mem.cached_bytes),
+      servicesBytes: normalizeInt64(mem.servicesBytes ?? mem.services_bytes),
+    },
+    host: {
+      hostname: host.hostname ?? '',
+      osName: host.osName ?? host.os_name ?? '',
+      osVersion: host.osVersion ?? host.os_version ?? '',
+      kernelVersion: host.kernelVersion ?? host.kernel_version ?? '',
+      architecture: host.architecture ?? '',
+      uptimeSeconds: normalizeInt64(host.uptimeSeconds ?? host.uptime_seconds),
+      motherboardVendor: host.motherboardVendor ?? host.motherboard_vendor ?? '',
+      motherboardName: host.motherboardName ?? host.motherboard_name ?? '',
+      motherboardVersion: host.motherboardVersion ?? host.motherboard_version ?? '',
+      biosVendor: host.biosVendor ?? host.bios_vendor ?? '',
+      biosVersion: host.biosVersion ?? host.bios_version ?? '',
+      biosDate: host.biosDate ?? host.bios_date ?? '',
+      gpus: Array.isArray(host.gpus) ? host.gpus : [],
+    },
+    network: network.map((n: any) => ({
+      name: n.name ?? '',
+      ipAddresses: Array.isArray(n.ipAddresses ?? n.ip_addresses) ? (n.ipAddresses ?? n.ip_addresses) : [],
+      macAddress: n.macAddress ?? n.mac_address ?? '',
+      isUp: Boolean(n.isUp ?? n.is_up),
+      speedMbps: normalizeInt64(n.speedMbps ?? n.speed_mbps),
+      rxBytes: normalizeInt64(n.rxBytes ?? n.rx_bytes),
+      txBytes: normalizeInt64(n.txBytes ?? n.tx_bytes),
+      rxRateBytesPerSec: normalizeInt64(n.rxRateBytesPerSec ?? n.rx_rate_bytes_per_sec),
+      txRateBytesPerSec: normalizeInt64(n.txRateBytesPerSec ?? n.tx_rate_bytes_per_sec),
+      isDefault: Boolean(n.isDefault ?? n.is_default),
+    })),
   };
 }
 
@@ -665,6 +727,11 @@ export class HttpSystemAdapter implements SystemPort {
   async discoverPools(): Promise<DiscoveredPool[]> {
     const raw = await this.client.get<any>('systemConfig:discoverPools');
     return (raw?.pools ?? []).map(mapDiscoveredPool);
+  }
+
+  async getTelemetry(): Promise<SystemTelemetry> {
+    const raw = await this.client.get<any>('system/telemetry');
+    return mapSystemTelemetry(raw);
   }
 }
 

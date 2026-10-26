@@ -170,6 +170,17 @@ func (s *Server) DiscoverPools(ctx context.Context, req *nasv1.DiscoverPoolsRequ
 	return &nasv1.DiscoverPoolsResponse{Pools: out}, nil
 }
 
+func (s *Server) GetSystemTelemetry(ctx context.Context, req *nasv1.GetSystemTelemetryRequest) (*nasv1.SystemTelemetry, error) {
+	if s.system == nil {
+		return &nasv1.SystemTelemetry{}, nil
+	}
+	telem, err := s.system.GetTelemetry(ctx)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoSystemTelemetry(telem), nil
+}
+
 // =============================================================================
 // Prerequisites
 // =============================================================================
@@ -2316,6 +2327,68 @@ func toProtoDiscoveredPool(p domain.DiscoveredPool) *nasv1.DiscoveredPool {
 		IsImported:    p.IsImported,
 		DatasetPath:   p.DatasetPath,
 		Mountpoint:    p.Mountpoint,
+	}
+}
+
+func toProtoSystemTelemetry(t *domain.SystemTelemetry) *nasv1.SystemTelemetry {
+	if t == nil {
+		return &nasv1.SystemTelemetry{}
+	}
+	var netIfaces []*nasv1.NetworkInterfaceTelemetry
+	for _, n := range t.Network {
+		netIfaces = append(netIfaces, &nasv1.NetworkInterfaceTelemetry{
+			Name:              n.Name,
+			IpAddresses:       n.IpAddresses,
+			MacAddress:        n.MacAddress,
+			IsUp:              n.IsUp,
+			SpeedMbps:         n.SpeedMbps,
+			RxBytes:           n.RxBytes,
+			TxBytes:           n.TxBytes,
+			RxRateBytesPerSec: n.RxRateBytesPerSec,
+			TxRateBytesPerSec: n.TxRateBytesPerSec,
+			IsDefault:         n.IsDefault,
+		})
+	}
+
+	return &nasv1.SystemTelemetry{
+		Cpu: &nasv1.CpuTelemetry{
+			Model:              t.Cpu.Model,
+			PhysicalCores:      t.Cpu.PhysicalCores,
+			LogicalCores:       t.Cpu.LogicalCores,
+			UsagePercent:       t.Cpu.UsagePercent,
+			Load1:              t.Cpu.Load1,
+			Load5:              t.Cpu.Load5,
+			Load15:             t.Cpu.Load15,
+			TemperatureCelsius: t.Cpu.TemperatureCelsius,
+			CoreTemperatures:   t.Cpu.CoreTemperatures,
+		},
+		Memory: &nasv1.MemoryTelemetry{
+			TotalBytes:     t.Memory.TotalBytes,
+			FreeBytes:      t.Memory.FreeBytes,
+			AvailableBytes: t.Memory.AvailableBytes,
+			UsedBytes:      t.Memory.UsedBytes,
+			ZfsArcBytes:    t.Memory.ZfsArcBytes,
+			ZfsArcMaxBytes: t.Memory.ZfsArcMaxBytes,
+			BuffersBytes:   t.Memory.BuffersBytes,
+			CachedBytes:    t.Memory.CachedBytes,
+			ServicesBytes:  t.Memory.ServicesBytes,
+		},
+		Host: &nasv1.HostHardwareInfo{
+			Hostname:           t.Host.Hostname,
+			OsName:             t.Host.OsName,
+			OsVersion:          t.Host.OsVersion,
+			KernelVersion:      t.Host.KernelVersion,
+			Architecture:       t.Host.Architecture,
+			UptimeSeconds:      t.Host.UptimeSeconds,
+			MotherboardVendor:  t.Host.MotherboardVendor,
+			MotherboardName:    t.Host.MotherboardName,
+			MotherboardVersion: t.Host.MotherboardVersion,
+			BiosVendor:         t.Host.BiosVendor,
+			BiosVersion:        t.Host.BiosVersion,
+			BiosDate:           t.Host.BiosDate,
+			Gpus:               t.Host.Gpus,
+		},
+		Network: netIfaces,
 	}
 }
 

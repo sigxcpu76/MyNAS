@@ -151,3 +151,41 @@ func TestSystemAdapterPoolSelectionAndRecovery(t *testing.T) {
 
 	_ = os.RemoveAll(tempDir)
 }
+
+func TestSystemTelemetryCollection(t *testing.T) {
+	ctx := context.Background()
+	zfsPort := &testZfsPort{
+		pools:    make(map[string]domain.ZfsPool),
+		datasets: make(map[string]domain.ZfsDataset),
+	}
+	prereqChecker := prereq.NewSystemChecker()
+	adapter := system.NewAdapter(zfsPort, prereqChecker)
+
+	telem, err := adapter.GetTelemetry(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error collecting telemetry: %v", err)
+	}
+	if telem == nil {
+		t.Fatalf("expected non-nil telemetry")
+	}
+
+	// Verify host information
+	if telem.Host.Hostname == "" {
+		t.Errorf("expected non-empty hostname")
+	}
+	if telem.Host.Architecture == "" {
+		t.Errorf("expected non-empty architecture")
+	}
+
+	// Verify CPU telemetry
+	if telem.Cpu.LogicalCores <= 0 {
+		t.Errorf("expected logical cores > 0, got %d", telem.Cpu.LogicalCores)
+	}
+
+	// Verify Memory telemetry
+	if telem.Memory.TotalBytes <= 0 {
+		t.Errorf("expected total memory > 0, got %d", telem.Memory.TotalBytes)
+	}
+	t.Logf("Telemetry collected successfully: CPU=%s (%d cores), MemTotal=%d MB, Host=%s",
+		telem.Cpu.Model, telem.Cpu.LogicalCores, telem.Memory.TotalBytes/1024/1024, telem.Host.Hostname)
+}

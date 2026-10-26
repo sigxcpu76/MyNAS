@@ -15,6 +15,7 @@ import type {
   LxcContainer,
   Prerequisite,
   SystemConfig,
+  SystemTelemetry,
   User,
   VirtualMachine,
   WebdavShare,
@@ -62,6 +63,7 @@ let nextToastId = 1;
 
 interface LocalCachePayload {
   systemConfig?: SystemConfig | null;
+  systemTelemetry?: SystemTelemetry | null;
   prerequisites?: Prerequisite[];
   disks?: Disk[];
   pools?: ZfsPool[];
@@ -86,6 +88,7 @@ export function saveLocalCache(): void {
     if (typeof window !== 'undefined' && window.localStorage) {
       const data: LocalCachePayload = {
         systemConfig: nasState.systemConfig,
+        systemTelemetry: nasState.systemTelemetry,
         prerequisites: nasState.prerequisites,
         disks: nasState.disks,
         pools: nasState.pools,
@@ -111,6 +114,7 @@ export const nasState = reactive({
   liveSyncActive: false,
 
   systemConfig: cached?.systemConfig || null,
+  systemTelemetry: cached?.systemTelemetry || (null as SystemTelemetry | null),
   prerequisites: cached?.prerequisites || [],
   disks: cached?.disks || [],
   pools: cached?.pools || [],
@@ -199,15 +203,19 @@ export async function refreshZfsSubresources(poolName: string): Promise<void> {
 export async function refreshAllData(): Promise<void> {
   nasState.loading = true;
   try {
-    const [sysCfg, prereqs] = await Promise.all([
+    const [sysCfg, prereqs, telem] = await Promise.all([
       services.system.getSystemConfig().catch(() => null),
       services.prerequisites.listPrerequisites().catch(() => []),
+      services.system.getTelemetry().catch(() => null),
     ]);
     if (sysCfg) {
       nasState.systemConfig = sysCfg;
     }
     if (prereqs && prereqs.length > 0) {
       nasState.prerequisites = prereqs;
+    }
+    if (telem) {
+      nasState.systemTelemetry = telem;
     }
     nasState.initialLoaded = true;
 
@@ -284,6 +292,17 @@ export async function refreshDockerData(): Promise<void> {
     nasState.dockerApps = apps;
     nasState.lastRefreshed = new Date().toLocaleTimeString();
     saveLocalCache();
+  } catch {
+    // ignore
+  }
+}
+
+export async function refreshTelemetry(): Promise<void> {
+  try {
+    const telem = await services.system.getTelemetry();
+    if (telem) {
+      nasState.systemTelemetry = telem;
+    }
   } catch {
     // ignore
   }
