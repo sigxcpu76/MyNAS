@@ -678,6 +678,7 @@ async function handleWizardSubmit() {
       biosType: wizardForm.biosType,
       tpmVersion: wizardForm.tpmVersion,
       secureBoot: wizardForm.secureBoot,
+      cdromIsoImage: wizardForm.bootIso || undefined,
       disks: [primaryDisk],
       networkInterfaces: [primaryNic],
       cloudInit: {

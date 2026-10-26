@@ -1128,7 +1128,7 @@ export class HttpKvmAdapter implements KvmPort {
     return mapVirtualMachine(raw);
   }
 
-  async attachMedia(name: string, isoPath: string, deviceId = 'hdc'): Promise<VirtualMachine> {
+  async attachMedia(name: string, isoPath: string, deviceId = ''): Promise<VirtualMachine> {
     const raw = await this.client.customMethod<any>(name, 'attachMedia', {
       deviceId,
       isoPath,
@@ -1136,7 +1136,7 @@ export class HttpKvmAdapter implements KvmPort {
     return mapVirtualMachine(raw);
   }
 
-  async ejectMedia(name: string, deviceId = 'hdc'): Promise<VirtualMachine> {
+  async ejectMedia(name: string, deviceId = ''): Promise<VirtualMachine> {
     const raw = await this.client.customMethod<any>(name, 'ejectMedia', {
       deviceId,
     });

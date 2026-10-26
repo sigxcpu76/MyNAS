@@ -59,7 +59,61 @@ func NewAdapterWithStateDir(stateDir string) *Adapter {
 		snapshots: make(map[string][]domain.VirtualMachineSnapshot),
 		nextPort:  5903,
 	}
+
+	go func() {
+		_ = EnsureHostPermissions()
+	}()
+
 	return a
+}
+
+// EnsureHostPermissions ensures the libvirt/qemu user has group access to block devices (disk/kvm)
+// and that AppArmor profiles allow access to ZFS zvols (/dev/zvol/**, /dev/zd*) and NAS storage (/nas/**).
+func EnsureHostPermissions() error {
+	// 1. Add libvirt-qemu / qemu user to disk and kvm groups
+	for _, user := range []string{"libvirt-qemu", "qemu"} {
+		if _, err := exec.Command("id", user).Output(); err == nil {
+			_ = exec.Command("usermod", "-a", "-G", "disk", user).Run()
+			_ = exec.Command("usermod", "-a", "-G", "kvm", user).Run()
+		}
+	}
+
+	// 2. Configure AppArmor overrides if AppArmor is installed and active
+	if _, err := exec.LookPath("apparmor_parser"); err == nil {
+		aaDirs := []string{
+			"/etc/apparmor.d/local/abstractions",
+			"/etc/apparmor.d/abstractions/libvirt-qemu.d",
+			"/etc/apparmor.d/local",
+		}
+		for _, d := range aaDirs {
+			_ = os.MkdirAll(d, 0755)
+		}
+
+		ruleBlock := "# Allow QEMU access to ZFS zvols and NAS storage\n/dev/zvol/** rwk,\n/dev/zd* rwk,\n/nas/** rwk,\n"
+		helperRule := "# Allow virt-aa-helper access to ZFS zvols and NAS storage\n/dev/zvol/** rw,\n/dev/zd* rw,\n/nas/** rw,\n"
+		libvirtdRule := "# Allow libvirtd mount operations for zvols and nas storage\nmount options=(rw, bind) /dev/zvol/** -> /{,var/}run/libvirt/qemu/*{,/},\nmount options=(rw, bind) /nas/** -> /{,var/}run/libvirt/qemu/*{,/},\n/dev/zvol/** rwk,\n/dev/zd* rwk,\n/nas/** rwk,\n"
+
+		_ = os.WriteFile("/etc/apparmor.d/local/abstractions/libvirt-qemu", []byte(ruleBlock), 0644)
+		_ = os.WriteFile("/etc/apparmor.d/abstractions/libvirt-qemu.d/mynas", []byte(ruleBlock), 0644)
+		_ = os.WriteFile("/etc/apparmor.d/local/usr.lib.libvirt.virt-aa-helper", []byte(helperRule), 0644)
+		_ = os.WriteFile("/etc/apparmor.d/local/usr.sbin.libvirtd", []byte(libvirtdRule), 0644)
+
+		_ = exec.Command("apparmor_parser", "-r", "/etc/apparmor.d/usr.lib.libvirt.virt-aa-helper").Run()
+		_ = exec.Command("apparmor_parser", "-r", "/etc/apparmor.d/usr.sbin.libvirtd").Run()
+	}
+
+	// 3. Ensure permissions on /nas directory structure
+	_ = os.Chmod("/nas", 0755)
+	if entries, err := os.ReadDir("/nas"); err == nil {
+		for _, e := range entries {
+			poolPath := filepath.Join("/nas", e.Name())
+			_ = os.Chmod(poolPath, 0755)
+			_ = os.Chmod(filepath.Join(poolPath, "isos"), 0755)
+			_ = os.Chmod(filepath.Join(poolPath, "vms"), 0755)
+		}
+	}
+
+	return nil
 }
 
 func (a *Adapter) SetLogger(l *slog.Logger) {
@@ -946,28 +1000,53 @@ func (a *Adapter) findCdromTarget(ctx context.Context, id string) string {
 	return ""
 }
 
+func (a *Adapter) updateDomainCdromBoot(ctx context.Context, id, isoPath string) {
+	if vm, err := a.getDomainFromVirsh(ctx, id); err == nil && vm != nil {
+		vm.CdromIsoImage = isoPath
+		xmlStr := buildDomainXML(*vm)
+		cmd := exec.CommandContext(ctx, "virsh", "define", "/dev/stdin")
+		cmd.Stdin = strings.NewReader(xmlStr)
+		_ = cmd.Run()
+	}
+}
+
 func (a *Adapter) AttachMedia(ctx context.Context, id, deviceTarget, isoPath string) (*domain.VirtualMachine, error) {
 	if a.isRealDomain(ctx, id) {
 		dev := deviceTarget
+		actual := a.findCdromTarget(ctx, id)
+		if actual != "" && (dev == "" || dev == "hdc") {
+			dev = actual
+		}
 		if dev == "" {
-			dev = a.findCdromTarget(ctx, id)
-			if dev == "" {
-				dev = "sdz"
-			}
+			dev = "sdz"
 		}
 		out, err := exec.CommandContext(ctx, "virsh", "change-media", id, dev, isoPath, "--insert").CombinedOutput()
 		if err != nil {
 			// If tray is already occupied, try --update
 			if _, errUp := exec.CommandContext(ctx, "virsh", "change-media", id, dev, isoPath, "--update").CombinedOutput(); errUp == nil {
+				a.updateDomainCdromBoot(ctx, id, isoPath)
 				return a.getDomainFromVirsh(ctx, id)
+			}
+			// If device was hdc/wrong and actual exists, try actual
+			if actual != "" && actual != dev {
+				if _, errAct := exec.CommandContext(ctx, "virsh", "change-media", id, actual, isoPath, "--insert").CombinedOutput(); errAct == nil {
+					a.updateDomainCdromBoot(ctx, id, isoPath)
+					return a.getDomainFromVirsh(ctx, id)
+				}
+				if _, errActUp := exec.CommandContext(ctx, "virsh", "change-media", id, actual, isoPath, "--update").CombinedOutput(); errActUp == nil {
+					a.updateDomainCdromBoot(ctx, id, isoPath)
+					return a.getDomainFromVirsh(ctx, id)
+				}
 			}
 			// If device doesn't exist, attach as new cdrom device
 			if _, errAtt := exec.CommandContext(ctx, "virsh", "attach-disk", id, isoPath, dev, "--type", "cdrom", "--mode", "readonly", "--config").CombinedOutput(); errAtt == nil {
+				a.updateDomainCdromBoot(ctx, id, isoPath)
 				return a.getDomainFromVirsh(ctx, id)
 			}
 			a.logError("change_media_insert", id, err, out)
 			return nil, fmt.Errorf("virsh change-media failed: %s: %w", strings.TrimSpace(string(out)), err)
 		}
+		a.updateDomainCdromBoot(ctx, id, isoPath)
 		return a.getDomainFromVirsh(ctx, id)
 	}
 
@@ -986,17 +1065,25 @@ func (a *Adapter) AttachMedia(ctx context.Context, id, deviceTarget, isoPath str
 func (a *Adapter) EjectMedia(ctx context.Context, id, deviceTarget string) (*domain.VirtualMachine, error) {
 	if a.isRealDomain(ctx, id) {
 		dev := deviceTarget
+		actual := a.findCdromTarget(ctx, id)
+		if actual != "" && (dev == "" || dev == "hdc") {
+			dev = actual
+		}
 		if dev == "" {
-			dev = a.findCdromTarget(ctx, id)
-			if dev == "" {
-				dev = "sdz"
-			}
+			dev = "sdz"
 		}
 		out, err := exec.CommandContext(ctx, "virsh", "change-media", id, dev, "--eject").CombinedOutput()
+		if err != nil && actual != "" && actual != dev {
+			if _, errAct := exec.CommandContext(ctx, "virsh", "change-media", id, actual, "--eject").CombinedOutput(); errAct == nil {
+				a.updateDomainCdromBoot(ctx, id, "")
+				return a.getDomainFromVirsh(ctx, id)
+			}
+		}
 		if err != nil {
 			a.logError("change_media_eject", id, err, out)
 			return nil, fmt.Errorf("virsh change-media eject failed: %s: %w", strings.TrimSpace(string(out)), err)
 		}
+		a.updateDomainCdromBoot(ctx, id, "")
 		return a.getDomainFromVirsh(ctx, id)
 	}
 
@@ -1247,10 +1334,13 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 	}
 	sb.WriteString(">\n")
 	sb.WriteString(fmt.Sprintf(`    <type arch='x86_64' machine='%s'>hvm</type>
-    <boot dev='hd'/>
 `, mach))
 	if vm.CdromIsoImage != "" {
 		sb.WriteString(`    <boot dev='cdrom'/>
+    <boot dev='hd'/>
+`)
+	} else {
+		sb.WriteString(`    <boot dev='hd'/>
 `)
 	}
 	sb.WriteString(`  </os>

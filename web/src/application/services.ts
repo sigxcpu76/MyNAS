@@ -425,11 +425,11 @@ export class KvmService {
     );
   }
 
-  async attachMedia(vmIdOrName: string, isoPath: string, deviceId = 'hdc'): Promise<VirtualMachine> {
+  async attachMedia(vmIdOrName: string, isoPath: string, deviceId = ''): Promise<VirtualMachine> {
     return this.kvmPort.attachMedia(ResourceNames.virtualMachine(vmIdOrName), isoPath, deviceId);
   }
 
-  async ejectMedia(vmIdOrName: string, deviceId = 'hdc'): Promise<VirtualMachine> {
+  async ejectMedia(vmIdOrName: string, deviceId = ''): Promise<VirtualMachine> {
     return this.kvmPort.ejectMedia(ResourceNames.virtualMachine(vmIdOrName), deviceId);
   }
 
