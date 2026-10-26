@@ -1,12 +1,21 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import {
+  mdiAspectRatio,
   mdiChevronDown,
+  mdiClose,
   mdiFullscreen,
   mdiFullscreenExit,
   mdiKeyboardOutline,
   mdiOpenInNew,
+  mdiPause,
+  mdiPlay,
+  mdiPower,
+  mdiPowerCycle,
   mdiRefresh,
+  mdiRestart,
+  mdiRestartAlert,
+  mdiSend,
 } from '@mdi/js';
 import MdiIcon from './MdiIcon.vue';
 import {
@@ -14,6 +23,7 @@ import {
   type ScaleMode,
 } from '../../adapters/novnc/rfbConsoleAdapter';
 import { services } from '../../container';
+import { askModal, notify } from '../store';
 
 const props = withDefaults(
   defineProps<{
@@ -45,8 +55,111 @@ const isFullscreen = ref(false);
 const scaleMode = ref<ScaleMode>('fit');
 const showKeysMenu = ref(false);
 const reconnecting = ref(false);
+const vmState = ref<'RUNNING' | 'STOPPED' | 'PAUSED' | 'UNKNOWN'>('RUNNING');
 
 let adapter: RfbConsoleAdapter | null = null;
+
+async function fetchVmState() {
+  try {
+    const vm = await services.kvm.getVirtualMachine(props.vmName);
+    if (vm && vm.state) {
+      vmState.value = vm.state as any;
+    }
+  } catch {
+    try {
+      const list = await services.kvm.listVirtualMachines();
+      const found = list.find((v) => v.name === props.vmName || v.vmName === props.vmName);
+      if (found && found.state) {
+        vmState.value = found.state as any;
+      }
+    } catch {}
+  }
+}
+
+async function handleVmPowerAction(
+  action: 'start' | 'stop' | 'reboot' | 'reset' | 'pause' | 'resume',
+  event?: MouseEvent
+) {
+  try {
+    if (action === 'start') {
+      await services.kvm.startVirtualMachine(props.vmName);
+      notify('success', `Started VM ${props.vmName}`);
+      vmState.value = 'RUNNING';
+      setTimeout(() => handleReconnect(), 1500);
+    } else if (action === 'stop') {
+      let force = false;
+      if (event && (event.shiftKey || event.altKey)) {
+        force = true;
+      } else {
+        const res = await askModal({
+          title: `Shutdown VM: ${props.vmName}`,
+          message: `Are you sure you want to shut down "${props.vmName}"?`,
+          details: 'ACPI shutdown requests the guest operating system to flush filesystem buffers and power off cleanly.',
+          confirmText: 'Shutdown',
+          tone: 'warning',
+          checkbox: {
+            label: 'Force shutdown immediately (virsh destroy)',
+            hint: 'Halts the VM process immediately. Use if the guest OS is hung, stuck, or unresponsive.',
+            checked: false,
+          },
+        });
+        if (!res.confirmed) return;
+        force = Boolean(res.checkboxChecked);
+      }
+      await services.kvm.stopVirtualMachine(props.vmName, force);
+      notify('success', `${force ? 'Force stopped' : 'Shut down'} VM ${props.vmName}`);
+      vmState.value = 'STOPPED';
+    } else if (action === 'reboot') {
+      let force = false;
+      if (event && (event.shiftKey || event.altKey)) {
+        force = true;
+      } else {
+        const res = await askModal({
+          title: `Reboot VM: ${props.vmName}`,
+          message: `Are you sure you want to reboot "${props.vmName}"?`,
+          details: 'ACPI reboot sends a restart signal to the guest operating system.',
+          confirmText: 'Reboot',
+          tone: 'warning',
+          checkbox: {
+            label: 'Force reset immediately (virsh reset)',
+            hint: 'Hard resets / power-cycles the virtual motherboard without waiting for guest OS response.',
+            checked: false,
+          },
+        });
+        if (!res.confirmed) return;
+        force = Boolean(res.checkboxChecked);
+      }
+      await services.kvm.rebootVirtualMachine(props.vmName, force);
+      notify('success', `${force ? 'Force reset' : 'Rebooted'} VM ${props.vmName}`);
+      vmState.value = 'RUNNING';
+      setTimeout(() => handleReconnect(), 2000);
+    } else if (action === 'reset') {
+      const res = await askModal({
+        title: `Hard Reset VM: ${props.vmName}`,
+        message: `Hard reset "${props.vmName}" immediately?`,
+        details: 'Power cycles virtual hardware instantly without clean OS shutdown.',
+        confirmText: 'Hard Reset',
+        tone: 'danger',
+      });
+      if (!res.confirmed) return;
+      await services.kvm.resetVirtualMachine(props.vmName);
+      notify('success', `Hard reset VM ${props.vmName}`);
+      vmState.value = 'RUNNING';
+      setTimeout(() => handleReconnect(), 2000);
+    } else if (action === 'pause') {
+      await services.kvm.pauseVirtualMachine(props.vmName);
+      notify('success', `Paused VM ${props.vmName}`);
+      vmState.value = 'PAUSED';
+    } else if (action === 'resume') {
+      await services.kvm.resumeVirtualMachine(props.vmName);
+      notify('success', `Resumed VM ${props.vmName}`);
+      vmState.value = 'RUNNING';
+    }
+    await fetchVmState();
+  } catch (err: any) {
+    notify('error', err?.message || `Failed to execute ${action} on VM`);
+  }
+}
 
 function sendCtrlAltDel() {
   adapter?.sendCtrlAltDel();
@@ -146,6 +259,7 @@ onMounted(() => {
   document.addEventListener('fullscreenchange', handleFullscreenChange);
   document.addEventListener('click', handleDocumentClick);
   initAdapter(props.token, props.websocketUrl);
+  fetchVmState();
 });
 
 onBeforeUnmount(() => {
@@ -161,56 +275,123 @@ onBeforeUnmount(() => {
     <!-- Header / Control Toolbar -->
     <div class="vnc-header">
       <div class="header-left">
-        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
-          <h3 class="console-title">Live QEMU VNC Console — {{ vmName }}</h3>
-          <span
-            class="badge"
-            :class="{
-              'badge-success': statusText === 'CONNECTED',
-              'badge-info': statusText === 'CONNECTING',
-              'badge-danger': statusText === 'ERROR' || statusText === 'DISCONNECTED',
-            }"
-          >
-            {{ statusText }}
-          </span>
-        </div>
-        <p class="console-subtitle mono">
-          {{ statusDetail }}
-          <span v-if="vncPort"> | Port: {{ vncPort }}</span>
-        </p>
+        <h3 class="console-title">{{ vmName }}</h3>
+        <span
+          class="badge badge-sm"
+          :class="{
+            'badge-success': statusText === 'CONNECTED',
+            'badge-info': statusText === 'CONNECTING',
+            'badge-danger': statusText === 'ERROR' || statusText === 'DISCONNECTED',
+          }"
+          :title="statusDetail + (vncPort ? ` (Port: ${vncPort})` : '')"
+        >
+          {{ statusText }}
+        </span>
       </div>
 
       <div class="header-actions">
+        <!-- VM Power Controls -->
+        <div class="toolbar-group">
+          <!-- Start (if stopped) -->
+          <button
+            v-if="vmState === 'STOPPED'"
+            class="btn btn-sm btn-icon btn-success"
+            title="Start VM"
+            @click="handleVmPowerAction('start')"
+          >
+            <MdiIcon :path="mdiPlay" size="16" />
+          </button>
+
+          <!-- Resume (if paused) -->
+          <button
+            v-if="vmState === 'PAUSED'"
+            class="btn btn-sm btn-icon btn-success"
+            title="Resume VM"
+            @click="handleVmPowerAction('resume')"
+          >
+            <MdiIcon :path="mdiPlay" size="16" />
+          </button>
+
+          <!-- Pause (if running) -->
+          <button
+            v-if="vmState === 'RUNNING'"
+            class="btn btn-sm btn-icon btn-secondary"
+            title="Pause VM"
+            @click="handleVmPowerAction('pause')"
+          >
+            <MdiIcon :path="mdiPause" size="16" />
+          </button>
+
+          <!-- Reboot (if running) -->
+          <button
+            v-if="vmState === 'RUNNING'"
+            class="btn btn-sm btn-icon btn-secondary"
+            title="Reboot VM (Hold Shift to Force Reset)"
+            @click="handleVmPowerAction('reboot', $event)"
+          >
+            <MdiIcon :path="mdiRestart" size="16" />
+          </button>
+
+          <!-- Shutdown (if running) -->
+          <button
+            v-if="vmState === 'RUNNING'"
+            class="btn btn-sm btn-icon btn-warning"
+            title="Shutdown VM (Hold Shift to Force Stop)"
+            @click="handleVmPowerAction('stop', $event)"
+          >
+            <MdiIcon :path="mdiPower" size="16" />
+          </button>
+
+          <!-- Hard Reset (if running) -->
+          <button
+            v-if="vmState === 'RUNNING'"
+            class="btn btn-sm btn-icon btn-danger"
+            title="Hard Reset (Power Cycle)"
+            @click="handleVmPowerAction('reset')"
+          >
+            <MdiIcon :path="mdiPowerCycle" size="16" />
+          </button>
+        </div>
+
+        <div class="toolbar-divider"></div>
+
         <!-- Scale Mode Selector -->
-        <div class="vnc-control-pill" title="Viewport Scaling Mode">
-          <span class="control-label">Scale:</span>
+        <div class="scale-select-wrapper" title="Viewport Scaling Mode">
+          <MdiIcon :path="mdiAspectRatio" size="14" class="scale-icon" />
           <select
             v-model="scaleMode"
-            class="select-inline mono"
+            class="scale-select mono"
             @change="handleScaleChange"
           >
-            <option value="fit">Fit Window</option>
-            <option value="1:1">100% (1:1)</option>
+            <option value="fit">Fit</option>
+            <option value="1:1">100%</option>
             <option value="125">125%</option>
             <option value="150">150%</option>
             <option value="200">200%</option>
           </select>
+          <MdiIcon :path="mdiChevronDown" size="12" class="scale-chevron" />
         </div>
 
         <!-- Send Keys Dropdown (Linux TTY & Virtual Terminals) -->
         <div ref="keysMenuRef" class="keys-dropdown-container">
           <button
-            class="btn btn-secondary btn-sm"
+            class="btn btn-secondary btn-sm btn-icon"
             type="button"
-            title="Send Linux virtual console keys (Alt+F1..F3, Ctrl+Alt+F1..F3)"
+            title="Send Keys (Ctrl+Alt+Del, Alt+F1..F3, Ctrl+Alt+F1..F3)"
             @click.stop="showKeysMenu = !showKeysMenu"
           >
-            <MdiIcon :path="mdiKeyboardOutline" size="14" style="margin-right: 4px" />
-            <span>Send Keys</span>
-            <MdiIcon :path="mdiChevronDown" size="13" style="margin-left: 2px; opacity: 0.8" />
+            <MdiIcon :path="mdiKeyboardOutline" size="16" />
           </button>
 
           <div v-if="showKeysMenu" class="keys-dropdown-menu" @click.stop>
+            <div class="keys-menu-group-header">System</div>
+            <button type="button" class="keys-menu-item" @click="sendCtrlAltDel(); showKeysMenu = false">
+              <kbd class="shortcut-kbd">Ctrl + Alt + Del</kbd>
+              <span class="shortcut-desc">Security / Task Manager</span>
+            </button>
+
+            <div class="keys-menu-divider"></div>
+
             <div class="keys-menu-group-header">Linux Console / Installer (Alt+Fn)</div>
             <button type="button" class="keys-menu-item" @click="sendShortcut('alt-f1')">
               <kbd class="shortcut-kbd">Alt + F1</kbd>
@@ -243,55 +424,61 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
+        <!-- Ctrl+Alt+Del Quick Action Button -->
+        <button
+          class="btn btn-secondary btn-sm btn-icon"
+          title="Send Ctrl+Alt+Del"
+          @click="sendCtrlAltDel"
+        >
+          <MdiIcon :path="mdiRestartAlert" size="16" />
+        </button>
+
         <!-- Reconnect Button -->
         <button
-          class="btn btn-sm"
+          class="btn btn-sm btn-icon"
           :class="{
             'btn-warning': statusText === 'DISCONNECTED' || statusText === 'ERROR',
             'btn-secondary': statusText === 'CONNECTED' || statusText === 'CONNECTING',
           }"
           :disabled="reconnecting || statusText === 'CONNECTING'"
-          title="Reconnect to live QEMU VNC server"
+          title="Reconnect to Console"
           @click="handleReconnect"
         >
           <MdiIcon
             :path="mdiRefresh"
-            size="14"
+            size="16"
             :class="{ 'spin-icon': reconnecting || statusText === 'CONNECTING' }"
-            style="margin-right: 4px"
           />
-          <span>{{ reconnecting ? 'Reconnecting...' : 'Reconnect' }}</span>
         </button>
 
         <!-- Fullscreen Button -->
         <button
-          class="btn btn-secondary btn-sm"
+          class="btn btn-secondary btn-sm btn-icon"
           :title="isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'"
           @click="toggleFullscreen"
         >
-          <MdiIcon :path="isFullscreen ? mdiFullscreenExit : mdiFullscreen" size="14" style="margin-right: 4px" />
-          <span>{{ isFullscreen ? 'Exit Fullscreen' : 'Fullscreen' }}</span>
-        </button>
-
-        <!-- Ctrl+Alt+Del -->
-        <button class="btn btn-danger btn-sm" title="Send Ctrl+Alt+Del" @click="sendCtrlAltDel">
-          Send Ctrl+Alt+Del
+          <MdiIcon :path="isFullscreen ? mdiFullscreenExit : mdiFullscreen" size="16" />
         </button>
 
         <!-- Detach Button (only shown when not standalone) -->
         <button
           v-if="!standalone"
-          class="btn btn-secondary btn-sm"
-          title="Detach console into independent window"
+          class="btn btn-secondary btn-sm btn-icon"
+          title="Detach into Separate Window"
           @click="emit('detach')"
         >
-          <MdiIcon :path="mdiOpenInNew" size="14" style="margin-right: 4px" />
-          <span>Detach</span>
+          <MdiIcon :path="mdiOpenInNew" size="16" />
         </button>
 
+        <div class="toolbar-divider"></div>
+
         <!-- Close / Exit -->
-        <button class="btn btn-sm" @click="emit('close')">
-          {{ standalone ? 'Close Window' : 'Close Console' }}
+        <button
+          class="btn btn-secondary btn-sm btn-icon"
+          :title="standalone ? 'Close Window' : 'Close Console'"
+          @click="emit('close')"
+        >
+          <MdiIcon :path="mdiClose" size="16" />
         </button>
       </div>
     </div>
@@ -403,10 +590,11 @@ onBeforeUnmount(() => {
         />
         <button
           type="submit"
-          class="btn btn-secondary btn-sm"
+          class="btn btn-secondary btn-sm btn-icon"
           :disabled="statusText !== 'CONNECTED'"
+          title="Send Text + Enter"
         >
-          Send Text + Enter
+          <MdiIcon :path="mdiSend" size="14" />
         </button>
       </form>
     </div>
@@ -436,6 +624,12 @@ onBeforeUnmount(() => {
   gap: 12px;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .console-title {
   margin: 0;
   font-size: 16px;
@@ -443,50 +637,79 @@ onBeforeUnmount(() => {
   color: var(--text-primary);
 }
 
-.console-subtitle {
-  margin: 3px 0 0 0;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
-.vnc-control-pill {
+.toolbar-group {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border-color, #334155);
+  margin: 0 4px;
+}
+
+.btn-icon {
+  width: 32px;
+  height: 30px;
+  min-width: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scale-select-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
   background: var(--bg-secondary, #1e293b);
   border: 1px solid var(--border-color, #334155);
   border-radius: 6px;
-  padding: 2px 8px;
-  height: 28px;
+  height: 30px;
+  padding: 0 4px 0 7px;
+  gap: 4px;
+  transition: border-color 0.15s ease;
 }
 
-.control-label {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+.scale-select-wrapper:hover {
+  border-color: var(--accent-primary, #38bdf8);
 }
 
-.select-inline {
+.scale-icon {
+  color: var(--text-secondary, #94a3b8);
+  pointer-events: none;
+}
+
+.scale-select {
+  appearance: none;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--text-primary, #f8fafc);
   border: none;
   outline: none;
   font-size: 12px;
+  padding-right: 14px;
   cursor: pointer;
 }
 
-.select-inline option {
+.scale-select option {
   background: #1e293b;
   color: #f8fafc;
+}
+
+.scale-chevron {
+  position: absolute;
+  right: 5px;
+  pointer-events: none;
+  opacity: 0.6;
 }
 
 .keys-dropdown-container {
@@ -503,7 +726,8 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
   z-index: 1000;
-  min-width: 270px;
+  min-width: 340px;
+  width: max-content;
   padding: 6px;
   display: flex;
   flex-direction: column;
@@ -538,6 +762,8 @@ onBeforeUnmount(() => {
   cursor: pointer;
   text-align: left;
   transition: background 0.15s ease;
+  white-space: nowrap;
+  gap: 16px;
 }
 
 .keys-menu-item:hover {
@@ -553,11 +779,13 @@ onBeforeUnmount(() => {
   border-radius: 4px;
   padding: 2px 6px;
   color: var(--accent-primary, #38bdf8);
+  white-space: nowrap;
 }
 
 .shortcut-desc {
   font-size: 11.5px;
   color: var(--text-secondary, #94a3b8);
+  white-space: nowrap;
 }
 
 .vnc-wrapper {
@@ -568,25 +796,16 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 480px;
-  height: 580px;
-  max-height: calc(85vh - 130px);
   position: relative;
+  min-height: 520px;
+  max-height: 80vh;
 }
 
 .vnc-wrapper.is-standalone {
   flex: 1;
-  min-height: 360px;
-  height: calc(100vh - 150px);
+  min-height: 0;
   max-height: none;
-}
-
-.vnc-wrapper:fullscreen {
-  width: 100vw;
-  height: 100vh;
-  max-height: 100vh;
-  border-radius: 0;
-  border: none;
+  height: calc(100vh - 120px);
 }
 
 .vnc-screen-container {
@@ -594,41 +813,36 @@ onBeforeUnmount(() => {
   justify-content: center;
   align-items: center;
   outline: none;
-  background: #000;
-  margin: auto;
+  user-select: none;
 }
 
-.vnc-wrapper.scale-fit-mode .vnc-screen-container {
+.scale-fit-mode .vnc-screen-container {
   width: 100%;
   height: 100%;
 }
 
-.vnc-wrapper.scale-fit-mode :deep(canvas) {
+.scale-fit-mode .vnc-screen-container :deep(canvas) {
   max-width: 100%;
   max-height: 100%;
+  width: auto !important;
+  height: auto !important;
   object-fit: contain;
+}
+
+.scale-manual-mode .vnc-screen-container {
+  display: inline-block;
   margin: auto;
-}
-
-.vnc-wrapper.scale-manual-mode .vnc-screen-container {
-  width: auto;
-  height: auto;
-}
-
-.vnc-wrapper.scale-manual-mode :deep(canvas) {
-  max-width: none !important;
-  max-height: none !important;
 }
 
 .vnc-disconnected-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(3px);
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(4px);
   display: flex;
-  justify-content: center;
   align-items: center;
-  z-index: 20;
+  justify-content: center;
+  z-index: 10;
 }
 
 .disconnected-card {
@@ -636,45 +850,38 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border-strong, #334155);
   border-radius: 10px;
   padding: 24px 32px;
+  text-align: center;
+  max-width: 420px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
   align-items: center;
-  text-align: center;
-  max-width: 380px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
 }
 
 .disconnected-title {
-  margin: 0;
-  font-size: 15px;
+  margin: 0 0 6px 0;
+  font-size: 16px;
   font-weight: 600;
-  color: var(--text-primary, #f8fafc);
+  color: var(--text-primary);
 }
 
 .disconnected-detail {
-  margin: 8px 0 16px 0;
-  font-size: 12.5px;
-  color: var(--text-secondary, #94a3b8);
-  font-family: monospace;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.spin-icon {
-  animation: spin 1s linear infinite;
+  margin: 0 0 16px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
 }
 
 .vnc-footer {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: var(--bg-surface, #1e293b);
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 8px;
+  padding: 8px 12px;
 }
 
 .linux-shortcuts-bar {
@@ -685,7 +892,7 @@ onBeforeUnmount(() => {
 }
 
 .shortcuts-tag {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
   color: var(--text-muted, #94a3b8);
   text-transform: uppercase;
@@ -693,21 +900,20 @@ onBeforeUnmount(() => {
 }
 
 .shortcuts-pills {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
-  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .btn-shortcut {
-  background: var(--bg-secondary, #1e293b);
+  background: var(--bg-primary, #0f172a);
   border: 1px solid var(--border-color, #334155);
-  color: var(--text-secondary, #cbd5e1);
-  font-family: monospace;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 8px;
   border-radius: 5px;
+  color: var(--text-primary, #f8fafc);
+  font-family: monospace;
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 3px 8px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -719,16 +925,30 @@ onBeforeUnmount(() => {
 }
 
 .shortcuts-divider {
-  display: inline-block;
   width: 1px;
-  height: 14px;
-  background: var(--border-subtle, #334155);
-  margin: 0 4px;
+  height: 16px;
+  background: var(--border-color, #334155);
+  margin: 0 2px;
 }
 
 .quick-text-form {
   display: flex;
-  gap: 8px;
   align-items: center;
+  gap: 6px;
+  flex: 1;
+  max-width: 460px;
+}
+
+.spin-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>
