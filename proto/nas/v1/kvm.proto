@@ -204,6 +204,7 @@ message RebootVirtualMachineRequest {
     (google.api.field_behavior) = REQUIRED,
     (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachine"}
   ];
+  bool force = 2;
 }
 
 message OpenVirtualMachineConsoleRequest {

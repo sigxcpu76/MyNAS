@@ -1397,6 +1397,7 @@ func (x *StopVirtualMachineRequest) GetForce() bool {
 type RebootVirtualMachineRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Force         bool                   `protobuf:"varint,2,opt,name=force,proto3" json:"force,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1436,6 +1437,13 @@ func (x *RebootVirtualMachineRequest) GetName() string {
 		return x.Name
 	}
 	return ""
+}
+
+func (x *RebootVirtualMachineRequest) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
 }
 
 type OpenVirtualMachineConsoleRequest struct {
@@ -2305,10 +2313,11 @@ const file_nas_v1_kvm_proto_rawDesc = "" +
 	"\x19StopVirtualMachineRequest\x12:\n" +
 	"\x04name\x18\x01 \x01(\tB&\xe2A\x01\x02\xfaA\x1f\n" +
 	"\x1dnas.sigxcpu.io/VirtualMachineR\x04name\x12\x14\n" +
-	"\x05force\x18\x02 \x01(\bR\x05force\"Y\n" +
+	"\x05force\x18\x02 \x01(\bR\x05force\"o\n" +
 	"\x1bRebootVirtualMachineRequest\x12:\n" +
 	"\x04name\x18\x01 \x01(\tB&\xe2A\x01\x02\xfaA\x1f\n" +
-	"\x1dnas.sigxcpu.io/VirtualMachineR\x04name\"^\n" +
+	"\x1dnas.sigxcpu.io/VirtualMachineR\x04name\x12\x14\n" +
+	"\x05force\x18\x02 \x01(\bR\x05force\"^\n" +
 	" OpenVirtualMachineConsoleRequest\x12:\n" +
 	"\x04name\x18\x01 \x01(\tB&\xe2A\x01\x02\xfaA\x1f\n" +
 	"\x1dnas.sigxcpu.io/VirtualMachineR\x04name\"\xcc\x01\n" +

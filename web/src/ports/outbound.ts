@@ -95,7 +95,7 @@ export interface KvmPort {
   deleteVirtualMachine(name: string): Promise<void>;
   startVirtualMachine(name: string): Promise<VirtualMachine>;
   stopVirtualMachine(name: string, force?: boolean): Promise<VirtualMachine>;
-  rebootVirtualMachine(name: string): Promise<VirtualMachine>;
+  rebootVirtualMachine(name: string, force?: boolean): Promise<VirtualMachine>;
   resetVirtualMachine(name: string): Promise<VirtualMachine>;
   pauseVirtualMachine(name: string): Promise<VirtualMachine>;
   resumeVirtualMachine(name: string): Promise<VirtualMachine>;

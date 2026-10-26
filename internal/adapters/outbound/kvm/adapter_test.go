@@ -204,3 +204,54 @@ func TestQemuSoftwareEmulationCpuCompatibility(t *testing.T) {
 		t.Errorf("expected RUNNING, got %s", vm.State)
 	}
 }
+
+func TestVmRebootAndStopForcedOptions(t *testing.T) {
+	ctx := context.Background()
+	tempDir := t.TempDir()
+	adapter := kvm.NewAdapterWithStateDir(tempDir)
+
+	vmID := "nasctl-ci-test-force-opts"
+	diskPath := tempDir + "/ci-force.raw"
+
+	vm, err := adapter.CreateVM(ctx, domain.VirtualMachine{
+		ID:        vmID,
+		VMName:    "Test Forced Options VM",
+		MemoryMiB: 256,
+		VCPUs:     1,
+		CPUType:   "host",
+		Disks: []domain.VirtualMachineDisk{
+			{
+				ID:        "sda",
+				Bus:       "scsi",
+				DiskPath:  diskPath,
+				SizeBytes: 10 * 1024 * 1024,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateVM failed: %v", err)
+	}
+	defer func() {
+		_, _ = adapter.StopVM(ctx, vm.ID, true)
+		_ = adapter.DeleteVM(ctx, vm.ID)
+		_ = os.Remove(diskPath)
+	}()
+
+	// Test graceful reboot
+	rebooted, err := adapter.RebootVM(ctx, vm.ID, false)
+	if err != nil || rebooted.State != "RUNNING" {
+		t.Fatalf("RebootVM (graceful) failed: %v", err)
+	}
+
+	// Test forced reboot (reset)
+	resetVM, err := adapter.RebootVM(ctx, vm.ID, true)
+	if err != nil || resetVM.State != "RUNNING" {
+		t.Fatalf("RebootVM (forced) failed: %v", err)
+	}
+
+	// Test forced stop
+	stoppedForce, err := adapter.StopVM(ctx, vm.ID, true)
+	if err != nil || stoppedForce.State != "STOPPED" {
+		t.Fatalf("StopVM (forced) failed: %v", err)
+	}
+}

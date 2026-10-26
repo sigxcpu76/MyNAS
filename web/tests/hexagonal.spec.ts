@@ -473,6 +473,30 @@ describe('Application Layer: Use-Case Services with Mock Ports', () => {
     // Positive calls
     await prereqService.checkPrerequisites();
     await lxcService.createContainer('alpine1', { distribution: 'alpine' });
+
+    // KVM force stop and force reboot
+    const kvmCalls: Array<{ url: string; body: any }> = [];
+    const kvmClient = new AipClient('/v1', vi.fn(async (url: any, init?: any) => {
+      kvmCalls.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : {} });
+      return new Response(JSON.stringify({ name: 'virtualMachines/vm1', state: 'RUNNING' }), { status: 200 });
+    }) as any);
+    const kvmSvc = new KvmService(new HttpKvmAdapter(kvmClient));
+
+    await kvmSvc.stopVirtualMachine('vm1', false);
+    expect(kvmCalls[0].url).toContain('/v1/virtualMachines/vm1:stop');
+    expect(kvmCalls[0].body).toEqual({ force: false });
+
+    await kvmSvc.stopVirtualMachine('vm1', true);
+    expect(kvmCalls[1].url).toContain('/v1/virtualMachines/vm1:stop');
+    expect(kvmCalls[1].body).toEqual({ force: true });
+
+    await kvmSvc.rebootVirtualMachine('vm1', false);
+    expect(kvmCalls[2].url).toContain('/v1/virtualMachines/vm1:reboot');
+    expect(kvmCalls[2].body).toEqual({ force: false });
+
+    await kvmSvc.rebootVirtualMachine('vm1', true);
+    expect(kvmCalls[3].url).toContain('/v1/virtualMachines/vm1:reboot');
+    expect(kvmCalls[3].body).toEqual({ force: true });
   });
 
   it('orchestrates CatalogService and HttpCatalogAdapter', async () => {

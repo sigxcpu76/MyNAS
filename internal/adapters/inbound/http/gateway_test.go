@@ -128,6 +128,26 @@ func (k *stubKvmPort) DialVNC(ctx context.Context, vmID string) (net.Conn, error
 	return client, nil
 }
 
+func (k *stubKvmPort) RebootVM(ctx context.Context, id string, force bool) (*domain.VirtualMachine, error) {
+	vm, ok := k.vms[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	vm.State = "RUNNING"
+	k.vms[id] = vm
+	return &vm, nil
+}
+
+func (k *stubKvmPort) StopVM(ctx context.Context, id string, force bool) (*domain.VirtualMachine, error) {
+	vm, ok := k.vms[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	vm.State = "STOPPED"
+	k.vms[id] = vm
+	return &vm, nil
+}
+
 func (k *stubKvmPort) ListVMs(ctx context.Context) ([]domain.VirtualMachine, error) {
 	var res []domain.VirtualMachine
 	for _, vm := range k.vms {
@@ -342,6 +362,21 @@ func TestGoogleAIPGatewayEndToEnd(t *testing.T) {
 	if string(rfbBanner) != "RFB 003.008\n" {
 		t.Fatalf("expected RFB 003.008\\n banner, got %q", string(rfbBanner))
 	}
+
+	// 5b. KVM Virtual Machine :reboot and :stop with forced option
+	rebootResp, err := client.Post(srv.URL+"/v1/virtualMachines/ubuntu-24-lts:reboot", "application/json", strings.NewReader(`{"force": true}`))
+	if err != nil || rebootResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(rebootResp.Body)
+		t.Fatalf("reboot with force failed: status=%v body=%s err=%v", rebootResp.StatusCode, string(body), err)
+	}
+	_ = rebootResp.Body.Close()
+
+	stopResp, err := client.Post(srv.URL+"/v1/virtualMachines/ubuntu-24-lts:stop", "application/json", strings.NewReader(`{"force": true}`))
+	if err != nil || stopResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(stopResp.Body)
+		t.Fatalf("stop with force failed: status=%v body=%s err=%v", stopResp.StatusCode, string(body), err)
+	}
+	_ = stopResp.Body.Close()
 
 	// 6. WebDAV live file upload & download (/dav/documents/hello.txt)
 	putReq, _ := http.NewRequest(http.MethodPut, srv.URL+"/dav/documents/hello.txt", bytes.NewBufferString("Hello from NAS WebDAV!"))

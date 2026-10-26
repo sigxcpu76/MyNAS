@@ -69,7 +69,7 @@ type KvmHypervisorPort interface {
 	DeleteVM(ctx context.Context, id string) error
 	StartVM(ctx context.Context, id string) (*domain.VirtualMachine, error)
 	StopVM(ctx context.Context, id string, force bool) (*domain.VirtualMachine, error)
-	RebootVM(ctx context.Context, id string) (*domain.VirtualMachine, error)
+	RebootVM(ctx context.Context, id string, force bool) (*domain.VirtualMachine, error)
 	ResetVM(ctx context.Context, id string) (*domain.VirtualMachine, error)
 	PauseVM(ctx context.Context, id string) (*domain.VirtualMachine, error)
 	ResumeVM(ctx context.Context, id string) (*domain.VirtualMachine, error)

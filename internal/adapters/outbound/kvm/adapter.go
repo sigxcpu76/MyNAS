@@ -839,12 +839,16 @@ func (a *Adapter) StopVM(ctx context.Context, id string, force bool) (*domain.Vi
 	return &cp, nil
 }
 
-func (a *Adapter) RebootVM(ctx context.Context, id string) (*domain.VirtualMachine, error) {
+func (a *Adapter) RebootVM(ctx context.Context, id string, force bool) (*domain.VirtualMachine, error) {
 	if a.isRealDomain(ctx, id) {
-		out, err := exec.CommandContext(ctx, "virsh", "reboot", id).CombinedOutput()
+		verb := "reboot"
+		if force {
+			verb = "reset"
+		}
+		out, err := exec.CommandContext(ctx, "virsh", verb, id).CombinedOutput()
 		if err != nil {
-			a.logError("reboot", id, err, out)
-			return nil, fmt.Errorf("virsh reboot failed: %s: %w", strings.TrimSpace(string(out)), err)
+			a.logError(verb, id, err, out)
+			return nil, fmt.Errorf("virsh %s failed: %s: %w", verb, strings.TrimSpace(string(out)), err)
 		}
 		return a.getDomainFromVirsh(ctx, id)
 	}

@@ -415,9 +415,10 @@ func newVMCmd(rootOpts *RootOptions) *cobra.Command {
 		},
 	}
 
+	var forceReboot bool
 	rebootCmd := &cobra.Command{
 		Use:   "reboot <vm-id>",
-		Short: "Reboot a KVM virtual machine gracefully via ACPI (:reboot)",
+		Short: "Reboot a KVM virtual machine gracefully via ACPI (:reboot, or force reset with --force)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, conn, err := rootOpts.dialClient(cmd.Context())
@@ -426,7 +427,8 @@ func newVMCmd(rootOpts *RootOptions) *cobra.Command {
 			}
 			defer conn.Close()
 			vm, err := client.RebootVirtualMachine(cmd.Context(), &nasv1.RebootVirtualMachineRequest{
-				Name: ensurePrefix(args[0], "virtualMachines/"),
+				Name:  ensurePrefix(args[0], "virtualMachines/"),
+				Force: forceReboot,
 			})
 			if err != nil {
 				return err
@@ -435,6 +437,7 @@ func newVMCmd(rootOpts *RootOptions) *cobra.Command {
 			return nil
 		},
 	}
+	rebootCmd.Flags().BoolVarP(&forceReboot, "force", "f", false, "Force reset immediately without waiting for graceful ACPI reboot")
 
 	resetCmd := &cobra.Command{
 		Use:   "reset <vm-id>",
@@ -667,9 +670,10 @@ func newVMCmd(rootOpts *RootOptions) *cobra.Command {
 		},
 	}
 
+	var forceStop bool
 	stopCmd := &cobra.Command{
 		Use:   "stop <vm-id>",
-		Short: "Stop a KVM virtual machine (:stop)",
+		Short: "Stop a KVM virtual machine (:stop, or force destroy with --force)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, conn, err := rootOpts.dialClient(cmd.Context())
@@ -678,7 +682,8 @@ func newVMCmd(rootOpts *RootOptions) *cobra.Command {
 			}
 			defer conn.Close()
 			vm, err := client.StopVirtualMachine(cmd.Context(), &nasv1.StopVirtualMachineRequest{
-				Name: ensurePrefix(args[0], "virtualMachines/"),
+				Name:  ensurePrefix(args[0], "virtualMachines/"),
+				Force: forceStop,
 			})
 			if err != nil {
 				return err
@@ -687,6 +692,7 @@ func newVMCmd(rootOpts *RootOptions) *cobra.Command {
 			return nil
 		},
 	}
+	stopCmd.Flags().BoolVarP(&forceStop, "force", "f", false, "Force stop/destroy immediately without waiting for graceful ACPI shutdown")
 
 	consoleCmd := &cobra.Command{
 		Use:   "console <vm-id>",

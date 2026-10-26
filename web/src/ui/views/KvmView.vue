@@ -11,7 +11,7 @@ import {
   type VirtualMachineNetworkInterface,
   type VirtualMachineSnapshot,
 } from '../../domain/models';
-import { confirmModal, nasState, notify, refreshIsos as storeRefreshIsos } from '../store';
+import { askModal, confirmModal, nasState, notify, refreshIsos as storeRefreshIsos } from '../store';
 import NoVncModal from '../components/NoVncModal.vue';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
@@ -300,22 +300,69 @@ async function loadSnapshots(vmName: string) {
 }
 
 // Power Actions
-async function handlePowerAction(vm: VirtualMachine, action: 'start' | 'stop' | 'reboot' | 'reset' | 'pause' | 'resume') {
+async function handlePowerAction(
+  vm: VirtualMachine,
+  action: 'start' | 'stop' | 'reboot' | 'reset' | 'pause' | 'resume',
+  event?: MouseEvent
+) {
   try {
     if (action === 'start') {
       await services.kvm.startVirtualMachine(vm.name);
+      notify('success', `Started VM ${vm.vmName}`);
     } else if (action === 'stop') {
-      await services.kvm.stopVirtualMachine(vm.name, false);
+      let force = false;
+      if (event && (event.shiftKey || event.altKey)) {
+        force = true;
+      } else {
+        const res = await askModal({
+          title: `Shutdown VM: ${vm.vmName}`,
+          message: `Are you sure you want to shut down "${vm.vmName}"?`,
+          details: 'ACPI shutdown requests the guest operating system to flush filesystem buffers and power off cleanly.',
+          confirmText: 'Shutdown',
+          tone: 'warning',
+          checkbox: {
+            label: 'Force shutdown immediately (virsh destroy)',
+            hint: 'Halts the VM process immediately. Use if the guest OS is hung, stuck, or unresponsive.',
+            checked: false,
+          },
+        });
+        if (!res.confirmed) return;
+        force = Boolean(res.checkboxChecked);
+      }
+      await services.kvm.stopVirtualMachine(vm.name, force);
+      notify('success', `${force ? 'Force stopped' : 'Shut down'} VM ${vm.vmName}`);
     } else if (action === 'reboot') {
-      await services.kvm.rebootVirtualMachine(vm.name);
+      let force = false;
+      if (event && (event.shiftKey || event.altKey)) {
+        force = true;
+      } else {
+        const res = await askModal({
+          title: `Reboot VM: ${vm.vmName}`,
+          message: `Are you sure you want to reboot "${vm.vmName}"?`,
+          details: 'ACPI reboot sends a restart signal to the guest operating system.',
+          confirmText: 'Reboot',
+          tone: 'warning',
+          checkbox: {
+            label: 'Force reset immediately (virsh reset)',
+            hint: 'Hard resets / power-cycles the virtual motherboard without waiting for guest OS response.',
+            checked: false,
+          },
+        });
+        if (!res.confirmed) return;
+        force = Boolean(res.checkboxChecked);
+      }
+      await services.kvm.rebootVirtualMachine(vm.name, force);
+      notify('success', `${force ? 'Force reset' : 'Rebooted'} VM ${vm.vmName}`);
     } else if (action === 'reset') {
       await services.kvm.resetVirtualMachine(vm.name);
+      notify('success', `Hard reset VM ${vm.vmName}`);
     } else if (action === 'pause') {
       await services.kvm.pauseVirtualMachine(vm.name);
+      notify('success', `Paused VM ${vm.vmName}`);
     } else if (action === 'resume') {
       await services.kvm.resumeVirtualMachine(vm.name);
+      notify('success', `Resumed VM ${vm.vmName}`);
     }
-    notify('success', `Executed :${action} on VM ${vm.vmName}`);
     await refreshVms();
   } catch (err: any) {
     notify('error', err?.message || `Failed to execute ${action} on VM`);
@@ -969,8 +1016,8 @@ async function handleWizardSubmit() {
                   <button
                     v-if="vm.state === 'RUNNING'"
                     class="btn btn-xs"
-                    title="Reboot VM"
-                    @click="handlePowerAction(vm, 'reboot')"
+                    title="Reboot VM (Hold Shift to Force Reset)"
+                    @click="handlePowerAction(vm, 'reboot', $event)"
                   >
                     <MdiIcon :path="mdiRefresh" size="13" />
                   </button>
@@ -979,8 +1026,8 @@ async function handleWizardSubmit() {
                   <button
                     v-if="vm.state === 'RUNNING'"
                     class="btn btn-xs btn-warning"
-                    title="Shutdown VM"
-                    @click="handlePowerAction(vm, 'stop')"
+                    title="Shutdown VM (Hold Shift to Force Stop)"
+                    @click="handlePowerAction(vm, 'stop', $event)"
                   >
                     <MdiIcon :path="mdiPower" size="13" />
                   </button>
@@ -1209,17 +1256,26 @@ async function handleWizardSubmit() {
             <button
               v-if="inspectingVm.state !== 'RUNNING'"
               class="btn btn-sm btn-success"
-              @click="handlePowerAction(inspectingVm, 'start')"
+              @click="handlePowerAction(inspectingVm, 'start', $event)"
             >
               <MdiIcon :path="mdiPlay" size="14" style="margin-right: 4px" /> Start
             </button>
-            <button
-              v-else
-              class="btn btn-sm btn-warning"
-              @click="handlePowerAction(inspectingVm, 'stop')"
-            >
-              <MdiIcon :path="mdiPower" size="14" style="margin-right: 4px" /> Shutdown
-            </button>
+            <template v-else>
+              <button
+                class="btn btn-sm"
+                title="Reboot VM (Hold Shift to Force Reset)"
+                @click="handlePowerAction(inspectingVm, 'reboot', $event)"
+              >
+                <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" /> Reboot
+              </button>
+              <button
+                class="btn btn-sm btn-warning"
+                title="Shutdown VM (Hold Shift to Force Stop)"
+                @click="handlePowerAction(inspectingVm, 'stop', $event)"
+              >
+                <MdiIcon :path="mdiPower" size="14" style="margin-right: 4px" /> Shutdown
+              </button>
+            </template>
             <button
               class="btn btn-sm btn-primary"
               :disabled="inspectingVm.state !== 'RUNNING'"

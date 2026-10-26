@@ -1092,8 +1092,8 @@ export class HttpKvmAdapter implements KvmPort {
     return mapVirtualMachine(raw);
   }
 
-  async rebootVirtualMachine(name: string): Promise<VirtualMachine> {
-    const raw = await this.client.customMethod<any>(name, 'reboot', {});
+  async rebootVirtualMachine(name: string, force = false): Promise<VirtualMachine> {
+    const raw = await this.client.customMethod<any>(name, 'reboot', { force });
     return mapVirtualMachine(raw);
   }
 

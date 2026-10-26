@@ -390,8 +390,8 @@ export class KvmService {
     return this.kvmPort.stopVirtualMachine(ResourceNames.virtualMachine(vmIdOrName), force);
   }
 
-  async rebootVirtualMachine(vmIdOrName: string): Promise<VirtualMachine> {
-    return this.kvmPort.rebootVirtualMachine(ResourceNames.virtualMachine(vmIdOrName));
+  async rebootVirtualMachine(vmIdOrName: string, force = false): Promise<VirtualMachine> {
+    return this.kvmPort.rebootVirtualMachine(ResourceNames.virtualMachine(vmIdOrName), force);
   }
 
   async resetVirtualMachine(vmIdOrName: string): Promise<VirtualMachine> {

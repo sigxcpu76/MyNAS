@@ -68,11 +68,11 @@ func (s *KvmService) StopVM(ctx context.Context, id string, force bool) (*domain
 	return s.hypervisor.StopVM(ctx, id, force)
 }
 
-func (s *KvmService) RebootVM(ctx context.Context, id string) (*domain.VirtualMachine, error) {
+func (s *KvmService) RebootVM(ctx context.Context, id string, force bool) (*domain.VirtualMachine, error) {
 	if err := domain.ValidateResourceID(id, "virtual_machine"); err != nil {
 		return nil, err
 	}
-	return s.hypervisor.RebootVM(ctx, id)
+	return s.hypervisor.RebootVM(ctx, id, force)
 }
 
 func (s *KvmService) ResetVM(ctx context.Context, id string) (*domain.VirtualMachine, error) {

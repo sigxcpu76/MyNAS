@@ -1025,7 +1025,7 @@ func (s *Server) RebootVirtualMachine(ctx context.Context, req *nasv1.RebootVirt
 	if err != nil {
 		return nil, err
 	}
-	vm, err := s.kvm.RebootVM(ctx, id)
+	vm, err := s.kvm.RebootVM(ctx, id, req.GetForce())
 	if err != nil {
 		return nil, ToGRPCError(err)
 	}
