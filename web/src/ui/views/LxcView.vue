@@ -13,7 +13,7 @@ import SkeletonBox from '../components/SkeletonBox.vue';
 import { services } from '../../container';
 import { confirmModal, nasState, notify, refreshLxcTemplates as storeRefreshTemplates } from '../store';
 import { generateNanosecondId, toZfsSafeSlug } from '../../domain/id';
-import { type StorageImage } from '../../domain/models';
+import { formatBytes, type StorageImage } from '../../domain/models';
 
 const showCreate = ref(false);
 const form = reactive({
@@ -68,6 +68,7 @@ onMounted(async () => {
 // Templates Repository Actions
 const templateFileInput = ref<HTMLInputElement | null>(null);
 const isUploadingTemplate = ref(false);
+const templateUploadProgress = ref<{ percent: number; loaded: number; total: number; filename: string } | null>(null);
 
 function triggerTemplateUpload() {
   templateFileInput.value?.click();
@@ -87,14 +88,29 @@ async function handleUploadTemplate(e: Event) {
   if (!file) return;
 
   isUploadingTemplate.value = true;
+  templateUploadProgress.value = {
+    percent: 0,
+    loaded: 0,
+    total: file.size,
+    filename: file.name,
+  };
+
   try {
-    const uploaded = await services.lxc.uploadTemplate(file);
+    const uploaded = await services.lxc.uploadTemplate(file, (p) => {
+      templateUploadProgress.value = {
+        percent: p.percent,
+        loaded: p.loaded,
+        total: p.total,
+        filename: file.name,
+      };
+    });
     notify('success', `Uploaded template ${uploaded.name} (${uploaded.sizeFormatted})`);
     await refreshTemplates();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to upload LXC template');
   } finally {
     isUploadingTemplate.value = false;
+    templateUploadProgress.value = null;
     if (templateFileInput.value) templateFileInput.value.value = '';
   }
 }
@@ -463,8 +479,36 @@ async function handleDelete(name: string) {
           @click="triggerTemplateUpload"
         >
           <MdiIcon :path="mdiUpload" size="14" style="margin-right: 4px" />
-          {{ isUploadingTemplate ? 'Uploading Template...' : 'Upload Template' }}
+          {{ isUploadingTemplate && templateUploadProgress ? `Uploading ${templateUploadProgress.percent}%...` : 'Upload Template' }}
         </button>
+      </div>
+    </div>
+
+    <!-- Active Upload Progress Banner -->
+    <div
+      v-if="isUploadingTemplate && templateUploadProgress"
+      style="
+        background: var(--bg-base);
+        border: 1px solid var(--accent-primary);
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin: 0 16px 16px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      "
+    >
+      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px">
+        <div style="display: flex; align-items: center; gap: 8px; font-weight: 600">
+          <MdiIcon :path="mdiUpload" size="16" style="color: var(--accent-primary)" />
+          <span>Uploading <span class="mono">{{ templateUploadProgress.filename }}</span></span>
+        </div>
+        <div class="mono" style="font-size: 12px; color: var(--text-secondary)">
+          {{ formatBytes(templateUploadProgress.loaded) }} / {{ formatBytes(templateUploadProgress.total) }} ({{ templateUploadProgress.percent }}%)
+        </div>
+      </div>
+      <div class="progress-bar" style="height: 8px">
+        <div class="progress-fill" :style="{ width: `${templateUploadProgress.percent}%` }"></div>
       </div>
     </div>
 
@@ -481,6 +525,19 @@ async function handleDelete(name: string) {
           </tr>
         </thead>
         <tbody>
+          <!-- Active Upload Row -->
+          <tr v-if="isUploadingTemplate && templateUploadProgress">
+            <td colspan="5" style="padding: 14px 16px; background: rgba(59, 130, 246, 0.04)">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 12px">
+                <span class="mono" style="font-weight: 600">{{ templateUploadProgress.filename }} (Uploading)</span>
+                <span class="mono">{{ formatBytes(templateUploadProgress.loaded) }} / {{ formatBytes(templateUploadProgress.total) }} ({{ templateUploadProgress.percent }}%)</span>
+              </div>
+              <div class="progress-bar" style="height: 6px">
+                <div class="progress-fill" :style="{ width: `${templateUploadProgress.percent}%` }"></div>
+              </div>
+            </td>
+          </tr>
+
           <!-- Skeleton Placeholders when Loading -->
           <template v-if="nasState.loading && nasState.lxcTemplates.length === 0">
             <tr v-for="r in 2" :key="r">

@@ -447,6 +447,7 @@ async function handleEjectMedia() {
 // ISO Repository Actions
 const isoFileInput = ref<HTMLInputElement | null>(null);
 const isUploadingIso = ref(false);
+const isoUploadProgress = ref<{ percent: number; loaded: number; total: number; filename: string } | null>(null);
 
 function triggerIsoUpload() {
   isoFileInput.value?.click();
@@ -466,14 +467,29 @@ async function handleUploadIso(e: Event) {
   if (!file) return;
 
   isUploadingIso.value = true;
+  isoUploadProgress.value = {
+    percent: 0,
+    loaded: 0,
+    total: file.size,
+    filename: file.name,
+  };
+
   try {
-    const uploaded = await services.kvm.uploadIso(file);
+    const uploaded = await services.kvm.uploadIso(file, (p) => {
+      isoUploadProgress.value = {
+        percent: p.percent,
+        loaded: p.loaded,
+        total: p.total,
+        filename: file.name,
+      };
+    });
     notify('success', `Uploaded ISO ${uploaded.name} (${uploaded.sizeFormatted})`);
     await refreshIsos();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to upload ISO');
   } finally {
     isUploadingIso.value = false;
+    isoUploadProgress.value = null;
     if (isoFileInput.value) isoFileInput.value.value = '';
   }
 }
@@ -1045,8 +1061,36 @@ async function handleWizardSubmit() {
             @click="triggerIsoUpload"
           >
             <MdiIcon :path="mdiUpload" size="14" style="margin-right: 4px" />
-            {{ isUploadingIso ? 'Uploading ISO...' : 'Upload ISO' }}
+            {{ isUploadingIso && isoUploadProgress ? `Uploading ${isoUploadProgress.percent}%...` : 'Upload ISO' }}
           </button>
+        </div>
+      </div>
+
+      <!-- Active Upload Progress Banner -->
+      <div
+        v-if="isUploadingIso && isoUploadProgress"
+        style="
+          background: var(--bg-base);
+          border: 1px solid var(--accent-primary);
+          border-radius: 8px;
+          padding: 12px 16px;
+          margin: 0 16px 16px 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        "
+      >
+        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px">
+          <div style="display: flex; align-items: center; gap: 8px; font-weight: 600">
+            <MdiIcon :path="mdiUpload" size="16" style="color: var(--accent-primary)" />
+            <span>Uploading <span class="mono">{{ isoUploadProgress.filename }}</span></span>
+          </div>
+          <div class="mono" style="font-size: 12px; color: var(--text-secondary)">
+            {{ formatBytes(isoUploadProgress.loaded) }} / {{ formatBytes(isoUploadProgress.total) }} ({{ isoUploadProgress.percent }}%)
+          </div>
+        </div>
+        <div class="progress-bar" style="height: 8px">
+          <div class="progress-fill" :style="{ width: `${isoUploadProgress.percent}%` }"></div>
         </div>
       </div>
 
@@ -1063,6 +1107,19 @@ async function handleWizardSubmit() {
             </tr>
           </thead>
           <tbody>
+            <!-- Active Upload Row -->
+            <tr v-if="isUploadingIso && isoUploadProgress">
+              <td colspan="5" style="padding: 14px 16px; background: rgba(59, 130, 246, 0.04)">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 12px">
+                  <span class="mono" style="font-weight: 600">{{ isoUploadProgress.filename }} (Uploading)</span>
+                  <span class="mono">{{ formatBytes(isoUploadProgress.loaded) }} / {{ formatBytes(isoUploadProgress.total) }} ({{ isoUploadProgress.percent }}%)</span>
+                </div>
+                <div class="progress-bar" style="height: 6px">
+                  <div class="progress-fill" :style="{ width: `${isoUploadProgress.percent}%` }"></div>
+                </div>
+              </td>
+            </tr>
+
             <!-- Skeleton Placeholders when Loading -->
             <template v-if="nasState.loading && nasState.isos.length === 0">
               <tr v-for="r in 2" :key="r">

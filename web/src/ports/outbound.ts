@@ -21,6 +21,7 @@ import type {
   StorageImage,
   SystemConfig,
   SystemTelemetry,
+  UploadProgressCallback,
   User,
   VirtualMachine,
   VirtualMachineConsoleSession,
@@ -107,7 +108,7 @@ export interface KvmPort {
   deleteSnapshot(snapName: string): Promise<void>;
   openVirtualMachineConsole(name: string): Promise<VirtualMachineConsoleSession>;
   listIsos(): Promise<StorageImage[]>;
-  uploadIso(file: File): Promise<StorageImage>;
+  uploadIso(file: File, onProgress?: UploadProgressCallback): Promise<StorageImage>;
   deleteIso(filename: string): Promise<void>;
 }
 
@@ -149,7 +150,7 @@ export interface LxcPort {
   stopContainer(name: string): Promise<LxcContainer>;
   freezeContainer(name: string): Promise<LxcContainer>;
   listTemplates(): Promise<StorageImage[]>;
-  uploadTemplate(file: File): Promise<StorageImage>;
+  uploadTemplate(file: File, onProgress?: UploadProgressCallback): Promise<StorageImage>;
   deleteTemplate(filename: string): Promise<void>;
 }
 

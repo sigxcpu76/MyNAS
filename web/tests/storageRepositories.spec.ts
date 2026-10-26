@@ -108,6 +108,31 @@ describe('Storage Repositories: ISOs and LXC Templates', () => {
       expect(result.sizeFormatted).toBe('762.9 MiB');
     });
 
+    it('triggers onProgress callback during upload', async () => {
+      const uploadedImage: StorageImage = {
+        name: 'fedora.iso',
+        path: '/nas/tank/isos/fedora.iso',
+        sizeBytes: 2000000000,
+        sizeFormatted: '1.9 GiB',
+        modTime: '2026-10-26T22:00:00Z',
+      };
+
+      const mockFetch = vi.fn().mockImplementation(async () => {
+        return new Response(JSON.stringify({ iso: uploadedImage }), { status: 200 });
+      });
+
+      const client = new AipClient('/v1', mockFetch as any);
+      const adapter = new HttpKvmAdapter(client);
+      const service = new KvmService(adapter);
+
+      const progressList: any[] = [];
+      const dummyFile = new File(['data'], 'fedora.iso');
+      await service.uploadIso(dummyFile, (p) => progressList.push(p));
+
+      expect(progressList.length).toBeGreaterThan(0);
+      expect(progressList[progressList.length - 1].percent).toBe(100);
+    });
+
     it('deletes an ISO file', async () => {
       let deletedName = '';
       const mockFetch = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {

@@ -23,6 +23,7 @@ import {
   type StorageImage,
   type SystemConfig,
   type SystemTelemetry,
+  type UploadProgressCallback,
   type DiscoveredPool,
   type User,
   validateSshPublicKey,
@@ -469,8 +470,8 @@ export class KvmService {
     return this.kvmPort.listIsos();
   }
 
-  async uploadIso(file: File): Promise<StorageImage> {
-    return this.kvmPort.uploadIso(file);
+  async uploadIso(file: File, onProgress?: UploadProgressCallback): Promise<StorageImage> {
+    return this.kvmPort.uploadIso(file, onProgress);
   }
 
   async deleteIso(filename: string): Promise<void> {
@@ -674,8 +675,8 @@ export class LxcService {
     return this.lxcPort.listTemplates();
   }
 
-  async uploadTemplate(file: File): Promise<StorageImage> {
-    return this.lxcPort.uploadTemplate(file);
+  async uploadTemplate(file: File, onProgress?: UploadProgressCallback): Promise<StorageImage> {
+    return this.lxcPort.uploadTemplate(file, onProgress);
   }
 
   async deleteTemplate(filename: string): Promise<void> {

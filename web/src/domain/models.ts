@@ -291,6 +291,14 @@ export interface StorageImage {
   modTime: string;
 }
 
+export interface UploadProgress {
+  loaded: number;
+  total: number;
+  percent: number;
+}
+
+export type UploadProgressCallback = (progress: UploadProgress) => void;
+
 // ---------------------------------------------------------------------------
 // KVM Virtual Machines (`virtualMachines/{virtual_machine}`)
 // ---------------------------------------------------------------------------

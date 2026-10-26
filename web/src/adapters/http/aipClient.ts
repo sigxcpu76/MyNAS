@@ -40,9 +40,11 @@ export class AipClient {
   private token: string | null = null;
   private readonly baseUrl: string;
   private readonly fetchImpl: FetchLike;
+  private readonly isCustomFetch: boolean;
 
   constructor(baseUrl = '/v1', fetchImpl?: FetchLike) {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
+    this.isCustomFetch = Boolean(fetchImpl);
     this.fetchImpl = fetchImpl || ((...args) => globalThis.fetch(...args));
     try {
       if (
@@ -133,8 +135,71 @@ export class AipClient {
     await this.request<unknown>('DELETE', this.buildUrl(resourcePath, query));
   }
 
-  async postMultipart<T>(resourcePath: string, formData: FormData): Promise<T> {
+  async postMultipart<T>(
+    resourcePath: string,
+    formData: FormData,
+    onProgress?: (progress: { loaded: number; total: number; percent: number }) => void
+  ): Promise<T> {
     const url = this.buildUrl(resourcePath);
+
+    // If XMLHttpRequest is available in browser context and no mock fetch was injected, use XHR to support upload progress monitoring
+    const isBrowserXhr =
+      !this.isCustomFetch &&
+      typeof XMLHttpRequest !== 'undefined' &&
+      typeof window !== 'undefined' &&
+      Boolean(window.XMLHttpRequest);
+
+    if (isBrowserXhr) {
+      return new Promise<T>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', url);
+        xhr.setRequestHeader('Accept', 'application/json');
+        if (this.token) {
+          xhr.setRequestHeader('Authorization', `Bearer ${this.token}`);
+        }
+
+        if (xhr.upload && onProgress) {
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable && event.total > 0) {
+              const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
+              onProgress({
+                loaded: event.loaded,
+                total: event.total,
+                percent,
+              });
+            }
+          };
+        }
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              resolve(data as T);
+            } catch {
+              resolve({} as T);
+            }
+          } else {
+            let errMsg = 'Upload failed';
+            try {
+              const errPayload = JSON.parse(xhr.responseText);
+              errMsg = errPayload.message || errPayload.error || errMsg;
+            } catch {}
+            reject(new AipHttpError(xhr.status, errMsg));
+          }
+        };
+
+        xhr.onerror = () => {
+          reject(new AipHttpError(0, 'Network error during file upload'));
+        };
+
+        xhr.send(formData);
+      });
+    }
+
+    if (onProgress) {
+      onProgress({ loaded: 100, total: 100, percent: 100 });
+    }
     const headers: Record<string, string> = {
       Accept: 'application/json',
     };

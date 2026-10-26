@@ -29,6 +29,7 @@ import type {
   StorageImage,
   SystemConfig,
   SystemTelemetry,
+  UploadProgressCallback,
   User,
   VirtualMachine,
   VirtualMachineCloudInit,
@@ -1198,11 +1199,11 @@ export class HttpKvmAdapter implements KvmPort {
     }));
   }
 
-  async uploadIso(file: File): Promise<StorageImage> {
+  async uploadIso(file: File, onProgress?: UploadProgressCallback): Promise<StorageImage> {
     const fd = new FormData();
     fd.append('file', file, file.name);
-    const res = await this.client.postMultipart<any>('storage/isos/upload', fd);
-    const raw = res?.iso ?? {};
+    const res = await this.client.postMultipart<any>('storage/isos/upload', fd, onProgress);
+    const raw = res?.iso ?? res ?? {};
     return {
       name: raw.name ?? '',
       path: raw.path ?? '',
@@ -1539,11 +1540,11 @@ export class HttpLxcAdapter implements LxcPort {
     }));
   }
 
-  async uploadTemplate(file: File): Promise<StorageImage> {
+  async uploadTemplate(file: File, onProgress?: UploadProgressCallback): Promise<StorageImage> {
     const fd = new FormData();
     fd.append('file', file, file.name);
-    const res = await this.client.postMultipart<any>('storage/lxc-templates/upload', fd);
-    const raw = res?.template ?? {};
+    const res = await this.client.postMultipart<any>('storage/lxc-templates/upload', fd, onProgress);
+    const raw = res?.template ?? res ?? {};
     return {
       name: raw.name ?? '',
       path: raw.path ?? '',
