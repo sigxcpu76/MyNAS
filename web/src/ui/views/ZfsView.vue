@@ -41,6 +41,7 @@ import {
 } from '../../domain/models';
 import MdiIcon from '../components/MdiIcon.vue';
 import SortableTh from '../components/SortableTh.vue';
+import PathSelector from '../components/PathSelector.vue';
 import { sortHierarchy, useTableSort } from '../composables/useTableSort';
 import ZfsPoolGauge from '../components/ZfsPoolGauge.vue';
 import { askModal, confirmDelete } from '../modal';
@@ -1188,10 +1189,10 @@ async function handleDeleteVolume(vol: ZfsVolume) {
           </div>
           <div class="form-group">
             <label>Mountpoint</label>
-            <input
+            <PathSelector
               v-model="poolForm.mountpoint"
-              class="input mono"
               :placeholder="poolForm.poolId ? `/mnt/${poolForm.poolId.trim()}` : '/mnt/<pool-name>'"
+              root-hint="/mnt"
             />
           </div>
           <div class="form-group">

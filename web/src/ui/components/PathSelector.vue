@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import {
   mdiArrowUp,
   mdiClose,
@@ -7,8 +7,10 @@ import {
   mdiFolderOutline,
   mdiCheck,
   mdiRefresh,
+  mdiFolderPlusOutline,
 } from '@mdi/js';
 import { services } from '../../container';
+import { nasState } from '../store';
 import type { DirectoryEntry } from '../../domain/models';
 import MdiIcon from './MdiIcon.vue';
 
@@ -17,10 +19,20 @@ const props = withDefaults(
     modelValue: string;
     placeholder?: string;
     rootHint?: string;
+    required?: boolean;
+    disabled?: boolean;
+    buttonLabel?: string;
+    inputClass?: string;
+    modalTitle?: string;
   }>(),
   {
     placeholder: '/mnt/tank/media',
     rootHint: '/mnt',
+    required: false,
+    disabled: false,
+    buttonLabel: 'Browse',
+    inputClass: 'input mono',
+    modalTitle: 'Select Host Folder',
   }
 );
 
@@ -37,8 +49,6 @@ async function fetchSuggestions(path: string) {
   if (!path || !path.startsWith('/')) {
     path = '/';
   }
-  // If the path ends with a slash or is a directory, query it directly
-  // Otherwise query the parent directory
   let lookupDir = path;
   if (!path.endsWith('/')) {
     const lastSlash = path.lastIndexOf('/');
@@ -70,6 +80,7 @@ const isBrowserOpen = ref(false);
 const currentBrowsePath = ref('');
 const browseEntries = ref<DirectoryEntry[]>([]);
 const isLoadingBrowse = ref(false);
+const subfolderInput = ref('');
 
 const pathBreadcrumbs = computed(() => {
   const p = currentBrowsePath.value;
@@ -84,13 +95,44 @@ const pathBreadcrumbs = computed(() => {
   return crumbs;
 });
 
+const finalSelectedPath = computed(() => {
+  const base = (currentBrowsePath.value || '/').replace(/\/+$/, '');
+  const sub = subfolderInput.value.trim().replace(/^\/+/, '');
+  if (!sub) return currentBrowsePath.value || '/';
+  return (base === '' ? '' : base) + '/' + sub;
+});
+
+// Quick shortcut paths based on available pools and mount points
+const quickShortcuts = computed(() => {
+  const shortcuts: { label: string; path: string }[] = [{ label: '/mnt', path: '/mnt' }];
+  const mainPool = nasState.systemConfig?.mainPool;
+  if (mainPool) {
+    shortcuts.push({ label: `/mnt/${mainPool}`, path: `/mnt/${mainPool}` });
+  }
+  if (nasState.pools && nasState.pools.length > 0) {
+    for (const p of nasState.pools) {
+      const pPath = `/mnt/${p.name}`;
+      if (!shortcuts.some((s) => s.path === pPath)) {
+        shortcuts.push({ label: pPath, path: pPath });
+      }
+    }
+  }
+  return shortcuts;
+});
+
 async function openBrowser() {
-  let initial = props.modelValue.trim();
+  if (props.disabled) return;
+  subfolderInput.value = '';
+  let initial = (props.modelValue || '').trim();
   if (initial.startsWith('/tank')) {
     initial = '/mnt' + initial;
   }
   if (!initial || !initial.startsWith('/')) {
-    initial = props.rootHint || '/mnt';
+    if (nasState.systemConfig?.mainPool) {
+      initial = `/mnt/${nasState.systemConfig.mainPool}`;
+    } else {
+      initial = props.rootHint || '/mnt';
+    }
   }
   isBrowserOpen.value = true;
   await navigateTo(initial);
@@ -98,18 +140,24 @@ async function openBrowser() {
 
 async function navigateTo(targetPath: string) {
   isLoadingBrowse.value = true;
+  subfolderInput.value = '';
   try {
     const res = await services.apps.listDirectories(targetPath);
     currentBrowsePath.value = res.currentPath;
     browseEntries.value = res.entries || [];
   } catch {
-    // If target doesn't exist, try parent or root
     try {
-      const fallback = await services.apps.listDirectories('/');
+      const fallback = await services.apps.listDirectories('/mnt');
       currentBrowsePath.value = fallback.currentPath;
       browseEntries.value = fallback.entries || [];
     } catch {
-      browseEntries.value = [];
+      try {
+        const rootFallback = await services.apps.listDirectories('/');
+        currentBrowsePath.value = rootFallback.currentPath;
+        browseEntries.value = rootFallback.entries || [];
+      } catch {
+        browseEntries.value = [];
+      }
     }
   } finally {
     isLoadingBrowse.value = false;
@@ -124,7 +172,7 @@ function navigateUp() {
 }
 
 function selectCurrentFolder() {
-  emit('update:modelValue', currentBrowsePath.value);
+  emit('update:modelValue', finalSelectedPath.value);
   isBrowserOpen.value = false;
 }
 
@@ -135,15 +183,17 @@ function selectFolderEntry(entry: DirectoryEntry) {
 </script>
 
 <template>
-  <div style="display: flex; gap: 6px; align-items: center; width: 100%">
+  <div class="path-selector-container" style="display: flex; gap: 6px; align-items: center; width: 100%">
     <!-- Text input with live directory datalist auto-completion -->
     <input
       :value="modelValue"
       type="text"
-      class="form-input mono"
+      :class="inputClass"
       :placeholder="placeholder"
       :list="datalistId"
-      style="padding: 4px 8px; font-size: 12px; flex: 1"
+      :required="required"
+      :disabled="disabled"
+      style="flex: 1"
       @input="handleInput"
       @focus="fetchSuggestions(modelValue)"
     />
@@ -155,31 +205,50 @@ function selectFolderEntry(entry: DirectoryEntry) {
     <!-- Visual Folder Browser Modal Button -->
     <button
       type="button"
-      class="btn btn-sm btn-icon"
-      style="padding: 4px 8px; flex-shrink: 0"
-      title="Browse Host Folders..."
+      class="btn btn-sm"
+      :disabled="disabled"
+      style="padding: 6px 10px; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0"
+      title="Browse Folders..."
       @click="openBrowser"
     >
       <MdiIcon :path="mdiFolderOpenOutline" size="16" style="color: var(--accent-primary)" />
+      <span v-if="buttonLabel">{{ buttonLabel }}</span>
     </button>
 
     <!-- Graphical Folder Browser Modal -->
     <div
       v-if="isBrowserOpen"
       class="modal-backdrop"
-      style="z-index: 150"
+      style="z-index: 2000"
+      @click.self="isBrowserOpen = false"
     >
-      <div class="modal-card" style="max-width: 680px; width: 95vw; max-height: 80vh; display: flex; flex-direction: column">
+      <div class="modal-card" style="max-width: 680px; width: 95vw; max-height: 85vh; display: flex; flex-direction: column">
         <!-- Header -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border-subtle)">
           <div style="display: flex; align-items: center; gap: 8px">
             <MdiIcon :path="mdiFolderOpenOutline" size="20" style="color: var(--accent-primary)" />
             <h4 style="font-size: 16px; font-weight: 700; color: var(--text-primary); margin: 0">
-              Select Host Folder
+              {{ modalTitle }}
             </h4>
           </div>
           <button class="btn btn-sm" style="padding: 2px 6px" @click="isBrowserOpen = false">
             <MdiIcon :path="mdiClose" size="18" />
+          </button>
+        </div>
+
+        <!-- Shortcuts Bar -->
+        <div v-if="quickShortcuts.length > 0" style="display: flex; align-items: center; gap: 6px; margin-bottom: 10px; flex-wrap: wrap">
+          <span style="font-size: 11px; color: var(--text-secondary); font-weight: 600">Quick Jump:</span>
+          <button
+            v-for="sc in quickShortcuts"
+            :key="sc.path"
+            type="button"
+            class="btn btn-xs"
+            :class="{ 'btn-primary': currentBrowsePath === sc.path }"
+            style="font-family: monospace; font-size: 11px; padding: 2px 6px"
+            @click="navigateTo(sc.path)"
+          >
+            {{ sc.label }}
           </button>
         </div>
 
@@ -199,17 +268,29 @@ function selectFolderEntry(entry: DirectoryEntry) {
             </template>
           </div>
 
-          <button
-            type="button"
-            class="btn btn-sm"
-            :disabled="currentBrowsePath === '/' || isLoadingBrowse"
-            style="padding: 3px 8px; font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px"
-            title="Go to parent directory"
-            @click="navigateUp"
-          >
-            <MdiIcon :path="mdiArrowUp" size="14" />
-            <span>Up</span>
-          </button>
+          <div style="display: flex; gap: 6px">
+            <button
+              type="button"
+              class="btn btn-sm"
+              :disabled="isLoadingBrowse"
+              style="padding: 3px 6px"
+              title="Refresh directory contents"
+              @click="navigateTo(currentBrowsePath)"
+            >
+              <MdiIcon :path="mdiRefresh" size="14" :class="{ 'spin-icon': isLoadingBrowse }" />
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm"
+              :disabled="currentBrowsePath === '/' || isLoadingBrowse"
+              style="padding: 3px 8px; font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px"
+              title="Go to parent directory"
+              @click="navigateUp"
+            >
+              <MdiIcon :path="mdiArrowUp" size="14" />
+              <span>Up</span>
+            </button>
+          </div>
         </div>
 
         <!-- Directory List -->
@@ -250,10 +331,23 @@ function selectFolderEntry(entry: DirectoryEntry) {
           </div>
         </div>
 
+        <!-- Optional Subfolder or New Subfolder field -->
+        <div style="margin-top: 12px; display: flex; align-items: center; gap: 8px">
+          <MdiIcon :path="mdiFolderPlusOutline" size="18" style="color: var(--accent-primary); flex-shrink: 0" />
+          <span style="font-size: 12px; color: var(--text-secondary); white-space: nowrap">Subfolder (optional):</span>
+          <input
+            v-model="subfolderInput"
+            type="text"
+            class="input mono"
+            placeholder="e.g. media or backups"
+            style="font-size: 12px; padding: 4px 8px; flex: 1"
+          />
+        </div>
+
         <!-- Footer / Confirmation -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border-subtle); flex-shrink: 0">
-          <div class="mono" style="font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; max-width: 400px">
-            Selected: <span style="color: var(--text-primary); font-weight: 600">{{ currentBrowsePath }}</span>
+          <div class="mono" style="font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; max-width: 380px">
+            Selected: <span style="color: var(--text-primary); font-weight: 600">{{ finalSelectedPath }}</span>
           </div>
 
           <div style="display: flex; gap: 8px">

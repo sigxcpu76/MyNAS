@@ -21,6 +21,7 @@ import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import SortableTh from '../components/SortableTh.vue';
 import FileDropzone from '../components/FileDropzone.vue';
+import PathSelector from '../components/PathSelector.vue';
 import { useTableSort } from '../composables/useTableSort';
 import { generateNanosecondId, generateVMDiskFilePath, generateVMDiskName, generateZvolDiskPath, toZfsSafeSlug } from '../../domain/id';
 import {
@@ -2347,9 +2348,14 @@ async function handleWizardSubmit() {
           </div>
           <div class="form-group">
             <label>ISO Image Path</label>
-            <input v-model="mediaForm.isoPath" class="input mono" placeholder="/tank/isos/debian-12.iso" required />
+            <PathSelector
+              v-model="mediaForm.isoPath"
+              placeholder="/mnt/tank/isos/debian-12.iso"
+              root-hint="/mnt"
+              required
+            />
             <small style="color: var(--text-muted); font-size: 11px">
-              Or enter a custom path on the host.
+              Or browse / enter a custom path on the host.
             </small>
           </div>
           <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px">

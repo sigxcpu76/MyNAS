@@ -11,6 +11,7 @@ import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import SortableTh from '../components/SortableTh.vue';
 import FileDropzone from '../components/FileDropzone.vue';
+import PathSelector from '../components/PathSelector.vue';
 import { useTableSort } from '../composables/useTableSort';
 import { services } from '../../container';
 import { nasState, notify, refreshLxcTemplates as storeRefreshTemplates } from '../store';
@@ -359,10 +360,10 @@ async function handleDelete(lx: LxcContainer) {
               </option>
             </select>
           </div>
-          <input
+          <PathSelector
             v-model="form.templateArchive"
-            class="input mono"
             placeholder="/mnt/tank/lxc-templates/debian-12.tar.xz or custom archive path"
+            root-hint="/mnt"
           />
         </div>
       </div>

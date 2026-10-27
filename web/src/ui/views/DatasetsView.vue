@@ -26,6 +26,7 @@ import {
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import SortableTh from '../components/SortableTh.vue';
+import PathSelector from '../components/PathSelector.vue';
 import { sortHierarchy, useTableSort } from '../composables/useTableSort';
 import { confirmDelete } from '../modal';
 import { nasState, notify, refreshAllData, refreshZfsSubresources } from '../store';
@@ -731,7 +732,11 @@ onMounted(async () => {
 
             <div class="form-group">
               <label>Custom Mountpoint (Optional)</label>
-              <input v-model="datasetForm.mountpoint" class="input mono" placeholder="/mnt/data" />
+              <PathSelector
+                v-model="datasetForm.mountpoint"
+                placeholder="/mnt/data"
+                root-hint="/mnt"
+              />
             </div>
 
             <div class="form-grid">

@@ -103,4 +103,28 @@ describe('CIFS Shares & Global Config Mappers', () => {
     expect(capturedBody.workgroup).toBe('MYGROUP');
     expect(capturedBody.serverString).toBe('My Server');
   });
+
+  it('renders PathSelector for Samba and WebDAV share creation with folder browsers', async () => {
+    const { mount } = await import('@vue/test-utils');
+    const { default: SharesView } = await import('../src/ui/views/SharesView.vue');
+    const { default: PathSelector } = await import('../src/ui/components/PathSelector.vue');
+    const { nasState } = await import('../src/ui/store');
+
+    nasState.systemConfig = {
+      ...(nasState.systemConfig as any),
+      enabledModules: ['cifs', 'webdav'],
+    };
+
+    const wrapper = mount(SharesView);
+    const addSmbBtn = wrapper.findAll('button').find((b) => b.text().includes('Add SMB Share'));
+    if (addSmbBtn) {
+      await addSmbBtn.trigger('click');
+    }
+
+    const pathSelectors = wrapper.findAllComponents(PathSelector);
+    expect(pathSelectors.length).toBeGreaterThanOrEqual(1);
+
+    const browseButtons = wrapper.findAll('button[title="Browse Folders..."]');
+    expect(browseButtons.length).toBeGreaterThanOrEqual(1);
+  });
 });

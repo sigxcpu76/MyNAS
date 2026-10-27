@@ -4,6 +4,7 @@ import { services } from '../../container';
 import type { CifsGlobalConfig, CifsShare, WebdavShare } from '../../domain/models';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import SortableTh from '../components/SortableTh.vue';
+import PathSelector from '../components/PathSelector.vue';
 import { useTableSort } from '../composables/useTableSort';
 import { getModuleAvailability, nasState, notify } from '../store';
 import { confirmDelete } from '../modal';
@@ -483,7 +484,11 @@ async function handleDeleteWebdav(share: WebdavShare) {
           </div>
           <div class="form-group">
             <label>Filesystem Path</label>
-            <input v-model="cifsForm.path" class="input mono" placeholder="/tank/media" required />
+            <PathSelector
+              v-model="cifsForm.path"
+              placeholder="/mnt/tank/media"
+              required
+            />
           </div>
           <div class="form-group">
             <label>Comment / Description</label>
@@ -574,7 +579,11 @@ async function handleDeleteWebdav(share: WebdavShare) {
         <div class="form-grid">
           <div class="form-group">
             <label>Path</label>
-            <input v-model="editCifsForm.path" class="input mono" />
+            <PathSelector
+              v-model="editCifsForm.path"
+              placeholder="/mnt/tank/media"
+              required
+            />
           </div>
           <div class="form-group">
             <label>Comment</label>
@@ -776,7 +785,11 @@ async function handleDeleteWebdav(share: WebdavShare) {
           </div>
           <div class="form-group">
             <label>Path</label>
-            <input v-model="webdavForm.path" class="input mono" placeholder="/mnt/tank/documents" required />
+            <PathSelector
+              v-model="webdavForm.path"
+              placeholder="/mnt/tank/documents"
+              required
+            />
           </div>
           <div class="form-group">
             <label>Allowed Users</label>
@@ -812,7 +825,11 @@ async function handleDeleteWebdav(share: WebdavShare) {
         <div class="form-grid">
           <div class="form-group">
             <label>Path</label>
-            <input v-model="editWebdavForm.path" class="input mono" />
+            <PathSelector
+              v-model="editWebdavForm.path"
+              placeholder="/mnt/tank/documents"
+              required
+            />
           </div>
           <div class="form-group">
             <label>Allowed Users</label>

@@ -30,6 +30,7 @@ import {
 } from '../../domain/models';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
+import PathSelector from '../components/PathSelector.vue';
 import { confirmDelete } from '../modal';
 import { confirmModal, nasState, notify, refreshAllData } from '../store';
 import { navigateTo } from '../router';
@@ -1096,10 +1097,10 @@ function viewPoolDatasets(poolName: string) {
 
             <div class="form-group">
               <label>Mountpoint</label>
-              <input
+              <PathSelector
                 v-model="poolForm.mountpoint"
-                class="input mono"
                 :placeholder="poolForm.poolId ? `/mnt/${poolForm.poolId.trim()}` : '/mnt/<pool-name>'"
+                root-hint="/mnt"
               />
             </div>
 
