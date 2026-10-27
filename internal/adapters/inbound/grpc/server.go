@@ -29,6 +29,7 @@ const (
 	patternVirtualMachineSnapshot = "virtualMachines/{virtual_machine}/snapshots/{snapshot}"
 	patternDockerContainer = "dockerContainers/{docker_container}"
 	patternDockerApp       = "dockerApps/{docker_app}"
+	patternDockerRegistry  = "dockerRegistries/{docker_registry}"
 	patternLxcContainer    = "lxcContainers/{lxc_container}"
 	patternCifsShare       = "cifsShares/{cifs_share}"
 	patternWebdavShare     = "webdavShares/{webdav_share}"
@@ -49,6 +50,12 @@ type Server struct {
 	share     *application.ShareService
 	identity  *application.IdentityService
 	catalog   *application.CatalogService
+	registry  *application.DockerRegistryService
+}
+
+// SetRegistryService enables the container registry credential RPCs.
+func (s *Server) SetRegistryService(svc *application.DockerRegistryService) {
+	s.registry = svc
 }
 
 func NewServer(
@@ -1352,7 +1359,7 @@ func (s *Server) GetDockerContainerLogs(ctx context.Context, req *nasv1.GetDocke
 	if err != nil {
 		return nil, ToGRPCError(err)
 	}
-	return &nasv1.GetDockerContainerLogsResponse{Logs: logs}, nil
+	return &nasv1.GetDockerContainerLogsResponse{Logs: strings.ToValidUTF8(logs, "")}, nil
 }
 
 func (s *Server) DeleteDockerContainer(ctx context.Context, req *nasv1.DeleteDockerContainerRequest) (*emptypb.Empty, error) {
@@ -1642,12 +1649,13 @@ func (s *Server) GetDockerAppLogs(ctx context.Context, req *nasv1.GetDockerAppLo
 	if err != nil {
 		return nil, ToGRPCError(err)
 	}
-	lineCount := int32(len(strings.Split(strings.TrimSpace(logs), "\n")))
-	if logs == "" {
+	validLogs := strings.ToValidUTF8(logs, "")
+	lineCount := int32(len(strings.Split(strings.TrimSpace(validLogs), "\n")))
+	if validLogs == "" {
 		lineCount = 0
 	}
 	return &nasv1.GetDockerAppLogsResponse{
-		Logs:      logs,
+		Logs:      validLogs,
 		LineCount: lineCount,
 	}, nil
 }
@@ -1971,17 +1979,28 @@ func (s *Server) CreateCifsShare(ctx context.Context, req *nasv1.CreateCifsShare
 		id = strings.TrimPrefix(in.GetName(), "cifsShares/")
 	}
 	created, err := s.share.CreateCifsShare(ctx, domain.CifsShare{
-		ID:            id,
-		Path:          in.GetPath(),
-		Comment:       in.GetComment(),
-		ReadOnly:      in.GetReadOnly(),
-		GuestOk:       in.GetGuestOk(),
-		Browseable:    in.GetBrowseable(),
-		ValidUsers:    in.GetValidUsers(),
-		ValidGroups:   in.GetValidGroups(),
-		CreateMask:    in.GetCreateMask(),
-		DirectoryMask: in.GetDirectoryMask(),
-		Enabled:       in.GetEnabled(),
+		ID:                 id,
+		Path:               in.GetPath(),
+		Comment:            in.GetComment(),
+		ReadOnly:           in.GetReadOnly(),
+		GuestOk:            in.GetGuestOk(),
+		Browseable:         in.GetBrowseable(),
+		ValidUsers:         in.GetValidUsers(),
+		ValidGroups:        in.GetValidGroups(),
+		CreateMask:         in.GetCreateMask(),
+		DirectoryMask:      in.GetDirectoryMask(),
+		Enabled:            in.GetEnabled(),
+		ReadList:           in.GetReadList(),
+		WriteList:          in.GetWriteList(),
+		ForceUser:          in.GetForceUser(),
+		ForceGroup:         in.GetForceGroup(),
+		GuestAccount:       in.GetGuestAccount(),
+		GuestOnly:          in.GetGuestOnly(),
+		ForceCreateMode:    in.GetForceCreateMode(),
+		ForceDirectoryMode: in.GetForceDirectoryMode(),
+		ShadowCopy:         in.GetShadowCopy(),
+		TimeMachine:        in.GetTimeMachine(),
+		RecycleBin:         in.GetRecycleBin(),
 	})
 	if err != nil {
 		return nil, ToGRPCError(err)
@@ -1999,17 +2018,28 @@ func (s *Server) UpdateCifsShare(ctx context.Context, req *nasv1.UpdateCifsShare
 		return nil, err
 	}
 	updated, err := s.share.UpdateCifsShare(ctx, domain.CifsShare{
-		ID:            id,
-		Path:          in.GetPath(),
-		Comment:       in.GetComment(),
-		ReadOnly:      in.GetReadOnly(),
-		GuestOk:       in.GetGuestOk(),
-		Browseable:    in.GetBrowseable(),
-		ValidUsers:    in.GetValidUsers(),
-		ValidGroups:   in.GetValidGroups(),
-		CreateMask:    in.GetCreateMask(),
-		DirectoryMask: in.GetDirectoryMask(),
-		Enabled:       in.GetEnabled(),
+		ID:                 id,
+		Path:               in.GetPath(),
+		Comment:            in.GetComment(),
+		ReadOnly:           in.GetReadOnly(),
+		GuestOk:            in.GetGuestOk(),
+		Browseable:         in.GetBrowseable(),
+		ValidUsers:         in.GetValidUsers(),
+		ValidGroups:        in.GetValidGroups(),
+		CreateMask:         in.GetCreateMask(),
+		DirectoryMask:      in.GetDirectoryMask(),
+		Enabled:            in.GetEnabled(),
+		ReadList:           in.GetReadList(),
+		WriteList:          in.GetWriteList(),
+		ForceUser:          in.GetForceUser(),
+		ForceGroup:         in.GetForceGroup(),
+		GuestAccount:       in.GetGuestAccount(),
+		GuestOnly:          in.GetGuestOnly(),
+		ForceCreateMode:    in.GetForceCreateMode(),
+		ForceDirectoryMode: in.GetForceDirectoryMode(),
+		ShadowCopy:         in.GetShadowCopy(),
+		TimeMachine:        in.GetTimeMachine(),
+		RecycleBin:         in.GetRecycleBin(),
 	}, req.GetUpdateMask().GetPaths())
 	if err != nil {
 		return nil, ToGRPCError(err)
@@ -2029,6 +2059,42 @@ func (s *Server) DeleteCifsShare(ctx context.Context, req *nasv1.DeleteCifsShare
 		return nil, ToGRPCError(err)
 	}
 	return &emptypb.Empty{}, nil
+}
+
+func (s *Server) GetCifsGlobalConfig(ctx context.Context, req *nasv1.GetCifsGlobalConfigRequest) (*nasv1.CifsGlobalConfig, error) {
+	if err := s.prereq.RequireModule("cifs"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	cfg, err := s.share.GetCifsGlobalConfig(ctx)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoCifsGlobal(*cfg), nil
+}
+
+func (s *Server) UpdateCifsGlobalConfig(ctx context.Context, req *nasv1.UpdateCifsGlobalConfigRequest) (*nasv1.CifsGlobalConfig, error) {
+	if err := s.prereq.RequireModule("cifs"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	in := req.GetGlobalConfig()
+	if in == nil {
+		return nil, ToGRPCError(fmt.Errorf("%w: global_config required", domain.ErrInvalidArgument))
+	}
+	cfg, err := s.share.UpdateCifsGlobalConfig(ctx, domain.CifsGlobalConfig{
+		Workgroup:      in.GetWorkgroup(),
+		ServerString:   in.GetServerString(),
+		Security:       in.GetSecurity(),
+		MapToGuest:     in.GetMapToGuest(),
+		GuestAccount:   in.GetGuestAccount(),
+		MaxLogSize:     in.GetMaxLogSize(),
+		DisableSpoolss: in.GetDisableSpoolss(),
+		FruitAAPL:      in.GetFruitAapl(),
+		WSDDEnabled:    in.GetWsddEnabled(),
+	}, req.GetUpdateMask().GetPaths())
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoCifsGlobal(*cfg), nil
 }
 
 func (s *Server) ListWebdavShares(ctx context.Context, req *nasv1.ListWebdavSharesRequest) (*nasv1.ListWebdavSharesResponse, error) {
@@ -2174,6 +2240,8 @@ func (s *Server) CreateUser(ctx context.Context, req *nasv1.CreateUserRequest) (
 		Locked:              in.GetLocked(),
 		Password:            in.GetPassword(),
 		IsAdmin:             in.GetIsAdmin(),
+		SMBEnabled:          in.GetSmbEnabled(),
+		SMBPassword:         in.GetSmbPassword(),
 	})
 	if err != nil {
 		return nil, ToGRPCError(err)
@@ -2200,6 +2268,8 @@ func (s *Server) UpdateUser(ctx context.Context, req *nasv1.UpdateUserRequest) (
 		Locked:              in.GetLocked(),
 		Password:            in.GetPassword(),
 		IsAdmin:             in.GetIsAdmin(),
+		SMBEnabled:          in.GetSmbEnabled(),
+		SMBPassword:         in.GetSmbPassword(),
 	}, req.GetUpdateMask().GetPaths())
 	if err != nil {
 		return nil, ToGRPCError(err)
@@ -2753,18 +2823,44 @@ func toProtoLxc(c domain.LxcContainer) *nasv1.LxcContainer {
 
 func toProtoCifs(s domain.CifsShare) *nasv1.CifsShare {
 	return &nasv1.CifsShare{
-		Name:          resourcename.Sprint(patternCifsShare, s.ID),
-		ShareName:     s.ShareName,
-		Path:          s.Path,
-		Comment:       s.Comment,
-		ReadOnly:      s.ReadOnly,
-		GuestOk:       s.GuestOk,
-		Browseable:    s.Browseable,
-		ValidUsers:    s.ValidUsers,
-		ValidGroups:   s.ValidGroups,
-		CreateMask:    s.CreateMask,
-		DirectoryMask: s.DirectoryMask,
-		Enabled:       s.Enabled,
+		Name:               resourcename.Sprint(patternCifsShare, s.ID),
+		ShareName:          s.ShareName,
+		Path:               s.Path,
+		Comment:            s.Comment,
+		ReadOnly:           s.ReadOnly,
+		GuestOk:            s.GuestOk,
+		Browseable:         s.Browseable,
+		ValidUsers:         s.ValidUsers,
+		ValidGroups:        s.ValidGroups,
+		CreateMask:         s.CreateMask,
+		DirectoryMask:      s.DirectoryMask,
+		Enabled:            s.Enabled,
+		ReadList:           s.ReadList,
+		WriteList:          s.WriteList,
+		ForceUser:          s.ForceUser,
+		ForceGroup:         s.ForceGroup,
+		GuestAccount:       s.GuestAccount,
+		GuestOnly:          s.GuestOnly,
+		ForceCreateMode:    s.ForceCreateMode,
+		ForceDirectoryMode: s.ForceDirectoryMode,
+		ShadowCopy:         s.ShadowCopy,
+		TimeMachine:        s.TimeMachine,
+		RecycleBin:         s.RecycleBin,
+	}
+}
+
+func toProtoCifsGlobal(c domain.CifsGlobalConfig) *nasv1.CifsGlobalConfig {
+	return &nasv1.CifsGlobalConfig{
+		Name:           "cifsGlobalConfig",
+		Workgroup:      c.Workgroup,
+		ServerString:   c.ServerString,
+		Security:       c.Security,
+		MapToGuest:     c.MapToGuest,
+		GuestAccount:   c.GuestAccount,
+		MaxLogSize:     c.MaxLogSize,
+		DisableSpoolss: c.DisableSpoolss,
+		FruitAapl:      c.FruitAAPL,
+		WsddEnabled:    c.WSDDEnabled,
 	}
 }
 
@@ -2799,6 +2895,7 @@ func toProtoUser(u domain.User) *nasv1.User {
 		Locked:              u.Locked,
 		SystemAccount:       u.SystemAccount,
 		IsAdmin:             u.IsAdmin,
+		SmbEnabled:          u.SMBEnabled,
 	}
 }
 

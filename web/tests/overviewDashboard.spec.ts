@@ -141,8 +141,8 @@ describe('Overview Dashboard & Telemetry', () => {
     const tankCard = poolCards[0];
     expect(tankCard.text()).toContain('tank');
     expect(tankCard.text()).toContain('raidz1');
-    expect(tankCard.text()).toContain('Storage Usage');
-    expect(tankCard.text()).toContain('Fragmentation');
+    expect(tankCard.text()).toContain('Usage');
+    expect(tankCard.text()).toContain('Frag');
     expect(tankCard.text()).toContain('12%'); // Frag pct
     expect(tankCard.text()).toContain('1.25x'); // Dedup
 

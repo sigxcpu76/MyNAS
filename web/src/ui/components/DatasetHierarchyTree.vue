@@ -108,7 +108,7 @@ const rawDatasetsList = computed(() => {
 
     const poolMount = pool.mountpoint && pool.mountpoint !== 'none'
       ? pool.mountpoint
-      : `/nas/${shortName}`;
+      : `/mnt/${shortName}`;
 
     // Look for root dataset
     const rootDs = dss.find(
@@ -153,7 +153,7 @@ const rawDatasetsList = computed(() => {
       // Normalize mountpoint if needed
       let mp = ds.mountpoint;
       if (!mp || mp === 'none' || mp === 'legacy') {
-        mp = `/nas/${ds.datasetPath}`;
+        mp = `/mnt/${ds.datasetPath}`;
       }
       result.push({
         ...ds,
@@ -181,7 +181,7 @@ const hierarchyTree = computed<DatasetTreeNode[]>(() => {
       id: ds.name,
       name: shortName,
       path: fullPath,
-      mountpoint: ds.mountpoint || `/nas/${fullPath}`,
+      mountpoint: ds.mountpoint || `/mnt/${fullPath}`,
       poolName: ds.poolName,
       isPoolRoot: ds.isPoolRoot,
       usedBytes: ds.usedBytes,

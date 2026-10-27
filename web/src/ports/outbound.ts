@@ -7,6 +7,7 @@ import type {
   AuthSession,
   CatalogApp,
   CifsShare,
+  CifsGlobalConfig,
   DirectoryList,
   Disk,
   DiscoveredPool,
@@ -30,6 +31,8 @@ import type {
   ZfsDataset,
   ZfsPool,
   ZfsVolume,
+  DockerRegistry,
+  DockerRegistryInput,
 } from '../domain/models';
 
 export interface AuthPort {
@@ -139,6 +142,10 @@ export interface DockerAppPort {
   listDirectories(path?: string): Promise<DirectoryList>;
   checkHostPort(port: number, protocol?: string, excludeAppId?: string): Promise<HostPortStatus>;
   checkHostPorts(ports: number[], protocol?: string, excludeAppId?: string): Promise<HostPortStatus[]>;
+  listRegistries(): Promise<DockerRegistry[]>;
+  createRegistry(input: DockerRegistryInput): Promise<DockerRegistry>;
+  updateRegistry(name: string, input: DockerRegistryInput): Promise<DockerRegistry>;
+  deleteRegistry(name: string): Promise<void>;
 }
 
 export interface LxcPort {
@@ -161,6 +168,8 @@ export interface SharePort {
   createCifsShare(shareId: string, share: Partial<CifsShare>): Promise<CifsShare>;
   updateCifsShare(name: string, share: Partial<CifsShare>, updateMask: string[]): Promise<CifsShare>;
   deleteCifsShare(name: string): Promise<void>;
+  getCifsGlobalConfig(): Promise<CifsGlobalConfig>;
+  updateCifsGlobalConfig(config: Partial<CifsGlobalConfig>, updateMask?: string[]): Promise<CifsGlobalConfig>;
 
   // WebDAV
   listWebdavShares(): Promise<WebdavShare[]>;

@@ -257,11 +257,25 @@ export class AipClient {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
 
-    const response = await this.fetchImpl(url, {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), 20000) : null;
+
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, {
+        method,
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: controller?.signal,
+      });
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        throw new AipHttpError(408, 'Request timed out after 20 seconds. The server may be busy or unresponsive.');
+      }
+      throw err;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
 
     if (response.status === 204) {
       return {} as T;

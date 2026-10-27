@@ -239,6 +239,20 @@ var packageMapping = map[string]map[string][]string{
 		"zypper": {"samba"},
 		"apk":    {"samba"},
 	},
+	"avahi-daemon": {
+		"pacman": {"avahi"},
+		"apt":    {"avahi-daemon"},
+		"dnf":    {"avahi"},
+		"zypper": {"avahi"},
+		"apk":    {"avahi"},
+	},
+	"wsdd": {
+		"pacman": {"wsdd"},
+		"apt":    {"wsdd"},
+		"dnf":    {"wsdd"},
+		"zypper": {"wsdd"},
+		"apk":    {"wsdd"},
+	},
 	"sshd": {
 		"pacman": {"openssh"},
 		"apt":    {"openssh-server"},
@@ -249,7 +263,16 @@ var packageMapping = map[string]map[string][]string{
 }
 
 // PackagesForPrereq returns the package names needed for a prerequisite under the given package manager.
-func PackagesForPrereq(prereqID, pkgMgr string) []string {
+func PackagesForPrereq(prereqID, pkgMgr string, flavor ...domain.LinuxFlavor) []string {
+	if prereqID == "wsdd" && len(flavor) > 0 {
+		f := flavor[0]
+		if f.PackageManager == "apt" && strings.EqualFold(f.ID, "debian") {
+			v := strings.ToLower(f.VersionID + " " + f.PrettyName)
+			if strings.Contains(v, "13") || strings.Contains(v, "trixie") || strings.Contains(v, "testing") || strings.Contains(v, "sid") {
+				return []string{"wsdd2"}
+			}
+		}
+	}
 	if m, ok := packageMapping[prereqID]; ok {
 		if pkgs, found := m[pkgMgr]; found {
 			return pkgs
@@ -265,7 +288,7 @@ func PackagesForPrereq(prereqID, pkgMgr string) []string {
 // FormatInstallHint returns a tailored install hint string for a prerequisite given the detected Linux flavor.
 func FormatInstallHint(specID string, flavor domain.LinuxFlavor) string {
 	if specID == "kvm-dev" {
-		pkgs := PackagesForPrereq(specID, flavor.PackageManager)
+		pkgs := PackagesForPrereq(specID, flavor.PackageManager, flavor)
 		pkgStr := ""
 		if len(pkgs) > 0 {
 			pkgStr = fmt.Sprintf(flavor.InstallCommandTemplate, strings.Join(pkgs, " ")) + " && "
@@ -273,7 +296,7 @@ func FormatInstallHint(specID string, flavor domain.LinuxFlavor) string {
 		return pkgStr + "(sudo modprobe kvm_intel 2>/dev/null || sudo modprobe kvm_amd 2>/dev/null || sudo modprobe kvm 2>/dev/null || true)"
 	}
 
-	pkgs := PackagesForPrereq(specID, flavor.PackageManager)
+	pkgs := PackagesForPrereq(specID, flavor.PackageManager, flavor)
 	if len(pkgs) == 0 {
 		return "Built directly into NAS binary"
 	}

@@ -208,7 +208,7 @@ func TestNasctlCobraSubcommands(t *testing.T) {
 			"tank": {ID: "tank", PoolName: "tank", State: "ONLINE", Mountpoint: tempDir},
 		},
 		datasets: map[string]domain.ZfsDataset{
-			"tank/media": {PoolID: "tank", ID: "media", DatasetPath: "tank/media", Mountpoint: "/nas/tank/media"},
+			"tank/media": {PoolID: "tank", ID: "media", DatasetPath: "tank/media", Mountpoint: "/mnt/tank/media"},
 		},
 		volumes: map[string]domain.ZfsVolume{
 			"tank/kvm-storage-lun0": {PoolID: "tank", ID: "kvm-storage-lun0", DevicePath: "/dev/zvol/tank/kvm-storage-lun0"},
@@ -243,7 +243,7 @@ func TestNasctlCobraSubcommands(t *testing.T) {
 	cifsAdapter := share.NewCifsAdapter(t.TempDir())
 	_, _ = cifsAdapter.CreateShare(context.Background(), domain.CifsShare{
 		ID:       "media",
-		Path:     "/nas/tank/media",
+		Path:     "/mnt/tank/media",
 		Enabled:  true,
 		ReadOnly: false,
 	})

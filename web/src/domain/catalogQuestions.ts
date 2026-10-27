@@ -1,5 +1,6 @@
 import type { CatalogApp, CatalogQuestion, CatalogQuestionGroup } from './models';
 import { toZfsSafeSlug } from './id';
+import { escapeComposeEnvValue } from './composeModel';
 
 /**
  * Returns default answers for an application based on its question groups / questions.
@@ -15,14 +16,14 @@ export function getQuestionsDefaultAnswers(
   for (const q of flatQs) {
     let defVal = q.defaultValue || '';
     if (q.type === 'hostpath' || q.variable.toLowerCase().includes('storage')) {
-      if (defVal.startsWith('/mnt/')) {
-        defVal = defVal.replace('/mnt/', '/nas/');
+      if (defVal.startsWith('/nas/')) {
+        defVal = defVal.replace('/nas/', '/mnt/');
       }
       if (!defVal) {
         const parts = q.variable.split('.');
         const leaf = parts[parts.length - 1] || 'data';
         const cleanId = toZfsSafeSlug(app.appId) || 'app';
-        defVal = `/nas/${appsPool}/apps/${cleanId}/${leaf}`;
+        defVal = `/mnt/${appsPool}/apps/${cleanId}/${leaf}`;
       }
     }
     answers[q.variable] = defVal;
@@ -161,7 +162,7 @@ export function generateComposeFromQuestions(
 ): string {
   const serviceName = toZfsSafeSlug(app.appId || 'app') || 'app';
   const image = app.containerImage || `${serviceName}:latest`;
-  const appdataPath = `/nas/${appsPool}/apps`;
+  const appdataPath = `/mnt/${appsPool}/apps`;
 
   const flat = getAllAppQuestions(app);
   const ports: string[] = [];
@@ -279,7 +280,7 @@ export function generateComposeFromQuestions(
   if (envEntries.length > 0) {
     lines.push('    environment:');
     for (const [k, v] of envEntries) {
-      lines.push(`      - ${k}=${v}`);
+      lines.push(`      - ${k}=${escapeComposeEnvValue(String(v))}`);
     }
   }
 

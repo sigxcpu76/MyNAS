@@ -49,68 +49,65 @@ func GenerateNanosecondID() string {
 }
 
 // GenerateVMDiskName generates a standardized disk name based on the VM ID and disk index.
-// E.g. "vm-my-vm-disk-0"
+// E.g. "vm-my-vm-01"
 func GenerateVMDiskName(vmID string, diskIndex int) string {
 	cleanID := ToZfsSafeSlug(strings.TrimPrefix(vmID, "virtualMachines/"))
 	if cleanID == "" {
 		cleanID = "vm"
 	}
-	return fmt.Sprintf("vm-%s-disk-%d", cleanID, diskIndex)
+	return fmt.Sprintf("vm-%s-%02d", cleanID, diskIndex+1)
 }
 
 // GenerateZvolDiskPath generates a standard ZVol block device path for a VM on a storage pool.
-// All VMs are rooted to the main pool under /vms/<vm_id>.
-// E.g. "/dev/zvol/mypool/vms/my-vm" or "/dev/zvol/mypool/vms/my-vm-disk-1"
+// All VMs are rooted to the main pool under /vms/<vm_id>-<diskIndex>.
+// E.g. "/dev/zvol/mypool/vms/my-vm-01" or "/dev/zvol/mypool/vms/my-vm-02"
 func GenerateZvolDiskPath(pool, vmID string, diskIndex int) string {
 	cleanPool := strings.TrimPrefix(pool, "zfsPools/")
 	cleanID := ToZfsSafeSlug(strings.TrimPrefix(vmID, "virtualMachines/"))
 	if cleanID == "" {
 		cleanID = "vm"
 	}
-	if diskIndex == 0 {
-		return fmt.Sprintf("/dev/zvol/%s/vms/%s", cleanPool, cleanID)
-	}
-	return fmt.Sprintf("/dev/zvol/%s/vms/%s-disk-%d", cleanPool, cleanID, diskIndex)
+	return fmt.Sprintf("/dev/zvol/%s/vms/%s-%02d", cleanPool, cleanID, diskIndex+1)
 }
 
 // GenerateVMPath returns the root directory for a virtual machine on the main pool.
-// E.g. "/nas/mypool/vms/my-vm"
+// E.g. "/mnt/mypool/vms/my-vm"
 func GenerateVMPath(mainPool, vmID string) string {
 	cleanPool := strings.TrimPrefix(mainPool, "zfsPools/")
 	cleanID := ToZfsSafeSlug(strings.TrimPrefix(vmID, "virtualMachines/"))
 	if cleanID == "" {
 		cleanID = "vm"
 	}
-	return fmt.Sprintf("/nas/%s/vms/%s", cleanPool, cleanID)
+	return fmt.Sprintf("/mnt/%s/vms/%s", cleanPool, cleanID)
 }
 
 // GenerateVMDiskFilePath returns the standard disk image path on the main pool for a VM.
 // All VMs are rooted to the main pool under /vms/<vm_id>.
-// E.g. "/nas/mypool/vms/my-vm/disk-0.raw"
+// E.g. "/mnt/mypool/vms/my-vm/disk-01.raw"
 func GenerateVMDiskFilePath(mainPool, vmID string, diskIndex int) string {
-	return fmt.Sprintf("%s/disk-%d.raw", GenerateVMPath(mainPool, vmID), diskIndex)
+	return fmt.Sprintf("%s/disk-%02d.raw", GenerateVMPath(mainPool, vmID), diskIndex+1)
 }
 
 // GenerateLxcRootfsPath returns the standard rootfs path for an LXC container on the main pool.
 // All LXC containers are rooted to the main pool under /containers/<container_id>.
-// E.g. "/nas/mypool/containers/my-container/rootfs"
+// E.g. "/mnt/mypool/containers/my-container/rootfs"
 func GenerateLxcRootfsPath(mainPool, containerID string) string {
 	cleanPool := strings.TrimPrefix(mainPool, "zfsPools/")
 	cleanID := ToZfsSafeSlug(strings.TrimPrefix(containerID, "lxcContainers/"))
 	if cleanID == "" {
 		cleanID = "container"
 	}
-	return fmt.Sprintf("/nas/%s/containers/%s/rootfs", cleanPool, cleanID)
+	return fmt.Sprintf("/mnt/%s/containers/%s/rootfs", cleanPool, cleanID)
 }
 
 // GenerateAppdataPath returns the standard application persistent storage path on the main pool.
 // All applications are rooted to the main pool under /apps/<app_id>.
-// E.g. "/nas/mypool/apps/nextcloud"
+// E.g. "/mnt/mypool/apps/nextcloud"
 func GenerateAppdataPath(mainPool, appID string) string {
 	cleanPool := strings.TrimPrefix(mainPool, "zfsPools/")
 	cleanID := ToZfsSafeSlug(strings.TrimPrefix(appID, "dockerApps/"))
 	if cleanID == "" {
 		cleanID = "app"
 	}
-	return fmt.Sprintf("/nas/%s/apps/%s", cleanPool, cleanID)
+	return fmt.Sprintf("/mnt/%s/apps/%s", cleanPool, cleanID)
 }

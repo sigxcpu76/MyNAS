@@ -300,3 +300,58 @@ message CheckHostPortsResponse {
   repeated HostPortStatus ports = 1;
 }
 
+
+// =============================================================================
+// Container Registry Credentials (Docker Hub, GHCR, private registries)
+// =============================================================================
+
+message DockerRegistry {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/DockerRegistry"
+    pattern: "dockerRegistries/{docker_registry}"
+    singular: "dockerRegistry"
+    plural: "dockerRegistries"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  // Registry host, e.g. "docker.io", "ghcr.io", "registry.example.com:5000".
+  string server = 2 [(google.api.field_behavior) = REQUIRED];
+  string username = 3 [(google.api.field_behavior) = REQUIRED];
+  // Password or access token. Write-only: never returned by the API.
+  string password = 4 [(google.api.field_behavior) = INPUT_ONLY];
+  bool has_password = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string description = 6;
+  // "ok" when the last `docker login` verification succeeded, otherwise the error text.
+  string last_login_status = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string last_login_time = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+message ListDockerRegistriesRequest {}
+
+message ListDockerRegistriesResponse {
+  repeated DockerRegistry docker_registries = 1;
+}
+
+message GetDockerRegistryRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerRegistry"}
+  ];
+}
+
+message CreateDockerRegistryRequest {
+  string docker_registry_id = 1;
+  DockerRegistry docker_registry = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateDockerRegistryRequest {
+  DockerRegistry docker_registry = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteDockerRegistryRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerRegistry"}
+  ];
+}

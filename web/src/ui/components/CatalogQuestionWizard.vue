@@ -142,7 +142,7 @@ const cleanAppId = computed(() => toZfsSafeSlug(props.app.appId || props.app.tit
 function resetStoragePath(variable: string) {
   const parts = variable.split('.');
   const leaf = parts[parts.length - 1] || 'data';
-  answers[variable] = `/nas/${props.appsPool}/apps/${cleanAppId.value}/${leaf}`;
+  answers[variable] = `/mnt/${props.appsPool}/apps/${cleanAppId.value}/${leaf}`;
 }
 
 async function copyYaml() {
@@ -348,14 +348,14 @@ watch(
                     <div style="flex: 1">
                       <PathSelector
                         v-model="answers[q.variable]"
-                        :placeholder="`/nas/${appsPool}/apps/${cleanAppId}/...`"
-                        :root-hint="`/nas/${appsPool}`"
+                        :placeholder="`/mnt/${appsPool}/apps/${cleanAppId}/...`"
+                        :root-hint="`/mnt/${appsPool}`"
                       />
                     </div>
                     <button
                       class="btn btn-sm"
                       style="padding: 6px 10px; font-size: 11.5px; white-space: nowrap"
-                      title="Reset path to default dataset under /nas/<pool>/apps/"
+                      title="Reset path to default dataset under /mnt/<pool>/apps/"
                       @click="resetStoragePath(q.variable)"
                     >
                       <MdiIcon :path="mdiRefresh" size="14" />

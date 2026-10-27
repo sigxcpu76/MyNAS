@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { onMounted, onUnmounted, reactive, ref } from 'vue';
 import {
   mdiArchiveOutline,
   mdiContentCopy,
@@ -91,8 +91,24 @@ async function refreshLxc() {
   nasState.lxcContainers = await services.lxc.listContainers();
 }
 
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+
 onMounted(async () => {
   await Promise.all([refreshLxc(), refreshTemplates()]);
+  pollTimer = setInterval(async () => {
+    try {
+      nasState.lxcContainers = await services.lxc.listContainers();
+    } catch {
+      // background polling error ignored
+    }
+  }, 3000);
+});
+
+onUnmounted(() => {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
 });
 
 // Templates Repository Actions
@@ -330,7 +346,7 @@ async function handleDelete(lx: LxcContainer) {
           <input
             v-model="form.templateArchive"
             class="input mono"
-            placeholder="/nas/tank/lxc-templates/debian-12.tar.xz or custom archive path"
+            placeholder="/mnt/tank/lxc-templates/debian-12.tar.xz or custom archive path"
           />
         </div>
       </div>

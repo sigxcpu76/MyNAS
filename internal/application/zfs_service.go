@@ -37,7 +37,7 @@ func (s *ZfsService) CreatePool(ctx context.Context, pool domain.ZfsPool) (*doma
 		pool.Compression = "lz4"
 	}
 	if pool.Mountpoint == "" {
-		pool.Mountpoint = "/nas/" + pool.ID
+		pool.Mountpoint = "/mnt/" + pool.ID
 	}
 	if err := pool.Validate(); err != nil {
 		return nil, err

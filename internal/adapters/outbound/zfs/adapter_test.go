@@ -56,7 +56,7 @@ func TestZfsCreateAndExportPoolMultiVdev(t *testing.T) {
 	pool := domain.ZfsPool{
 		ID:          "vault",
 		PoolName:    "vault",
-		Mountpoint:  "/nas/vault",
+		Mountpoint:  "/mnt/vault",
 		Compression: "lz4",
 		Vdevs: []domain.ZfsVdev{
 			{

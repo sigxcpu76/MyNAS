@@ -4,6 +4,8 @@ import {
   formToComposeYaml,
   createDefaultAppForm,
   createDefaultService,
+  escapeComposeEnvValue,
+  unescapeComposeEnvValue,
 } from '../src/domain/composeModel';
 
 describe('ComposeModel: YAML <-> Form Bi-directional Conversion', () => {
@@ -304,5 +306,39 @@ services:
     const parsed = composeYamlToForm(yaml, 'res-test');
     expect(parsed.services[0].memoryLimit).toBe('512m');
     expect(parsed.services[0].cpuLimit).toBe('1.0');
+  });
+
+  it('escapes and unescapes environment variables containing dollar ($) signs', () => {
+    expect(escapeComposeEnvValue('secret$123')).toBe('secret$$123');
+    expect(escapeComposeEnvValue('foo$bar$baz')).toBe('foo$$bar$$baz');
+    expect(escapeComposeEnvValue('already$$escaped')).toBe('already$$escaped');
+    expect(escapeComposeEnvValue('$2y$10$abcdef')).toBe('$$2y$$10$$abcdef');
+    expect(escapeComposeEnvValue('${PUID:-1000}')).toBe('${PUID:-1000}');
+    expect(escapeComposeEnvValue('P@$$w0rd!')).toBe('P@$$w0rd!');
+
+    expect(unescapeComposeEnvValue('secret$$123')).toBe('secret$123');
+    expect(unescapeComposeEnvValue('$$2y$$10$$abcdef')).toBe('$2y$10$abcdef');
+    expect(unescapeComposeEnvValue('${PUID:-1000}')).toBe('${PUID:-1000}');
+  });
+
+  it('preserves environment values with dollars during formToComposeYaml and composeYamlToForm', () => {
+    const appForm = createDefaultAppForm('env-dollar-test', 'Env Dollar Test');
+    appForm.services[0].environment = [
+      { key: 'POSTGRES_PASSWORD', value: 'my$secret$pass' },
+      { key: 'BCRYPT_HASH', value: '$2y$10$abcdef' },
+      { key: 'COMPOSE_VAR', value: '${PUID:-1000}' },
+    ];
+
+    const yaml = formToComposeYaml(appForm);
+    expect(yaml).toContain('POSTGRES_PASSWORD=my$$secret$$pass');
+    expect(yaml).toContain('BCRYPT_HASH=$$2y$$10$$abcdef');
+    expect(yaml).toContain('COMPOSE_VAR=${PUID:-1000}');
+
+    // Load back into form
+    const loadedForm = composeYamlToForm(yaml, 'env-dollar-test');
+    const envs = loadedForm.services[0].environment;
+    expect(envs.find((e) => e.key === 'POSTGRES_PASSWORD')?.value).toBe('my$secret$pass');
+    expect(envs.find((e) => e.key === 'BCRYPT_HASH')?.value).toBe('$2y$10$abcdef');
+    expect(envs.find((e) => e.key === 'COMPOSE_VAR')?.value).toBe('${PUID:-1000}');
   });
 });

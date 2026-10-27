@@ -8,6 +8,7 @@ import { aipClient, services } from '../container';
 import { isDotDataset } from '../domain/models';
 import type {
   CifsShare,
+  CifsGlobalConfig,
   Disk,
   DockerApp,
   DockerConfig,
@@ -136,6 +137,7 @@ export const nasState = reactive({
   dockerConfig: null as DockerConfig | null,
   lxcContainers: [] as LxcContainer[],
   cifsShares: [] as CifsShare[],
+  cifsGlobalConfig: null as CifsGlobalConfig | null,
   webdavShares: [] as WebdavShare[],
   users: [] as User[],
   groups: [] as Group[],
@@ -263,28 +265,28 @@ export async function refreshAllData(): Promise<void> {
       users,
       groups,
     ] = await Promise.all([
-      services.disk.listDisks().catch(() => []),
-      zfsOk ? services.zfs.listPools().catch(() => []) : Promise.resolve([]),
-      kvmOk ? services.kvm.listVirtualMachines().catch(() => []) : Promise.resolve([]),
-      dockerOk ? services.docker.listContainers().catch(() => []) : Promise.resolve([]),
-      dockerOk ? services.apps.listApps().catch(() => []) : Promise.resolve([]),
-      lxcOk ? services.lxc.listContainers().catch(() => []) : Promise.resolve([]),
-      cifsOk ? services.shares.listCifsShares().catch(() => []) : Promise.resolve([]),
-      services.shares.listWebdavShares().catch(() => []),
-      services.identity.listUsers(nasState.includeSystemAccounts).catch(() => []),
-      services.identity.listGroups(nasState.includeSystemGroups).catch(() => []),
+      services.disk.listDisks().catch(() => null),
+      zfsOk ? services.zfs.listPools().catch(() => null) : Promise.resolve(null),
+      kvmOk ? services.kvm.listVirtualMachines().catch(() => null) : Promise.resolve(null),
+      dockerOk ? services.docker.listContainers().catch(() => null) : Promise.resolve(null),
+      dockerOk ? services.apps.listApps().catch(() => null) : Promise.resolve(null),
+      lxcOk ? services.lxc.listContainers().catch(() => null) : Promise.resolve(null),
+      cifsOk ? services.shares.listCifsShares().catch(() => null) : Promise.resolve(null),
+      services.shares.listWebdavShares().catch(() => null),
+      services.identity.listUsers(nasState.includeSystemAccounts).catch(() => null),
+      services.identity.listGroups(nasState.includeSystemGroups).catch(() => null),
     ]);
 
-    nasState.disks = disks;
-    nasState.pools = pools;
-    nasState.vms = vms;
-    nasState.dockerContainers = dockerContainers;
-    nasState.dockerApps = dockerApps;
-    nasState.lxcContainers = lxcContainers;
-    nasState.cifsShares = cifsShares;
-    nasState.webdavShares = webdavShares;
-    nasState.users = users;
-    nasState.groups = groups;
+    if (disks !== null) nasState.disks = disks;
+    if (pools !== null) nasState.pools = pools;
+    if (vms !== null) nasState.vms = vms;
+    if (dockerContainers !== null) nasState.dockerContainers = dockerContainers;
+    if (dockerApps !== null) nasState.dockerApps = dockerApps;
+    if (lxcContainers !== null) nasState.lxcContainers = lxcContainers;
+    if (cifsShares !== null) nasState.cifsShares = cifsShares;
+    if (webdavShares !== null) nasState.webdavShares = webdavShares;
+    if (users !== null) nasState.users = users;
+    if (groups !== null) nasState.groups = groups;
 
     if (kvmOk) {
       refreshIsos().catch(() => {});
@@ -293,15 +295,16 @@ export async function refreshAllData(): Promise<void> {
       refreshLxcTemplates().catch(() => {});
     }
 
-    if (pools.length > 0 && zfsOk) {
+    const effectivePools = pools ?? nasState.pools;
+    if (effectivePools.length > 0 && zfsOk) {
       if (
         !nasState.selectedPoolName ||
-        !pools.some((p) => p.name === nasState.selectedPoolName)
+        !effectivePools.some((p) => p.name === nasState.selectedPoolName)
       ) {
-        nasState.selectedPoolName = pools[0].name;
+        nasState.selectedPoolName = effectivePools[0].name;
       }
-      await Promise.all(pools.map((p) => refreshZfsSubresources(p.name)));
-    } else {
+      await Promise.all(effectivePools.map((p) => refreshZfsSubresources(p.name)));
+    } else if (pools !== null) {
       nasState.selectedPoolName = '';
     }
 
@@ -318,11 +321,11 @@ export async function refreshDockerData(): Promise<void> {
   if (!dockerOk) return;
   try {
     const [containers, apps] = await Promise.all([
-      services.docker.listContainers().catch(() => []),
-      services.apps.listApps().catch(() => []),
+      services.docker.listContainers().catch(() => null),
+      services.apps.listApps().catch(() => null),
     ]);
-    nasState.dockerContainers = containers;
-    nasState.dockerApps = apps;
+    if (containers !== null) nasState.dockerContainers = containers;
+    if (apps !== null) nasState.dockerApps = apps;
     nasState.lastRefreshed = new Date().toLocaleTimeString();
     saveLocalCache();
   } catch {

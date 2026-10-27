@@ -10,12 +10,24 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/sigxcpu/nas/internal/domain"
 )
 
+type snapshotCacheEntry struct {
+	at     time.Time
+	counts map[string]int32
+	latest map[string]string
+}
+
 type Adapter struct {
 	mu sync.RWMutex
+
+	// snapshot statistics cache (whole-pool snapshot enumeration is slow on large pools)
+	snapMu     sync.Mutex
+	snapScanMu sync.Mutex
+	snapCache  map[string]snapshotCacheEntry
 }
 
 func NewAdapter() *Adapter {
@@ -210,7 +222,7 @@ func (a *Adapter) listHostPools(ctx context.Context) ([]domain.ZfsPool, error) {
 			dedup = 1.00
 		}
 
-		mountpoint := "/nas/" + poolName
+		mountpoint := "/mnt/" + poolName
 		compression := "lz4"
 		syncProp := "standard"
 		autotrim := "off"
@@ -312,10 +324,10 @@ func (a *Adapter) CreatePool(ctx context.Context, pool domain.ZfsPool) (*domain.
 	}
 
 	if pool.Mountpoint == "" {
-		pool.Mountpoint = fmt.Sprintf("/nas/%s", pool.ID)
+		pool.Mountpoint = fmt.Sprintf("/mnt/%s", pool.ID)
 	}
 
-	_ = os.MkdirAll("/nas", 0755)
+	_ = os.MkdirAll("/mnt", 0755)
 	args := []string{"create", "-m", pool.Mountpoint}
 	if pool.Compression != "" && pool.Compression != "off" {
 		args = append(args, "-O", fmt.Sprintf("compression=%s", pool.Compression))
@@ -416,6 +428,7 @@ func (a *Adapter) DeletePool(ctx context.Context, id string, force bool) error {
 	if !a.canUseHostZfs() {
 		return fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
+	a.invalidateSnapshotCache()
 	args := []string{"destroy"}
 	if force {
 		args = append(args, "-f")
@@ -524,32 +537,103 @@ func (a *Adapter) RemoveVdev(ctx context.Context, poolID string, device string) 
 // ZFS Datasets
 // =============================================================================
 
-func (a *Adapter) getSnapshotsInfo(ctx context.Context, poolID string) (map[string]int32, map[string]string) {
+// snapshotInfoScan runs a snapshot listing and aggregates per-dataset snapshot counts and the
+// most recently created snapshot. Ordering is resolved in-process (max creation time) instead of
+// asking ZFS to sort, and the optional extra args allow scoping the listing to one dataset.
+func (a *Adapter) snapshotInfoScan(ctx context.Context, args ...string) (map[string]int32, map[string]string) {
 	snapCounts := make(map[string]int32)
 	snapLatest := make(map[string]string)
-	cmd := exec.CommandContext(ctx, "zfs", "list", "-Hp", "-t", "snapshot", "-o", "name,creation", "-s", "creation", "-r", poolID)
-	out, err := cmd.Output()
+	latestCreation := make(map[string]int64)
+
+	cmdArgs := append([]string{"list", "-Hp", "-t", "snapshot", "-o", "name,creation"}, args...)
+	out, err := exec.CommandContext(ctx, "zfs", cmdArgs...).Output()
 	if err != nil {
 		return snapCounts, snapLatest
 	}
 	for _, line := range strings.Split(string(out), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
 		fields := strings.Fields(line)
 		if len(fields) < 1 {
 			continue
 		}
-		snapFullName := fields[0]
-		parts := strings.Split(snapFullName, "@")
-		if len(parts) == 2 {
-			parentDS := parts[0]
-			snapCounts[parentDS]++
-			snapLatest[parentDS] = snapFullName
+		parts := strings.Split(fields[0], "@")
+		if len(parts) != 2 {
+			continue
+		}
+		parentDS := parts[0]
+		var created int64
+		if len(fields) >= 2 {
+			created, _ = strconv.ParseInt(fields[1], 10, 64)
+		}
+		snapCounts[parentDS]++
+		if prev, ok := latestCreation[parentDS]; !ok || created >= prev {
+			latestCreation[parentDS] = created
+			snapLatest[parentDS] = fields[0]
 		}
 	}
 	return snapCounts, snapLatest
+}
+
+// getSnapshotsInfo returns snapshot counts/latest for every dataset in the pool. Whole-pool snapshot
+// enumeration is expensive on pools with many snapshots, so results are cached briefly and concurrent
+// callers share a single in-flight scan.
+func (a *Adapter) getSnapshotsInfo(ctx context.Context, poolID string) (map[string]int32, map[string]string) {
+	const ttl = 30 * time.Second
+
+	a.snapMu.Lock()
+	if entry, ok := a.snapCache[poolID]; ok && time.Since(entry.at) < ttl {
+		a.snapMu.Unlock()
+		return entry.counts, entry.latest
+	}
+	if a.snapCache == nil {
+		a.snapCache = make(map[string]snapshotCacheEntry)
+	}
+	a.snapMu.Unlock()
+
+	// Serialize scans per adapter so a burst of callers doesn't spawn N parallel full scans.
+	a.snapScanMu.Lock()
+	defer a.snapScanMu.Unlock()
+
+	a.snapMu.Lock()
+	if entry, ok := a.snapCache[poolID]; ok && time.Since(entry.at) < ttl {
+		a.snapMu.Unlock()
+		return entry.counts, entry.latest
+	}
+	a.snapMu.Unlock()
+
+	counts, latest := a.snapshotInfoScan(ctx, "-r", poolID)
+
+	a.snapMu.Lock()
+	a.snapCache[poolID] = snapshotCacheEntry{at: time.Now(), counts: counts, latest: latest}
+	a.snapMu.Unlock()
+	return counts, latest
+}
+
+// invalidateSnapshotCache drops cached snapshot info after operations that change snapshots.
+func (a *Adapter) invalidateSnapshotCache() {
+	a.snapMu.Lock()
+	a.snapCache = nil
+	a.snapMu.Unlock()
+}
+
+// ListDatasetPaths returns only the dataset names under a pool. It is a cheap alternative to
+// ListDatasets for callers that do not need properties or snapshot statistics.
+func (a *Adapter) ListDatasetPaths(ctx context.Context, poolID string) ([]string, error) {
+	cleanPool := strings.TrimPrefix(poolID, "zfsPools/")
+	if !a.canUseHostZfs() {
+		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
+	}
+	out, err := exec.CommandContext(ctx, "zfs", "list", "-H", "-r", "-t", "filesystem", "-o", "name", cleanPool).Output()
+	if err != nil {
+		return nil, nil
+	}
+	var names []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if name := strings.TrimSpace(line); name != "" {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names, nil
 }
 
 func (a *Adapter) ListDatasets(ctx context.Context, poolID string) ([]domain.ZfsDataset, error) {
@@ -649,7 +733,7 @@ func (a *Adapter) GetDataset(ctx context.Context, poolID, datasetID string) (*do
 		var zfsData zfsListJSON
 		if json.Unmarshal(out, &zfsData) == nil {
 			if item, ok := zfsData.Datasets[targetPath]; ok {
-				snapCounts, snapLatest := a.getSnapshotsInfo(ctx, cleanPool)
+				snapCounts, snapLatest := a.snapshotInfoScan(ctx, "-d", "1", targetPath)
 				used, _ := strconv.ParseInt(item.Properties["used"].Value, 10, 64)
 				avail, _ := strconv.ParseInt(item.Properties["available"].Value, 10, 64)
 				ref, _ := strconv.ParseInt(item.Properties["referenced"].Value, 10, 64)
@@ -702,8 +786,8 @@ func (a *Adapter) CreateDataset(ctx context.Context, dataset domain.ZfsDataset) 
 	if dataset.Compression != "" {
 		args = append(args, "-o", "compression="+dataset.Compression)
 	}
-	if dataset.Mountpoint != "" {
-		args = append(args, "-o", "mountpoint="+dataset.Mountpoint)
+	if mp := a.normalizeMountpointForCreate(ctx, dataset.DatasetPath, dataset.Mountpoint); mp != "" {
+		args = append(args, "-o", "mountpoint="+mp)
 	}
 	if dataset.Recordsize != "" {
 		args = append(args, "-o", "recordsize="+dataset.Recordsize)
@@ -777,7 +861,9 @@ func (a *Adapter) UpdateDataset(ctx context.Context, dataset domain.ZfsDataset, 
 		_ = exec.CommandContext(ctx, "zfs", "set", "recordsize="+dataset.Recordsize, targetPath).Run()
 	}
 	if hasField("mountpoint") && dataset.Mountpoint != "" {
-		_ = exec.CommandContext(ctx, "zfs", "set", "mountpoint="+dataset.Mountpoint, targetPath).Run()
+		if mp := a.toStoredMountpoint(ctx, targetPath, dataset.Mountpoint); mp != "" {
+			_ = exec.CommandContext(ctx, "zfs", "set", "mountpoint="+mp, targetPath).Run()
+		}
 	}
 	if hasField("sync") && dataset.Sync != "" {
 		_ = exec.CommandContext(ctx, "zfs", "set", "sync="+dataset.Sync, targetPath).Run()
@@ -804,6 +890,7 @@ func (a *Adapter) DeleteDataset(ctx context.Context, poolID, datasetID string, r
 
 	targetPath := a.resolveZfsPath(ctx, cleanPool, cleanDS, "filesystem")
 
+	a.invalidateSnapshotCache()
 	args := []string{"destroy"}
 	if recursive {
 		args = append(args, "-r")
@@ -825,6 +912,7 @@ func (a *Adapter) SnapshotDataset(ctx context.Context, poolID, datasetID, snapNa
 	targetPath := a.resolveZfsPath(ctx, cleanPool, cleanDS, "filesystem")
 
 	snapTarget := fmt.Sprintf("%s@%s", targetPath, snapName)
+	a.invalidateSnapshotCache()
 	if out, err := exec.CommandContext(ctx, "zfs", "snapshot", snapTarget).CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("zfs snapshot failed: %v (%s)", err, strings.TrimSpace(string(out)))
 	}
@@ -841,6 +929,7 @@ func (a *Adapter) RollbackDataset(ctx context.Context, poolID, datasetID, snapNa
 	targetPath := a.resolveZfsPath(ctx, cleanPool, cleanDS, "filesystem")
 
 	snapTarget := fmt.Sprintf("%s@%s", targetPath, snapName)
+	a.invalidateSnapshotCache()
 	if out, err := exec.CommandContext(ctx, "zfs", "rollback", "-r", snapTarget).CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("zfs rollback failed: %v (%s)", err, strings.TrimSpace(string(out)))
 	}
@@ -1079,4 +1168,60 @@ func (a *Adapter) DeleteVolume(ctx context.Context, poolID, volumeID string) err
 		return fmt.Errorf("zfs destroy volume failed: %v (%s)", err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// poolAltroot returns the altroot of the pool owning dataset (e.g. "/mnt" when imported with
+// `zpool import -R /mnt`), or "" when none is set.
+func (a *Adapter) poolAltroot(ctx context.Context, dataset string) string {
+	pool := strings.SplitN(strings.TrimPrefix(dataset, "zfsPools/"), "/", 2)[0]
+	out, err := exec.CommandContext(ctx, "zpool", "get", "-H", "-o", "value", "altroot", pool).Output()
+	if err != nil {
+		return ""
+	}
+	v := strings.TrimSpace(string(out))
+	if v == "-" || v == "/" {
+		return ""
+	}
+	return strings.TrimRight(v, "/")
+}
+
+// toStoredMountpoint converts a displayed/effective mountpoint (which includes the pool altroot,
+// as reported by `zfs get mountpoint`) into the value that must be stored in the property.
+// ZFS prepends altroot to the stored value, so passing the displayed path verbatim produces a
+// doubled prefix such as /mnt/mnt/fast/docker.
+func (a *Adapter) toStoredMountpoint(ctx context.Context, dataset, mountpoint string) string {
+	if mountpoint == "" || mountpoint == "none" || mountpoint == "legacy" {
+		return mountpoint
+	}
+	if alt := a.poolAltroot(ctx, dataset); alt != "" {
+		if mountpoint == alt {
+			return "/"
+		}
+		if strings.HasPrefix(mountpoint, alt+"/") {
+			return strings.TrimPrefix(mountpoint, alt)
+		}
+	}
+	return mountpoint
+}
+
+// normalizeMountpointForCreate returns the mountpoint value to pass to `zfs create`. When the
+// requested mountpoint equals the one the dataset would inherit from its parent, it returns ""
+// so the dataset simply inherits (keeps the layout portable across imports with or without
+// altroot). Otherwise it returns the altroot-adjusted stored value.
+func (a *Adapter) normalizeMountpointForCreate(ctx context.Context, dataset, mountpoint string) string {
+	if mountpoint == "" {
+		return ""
+	}
+	if idx := strings.LastIndex(dataset, "/"); idx > 0 {
+		parent, leaf := dataset[:idx], dataset[idx+1:]
+		if out, err := exec.CommandContext(ctx, "zfs", "get", "-H", "-o", "value", "mountpoint", parent).Output(); err == nil {
+			parentMP := strings.TrimSpace(string(out))
+			if parentMP != "" && parentMP != "none" && parentMP != "legacy" && parentMP != "-" {
+				if strings.TrimRight(mountpoint, "/") == strings.TrimRight(parentMP, "/")+"/"+leaf {
+					return ""
+				}
+			}
+		}
+	}
+	return a.toStoredMountpoint(ctx, dataset, mountpoint)
 }

@@ -24,21 +24,32 @@ const (
 )
 
 type CifsShare struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ShareName     string                 `protobuf:"bytes,2,opt,name=share_name,json=shareName,proto3" json:"share_name,omitempty"`
-	Path          string                 `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
-	Comment       string                 `protobuf:"bytes,4,opt,name=comment,proto3" json:"comment,omitempty"`
-	ReadOnly      bool                   `protobuf:"varint,5,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
-	GuestOk       bool                   `protobuf:"varint,6,opt,name=guest_ok,json=guestOk,proto3" json:"guest_ok,omitempty"`
-	Browseable    bool                   `protobuf:"varint,7,opt,name=browseable,proto3" json:"browseable,omitempty"`
-	ValidUsers    []string               `protobuf:"bytes,8,rep,name=valid_users,json=validUsers,proto3" json:"valid_users,omitempty"`
-	ValidGroups   []string               `protobuf:"bytes,9,rep,name=valid_groups,json=validGroups,proto3" json:"valid_groups,omitempty"`
-	CreateMask    string                 `protobuf:"bytes,10,opt,name=create_mask,json=createMask,proto3" json:"create_mask,omitempty"`
-	DirectoryMask string                 `protobuf:"bytes,11,opt,name=directory_mask,json=directoryMask,proto3" json:"directory_mask,omitempty"`
-	Enabled       bool                   `protobuf:"varint,12,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Name               string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	ShareName          string                 `protobuf:"bytes,2,opt,name=share_name,json=shareName,proto3" json:"share_name,omitempty"`
+	Path               string                 `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
+	Comment            string                 `protobuf:"bytes,4,opt,name=comment,proto3" json:"comment,omitempty"`
+	ReadOnly           bool                   `protobuf:"varint,5,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
+	GuestOk            bool                   `protobuf:"varint,6,opt,name=guest_ok,json=guestOk,proto3" json:"guest_ok,omitempty"`
+	Browseable         bool                   `protobuf:"varint,7,opt,name=browseable,proto3" json:"browseable,omitempty"`
+	ValidUsers         []string               `protobuf:"bytes,8,rep,name=valid_users,json=validUsers,proto3" json:"valid_users,omitempty"`
+	ValidGroups        []string               `protobuf:"bytes,9,rep,name=valid_groups,json=validGroups,proto3" json:"valid_groups,omitempty"`
+	CreateMask         string                 `protobuf:"bytes,10,opt,name=create_mask,json=createMask,proto3" json:"create_mask,omitempty"`
+	DirectoryMask      string                 `protobuf:"bytes,11,opt,name=directory_mask,json=directoryMask,proto3" json:"directory_mask,omitempty"`
+	Enabled            bool                   `protobuf:"varint,12,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	ReadList           []string               `protobuf:"bytes,13,rep,name=read_list,json=readList,proto3" json:"read_list,omitempty"`
+	WriteList          []string               `protobuf:"bytes,14,rep,name=write_list,json=writeList,proto3" json:"write_list,omitempty"`
+	ForceUser          string                 `protobuf:"bytes,15,opt,name=force_user,json=forceUser,proto3" json:"force_user,omitempty"`
+	ForceGroup         string                 `protobuf:"bytes,16,opt,name=force_group,json=forceGroup,proto3" json:"force_group,omitempty"`
+	GuestAccount       string                 `protobuf:"bytes,17,opt,name=guest_account,json=guestAccount,proto3" json:"guest_account,omitempty"`
+	GuestOnly          bool                   `protobuf:"varint,18,opt,name=guest_only,json=guestOnly,proto3" json:"guest_only,omitempty"`
+	ForceCreateMode    string                 `protobuf:"bytes,19,opt,name=force_create_mode,json=forceCreateMode,proto3" json:"force_create_mode,omitempty"`
+	ForceDirectoryMode string                 `protobuf:"bytes,20,opt,name=force_directory_mode,json=forceDirectoryMode,proto3" json:"force_directory_mode,omitempty"`
+	ShadowCopy         bool                   `protobuf:"varint,21,opt,name=shadow_copy,json=shadowCopy,proto3" json:"shadow_copy,omitempty"`
+	TimeMachine        bool                   `protobuf:"varint,22,opt,name=time_machine,json=timeMachine,proto3" json:"time_machine,omitempty"`
+	RecycleBin         bool                   `protobuf:"varint,23,opt,name=recycle_bin,json=recycleBin,proto3" json:"recycle_bin,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *CifsShare) Reset() {
@@ -155,6 +166,295 @@ func (x *CifsShare) GetEnabled() bool {
 	return false
 }
 
+func (x *CifsShare) GetReadList() []string {
+	if x != nil {
+		return x.ReadList
+	}
+	return nil
+}
+
+func (x *CifsShare) GetWriteList() []string {
+	if x != nil {
+		return x.WriteList
+	}
+	return nil
+}
+
+func (x *CifsShare) GetForceUser() string {
+	if x != nil {
+		return x.ForceUser
+	}
+	return ""
+}
+
+func (x *CifsShare) GetForceGroup() string {
+	if x != nil {
+		return x.ForceGroup
+	}
+	return ""
+}
+
+func (x *CifsShare) GetGuestAccount() string {
+	if x != nil {
+		return x.GuestAccount
+	}
+	return ""
+}
+
+func (x *CifsShare) GetGuestOnly() bool {
+	if x != nil {
+		return x.GuestOnly
+	}
+	return false
+}
+
+func (x *CifsShare) GetForceCreateMode() string {
+	if x != nil {
+		return x.ForceCreateMode
+	}
+	return ""
+}
+
+func (x *CifsShare) GetForceDirectoryMode() string {
+	if x != nil {
+		return x.ForceDirectoryMode
+	}
+	return ""
+}
+
+func (x *CifsShare) GetShadowCopy() bool {
+	if x != nil {
+		return x.ShadowCopy
+	}
+	return false
+}
+
+func (x *CifsShare) GetTimeMachine() bool {
+	if x != nil {
+		return x.TimeMachine
+	}
+	return false
+}
+
+func (x *CifsShare) GetRecycleBin() bool {
+	if x != nil {
+		return x.RecycleBin
+	}
+	return false
+}
+
+type CifsGlobalConfig struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Workgroup      string                 `protobuf:"bytes,2,opt,name=workgroup,proto3" json:"workgroup,omitempty"`
+	ServerString   string                 `protobuf:"bytes,3,opt,name=server_string,json=serverString,proto3" json:"server_string,omitempty"`
+	Security       string                 `protobuf:"bytes,4,opt,name=security,proto3" json:"security,omitempty"`
+	MapToGuest     string                 `protobuf:"bytes,5,opt,name=map_to_guest,json=mapToGuest,proto3" json:"map_to_guest,omitempty"`
+	GuestAccount   string                 `protobuf:"bytes,6,opt,name=guest_account,json=guestAccount,proto3" json:"guest_account,omitempty"`
+	MaxLogSize     int32                  `protobuf:"varint,7,opt,name=max_log_size,json=maxLogSize,proto3" json:"max_log_size,omitempty"`
+	DisableSpoolss bool                   `protobuf:"varint,8,opt,name=disable_spoolss,json=disableSpoolss,proto3" json:"disable_spoolss,omitempty"`
+	FruitAapl      bool                   `protobuf:"varint,9,opt,name=fruit_aapl,json=fruitAapl,proto3" json:"fruit_aapl,omitempty"`
+	WsddEnabled    bool                   `protobuf:"varint,10,opt,name=wsdd_enabled,json=wsddEnabled,proto3" json:"wsdd_enabled,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *CifsGlobalConfig) Reset() {
+	*x = CifsGlobalConfig{}
+	mi := &file_nas_v1_share_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CifsGlobalConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CifsGlobalConfig) ProtoMessage() {}
+
+func (x *CifsGlobalConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_share_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CifsGlobalConfig.ProtoReflect.Descriptor instead.
+func (*CifsGlobalConfig) Descriptor() ([]byte, []int) {
+	return file_nas_v1_share_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *CifsGlobalConfig) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CifsGlobalConfig) GetWorkgroup() string {
+	if x != nil {
+		return x.Workgroup
+	}
+	return ""
+}
+
+func (x *CifsGlobalConfig) GetServerString() string {
+	if x != nil {
+		return x.ServerString
+	}
+	return ""
+}
+
+func (x *CifsGlobalConfig) GetSecurity() string {
+	if x != nil {
+		return x.Security
+	}
+	return ""
+}
+
+func (x *CifsGlobalConfig) GetMapToGuest() string {
+	if x != nil {
+		return x.MapToGuest
+	}
+	return ""
+}
+
+func (x *CifsGlobalConfig) GetGuestAccount() string {
+	if x != nil {
+		return x.GuestAccount
+	}
+	return ""
+}
+
+func (x *CifsGlobalConfig) GetMaxLogSize() int32 {
+	if x != nil {
+		return x.MaxLogSize
+	}
+	return 0
+}
+
+func (x *CifsGlobalConfig) GetDisableSpoolss() bool {
+	if x != nil {
+		return x.DisableSpoolss
+	}
+	return false
+}
+
+func (x *CifsGlobalConfig) GetFruitAapl() bool {
+	if x != nil {
+		return x.FruitAapl
+	}
+	return false
+}
+
+func (x *CifsGlobalConfig) GetWsddEnabled() bool {
+	if x != nil {
+		return x.WsddEnabled
+	}
+	return false
+}
+
+type GetCifsGlobalConfigRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCifsGlobalConfigRequest) Reset() {
+	*x = GetCifsGlobalConfigRequest{}
+	mi := &file_nas_v1_share_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCifsGlobalConfigRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCifsGlobalConfigRequest) ProtoMessage() {}
+
+func (x *GetCifsGlobalConfigRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_share_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCifsGlobalConfigRequest.ProtoReflect.Descriptor instead.
+func (*GetCifsGlobalConfigRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_share_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *GetCifsGlobalConfigRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type UpdateCifsGlobalConfigRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GlobalConfig  *CifsGlobalConfig      `protobuf:"bytes,1,opt,name=global_config,json=globalConfig,proto3" json:"global_config,omitempty"`
+	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateCifsGlobalConfigRequest) Reset() {
+	*x = UpdateCifsGlobalConfigRequest{}
+	mi := &file_nas_v1_share_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateCifsGlobalConfigRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateCifsGlobalConfigRequest) ProtoMessage() {}
+
+func (x *UpdateCifsGlobalConfigRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_share_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateCifsGlobalConfigRequest.ProtoReflect.Descriptor instead.
+func (*UpdateCifsGlobalConfigRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_share_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *UpdateCifsGlobalConfigRequest) GetGlobalConfig() *CifsGlobalConfig {
+	if x != nil {
+		return x.GlobalConfig
+	}
+	return nil
+}
+
+func (x *UpdateCifsGlobalConfigRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
+	if x != nil {
+		return x.UpdateMask
+	}
+	return nil
+}
+
 type ListCifsSharesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PageSize      int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
@@ -165,7 +465,7 @@ type ListCifsSharesRequest struct {
 
 func (x *ListCifsSharesRequest) Reset() {
 	*x = ListCifsSharesRequest{}
-	mi := &file_nas_v1_share_proto_msgTypes[1]
+	mi := &file_nas_v1_share_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -177,7 +477,7 @@ func (x *ListCifsSharesRequest) String() string {
 func (*ListCifsSharesRequest) ProtoMessage() {}
 
 func (x *ListCifsSharesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_share_proto_msgTypes[1]
+	mi := &file_nas_v1_share_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -190,7 +490,7 @@ func (x *ListCifsSharesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCifsSharesRequest.ProtoReflect.Descriptor instead.
 func (*ListCifsSharesRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_share_proto_rawDescGZIP(), []int{1}
+	return file_nas_v1_share_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ListCifsSharesRequest) GetPageSize() int32 {
@@ -218,7 +518,7 @@ type ListCifsSharesResponse struct {
 
 func (x *ListCifsSharesResponse) Reset() {
 	*x = ListCifsSharesResponse{}
-	mi := &file_nas_v1_share_proto_msgTypes[2]
+	mi := &file_nas_v1_share_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -230,7 +530,7 @@ func (x *ListCifsSharesResponse) String() string {
 func (*ListCifsSharesResponse) ProtoMessage() {}
 
 func (x *ListCifsSharesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_share_proto_msgTypes[2]
+	mi := &file_nas_v1_share_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -243,7 +543,7 @@ func (x *ListCifsSharesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCifsSharesResponse.ProtoReflect.Descriptor instead.
 func (*ListCifsSharesResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_share_proto_rawDescGZIP(), []int{2}
+	return file_nas_v1_share_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ListCifsSharesResponse) GetCifsShares() []*CifsShare {
@@ -276,7 +576,7 @@ type GetCifsShareRequest struct {
 
 func (x *GetCifsShareRequest) Reset() {
 	*x = GetCifsShareRequest{}
-	mi := &file_nas_v1_share_proto_msgTypes[3]
+	mi := &file_nas_v1_share_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -288,7 +588,7 @@ func (x *GetCifsShareRequest) String() string {
 func (*GetCifsShareRequest) ProtoMessage() {}
 
 func (x *GetCifsShareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_share_proto_msgTypes[3]
+	mi := &file_nas_v1_share_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -301,7 +601,7 @@ func (x *GetCifsShareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCifsShareRequest.ProtoReflect.Descriptor instead.
 func (*GetCifsShareRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_share_proto_rawDescGZIP(), []int{3}
+	return file_nas_v1_share_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetCifsShareRequest) GetName() string {
@@ -321,7 +621,7 @@ type CreateCifsShareRequest struct {
 
 func (x *CreateCifsShareRequest) Reset() {
 	*x = CreateCifsShareRequest{}
-	mi := &file_nas_v1_share_proto_msgTypes[4]
+	mi := &file_nas_v1_share_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -333,7 +633,7 @@ func (x *CreateCifsShareRequest) String() string {
 func (*CreateCifsShareRequest) ProtoMessage() {}
 
 func (x *CreateCifsShareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_share_proto_msgTypes[4]
+	mi := &file_nas_v1_share_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -346,7 +646,7 @@ func (x *CreateCifsShareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCifsShareRequest.ProtoReflect.Descriptor instead.
 func (*CreateCifsShareRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_share_proto_rawDescGZIP(), []int{4}
+	return file_nas_v1_share_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CreateCifsShareRequest) GetCifsShareId() string {
@@ -373,7 +673,7 @@ type UpdateCifsShareRequest struct {
 
 func (x *UpdateCifsShareRequest) Reset() {
 	*x = UpdateCifsShareRequest{}
-	mi := &file_nas_v1_share_proto_msgTypes[5]
+	mi := &file_nas_v1_share_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -385,7 +685,7 @@ func (x *UpdateCifsShareRequest) String() string {
 func (*UpdateCifsShareRequest) ProtoMessage() {}
 
 func (x *UpdateCifsShareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_share_proto_msgTypes[5]
+	mi := &file_nas_v1_share_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -398,7 +698,7 @@ func (x *UpdateCifsShareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateCifsShareRequest.ProtoReflect.Descriptor instead.
 func (*UpdateCifsShareRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_share_proto_rawDescGZIP(), []int{5}
+	return file_nas_v1_share_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *UpdateCifsShareRequest) GetCifsShare() *CifsShare {
@@ -424,7 +724,7 @@ type DeleteCifsShareRequest struct {
 
 func (x *DeleteCifsShareRequest) Reset() {
 	*x = DeleteCifsShareRequest{}
-	mi := &file_nas_v1_share_proto_msgTypes[6]
+	mi := &file_nas_v1_share_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -436,7 +736,7 @@ func (x *DeleteCifsShareRequest) String() string {
 func (*DeleteCifsShareRequest) ProtoMessage() {}
 
 func (x *DeleteCifsShareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_share_proto_msgTypes[6]
+	mi := &file_nas_v1_share_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -449,7 +749,7 @@ func (x *DeleteCifsShareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteCifsShareRequest.ProtoReflect.Descriptor instead.
 func (*DeleteCifsShareRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_share_proto_rawDescGZIP(), []int{6}
+	return file_nas_v1_share_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *DeleteCifsShareRequest) GetName() string {
@@ -476,7 +776,7 @@ type WebdavShare struct {
 
 func (x *WebdavShare) Reset() {
 	*x = WebdavShare{}
-	mi := &file_nas_v1_share_proto_msgTypes[7]
+	mi := &file_nas_v1_share_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -488,7 +788,7 @@ func (x *WebdavShare) String() string {
 func (*WebdavShare) ProtoMessage() {}
 
 func (x *WebdavShare) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_share_proto_msgTypes[7]
+	mi := &file_nas_v1_share_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -501,7 +801,7 @@ func (x *WebdavShare) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebdavShare.ProtoReflect.Descriptor instead.
 func (*WebdavShare) Descriptor() ([]byte, []int) {
-	return file_nas_v1_share_proto_rawDescGZIP(), []int{7}
+	return file_nas_v1_share_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *WebdavShare) GetName() string {
@@ -577,7 +877,7 @@ type ListWebdavSharesRequest struct {
 
 func (x *ListWebdavSharesRequest) Reset() {
 	*x = ListWebdavSharesRequest{}
-	mi := &file_nas_v1_share_proto_msgTypes[8]
+	mi := &file_nas_v1_share_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -589,7 +889,7 @@ func (x *ListWebdavSharesRequest) String() string {
 func (*ListWebdavSharesRequest) ProtoMessage() {}
 
 func (x *ListWebdavSharesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_share_proto_msgTypes[8]
+	mi := &file_nas_v1_share_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -602,7 +902,7 @@ func (x *ListWebdavSharesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWebdavSharesRequest.ProtoReflect.Descriptor instead.
 func (*ListWebdavSharesRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_share_proto_rawDescGZIP(), []int{8}
+	return file_nas_v1_share_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ListWebdavSharesRequest) GetPageSize() int32 {
@@ -630,7 +930,7 @@ type ListWebdavSharesResponse struct {
 
 func (x *ListWebdavSharesResponse) Reset() {
 	*x = ListWebdavSharesResponse{}
-	mi := &file_nas_v1_share_proto_msgTypes[9]
+	mi := &file_nas_v1_share_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -642,7 +942,7 @@ func (x *ListWebdavSharesResponse) String() string {
 func (*ListWebdavSharesResponse) ProtoMessage() {}
 
 func (x *ListWebdavSharesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_share_proto_msgTypes[9]
+	mi := &file_nas_v1_share_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -655,7 +955,7 @@ func (x *ListWebdavSharesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWebdavSharesResponse.ProtoReflect.Descriptor instead.
 func (*ListWebdavSharesResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_share_proto_rawDescGZIP(), []int{9}
+	return file_nas_v1_share_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ListWebdavSharesResponse) GetWebdavShares() []*WebdavShare {
@@ -688,7 +988,7 @@ type GetWebdavShareRequest struct {
 
 func (x *GetWebdavShareRequest) Reset() {
 	*x = GetWebdavShareRequest{}
-	mi := &file_nas_v1_share_proto_msgTypes[10]
+	mi := &file_nas_v1_share_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -700,7 +1000,7 @@ func (x *GetWebdavShareRequest) String() string {
 func (*GetWebdavShareRequest) ProtoMessage() {}
 
 func (x *GetWebdavShareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_share_proto_msgTypes[10]
+	mi := &file_nas_v1_share_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -713,7 +1013,7 @@ func (x *GetWebdavShareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWebdavShareRequest.ProtoReflect.Descriptor instead.
 func (*GetWebdavShareRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_share_proto_rawDescGZIP(), []int{10}
+	return file_nas_v1_share_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetWebdavShareRequest) GetName() string {
@@ -733,7 +1033,7 @@ type CreateWebdavShareRequest struct {
 
 func (x *CreateWebdavShareRequest) Reset() {
 	*x = CreateWebdavShareRequest{}
-	mi := &file_nas_v1_share_proto_msgTypes[11]
+	mi := &file_nas_v1_share_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -745,7 +1045,7 @@ func (x *CreateWebdavShareRequest) String() string {
 func (*CreateWebdavShareRequest) ProtoMessage() {}
 
 func (x *CreateWebdavShareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_share_proto_msgTypes[11]
+	mi := &file_nas_v1_share_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -758,7 +1058,7 @@ func (x *CreateWebdavShareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateWebdavShareRequest.ProtoReflect.Descriptor instead.
 func (*CreateWebdavShareRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_share_proto_rawDescGZIP(), []int{11}
+	return file_nas_v1_share_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CreateWebdavShareRequest) GetWebdavShareId() string {
@@ -785,7 +1085,7 @@ type UpdateWebdavShareRequest struct {
 
 func (x *UpdateWebdavShareRequest) Reset() {
 	*x = UpdateWebdavShareRequest{}
-	mi := &file_nas_v1_share_proto_msgTypes[12]
+	mi := &file_nas_v1_share_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -797,7 +1097,7 @@ func (x *UpdateWebdavShareRequest) String() string {
 func (*UpdateWebdavShareRequest) ProtoMessage() {}
 
 func (x *UpdateWebdavShareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_share_proto_msgTypes[12]
+	mi := &file_nas_v1_share_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -810,7 +1110,7 @@ func (x *UpdateWebdavShareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateWebdavShareRequest.ProtoReflect.Descriptor instead.
 func (*UpdateWebdavShareRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_share_proto_rawDescGZIP(), []int{12}
+	return file_nas_v1_share_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *UpdateWebdavShareRequest) GetWebdavShare() *WebdavShare {
@@ -836,7 +1136,7 @@ type DeleteWebdavShareRequest struct {
 
 func (x *DeleteWebdavShareRequest) Reset() {
 	*x = DeleteWebdavShareRequest{}
-	mi := &file_nas_v1_share_proto_msgTypes[13]
+	mi := &file_nas_v1_share_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -848,7 +1148,7 @@ func (x *DeleteWebdavShareRequest) String() string {
 func (*DeleteWebdavShareRequest) ProtoMessage() {}
 
 func (x *DeleteWebdavShareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_share_proto_msgTypes[13]
+	mi := &file_nas_v1_share_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -861,7 +1161,7 @@ func (x *DeleteWebdavShareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteWebdavShareRequest.ProtoReflect.Descriptor instead.
 func (*DeleteWebdavShareRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_share_proto_rawDescGZIP(), []int{13}
+	return file_nas_v1_share_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *DeleteWebdavShareRequest) GetName() string {
@@ -875,7 +1175,7 @@ var File_nas_v1_share_proto protoreflect.FileDescriptor
 
 const file_nas_v1_share_proto_rawDesc = "" +
 	"\n" +
-	"\x12nas/v1/share.proto\x12\x06nas.v1\x1a\x1fgoogle/api/field_behavior.proto\x1a\x19google/api/resource.proto\x1a google/protobuf/field_mask.proto\"\xcb\x03\n" +
+	"\x12nas/v1/share.proto\x12\x06nas.v1\x1a\x1fgoogle/api/field_behavior.proto\x1a\x19google/api/resource.proto\x1a google/protobuf/field_mask.proto\"\xce\x06\n" +
 	"\tCifsShare\x12\x18\n" +
 	"\x04name\x18\x01 \x01(\tB\x04\xe2A\x01\bR\x04name\x12#\n" +
 	"\n" +
@@ -894,9 +1194,48 @@ const file_nas_v1_share_proto_rawDesc = "" +
 	" \x01(\tR\n" +
 	"createMask\x12%\n" +
 	"\x0edirectory_mask\x18\v \x01(\tR\rdirectoryMask\x12\x18\n" +
-	"\aenabled\x18\f \x01(\bR\aenabled:M\xeaAJ\n" +
+	"\aenabled\x18\f \x01(\bR\aenabled\x12\x1b\n" +
+	"\tread_list\x18\r \x03(\tR\breadList\x12\x1d\n" +
+	"\n" +
+	"write_list\x18\x0e \x03(\tR\twriteList\x12\x1d\n" +
+	"\n" +
+	"force_user\x18\x0f \x01(\tR\tforceUser\x12\x1f\n" +
+	"\vforce_group\x18\x10 \x01(\tR\n" +
+	"forceGroup\x12#\n" +
+	"\rguest_account\x18\x11 \x01(\tR\fguestAccount\x12\x1d\n" +
+	"\n" +
+	"guest_only\x18\x12 \x01(\bR\tguestOnly\x12*\n" +
+	"\x11force_create_mode\x18\x13 \x01(\tR\x0fforceCreateMode\x120\n" +
+	"\x14force_directory_mode\x18\x14 \x01(\tR\x12forceDirectoryMode\x12\x1f\n" +
+	"\vshadow_copy\x18\x15 \x01(\bR\n" +
+	"shadowCopy\x12!\n" +
+	"\ftime_machine\x18\x16 \x01(\bR\vtimeMachine\x12\x1f\n" +
+	"\vrecycle_bin\x18\x17 \x01(\bR\n" +
+	"recycleBin:M\xeaAJ\n" +
 	"\x18nas.sigxcpu.io/CifsShare\x12\x17cifsShares/{cifs_share}*\n" +
-	"cifsShares2\tcifsShare\"S\n" +
+	"cifsShares2\tcifsShare\"\xbc\x03\n" +
+	"\x10CifsGlobalConfig\x12\x18\n" +
+	"\x04name\x18\x01 \x01(\tB\x04\xe2A\x01\bR\x04name\x12\x1c\n" +
+	"\tworkgroup\x18\x02 \x01(\tR\tworkgroup\x12#\n" +
+	"\rserver_string\x18\x03 \x01(\tR\fserverString\x12\x1a\n" +
+	"\bsecurity\x18\x04 \x01(\tR\bsecurity\x12 \n" +
+	"\fmap_to_guest\x18\x05 \x01(\tR\n" +
+	"mapToGuest\x12#\n" +
+	"\rguest_account\x18\x06 \x01(\tR\fguestAccount\x12 \n" +
+	"\fmax_log_size\x18\a \x01(\x05R\n" +
+	"maxLogSize\x12'\n" +
+	"\x0fdisable_spoolss\x18\b \x01(\bR\x0edisableSpoolss\x12\x1d\n" +
+	"\n" +
+	"fruit_aapl\x18\t \x01(\bR\tfruitAapl\x12!\n" +
+	"\fwsdd_enabled\x18\n" +
+	" \x01(\bR\vwsddEnabled:[\xeaAX\n" +
+	"\x1fnas.sigxcpu.io/CifsGlobalConfig\x12\x10cifsGlobalConfig*\x11cifsGlobalConfigs2\x10cifsGlobalConfig\"0\n" +
+	"\x1aGetCifsGlobalConfigRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\xa1\x01\n" +
+	"\x1dUpdateCifsGlobalConfigRequest\x12C\n" +
+	"\rglobal_config\x18\x01 \x01(\v2\x18.nas.v1.CifsGlobalConfigB\x04\xe2A\x01\x02R\fglobalConfig\x12;\n" +
+	"\vupdate_mask\x18\x02 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
+	"updateMask\"S\n" +
 	"\x15ListCifsSharesRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
@@ -970,38 +1309,43 @@ func file_nas_v1_share_proto_rawDescGZIP() []byte {
 	return file_nas_v1_share_proto_rawDescData
 }
 
-var file_nas_v1_share_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_nas_v1_share_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_nas_v1_share_proto_goTypes = []any{
-	(*CifsShare)(nil),                // 0: nas.v1.CifsShare
-	(*ListCifsSharesRequest)(nil),    // 1: nas.v1.ListCifsSharesRequest
-	(*ListCifsSharesResponse)(nil),   // 2: nas.v1.ListCifsSharesResponse
-	(*GetCifsShareRequest)(nil),      // 3: nas.v1.GetCifsShareRequest
-	(*CreateCifsShareRequest)(nil),   // 4: nas.v1.CreateCifsShareRequest
-	(*UpdateCifsShareRequest)(nil),   // 5: nas.v1.UpdateCifsShareRequest
-	(*DeleteCifsShareRequest)(nil),   // 6: nas.v1.DeleteCifsShareRequest
-	(*WebdavShare)(nil),              // 7: nas.v1.WebdavShare
-	(*ListWebdavSharesRequest)(nil),  // 8: nas.v1.ListWebdavSharesRequest
-	(*ListWebdavSharesResponse)(nil), // 9: nas.v1.ListWebdavSharesResponse
-	(*GetWebdavShareRequest)(nil),    // 10: nas.v1.GetWebdavShareRequest
-	(*CreateWebdavShareRequest)(nil), // 11: nas.v1.CreateWebdavShareRequest
-	(*UpdateWebdavShareRequest)(nil), // 12: nas.v1.UpdateWebdavShareRequest
-	(*DeleteWebdavShareRequest)(nil), // 13: nas.v1.DeleteWebdavShareRequest
-	(*fieldmaskpb.FieldMask)(nil),    // 14: google.protobuf.FieldMask
+	(*CifsShare)(nil),                     // 0: nas.v1.CifsShare
+	(*CifsGlobalConfig)(nil),              // 1: nas.v1.CifsGlobalConfig
+	(*GetCifsGlobalConfigRequest)(nil),    // 2: nas.v1.GetCifsGlobalConfigRequest
+	(*UpdateCifsGlobalConfigRequest)(nil), // 3: nas.v1.UpdateCifsGlobalConfigRequest
+	(*ListCifsSharesRequest)(nil),         // 4: nas.v1.ListCifsSharesRequest
+	(*ListCifsSharesResponse)(nil),        // 5: nas.v1.ListCifsSharesResponse
+	(*GetCifsShareRequest)(nil),           // 6: nas.v1.GetCifsShareRequest
+	(*CreateCifsShareRequest)(nil),        // 7: nas.v1.CreateCifsShareRequest
+	(*UpdateCifsShareRequest)(nil),        // 8: nas.v1.UpdateCifsShareRequest
+	(*DeleteCifsShareRequest)(nil),        // 9: nas.v1.DeleteCifsShareRequest
+	(*WebdavShare)(nil),                   // 10: nas.v1.WebdavShare
+	(*ListWebdavSharesRequest)(nil),       // 11: nas.v1.ListWebdavSharesRequest
+	(*ListWebdavSharesResponse)(nil),      // 12: nas.v1.ListWebdavSharesResponse
+	(*GetWebdavShareRequest)(nil),         // 13: nas.v1.GetWebdavShareRequest
+	(*CreateWebdavShareRequest)(nil),      // 14: nas.v1.CreateWebdavShareRequest
+	(*UpdateWebdavShareRequest)(nil),      // 15: nas.v1.UpdateWebdavShareRequest
+	(*DeleteWebdavShareRequest)(nil),      // 16: nas.v1.DeleteWebdavShareRequest
+	(*fieldmaskpb.FieldMask)(nil),         // 17: google.protobuf.FieldMask
 }
 var file_nas_v1_share_proto_depIdxs = []int32{
-	0,  // 0: nas.v1.ListCifsSharesResponse.cifs_shares:type_name -> nas.v1.CifsShare
-	0,  // 1: nas.v1.CreateCifsShareRequest.cifs_share:type_name -> nas.v1.CifsShare
-	0,  // 2: nas.v1.UpdateCifsShareRequest.cifs_share:type_name -> nas.v1.CifsShare
-	14, // 3: nas.v1.UpdateCifsShareRequest.update_mask:type_name -> google.protobuf.FieldMask
-	7,  // 4: nas.v1.ListWebdavSharesResponse.webdav_shares:type_name -> nas.v1.WebdavShare
-	7,  // 5: nas.v1.CreateWebdavShareRequest.webdav_share:type_name -> nas.v1.WebdavShare
-	7,  // 6: nas.v1.UpdateWebdavShareRequest.webdav_share:type_name -> nas.v1.WebdavShare
-	14, // 7: nas.v1.UpdateWebdavShareRequest.update_mask:type_name -> google.protobuf.FieldMask
-	8,  // [8:8] is the sub-list for method output_type
-	8,  // [8:8] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	1,  // 0: nas.v1.UpdateCifsGlobalConfigRequest.global_config:type_name -> nas.v1.CifsGlobalConfig
+	17, // 1: nas.v1.UpdateCifsGlobalConfigRequest.update_mask:type_name -> google.protobuf.FieldMask
+	0,  // 2: nas.v1.ListCifsSharesResponse.cifs_shares:type_name -> nas.v1.CifsShare
+	0,  // 3: nas.v1.CreateCifsShareRequest.cifs_share:type_name -> nas.v1.CifsShare
+	0,  // 4: nas.v1.UpdateCifsShareRequest.cifs_share:type_name -> nas.v1.CifsShare
+	17, // 5: nas.v1.UpdateCifsShareRequest.update_mask:type_name -> google.protobuf.FieldMask
+	10, // 6: nas.v1.ListWebdavSharesResponse.webdav_shares:type_name -> nas.v1.WebdavShare
+	10, // 7: nas.v1.CreateWebdavShareRequest.webdav_share:type_name -> nas.v1.WebdavShare
+	10, // 8: nas.v1.UpdateWebdavShareRequest.webdav_share:type_name -> nas.v1.WebdavShare
+	17, // 9: nas.v1.UpdateWebdavShareRequest.update_mask:type_name -> google.protobuf.FieldMask
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_nas_v1_share_proto_init() }
@@ -1015,7 +1359,7 @@ func file_nas_v1_share_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nas_v1_share_proto_rawDesc), len(file_nas_v1_share_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

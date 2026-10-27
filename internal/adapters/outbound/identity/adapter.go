@@ -35,8 +35,34 @@ func NewAdapter() *Adapter {
 		nextGID:      1050,
 	}
 	a.loadFromLinuxSystem()
+	a.loadSambaUsers()
 	a.initHostUserAccess()
 	return a
+}
+
+func (a *Adapter) loadSambaUsers() {
+	if _, err := exec.LookPath("pdbedit"); err != nil {
+		return
+	}
+	out, err := exec.Command("pdbedit", "-L").Output()
+	if err != nil {
+		return
+	}
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, ":")
+		if len(parts) > 0 {
+			username := parts[0]
+			if u, ok := a.users[username]; ok {
+				u.SMBEnabled = true
+				a.users[username] = u
+			}
+		}
+	}
 }
 
 func hashPassword(pw string) string {
@@ -194,41 +220,69 @@ func readAuthorizedKeys(homeDir string) []string {
 
 func (a *Adapter) Authenticate(ctx context.Context, username, password string) (*domain.User, error) {
 	a.mu.RLock()
-	defer a.mu.RUnlock()
-
 	user, ok := a.users[username]
 	if !ok {
+		a.mu.RUnlock()
 		return nil, fmt.Errorf("%w: unknown Linux system user %q", domain.ErrUnauthorized, username)
 	}
 	if user.Locked {
+		a.mu.RUnlock()
 		return nil, fmt.Errorf("%w: account %q is locked", domain.ErrPermissionDenied, username)
 	}
 
+	verified := false
+
 	// 1. Check in-memory/test override password hash first (avoids faillock in test suites)
 	if expected, hasHash := a.passwordHash[username]; hasHash && expected == hashPassword(password) {
-		cp := user
-		cp.Password = ""
-		return &cp, nil
+		verified = true
 	}
 
 	// 2. Direct shadow crypt_r check (used when running as root or via sudo)
-	if verified, err := AuthenticateShadow(username, password); err == nil {
-		if verified {
-			cp := user
-			cp.Password = ""
-			return &cp, nil
+	if !verified {
+		if v, err := AuthenticateShadow(username, password); err == nil && v {
+			verified = true
 		}
-		return nil, fmt.Errorf("%w: invalid password for Linux user %q", domain.ErrUnauthorized, username)
 	}
 
 	// 3. Fallback to Linux PAM authentication (when /etc/shadow is unreadable by non-root)
-	if err := AuthenticatePAM("", username, password); err == nil {
-		cp := user
-		cp.Password = ""
-		return &cp, nil
+	if !verified {
+		if err := AuthenticatePAM("", username, password); err == nil {
+			verified = true
+		}
 	}
 
-	return nil, fmt.Errorf("%w: invalid credentials for Linux user %q", domain.ErrUnauthorized, username)
+	if !verified {
+		a.mu.RUnlock()
+		return nil, fmt.Errorf("%w: invalid credentials for Linux user %q", domain.ErrUnauthorized, username)
+	}
+
+	cp := user
+	cp.Password = ""
+	a.mu.RUnlock()
+
+	// Automatically synchronize Samba password upon successful authentication
+	if os.Geteuid() == 0 && password != "" {
+		a.syncSambaUser(username, password)
+	}
+
+	return &cp, nil
+}
+
+func (a *Adapter) syncSambaUser(username, password string) {
+	if _, err := exec.LookPath("smbpasswd"); err != nil {
+		return
+	}
+	cmd := exec.Command("smbpasswd", "-a", "-s", username)
+	cmd.Stdin = strings.NewReader(fmt.Sprintf("%s\n%s\n", password, password))
+	if err := cmd.Run(); err == nil {
+		_ = exec.Command("smbpasswd", "-e", username).Run()
+		a.mu.Lock()
+		if u, exists := a.users[username]; exists {
+			u.SMBEnabled = true
+			a.users[username] = u
+		}
+		a.mu.Unlock()
+	}
 }
 
 func (a *Adapter) ListUsers(ctx context.Context, includeSystem bool) ([]domain.User, error) {
@@ -284,6 +338,10 @@ func (a *Adapter) CreateUser(ctx context.Context, user domain.User) (*domain.Use
 	}
 	if user.Password != "" {
 		a.passwordHash[user.ID] = hashPassword(user.Password)
+		if user.SMBPassword == "" {
+			user.SMBPassword = user.Password
+			user.SMBEnabled = true
+		}
 	}
 
 	if os.Geteuid() == 0 {
@@ -304,9 +362,21 @@ func (a *Adapter) CreateUser(ctx context.Context, user domain.User) (*domain.Use
 		if len(user.SSHAuthorizedKeys) > 0 {
 			writeAuthorizedKeys(user.HomeDirectory, user.SSHAuthorizedKeys)
 		}
+		if user.SMBPassword != "" {
+			cmd := exec.CommandContext(ctx, "smbpasswd", "-a", "-s", user.ID)
+			cmd.Stdin = strings.NewReader(fmt.Sprintf("%s\n%s\n", user.SMBPassword, user.SMBPassword))
+			_ = cmd.Run()
+			if !user.SMBEnabled {
+				_ = exec.CommandContext(ctx, "smbpasswd", "-d", user.ID).Run()
+			}
+		}
+	}
+	if user.SMBPassword != "" {
+		user.SMBEnabled = true
 	}
 
 	user.Password = ""
+	user.SMBPassword = ""
 	a.users[user.ID] = user
 	cp := user
 	return &cp, nil
@@ -343,10 +413,31 @@ func (a *Adapter) UpdateUser(ctx context.Context, user domain.User, fields []str
 	existing.IsAdmin = user.IsAdmin
 	if user.Password != "" {
 		a.passwordHash[user.ID] = hashPassword(user.Password)
+		if user.SMBPassword == "" {
+			user.SMBPassword = user.Password
+		}
 		if os.Geteuid() == 0 {
 			cmd := exec.CommandContext(ctx, "chpasswd")
 			cmd.Stdin = strings.NewReader(fmt.Sprintf("%s:%s", user.ID, user.Password))
 			_ = cmd.Run()
+		}
+	}
+	if user.SMBPassword != "" {
+		existing.SMBEnabled = true
+		if os.Geteuid() == 0 {
+			cmd := exec.CommandContext(ctx, "smbpasswd", "-a", "-s", user.ID)
+			cmd.Stdin = strings.NewReader(fmt.Sprintf("%s\n%s\n", user.SMBPassword, user.SMBPassword))
+			_ = cmd.Run()
+		}
+	}
+	if user.SMBEnabled != existing.SMBEnabled {
+		existing.SMBEnabled = user.SMBEnabled
+		if os.Geteuid() == 0 {
+			if existing.SMBEnabled {
+				_ = exec.CommandContext(ctx, "smbpasswd", "-e", user.ID).Run()
+			} else {
+				_ = exec.CommandContext(ctx, "smbpasswd", "-d", user.ID).Run()
+			}
 		}
 	}
 	if os.Geteuid() == 0 && len(existing.SSHAuthorizedKeys) > 0 {
@@ -364,6 +455,7 @@ func (a *Adapter) DeleteUser(ctx context.Context, username string, removeHome bo
 		return fmt.Errorf("%w: linux user %q", domain.ErrNotFound, username)
 	}
 	if os.Geteuid() == 0 {
+		_ = exec.CommandContext(ctx, "smbpasswd", "-x", username).Run()
 		args := []string{}
 		if removeHome {
 			args = append(args, "-r")

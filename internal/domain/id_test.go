@@ -73,39 +73,39 @@ func TestGenerateNanosecondID(t *testing.T) {
 	// 3. Disk naming helper
 	vmID := "my-ubuntu-vm"
 	diskName := domain.GenerateVMDiskName(vmID, 0)
-	expectedDiskName := "vm-my-ubuntu-vm-disk-0"
+	expectedDiskName := "vm-my-ubuntu-vm-01"
 	if diskName != expectedDiskName {
 		t.Fatalf("expected %q, got %q", expectedDiskName, diskName)
 	}
 
 	zvolPath := domain.GenerateZvolDiskPath("mypool", vmID, 0)
-	expectedZvol := "/dev/zvol/mypool/vms/my-ubuntu-vm"
+	expectedZvol := "/dev/zvol/mypool/vms/my-ubuntu-vm-01"
 	if zvolPath != expectedZvol {
 		t.Fatalf("expected %q, got %q", expectedZvol, zvolPath)
 	}
 
 	zvolPath1 := domain.GenerateZvolDiskPath("mypool", vmID, 1)
-	expectedZvol1 := "/dev/zvol/mypool/vms/my-ubuntu-vm-disk-1"
+	expectedZvol1 := "/dev/zvol/mypool/vms/my-ubuntu-vm-02"
 	if zvolPath1 != expectedZvol1 {
 		t.Fatalf("expected %q, got %q", expectedZvol1, zvolPath1)
 	}
 
 	vmFilePath := domain.GenerateVMDiskFilePath("mypool", vmID, 0)
-	expectedFilePath := "/nas/mypool/vms/my-ubuntu-vm/disk-0.raw"
+	expectedFilePath := "/mnt/mypool/vms/my-ubuntu-vm/disk-01.raw"
 	if vmFilePath != expectedFilePath {
 		t.Fatalf("expected %q, got %q", expectedFilePath, vmFilePath)
 	}
 
 	// 4. LXC containers rootfs helper
 	lxcRootfs := domain.GenerateLxcRootfsPath("mypool", "debian-noble")
-	expectedLxc := "/nas/mypool/containers/debian-noble/rootfs"
+	expectedLxc := "/mnt/mypool/containers/debian-noble/rootfs"
 	if lxcRootfs != expectedLxc {
 		t.Fatalf("expected %q, got %q", expectedLxc, lxcRootfs)
 	}
 
 	// 5. Docker apps helper
 	appdataPath := domain.GenerateAppdataPath("mypool", "Nextcloud Hub")
-	expectedAppdata := "/nas/mypool/apps/nextcloud-hub"
+	expectedAppdata := "/mnt/mypool/apps/nextcloud-hub"
 	if appdataPath != expectedAppdata {
 		t.Fatalf("expected %q, got %q", expectedAppdata, appdataPath)
 	}

@@ -129,6 +129,8 @@ type CifsSharePort interface {
 	CreateShare(ctx context.Context, share domain.CifsShare) (*domain.CifsShare, error)
 	UpdateShare(ctx context.Context, share domain.CifsShare, fields []string) (*domain.CifsShare, error)
 	DeleteShare(ctx context.Context, id string) error
+	GetGlobalConfig(ctx context.Context) (*domain.CifsGlobalConfig, error)
+	UpdateGlobalConfig(ctx context.Context, config domain.CifsGlobalConfig, fields []string) (*domain.CifsGlobalConfig, error)
 }
 
 type WebdavSharePort interface {
@@ -166,6 +168,15 @@ type CatalogPort interface {
 type DockerConfigPort interface {
 	GetConfig(ctx context.Context) (*domain.DockerConfig, error)
 	UpdateConfig(ctx context.Context, cfg domain.DockerConfig) (*domain.DockerConfig, error)
+}
+
+// DockerRegistryPort manages stored container registry credentials used for image pulls.
+type DockerRegistryPort interface {
+	ListRegistries(ctx context.Context) ([]domain.DockerRegistry, error)
+	GetRegistry(ctx context.Context, id string) (*domain.DockerRegistry, error)
+	CreateRegistry(ctx context.Context, reg domain.DockerRegistry) (*domain.DockerRegistry, error)
+	UpdateRegistry(ctx context.Context, reg domain.DockerRegistry, fields []string) (*domain.DockerRegistry, error)
+	DeleteRegistry(ctx context.Context, id string) error
 }
 
 type FileSystemPort interface {

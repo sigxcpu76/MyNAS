@@ -38,6 +38,8 @@ const userForm = reactive({
   homeDirectory: '',
   shell: '/bin/bash',
   password: '',
+  smbPassword: '',
+  smbEnabled: true,
   sshEnabled: true,
   sshPasswordAuth: true,
   sshAuthorizedKeysText: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINasApplianceKey admin@nas',
@@ -52,6 +54,8 @@ const editUserForm = reactive({
   supplementaryGroupsText: '',
   shell: '/bin/bash',
   password: '',
+  smbPassword: '',
+  smbEnabled: false,
   sshEnabled: true,
   sshPasswordAuth: true,
   sshAuthorizedKeysText: '',
@@ -102,10 +106,13 @@ async function handleCreateUser() {
       sshAuthorizedKeys,
       locked: userForm.locked,
       isAdmin: userForm.isAdmin,
+      smbEnabled: userForm.smbEnabled,
+      smbPassword: userForm.smbPassword || userForm.password,
     });
     notify('success', `Created Linux user ${created.username} (UID ${created.uid})`);
     userForm.userId = '';
     userForm.password = '';
+    userForm.smbPassword = '';
     showCreateUser.value = false;
     await refreshIdentity();
   } catch (err: any) {
@@ -120,6 +127,8 @@ function startEditUser(u: User) {
   editUserForm.supplementaryGroupsText = (u.supplementaryGroups || []).join(', ');
   editUserForm.shell = u.shell || '/bin/bash';
   editUserForm.password = '';
+  editUserForm.smbPassword = '';
+  editUserForm.smbEnabled = Boolean(u.smbEnabled);
   editUserForm.sshEnabled = u.sshEnabled;
   editUserForm.sshPasswordAuth = u.sshPasswordAuth;
   editUserForm.sshAuthorizedKeysText = (u.sshAuthorizedKeys || []).join('\n');
@@ -149,6 +158,7 @@ async function handleSaveUserEdit() {
       'ssh_authorized_keys',
       'locked',
       'is_admin',
+      'smb_enabled',
     ];
     const updates: Partial<User> = {
       fullName: editUserForm.fullName,
@@ -160,10 +170,15 @@ async function handleSaveUserEdit() {
       sshAuthorizedKeys,
       locked: editUserForm.locked,
       isAdmin: editUserForm.isAdmin,
+      smbEnabled: editUserForm.smbEnabled,
     };
     if (editUserForm.password) {
       updates.password = editUserForm.password;
       mask.push('password');
+    }
+    if (editUserForm.smbPassword) {
+      updates.smbPassword = editUserForm.smbPassword;
+      mask.push('smb_password');
     }
 
     await services.identity.updateUser(editingUser.value.name, updates, mask);
@@ -333,6 +348,10 @@ async function handleDeleteGroup(g: Group) {
             <label>Password</label>
             <input v-model="userForm.password" type="password" class="input" placeholder="••••••••" />
           </div>
+          <div class="form-group">
+            <label>Samba / SMB Password</label>
+            <input v-model="userForm.smbPassword" type="password" class="input" placeholder="Leave blank to match system password" />
+          </div>
         </div>
 
         <div class="form-group" style="margin-top: 12px">
@@ -346,7 +365,10 @@ async function handleDeleteGroup(g: Group) {
         </div>
 
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; flex-wrap: wrap; gap: 12px">
-          <div style="display: flex; gap: 16px; font-size: 12.5px">
+          <div style="display: flex; gap: 16px; font-size: 12.5px; flex-wrap: wrap">
+            <label style="display: flex; align-items: center; gap: 6px">
+              <input v-model="userForm.smbEnabled" type="checkbox" /> Enable Samba / SMB
+            </label>
             <label style="display: flex; align-items: center; gap: 6px">
               <input v-model="userForm.sshEnabled" type="checkbox" /> Enable SSH Login
             </label>
@@ -405,6 +427,10 @@ async function handleDeleteGroup(g: Group) {
             <label>New Password (leave blank to keep current)</label>
             <input v-model="editUserForm.password" type="password" class="input" />
           </div>
+          <div class="form-group">
+            <label>New Samba / SMB Password</label>
+            <input v-model="editUserForm.smbPassword" type="password" class="input" placeholder="Leave blank to keep current" />
+          </div>
         </div>
 
         <div class="form-group" style="margin-top: 10px">
@@ -424,6 +450,9 @@ async function handleDeleteGroup(g: Group) {
             </label>
             <label style="display: flex; align-items: center; gap: 5px">
               <input v-model="editUserForm.sshPasswordAuth" type="checkbox" /> SSH Password Auth
+            </label>
+            <label style="display: flex; align-items: center; gap: 5px">
+              <input v-model="editUserForm.smbEnabled" type="checkbox" /> SMB Access
             </label>
             <label style="display: flex; align-items: center; gap: 5px">
               <input v-model="editUserForm.locked" type="checkbox" /> Lock Account
@@ -525,6 +554,9 @@ async function handleDeleteGroup(g: Group) {
               <td>
                 <span class="badge" :class="u.locked ? 'badge-danger' : 'badge-success'">
                   {{ u.locked ? 'LOCKED' : 'ACTIVE' }}
+                </span>
+                <span class="badge" :class="u.smbEnabled ? 'badge-purple' : 'badge-neutral'" style="margin-left: 4px">
+                  SMB: {{ u.smbEnabled ? 'ON' : 'OFF' }}
                 </span>
               </td>
               <td>

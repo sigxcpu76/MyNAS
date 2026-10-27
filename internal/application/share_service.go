@@ -49,6 +49,14 @@ func (s *ShareService) DeleteCifsShare(ctx context.Context, id string) error {
 	return s.cifs.DeleteShare(ctx, id)
 }
 
+func (s *ShareService) GetCifsGlobalConfig(ctx context.Context) (*domain.CifsGlobalConfig, error) {
+	return s.cifs.GetGlobalConfig(ctx)
+}
+
+func (s *ShareService) UpdateCifsGlobalConfig(ctx context.Context, config domain.CifsGlobalConfig, fields []string) (*domain.CifsGlobalConfig, error) {
+	return s.cifs.UpdateGlobalConfig(ctx, config, fields)
+}
+
 func (s *ShareService) ListWebdavShares(ctx context.Context) ([]domain.WebdavShare, error) {
 	return s.webdav.ListShares(ctx)
 }

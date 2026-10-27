@@ -140,6 +140,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	stateDir := resolveStateDir(cfg.Server.StateDir)
 	if activeMainPool != "" {
 		candidates := []string{
+			filepath.Join("/mnt", activeMainPool, cfg.System.SystemDataset),
 			filepath.Join("/nas", activeMainPool, cfg.System.SystemDataset),
 			filepath.Join("/" + activeMainPool, cfg.System.SystemDataset),
 		}
@@ -196,16 +197,30 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 
 	logger.Info("filesystem unit state store initialized", "path", stateDir)
 
+	startupBegin := time.Now()
+	stepStart := time.Now()
+	// step logs how long the previous startup phase took, then restarts the phase timer.
+	step := func(name string) {
+		logger.Info("startup progress", "step", name, "took", time.Since(stepStart).Round(time.Millisecond).String(), "total", time.Since(startupBegin).Round(time.Millisecond).String())
+		stepStart = time.Now()
+	}
+
 	kvmAdapter := kvm.NewAdapterWithStateDir(vmUnitsDir)
 	kvmAdapter.SetLogger(logger.With("subsystem", "libvirt"))
+	step("kvm adapter initialized")
 	dockerAdapter := docker.NewAdapterWithStateDir(dockerUnitsDir)
 	dockerAdapter.SetLogger(logger.With("subsystem", "docker"))
+	step("docker adapter initialized (compose detection, persisted units)")
 	lxcAdapter := lxc.NewAdapter()
+	step("lxc adapter initialized")
 	cifsAdapter := share.NewCifsAdapter(sharesDir)
+	step("cifs adapter initialized (samba config load)")
 	webdavAdapter := share.NewWebdavAdapter()
 	identityAdapter := identity.NewAdapter()
+	step("webdav and identity adapters initialized")
 	catalogCacheDir := filepath.Join(stateDir, "catalog")
 	catalogAdapter := catalog.NewAdapter(catalogCacheDir)
+	step("catalog adapter initialized (cache load)")
 
 	dockerAdapter.SetZfsPort(zfsAdapter)
 	if activeMainPool != "" {
@@ -216,6 +231,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	if cfg, err := dockerAdapter.GetConfig(ctx); err == nil && cfg != nil && cfg.Pool != "" {
 		catalogAdapter.SetAppsPool(cfg.Pool)
 	}
+	step("docker config resolved (zfs pool/dataset lookup)")
 
 	// 2. Event Bus & Real-Time Notification Stream
 	eventBus := application.NewEventBus()
@@ -223,6 +239,8 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 		logger.Debug("docker event captured", "action", evt.Action, "resource", evt.Resource)
 		eventBus.Publish(evt)
 	})
+
+	step("docker event watcher started")
 
 	// 2b. Application Services (Hexagonal Core Use-Cases)
 	prereqSvc := application.NewPrerequisiteService(prereqAdapter)
@@ -237,8 +255,11 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	identitySvc := application.NewIdentityService(identityAdapter, opts.JWTSecret)
 	catalogSvc := application.NewCatalogService(catalogAdapter)
 
+	step("application services constructed")
+
 	// 3. Inbound Adapters (Driving Ports: gRPC + gRPC-Gateway + noVNC WS + WebDAV + Embedded Vue UI + SSE Events)
 	nasGRPC := grpcadapter.NewServer(systemSvc, prereqSvc, diskSvc, zfsSvc, kvmSvc, dockerSvc, dockerAppSvc, lxcSvc, shareSvc, identitySvc, catalogSvc)
+	nasGRPC.SetRegistryService(application.NewDockerRegistryService(dockerAdapter))
 
 	rawGRPCServer := grpc.NewServer(
 		grpc.UnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
@@ -257,16 +278,21 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 		return err
 	}
 
+	step("grpc server and web UI assets ready")
+
 	storageRepoSvc := application.NewStorageRepoService(zfsAdapter, "")
 	if activeMainPool != "" {
 		storageRepoSvc.SetMainPool(activeMainPool)
 		_ = storageRepoSvc.EnsureRepositories(ctx)
 	}
+	step("storage repositories ensured (isos, lxc-templates datasets)")
 
 	gateway, err := httpadapter.NewGateway(ctx, nasGRPC, kvmSvc, dockerSvc, storageRepoSvc, webdavAdapter, uiFS, eventBus)
 	if err != nil {
 		return err
 	}
+
+	step("http gateway created")
 
 	if cfg.Server.GRPCPort > 0 {
 		grpcAddr := fmt.Sprintf(":%d", cfg.Server.GRPCPort)
@@ -293,6 +319,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	errCh := make(chan error, 1)
 	go func() {
 		logger.Info("nasctl server started",
+			"startup_total", time.Since(startupBegin).Round(time.Millisecond).String(),
 			"http_port", cfg.Server.HTTPPort,
 			"grpc_port", cfg.Server.GRPCPort,
 			"tty_mode", logging.IsTTY(rootOpts.ErrOut),

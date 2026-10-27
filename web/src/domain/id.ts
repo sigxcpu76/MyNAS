@@ -39,25 +39,24 @@ export function generateNanosecondId(): string {
 
 /**
  * Generates a standardized disk name based on the VM ID and disk index.
- * E.g. "vm-my-vm-disk-0"
+ * E.g. "vm-my-vm-01"
  */
 export function generateVMDiskName(vmId: string, diskIndex = 0): string {
   const cleanId = toZfsSafeSlug(vmId.replace(/^virtualMachines\//, '').trim()) || 'vm';
-  return `vm-${cleanId}-disk-${diskIndex}`;
+  const num = String(diskIndex + 1).padStart(2, '0');
+  return `vm-${cleanId}-${num}`;
 }
 
 /**
  * Generates a standard ZFS ZVol block device path for a VM disk on a storage pool.
- * All VMs are rooted to the main pool under /vms/<vm_id>.
- * E.g. "/dev/zvol/mypool/vms/my-vm" or "/dev/zvol/mypool/vms/my-vm-disk-1"
+ * All VMs are rooted to the main pool under /vms/<vm_id>-<diskIndex>.
+ * E.g. "/dev/zvol/mypool/vms/my-vm-01" or "/dev/zvol/mypool/vms/my-vm-02"
  */
 export function generateZvolDiskPath(pool: string, vmId: string, diskIndex = 0): string {
   const cleanPool = pool.replace(/^zfsPools\//, '').trim() || 'tank';
   const cleanId = toZfsSafeSlug(vmId.replace(/^virtualMachines\//, '').trim()) || 'vm';
-  if (diskIndex === 0) {
-    return `/dev/zvol/${cleanPool}/vms/${cleanId}`;
-  }
-  return `/dev/zvol/${cleanPool}/vms/${cleanId}-disk-${diskIndex}`;
+  const num = String(diskIndex + 1).padStart(2, '0');
+  return `/dev/zvol/${cleanPool}/vms/${cleanId}-${num}`;
 }
 
 /**
@@ -67,37 +66,38 @@ export function generateZvolDiskPath(pool: string, vmId: string, diskIndex = 0):
 export function generateVMPath(mainPool: string, vmId: string): string {
   const cleanPool = mainPool.replace(/^zfsPools\//, '').trim() || 'tank';
   const cleanId = toZfsSafeSlug(vmId.replace(/^virtualMachines\//, '').trim()) || 'vm';
-  return `/nas/${cleanPool}/vms/${cleanId}`;
+  return `/mnt/${cleanPool}/vms/${cleanId}`;
 }
 
 /**
  * Generates the default primary disk image path for a VM on the main storage pool.
  * All VMs are rooted to the main pool under /vms/<vm_id>.
- * E.g. "/nas/mypool/vms/my-vm/disk-0.raw"
+ * E.g. "/mnt/mypool/vms/my-vm/disk-0.raw"
  */
 export function generateVMDiskFilePath(mainPool: string, vmId: string, diskIndex = 0): string {
   const root = generateVMPath(mainPool, vmId);
-  return `${root}/disk-${diskIndex}.raw`;
+  const num = String(diskIndex + 1).padStart(2, '0');
+  return `${root}/disk-${num}.raw`;
 }
 
 /**
  * Generates a standard LXC rootfs path on the main pool.
  * All LXC containers are rooted to the main pool under /containers/<container_id>.
- * E.g. "/nas/mypool/containers/my-container/rootfs"
+ * E.g. "/mnt/mypool/containers/my-container/rootfs"
  */
 export function generateLxcRootfsPath(mainPool: string, containerId: string): string {
   const cleanPool = mainPool.replace(/^zfsPools\//, '').trim() || 'tank';
   const cleanId = toZfsSafeSlug(containerId.replace(/^lxcContainers\//, '').trim()) || 'container';
-  return `/nas/${cleanPool}/containers/${cleanId}/rootfs`;
+  return `/mnt/${cleanPool}/containers/${cleanId}/rootfs`;
 }
 
 /**
  * Generates a standard application persistent storage path on the main pool.
  * All applications are rooted to the main pool under /apps/<app_id>.
- * E.g. "/nas/mypool/apps/nextcloud"
+ * E.g. "/mnt/mypool/apps/nextcloud"
  */
 export function generateAppdataPath(mainPool: string, appId: string): string {
   const cleanPool = mainPool.replace(/^zfsPools\//, '').trim() || 'tank';
   const cleanId = toZfsSafeSlug(appId.replace(/^dockerApps\//, '').trim()) || 'app';
-  return `/nas/${cleanPool}/apps/${cleanId}`;
+  return `/mnt/${cleanPool}/apps/${cleanId}`;
 }

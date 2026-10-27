@@ -36,6 +36,8 @@ message User {
   bool system_account = 14 [(google.api.field_behavior) = OUTPUT_ONLY];
   string password = 15 [(google.api.field_behavior) = INPUT_ONLY];
   bool is_admin = 16;
+  bool smb_enabled = 17;
+  string smb_password = 18 [(google.api.field_behavior) = INPUT_ONLY];
 }
 
 message ListUsersRequest {

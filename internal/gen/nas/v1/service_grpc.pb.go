@@ -93,6 +93,11 @@ const (
 	NasService_UpdateDockerConfig_FullMethodName             = "/nas.v1.NasService/UpdateDockerConfig"
 	NasService_CheckHostPort_FullMethodName                  = "/nas.v1.NasService/CheckHostPort"
 	NasService_CheckHostPorts_FullMethodName                 = "/nas.v1.NasService/CheckHostPorts"
+	NasService_ListDockerRegistries_FullMethodName           = "/nas.v1.NasService/ListDockerRegistries"
+	NasService_GetDockerRegistry_FullMethodName              = "/nas.v1.NasService/GetDockerRegistry"
+	NasService_CreateDockerRegistry_FullMethodName           = "/nas.v1.NasService/CreateDockerRegistry"
+	NasService_UpdateDockerRegistry_FullMethodName           = "/nas.v1.NasService/UpdateDockerRegistry"
+	NasService_DeleteDockerRegistry_FullMethodName           = "/nas.v1.NasService/DeleteDockerRegistry"
 	NasService_ListFileSystemDirectories_FullMethodName      = "/nas.v1.NasService/ListFileSystemDirectories"
 	NasService_ListLxcContainers_FullMethodName              = "/nas.v1.NasService/ListLxcContainers"
 	NasService_GetLxcContainer_FullMethodName                = "/nas.v1.NasService/GetLxcContainer"
@@ -106,6 +111,8 @@ const (
 	NasService_CreateCifsShare_FullMethodName                = "/nas.v1.NasService/CreateCifsShare"
 	NasService_UpdateCifsShare_FullMethodName                = "/nas.v1.NasService/UpdateCifsShare"
 	NasService_DeleteCifsShare_FullMethodName                = "/nas.v1.NasService/DeleteCifsShare"
+	NasService_GetCifsGlobalConfig_FullMethodName            = "/nas.v1.NasService/GetCifsGlobalConfig"
+	NasService_UpdateCifsGlobalConfig_FullMethodName         = "/nas.v1.NasService/UpdateCifsGlobalConfig"
 	NasService_ListWebdavShares_FullMethodName               = "/nas.v1.NasService/ListWebdavShares"
 	NasService_GetWebdavShare_FullMethodName                 = "/nas.v1.NasService/GetWebdavShare"
 	NasService_CreateWebdavShare_FullMethodName              = "/nas.v1.NasService/CreateWebdavShare"
@@ -209,6 +216,11 @@ type NasServiceClient interface {
 	UpdateDockerConfig(ctx context.Context, in *UpdateDockerConfigRequest, opts ...grpc.CallOption) (*DockerConfig, error)
 	CheckHostPort(ctx context.Context, in *CheckHostPortRequest, opts ...grpc.CallOption) (*CheckHostPortResponse, error)
 	CheckHostPorts(ctx context.Context, in *CheckHostPortsRequest, opts ...grpc.CallOption) (*CheckHostPortsResponse, error)
+	ListDockerRegistries(ctx context.Context, in *ListDockerRegistriesRequest, opts ...grpc.CallOption) (*ListDockerRegistriesResponse, error)
+	GetDockerRegistry(ctx context.Context, in *GetDockerRegistryRequest, opts ...grpc.CallOption) (*DockerRegistry, error)
+	CreateDockerRegistry(ctx context.Context, in *CreateDockerRegistryRequest, opts ...grpc.CallOption) (*DockerRegistry, error)
+	UpdateDockerRegistry(ctx context.Context, in *UpdateDockerRegistryRequest, opts ...grpc.CallOption) (*DockerRegistry, error)
+	DeleteDockerRegistry(ctx context.Context, in *DeleteDockerRegistryRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	ListFileSystemDirectories(ctx context.Context, in *ListFileSystemDirectoriesRequest, opts ...grpc.CallOption) (*ListFileSystemDirectoriesResponse, error)
 	ListLxcContainers(ctx context.Context, in *ListLxcContainersRequest, opts ...grpc.CallOption) (*ListLxcContainersResponse, error)
 	GetLxcContainer(ctx context.Context, in *GetLxcContainerRequest, opts ...grpc.CallOption) (*LxcContainer, error)
@@ -222,6 +234,8 @@ type NasServiceClient interface {
 	CreateCifsShare(ctx context.Context, in *CreateCifsShareRequest, opts ...grpc.CallOption) (*CifsShare, error)
 	UpdateCifsShare(ctx context.Context, in *UpdateCifsShareRequest, opts ...grpc.CallOption) (*CifsShare, error)
 	DeleteCifsShare(ctx context.Context, in *DeleteCifsShareRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	GetCifsGlobalConfig(ctx context.Context, in *GetCifsGlobalConfigRequest, opts ...grpc.CallOption) (*CifsGlobalConfig, error)
+	UpdateCifsGlobalConfig(ctx context.Context, in *UpdateCifsGlobalConfigRequest, opts ...grpc.CallOption) (*CifsGlobalConfig, error)
 	ListWebdavShares(ctx context.Context, in *ListWebdavSharesRequest, opts ...grpc.CallOption) (*ListWebdavSharesResponse, error)
 	GetWebdavShare(ctx context.Context, in *GetWebdavShareRequest, opts ...grpc.CallOption) (*WebdavShare, error)
 	CreateWebdavShare(ctx context.Context, in *CreateWebdavShareRequest, opts ...grpc.CallOption) (*WebdavShare, error)
@@ -980,6 +994,56 @@ func (c *nasServiceClient) CheckHostPorts(ctx context.Context, in *CheckHostPort
 	return out, nil
 }
 
+func (c *nasServiceClient) ListDockerRegistries(ctx context.Context, in *ListDockerRegistriesRequest, opts ...grpc.CallOption) (*ListDockerRegistriesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListDockerRegistriesResponse)
+	err := c.cc.Invoke(ctx, NasService_ListDockerRegistries_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) GetDockerRegistry(ctx context.Context, in *GetDockerRegistryRequest, opts ...grpc.CallOption) (*DockerRegistry, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DockerRegistry)
+	err := c.cc.Invoke(ctx, NasService_GetDockerRegistry_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) CreateDockerRegistry(ctx context.Context, in *CreateDockerRegistryRequest, opts ...grpc.CallOption) (*DockerRegistry, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DockerRegistry)
+	err := c.cc.Invoke(ctx, NasService_CreateDockerRegistry_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) UpdateDockerRegistry(ctx context.Context, in *UpdateDockerRegistryRequest, opts ...grpc.CallOption) (*DockerRegistry, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DockerRegistry)
+	err := c.cc.Invoke(ctx, NasService_UpdateDockerRegistry_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) DeleteDockerRegistry(ctx context.Context, in *DeleteDockerRegistryRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, NasService_DeleteDockerRegistry_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nasServiceClient) ListFileSystemDirectories(ctx context.Context, in *ListFileSystemDirectoriesRequest, opts ...grpc.CallOption) (*ListFileSystemDirectoriesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListFileSystemDirectoriesResponse)
@@ -1104,6 +1168,26 @@ func (c *nasServiceClient) DeleteCifsShare(ctx context.Context, in *DeleteCifsSh
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, NasService_DeleteCifsShare_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) GetCifsGlobalConfig(ctx context.Context, in *GetCifsGlobalConfigRequest, opts ...grpc.CallOption) (*CifsGlobalConfig, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CifsGlobalConfig)
+	err := c.cc.Invoke(ctx, NasService_GetCifsGlobalConfig_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) UpdateCifsGlobalConfig(ctx context.Context, in *UpdateCifsGlobalConfigRequest, opts ...grpc.CallOption) (*CifsGlobalConfig, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CifsGlobalConfig)
+	err := c.cc.Invoke(ctx, NasService_UpdateCifsGlobalConfig_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1373,6 +1457,11 @@ type NasServiceServer interface {
 	UpdateDockerConfig(context.Context, *UpdateDockerConfigRequest) (*DockerConfig, error)
 	CheckHostPort(context.Context, *CheckHostPortRequest) (*CheckHostPortResponse, error)
 	CheckHostPorts(context.Context, *CheckHostPortsRequest) (*CheckHostPortsResponse, error)
+	ListDockerRegistries(context.Context, *ListDockerRegistriesRequest) (*ListDockerRegistriesResponse, error)
+	GetDockerRegistry(context.Context, *GetDockerRegistryRequest) (*DockerRegistry, error)
+	CreateDockerRegistry(context.Context, *CreateDockerRegistryRequest) (*DockerRegistry, error)
+	UpdateDockerRegistry(context.Context, *UpdateDockerRegistryRequest) (*DockerRegistry, error)
+	DeleteDockerRegistry(context.Context, *DeleteDockerRegistryRequest) (*emptypb.Empty, error)
 	ListFileSystemDirectories(context.Context, *ListFileSystemDirectoriesRequest) (*ListFileSystemDirectoriesResponse, error)
 	ListLxcContainers(context.Context, *ListLxcContainersRequest) (*ListLxcContainersResponse, error)
 	GetLxcContainer(context.Context, *GetLxcContainerRequest) (*LxcContainer, error)
@@ -1386,6 +1475,8 @@ type NasServiceServer interface {
 	CreateCifsShare(context.Context, *CreateCifsShareRequest) (*CifsShare, error)
 	UpdateCifsShare(context.Context, *UpdateCifsShareRequest) (*CifsShare, error)
 	DeleteCifsShare(context.Context, *DeleteCifsShareRequest) (*emptypb.Empty, error)
+	GetCifsGlobalConfig(context.Context, *GetCifsGlobalConfigRequest) (*CifsGlobalConfig, error)
+	UpdateCifsGlobalConfig(context.Context, *UpdateCifsGlobalConfigRequest) (*CifsGlobalConfig, error)
 	ListWebdavShares(context.Context, *ListWebdavSharesRequest) (*ListWebdavSharesResponse, error)
 	GetWebdavShare(context.Context, *GetWebdavShareRequest) (*WebdavShare, error)
 	CreateWebdavShare(context.Context, *CreateWebdavShareRequest) (*WebdavShare, error)
@@ -1633,6 +1724,21 @@ func (UnimplementedNasServiceServer) CheckHostPort(context.Context, *CheckHostPo
 func (UnimplementedNasServiceServer) CheckHostPorts(context.Context, *CheckHostPortsRequest) (*CheckHostPortsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CheckHostPorts not implemented")
 }
+func (UnimplementedNasServiceServer) ListDockerRegistries(context.Context, *ListDockerRegistriesRequest) (*ListDockerRegistriesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListDockerRegistries not implemented")
+}
+func (UnimplementedNasServiceServer) GetDockerRegistry(context.Context, *GetDockerRegistryRequest) (*DockerRegistry, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetDockerRegistry not implemented")
+}
+func (UnimplementedNasServiceServer) CreateDockerRegistry(context.Context, *CreateDockerRegistryRequest) (*DockerRegistry, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateDockerRegistry not implemented")
+}
+func (UnimplementedNasServiceServer) UpdateDockerRegistry(context.Context, *UpdateDockerRegistryRequest) (*DockerRegistry, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateDockerRegistry not implemented")
+}
+func (UnimplementedNasServiceServer) DeleteDockerRegistry(context.Context, *DeleteDockerRegistryRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteDockerRegistry not implemented")
+}
 func (UnimplementedNasServiceServer) ListFileSystemDirectories(context.Context, *ListFileSystemDirectoriesRequest) (*ListFileSystemDirectoriesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListFileSystemDirectories not implemented")
 }
@@ -1671,6 +1777,12 @@ func (UnimplementedNasServiceServer) UpdateCifsShare(context.Context, *UpdateCif
 }
 func (UnimplementedNasServiceServer) DeleteCifsShare(context.Context, *DeleteCifsShareRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteCifsShare not implemented")
+}
+func (UnimplementedNasServiceServer) GetCifsGlobalConfig(context.Context, *GetCifsGlobalConfigRequest) (*CifsGlobalConfig, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetCifsGlobalConfig not implemented")
+}
+func (UnimplementedNasServiceServer) UpdateCifsGlobalConfig(context.Context, *UpdateCifsGlobalConfigRequest) (*CifsGlobalConfig, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateCifsGlobalConfig not implemented")
 }
 func (UnimplementedNasServiceServer) ListWebdavShares(context.Context, *ListWebdavSharesRequest) (*ListWebdavSharesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListWebdavShares not implemented")
@@ -3061,6 +3173,96 @@ func _NasService_CheckHostPorts_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NasService_ListDockerRegistries_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListDockerRegistriesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).ListDockerRegistries(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_ListDockerRegistries_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).ListDockerRegistries(ctx, req.(*ListDockerRegistriesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_GetDockerRegistry_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDockerRegistryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).GetDockerRegistry(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_GetDockerRegistry_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).GetDockerRegistry(ctx, req.(*GetDockerRegistryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_CreateDockerRegistry_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateDockerRegistryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).CreateDockerRegistry(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_CreateDockerRegistry_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).CreateDockerRegistry(ctx, req.(*CreateDockerRegistryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_UpdateDockerRegistry_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateDockerRegistryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).UpdateDockerRegistry(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_UpdateDockerRegistry_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).UpdateDockerRegistry(ctx, req.(*UpdateDockerRegistryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_DeleteDockerRegistry_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteDockerRegistryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).DeleteDockerRegistry(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_DeleteDockerRegistry_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).DeleteDockerRegistry(ctx, req.(*DeleteDockerRegistryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NasService_ListFileSystemDirectories_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListFileSystemDirectoriesRequest)
 	if err := dec(in); err != nil {
@@ -3291,6 +3493,42 @@ func _NasService_DeleteCifsShare_Handler(srv interface{}, ctx context.Context, d
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NasServiceServer).DeleteCifsShare(ctx, req.(*DeleteCifsShareRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_GetCifsGlobalConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCifsGlobalConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).GetCifsGlobalConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_GetCifsGlobalConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).GetCifsGlobalConfig(ctx, req.(*GetCifsGlobalConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_UpdateCifsGlobalConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateCifsGlobalConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).UpdateCifsGlobalConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_UpdateCifsGlobalConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).UpdateCifsGlobalConfig(ctx, req.(*UpdateCifsGlobalConfigRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -3919,6 +4157,26 @@ var NasService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NasService_CheckHostPorts_Handler,
 		},
 		{
+			MethodName: "ListDockerRegistries",
+			Handler:    _NasService_ListDockerRegistries_Handler,
+		},
+		{
+			MethodName: "GetDockerRegistry",
+			Handler:    _NasService_GetDockerRegistry_Handler,
+		},
+		{
+			MethodName: "CreateDockerRegistry",
+			Handler:    _NasService_CreateDockerRegistry_Handler,
+		},
+		{
+			MethodName: "UpdateDockerRegistry",
+			Handler:    _NasService_UpdateDockerRegistry_Handler,
+		},
+		{
+			MethodName: "DeleteDockerRegistry",
+			Handler:    _NasService_DeleteDockerRegistry_Handler,
+		},
+		{
 			MethodName: "ListFileSystemDirectories",
 			Handler:    _NasService_ListFileSystemDirectories_Handler,
 		},
@@ -3969,6 +4227,14 @@ var NasService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteCifsShare",
 			Handler:    _NasService_DeleteCifsShare_Handler,
+		},
+		{
+			MethodName: "GetCifsGlobalConfig",
+			Handler:    _NasService_GetCifsGlobalConfig_Handler,
+		},
+		{
+			MethodName: "UpdateCifsGlobalConfig",
+			Handler:    _NasService_UpdateCifsGlobalConfig_Handler,
 		},
 		{
 			MethodName: "ListWebdavShares",

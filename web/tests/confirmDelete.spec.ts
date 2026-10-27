@@ -27,6 +27,16 @@ describe('Type-to-confirm delete modal', () => {
 
     await input.setValue('tank/vms/arch');
     expect(confirmBtn().attributes('disabled')).toBeUndefined();
+
+    // Verify modal close button uses dark theme modal-close-btn
+    const closeBtn = wrapper.find('.modal-close-btn');
+    expect(closeBtn.exists()).toBe(true);
+
+    // Verify copy phrase button exists and paste is allowed (no paste.prevent)
+    const copyBtn = wrapper.find('.phrase-copy-btn');
+    expect(copyBtn.exists()).toBe(true);
+    expect(input.attributes('prevent')).toBeUndefined();
+
     await confirmBtn().trigger('click');
 
     const res = await promise;

@@ -40,22 +40,22 @@ describe('Domain Slug and Resource Path Helpers (TypeScript)', () => {
     expect(vmId).toBe('debian-server');
 
     const diskName = generateVMDiskName(vmId, 0);
-    expect(diskName).toBe('vm-debian-server-disk-0');
+    expect(diskName).toBe('vm-debian-server-01');
 
     const disk1 = generateVMDiskName(`virtualMachines/${vmId}`, 1);
-    expect(disk1).toBe('vm-debian-server-disk-1');
+    expect(disk1).toBe('vm-debian-server-02');
 
     const zvolPath = generateZvolDiskPath('mypool', vmId, 0);
-    expect(zvolPath).toBe('/dev/zvol/mypool/vms/debian-server');
+    expect(zvolPath).toBe('/dev/zvol/mypool/vms/debian-server-01');
 
     const zvolPath1 = generateZvolDiskPath('mypool', vmId, 1);
-    expect(zvolPath1).toBe('/dev/zvol/mypool/vms/debian-server-disk-1');
+    expect(zvolPath1).toBe('/dev/zvol/mypool/vms/debian-server-02');
 
     const vmDir = generateVMPath('mypool', vmId);
-    expect(vmDir).toBe('/nas/mypool/vms/debian-server');
+    expect(vmDir).toBe('/mnt/mypool/vms/debian-server');
 
     const vmFilePath = generateVMDiskFilePath('mypool', vmId, 0);
-    expect(vmFilePath).toBe('/nas/mypool/vms/debian-server/disk-0.raw');
+    expect(vmFilePath).toBe('/mnt/mypool/vms/debian-server/disk-01.raw');
   });
 
   it('generates standardized LXC rootfs rooted to /containers/<container_id>', () => {
@@ -64,7 +64,7 @@ describe('Domain Slug and Resource Path Helpers (TypeScript)', () => {
     expect(id).toBe('ubuntu-24-noble');
 
     const lxcPath = generateLxcRootfsPath('fastpool', id);
-    expect(lxcPath).toBe('/nas/fastpool/containers/ubuntu-24-noble/rootfs');
+    expect(lxcPath).toBe('/mnt/fastpool/containers/ubuntu-24-noble/rootfs');
   });
 
   it('generates standardized App persistent paths rooted to /apps/<app_id>', () => {
@@ -73,6 +73,6 @@ describe('Domain Slug and Resource Path Helpers (TypeScript)', () => {
     expect(appId).toBe('nextcloud-hub');
 
     const appPath = generateAppdataPath('fastpool', appId);
-    expect(appPath).toBe('/nas/fastpool/apps/nextcloud-hub');
+    expect(appPath).toBe('/mnt/fastpool/apps/nextcloud-hub');
   });
 });

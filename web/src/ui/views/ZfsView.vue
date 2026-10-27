@@ -7,7 +7,6 @@ import {
   mdiChevronDown,
   mdiChevronRight,
   mdiClose,
-  mdiCogOutline,
   mdiCrown,
   mdiDatabase,
   mdiDatabaseExportOutline,
@@ -411,7 +410,7 @@ async function handleCreatePool() {
       vdevLayout: primaryDataVdev?.layout || 'mirror',
       devices: allDevices,
       compression: poolForm.compression || 'lz4',
-      mountpoint: poolForm.mountpoint || `/nas/${poolForm.poolId.trim()}`,
+      mountpoint: poolForm.mountpoint || `/mnt/${poolForm.poolId.trim()}`,
       vdevs,
     });
     notify(
@@ -1192,7 +1191,7 @@ async function handleDeleteVolume(vol: ZfsVolume) {
             <input
               v-model="poolForm.mountpoint"
               class="input mono"
-              :placeholder="poolForm.poolId ? `/nas/${poolForm.poolId.trim()}` : '/nas/<pool-name>'"
+              :placeholder="poolForm.poolId ? `/mnt/${poolForm.poolId.trim()}` : '/mnt/<pool-name>'"
             />
           </div>
           <div class="form-group">
@@ -1673,7 +1672,7 @@ async function handleDeleteVolume(vol: ZfsVolume) {
                 title="Configure pool settings and storage tiers"
                 @click="openPoolConfig(pool)"
               >
-                <MdiIcon :path="mdiCogOutline" size="14" style="margin-right: 4px" />
+                <MdiIcon :path="mdiPencil" size="14" style="margin-right: 4px" />
                 Configure
               </button>
               <button
@@ -1715,7 +1714,7 @@ async function handleDeleteVolume(vol: ZfsVolume) {
         <div class="modal-header">
           <div style="display: flex; align-items: center; gap: 10px">
             <div class="pool-icon-wrap" style="width: 32px; height: 32px">
-              <MdiIcon :path="mdiCogOutline" size="20" style="color: var(--accent-primary)" />
+              <MdiIcon :path="mdiPencil" size="20" style="color: var(--accent-primary)" />
             </div>
             <div>
               <h3 style="margin: 0; font-size: 17px; font-weight: 700">

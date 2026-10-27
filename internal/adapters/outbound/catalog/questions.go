@@ -60,7 +60,7 @@ func ParseQuestionsYAML(data []byte, appID, appsPool, appdataPath string) ([]dom
 		appsPool = "tank"
 	}
 	if appdataPath == "" {
-		appdataPath = fmt.Sprintf("/nas/%s/apps", appsPool)
+		appdataPath = fmt.Sprintf("/mnt/%s/apps", appsPool)
 	}
 
 	var flatList []domain.CatalogQuestion
@@ -204,8 +204,7 @@ func normalizeQuestionType(rawType string) string {
 func formatDefaultValue(val any, qType, varPath, appID, appdataPath string) string {
 	if qType == "hostpath" {
 		if valStr, ok := val.(string); ok && valStr != "" && strings.HasPrefix(valStr, "/") {
-			// Replace /mnt/<pool> with /nas/<pool>/apps/<app>
-			return strings.ReplaceAll(valStr, "/mnt/", "/nas/")
+			return strings.ReplaceAll(valStr, "/nas/", "/mnt/")
 		}
 		leaf := "data"
 		parts := strings.Split(varPath, ".")
@@ -302,7 +301,7 @@ func GenerateComposeFromQuestions(app domain.CatalogApp, answers map[string]stri
 		appsPool = "tank"
 	}
 	if appdataPath == "" {
-		appdataPath = fmt.Sprintf("/nas/%s/apps", appsPool)
+		appdataPath = fmt.Sprintf("/mnt/%s/apps", appsPool)
 	}
 
 	serviceName := app.AppID
@@ -373,7 +372,7 @@ func GenerateComposeFromQuestions(app domain.CatalogApp, answers map[string]stri
 		if categorizeQuestion(q) == "Application Configuration & Credentials" && val != "" {
 			parts := strings.Split(q.Variable, ".")
 			key := strings.ToUpper(parts[len(parts)-1])
-			envs = append(envs, fmt.Sprintf("%s=%s", key, val))
+			envs = append(envs, fmt.Sprintf("%s=%s", key, escapeComposeEnvVal(val)))
 		}
 	}
 
@@ -429,13 +428,41 @@ func GenerateComposeFromQuestions(app domain.CatalogApp, answers map[string]stri
 	return sb.String()
 }
 
+func escapeComposeEnvVal(val string) string {
+	if val == "" {
+		return ""
+	}
+	var sb strings.Builder
+	for i := 0; i < len(val); i++ {
+		if val[i] == '$' {
+			if i+1 < len(val) && val[i+1] == '$' {
+				sb.WriteString("$$")
+				i++
+				continue
+			}
+			if i+1 < len(val) && val[i+1] == '{' {
+				closeIdx := strings.IndexByte(val[i+2:], '}')
+				if closeIdx != -1 {
+					sb.WriteString(val[i : i+2+closeIdx+1])
+					i += 2 + closeIdx
+					continue
+				}
+			}
+			sb.WriteString("$$")
+			continue
+		}
+		sb.WriteByte(val[i])
+	}
+	return sb.String()
+}
+
 // GetCuratedQuestions provides standard questions for apps when questions.yaml is unavailable.
 func GetCuratedQuestions(app domain.CatalogApp, appsPool, appdataPath string) ([]domain.CatalogQuestionGroup, []domain.CatalogQuestion) {
 	if appsPool == "" {
 		appsPool = "tank"
 	}
 	if appdataPath == "" {
-		appdataPath = fmt.Sprintf("/nas/%s/apps", appsPool)
+		appdataPath = fmt.Sprintf("/mnt/%s/apps", appsPool)
 	}
 
 	defaultPort := app.DefaultPort

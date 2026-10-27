@@ -519,6 +519,23 @@ export interface AppCatalogTemplate {
   composeYaml: string;
 }
 
+export interface DockerRegistry {
+  name: string; // "dockerRegistries/{id}"
+  server: string; // canonical host, e.g. "docker.io", "ghcr.io"
+  username: string;
+  hasPassword: boolean;
+  description: string;
+  lastLoginStatus: string; // "ok" or error text
+  lastLoginTime: string;
+}
+
+export interface DockerRegistryInput {
+  server: string;
+  username: string;
+  password?: string; // empty on update keeps the stored secret
+  description?: string;
+}
+
 export interface DockerConfig {
   dataset: string;
   pool: string;
@@ -622,6 +639,30 @@ export interface CifsShare {
   createMask: string;
   directoryMask: string;
   enabled: boolean;
+  readList: string[];
+  writeList: string[];
+  forceUser: string;
+  forceGroup: string;
+  guestAccount: string;
+  guestOnly: boolean;
+  forceCreateMode: string;
+  forceDirectoryMode: string;
+  shadowCopy: boolean;
+  timeMachine: boolean;
+  recycleBin: boolean;
+}
+
+export interface CifsGlobalConfig {
+  name: string; // cifsGlobalConfig
+  workgroup: string;
+  serverString: string;
+  security: string;
+  mapToGuest: string;
+  guestAccount: string;
+  maxLogSize: number;
+  disableSpoolss: boolean;
+  fruitAapl: boolean;
+  wsddEnabled: boolean;
 }
 
 export interface WebdavShare {
@@ -657,6 +698,8 @@ export interface User {
   systemAccount: boolean;
   password?: string;
   isAdmin: boolean;
+  smbEnabled?: boolean;
+  smbPassword?: string;
 }
 
 export interface Group {
@@ -888,7 +931,7 @@ export const APP_CATALOG_TEMPLATES: AppCatalogTemplate[] = [
       - POSTGRES_PASSWORD=nextcloud
       - REDIS_HOST=redis
     volumes:
-      - /nas/tank/appdata/nextcloud:/var/www/html
+      - /mnt/tank/appdata/nextcloud:/var/www/html
     depends_on:
       - db
       - redis
@@ -901,7 +944,7 @@ export const APP_CATALOG_TEMPLATES: AppCatalogTemplate[] = [
       - POSTGRES_USER=nextcloud
       - POSTGRES_PASSWORD=nextcloud
     volumes:
-      - /nas/tank/appdata/nextcloud-db:/var/lib/postgresql/data
+      - /mnt/tank/appdata/nextcloud-db:/var/lib/postgresql/data
   redis:
     image: redis:alpine
     container_name: nextcloud-redis
@@ -923,8 +966,8 @@ export const APP_CATALOG_TEMPLATES: AppCatalogTemplate[] = [
     ports:
       - "8096:8096"
     volumes:
-      - /nas/tank/media:/media:ro
-      - /nas/tank/appdata/jellyfin:/config
+      - /mnt/tank/media:/media:ro
+      - /mnt/tank/appdata/jellyfin:/config
 `,
   },
   {
@@ -945,7 +988,7 @@ export const APP_CATALOG_TEMPLATES: AppCatalogTemplate[] = [
       - SIGNUPS_ALLOWED=true
       - WEBSOCKET_ENABLED=true
     volumes:
-      - /nas/tank/appdata/vaultwarden:/data
+      - /mnt/tank/appdata/vaultwarden:/data
 `,
   },
   {
@@ -968,8 +1011,8 @@ export const APP_CATALOG_TEMPLATES: AppCatalogTemplate[] = [
       - TZ=UTC
       - WEBPASSWORD=admin
     volumes:
-      - /nas/tank/appdata/pihole:/etc/pihole
-      - /nas/tank/appdata/dnsmasq:/etc/dnsmasq.d
+      - /mnt/tank/appdata/pihole:/etc/pihole
+      - /mnt/tank/appdata/dnsmasq:/etc/dnsmasq.d
 `,
   },
   {
@@ -990,8 +1033,8 @@ export const APP_CATALOG_TEMPLATES: AppCatalogTemplate[] = [
       - PGID=1000
       - VERSION=docker
     volumes:
-      - /nas/tank/appdata/plex:/config
-      - /nas/tank/media:/media:ro
+      - /mnt/tank/appdata/plex:/config
+      - /mnt/tank/media:/media:ro
 `,
   },
   {
@@ -1025,8 +1068,8 @@ services:
       - "81:81"
       - "443:443"
     volumes:
-      - /nas/tank/appdata/npm/data:/data
-      - /nas/tank/appdata/npm/letsencrypt:/etc/letsencrypt
+      - /mnt/tank/appdata/npm/data:/data
+      - /mnt/tank/appdata/npm/letsencrypt:/etc/letsencrypt
 `,
   },
   {
@@ -1044,7 +1087,7 @@ services:
     network_mode: host
     privileged: true
     volumes:
-      - /nas/tank/appdata/homeassistant:/config
+      - /mnt/tank/appdata/homeassistant:/config
       - /etc/localtime:/etc/localtime:ro
 `,
   },

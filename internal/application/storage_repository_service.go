@@ -62,7 +62,7 @@ func (s *StorageRepoService) GetIsosDirectory() string {
 	if pool == "" {
 		pool = "tank"
 	}
-	return fmt.Sprintf("/nas/%s/isos", pool)
+	return fmt.Sprintf("/mnt/%s/isos", pool)
 }
 
 func (s *StorageRepoService) GetLxcTemplatesDirectory() string {
@@ -78,7 +78,7 @@ func (s *StorageRepoService) GetLxcTemplatesDirectory() string {
 	if pool == "" {
 		pool = "tank"
 	}
-	return fmt.Sprintf("/nas/%s/lxc-templates", pool)
+	return fmt.Sprintf("/mnt/%s/lxc-templates", pool)
 }
 
 // EnsureRepositories verifies or provisions the isos and lxc-templates datasets and filesystem directories.

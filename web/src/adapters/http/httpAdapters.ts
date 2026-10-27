@@ -11,6 +11,7 @@ import type {
   CatalogQuestion,
   CatalogQuestionGroup,
   CifsShare,
+  CifsGlobalConfig,
   DirectoryList,
   Disk,
   DiskPartition,
@@ -42,6 +43,8 @@ import type {
   ZfsPool,
   ZfsVdev,
   ZfsVolume,
+  DockerRegistry,
+  DockerRegistryInput,
 } from '../../domain/models';
 import type {
   AuthPort,
@@ -103,6 +106,7 @@ export function mapUser(raw: any): User {
     locked: Boolean(raw.locked ?? false),
     systemAccount: Boolean(raw.systemAccount ?? raw.system_account ?? false),
     isAdmin: Boolean(raw.isAdmin ?? raw.is_admin ?? false),
+    smbEnabled: Boolean(raw.smbEnabled ?? raw.smb_enabled ?? false),
   };
 }
 
@@ -642,6 +646,36 @@ export function mapCifsShare(raw: any): CifsShare {
     createMask: raw?.createMask ?? raw?.create_mask ?? '0664',
     directoryMask: raw?.directoryMask ?? raw?.directory_mask ?? '0775',
     enabled: Boolean(raw?.enabled ?? true),
+    readList: Array.isArray(raw?.readList ?? raw?.read_list)
+      ? (raw.readList ?? raw.read_list)
+      : [],
+    writeList: Array.isArray(raw?.writeList ?? raw?.write_list)
+      ? (raw.writeList ?? raw.write_list)
+      : [],
+    forceUser: raw?.forceUser ?? raw?.force_user ?? '',
+    forceGroup: raw?.forceGroup ?? raw?.force_group ?? '',
+    guestAccount: raw?.guestAccount ?? raw?.guest_account ?? '',
+    guestOnly: Boolean(raw?.guestOnly ?? raw?.guest_only ?? false),
+    forceCreateMode: raw?.forceCreateMode ?? raw?.force_create_mode ?? '0664',
+    forceDirectoryMode: raw?.forceDirectoryMode ?? raw?.force_directory_mode ?? '0775',
+    shadowCopy: Boolean(raw?.shadowCopy ?? raw?.shadow_copy ?? false),
+    timeMachine: Boolean(raw?.timeMachine ?? raw?.time_machine ?? false),
+    recycleBin: Boolean(raw?.recycleBin ?? raw?.recycle_bin ?? false),
+  };
+}
+
+export function mapCifsGlobalConfig(raw: any): CifsGlobalConfig {
+  return {
+    name: raw?.name ?? 'cifsGlobalConfig',
+    workgroup: raw?.workgroup ?? 'WORKGROUP',
+    serverString: raw?.serverString ?? raw?.server_string ?? 'NAS Samba Server',
+    security: raw?.security ?? 'user',
+    mapToGuest: raw?.mapToGuest ?? raw?.map_to_guest ?? 'Bad User',
+    guestAccount: raw?.guestAccount ?? raw?.guest_account ?? 'nobody',
+    maxLogSize: Number(raw?.maxLogSize ?? raw?.max_log_size ?? 50),
+    disableSpoolss: Boolean(raw?.disableSpoolss ?? raw?.disable_spoolss ?? true),
+    fruitAapl: Boolean(raw?.fruitAapl ?? raw?.fruit_aapl ?? true),
+    wsddEnabled: Boolean(raw?.wsddEnabled ?? raw?.wsdd_enabled ?? true),
   };
 }
 
@@ -1370,8 +1404,9 @@ export class HttpDockerAppAdapter implements DockerAppPort {
   async getAppLogs(name: string, tail = 100, serviceName?: string): Promise<{ logs: string; lineCount: number }> {
     const params: Record<string, any> = { tail };
     if (serviceName) {
+      // grpc-gateway accepts either JSON (camelCase) or proto (snake_case) names, but rejects a
+      // request that sets the same field under both ("duplicate field").
       params.serviceName = serviceName;
-      params.service_name = serviceName;
     }
     const res = await this.client.get<any>(`${name}:logs`, params);
     return {
@@ -1452,6 +1487,40 @@ export class HttpDockerAppAdapter implements DockerAppPort {
       available: Boolean(raw?.available ?? false),
       inUseBy: String(raw?.inUseBy ?? raw?.in_use_by ?? ''),
     };
+  }
+
+  async listRegistries(): Promise<DockerRegistry[]> {
+    const raw = await this.client.get<any>('dockerRegistries');
+    return (raw?.dockerRegistries ?? raw?.docker_registries ?? []).map(mapDockerRegistry);
+  }
+
+  async createRegistry(input: DockerRegistryInput): Promise<DockerRegistry> {
+    const raw = await this.client.post<any>('dockerRegistries', {
+      server: input.server,
+      username: input.username,
+      password: input.password ?? '',
+      description: input.description ?? '',
+    });
+    return mapDockerRegistry(raw);
+  }
+
+  async updateRegistry(name: string, input: DockerRegistryInput): Promise<DockerRegistry> {
+    const paths = ['server', 'username', 'description'];
+    const body: Record<string, any> = {
+      server: input.server,
+      username: input.username,
+      description: input.description ?? '',
+    };
+    if (input.password) {
+      body.password = input.password;
+      paths.push('password');
+    }
+    const raw = await this.client.patch<any>(name, body, paths);
+    return mapDockerRegistry(raw);
+  }
+
+  async deleteRegistry(name: string): Promise<void> {
+    await this.client.delete(name);
   }
 
   async checkHostPorts(ports: number[], protocol = 'tcp', excludeAppId = ''): Promise<HostPortStatus[]> {
@@ -1589,8 +1658,19 @@ export class HttpShareAdapter implements SharePort {
       browseable: share.browseable,
       validUsers: share.validUsers ?? [],
       validGroups: share.validGroups ?? [],
+      readList: share.readList ?? [],
+      writeList: share.writeList ?? [],
+      forceUser: share.forceUser,
+      forceGroup: share.forceGroup,
+      guestAccount: share.guestAccount,
+      guestOnly: share.guestOnly,
       createMask: share.createMask,
       directoryMask: share.directoryMask,
+      forceCreateMode: share.forceCreateMode,
+      forceDirectoryMode: share.forceDirectoryMode,
+      shadowCopy: share.shadowCopy,
+      timeMachine: share.timeMachine,
+      recycleBin: share.recycleBin,
       enabled: share.enabled,
     };
     const raw = await this.client.post<any>('cifsShares', payload, {
@@ -1613,8 +1693,19 @@ export class HttpShareAdapter implements SharePort {
       browseable: share.browseable,
       validUsers: share.validUsers,
       validGroups: share.validGroups,
+      readList: share.readList,
+      writeList: share.writeList,
+      forceUser: share.forceUser,
+      forceGroup: share.forceGroup,
+      guestAccount: share.guestAccount,
+      guestOnly: share.guestOnly,
       createMask: share.createMask,
       directoryMask: share.directoryMask,
+      forceCreateMode: share.forceCreateMode,
+      forceDirectoryMode: share.forceDirectoryMode,
+      shadowCopy: share.shadowCopy,
+      timeMachine: share.timeMachine,
+      recycleBin: share.recycleBin,
       enabled: share.enabled,
     };
     const raw = await this.client.patch<any>(name, payload, updateMask);
@@ -1623,6 +1714,31 @@ export class HttpShareAdapter implements SharePort {
 
   async deleteCifsShare(name: string): Promise<void> {
     await this.client.delete(name);
+  }
+
+  async getCifsGlobalConfig(): Promise<CifsGlobalConfig> {
+    const raw = await this.client.get<any>('cifsGlobalConfig');
+    return mapCifsGlobalConfig(raw);
+  }
+
+  async updateCifsGlobalConfig(
+    config: Partial<CifsGlobalConfig>,
+    updateMask?: string[]
+  ): Promise<CifsGlobalConfig> {
+    const payload = {
+      name: 'cifsGlobalConfig',
+      workgroup: config.workgroup,
+      serverString: config.serverString,
+      security: config.security,
+      mapToGuest: config.mapToGuest,
+      guestAccount: config.guestAccount,
+      maxLogSize: config.maxLogSize,
+      disableSpoolss: config.disableSpoolss,
+      fruitAapl: config.fruitAapl,
+      wsddEnabled: config.wsddEnabled,
+    };
+    const raw = await this.client.patch<any>('cifsGlobalConfig', payload, updateMask);
+    return mapCifsGlobalConfig(raw);
   }
 
   // WebDAV
@@ -1713,6 +1829,8 @@ export class HttpIdentityAdapter implements IdentityPort {
       locked: user.locked,
       password: user.password,
       isAdmin: user.isAdmin,
+      smbEnabled: user.smbEnabled,
+      smbPassword: user.smbPassword,
     };
     const raw = await this.client.post<any>('users', payload, {
       userId,
@@ -1738,6 +1856,8 @@ export class HttpIdentityAdapter implements IdentityPort {
       locked: user.locked,
       password: user.password,
       isAdmin: user.isAdmin,
+      smbEnabled: user.smbEnabled,
+      smbPassword: user.smbPassword,
     };
     const raw = await this.client.patch<any>(name, payload, updateMask);
     return mapUser(raw);
@@ -1877,4 +1997,16 @@ export class HttpCatalogAdapter implements CatalogPort {
       lastSyncTime: String(raw?.lastSyncTime ?? raw?.last_sync_time ?? ''),
     };
   }
+}
+
+function mapDockerRegistry(raw: any): DockerRegistry {
+  return {
+    name: String(raw?.name ?? ''),
+    server: String(raw?.server ?? ''),
+    username: String(raw?.username ?? ''),
+    hasPassword: Boolean(raw?.hasPassword ?? raw?.has_password ?? false),
+    description: String(raw?.description ?? ''),
+    lastLoginStatus: String(raw?.lastLoginStatus ?? raw?.last_login_status ?? ''),
+    lastLoginTime: String(raw?.lastLoginTime ?? raw?.last_login_time ?? ''),
+  };
 }

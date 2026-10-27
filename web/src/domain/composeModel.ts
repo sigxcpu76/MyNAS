@@ -157,6 +157,57 @@ export function createDefaultAppForm(appId = '', title = ''): ComposeAppFormMode
 }
 
 // =============================================================================
+// Helper Functions for Dollar ($) Escaping in Compose Environment Variables
+// =============================================================================
+
+/**
+ * Escapes literal dollar signs ($) in an environment variable value to ($$)
+ * so Docker Compose passes them verbatim to the container instead of attempting
+ * variable interpolation. Valid compose interpolations like ${VAR} or ${VAR:-default}
+ * are preserved as is.
+ */
+export function escapeComposeEnvValue(val: string): string {
+  if (!val || typeof val !== 'string') return val ?? '';
+  let out = '';
+  for (let i = 0; i < val.length; i++) {
+    if (val[i] === '$') {
+      // Already escaped as $$? Keep as $$
+      if (i + 1 < val.length && val[i + 1] === '$') {
+        out += '$$';
+        i++;
+        continue;
+      }
+      // Valid braced interpolation like ${VAR} or ${VAR:-default}? Preserve as is
+      if (i + 1 < val.length && val[i + 1] === '{') {
+        const closeIdx = val.indexOf('}', i + 2);
+        if (closeIdx !== -1) {
+          const inner = val.substring(i + 2, closeIdx);
+          if (/^[a-zA-Z_][a-zA-Z0-9_]*(:-.*)?$/.test(inner)) {
+            out += val.substring(i, closeIdx + 1);
+            i = closeIdx;
+            continue;
+          }
+        }
+      }
+      // Bare literal $: escape to $$
+      out += '$$';
+      continue;
+    }
+    out += val[i];
+  }
+  return out;
+}
+
+/**
+ * Unescapes ($$) in a compose environment value back to ($) for human display
+ * and editing in visual forms.
+ */
+export function unescapeComposeEnvValue(val: string): string {
+  if (!val || typeof val !== 'string') return val ?? '';
+  return val.replace(/\$\$/g, '$');
+}
+
+// =============================================================================
 // YAML <-> Form Bi-directional Converters
 // =============================================================================
 
@@ -333,7 +384,7 @@ export function composeYamlToForm(
           if (idx !== -1) {
             serviceModel.environment.push({
               key: envItem.substring(0, idx).trim(),
-              value: envItem.substring(idx + 1),
+              value: unescapeComposeEnvValue(envItem.substring(idx + 1)),
             });
           } else {
             serviceModel.environment.push({
@@ -347,7 +398,7 @@ export function composeYamlToForm(
       for (const [k, v] of Object.entries(svc.environment)) {
         serviceModel.environment.push({
           key: k,
-          value: v === null || v === undefined ? '' : String(v),
+          value: v === null || v === undefined ? '' : unescapeComposeEnvValue(String(v)),
         });
       }
     }
@@ -567,7 +618,7 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
     // Environment
     const activeEnv = svc.environment.filter((e) => e.key.trim());
     if (activeEnv.length > 0) {
-      svcObj.environment = activeEnv.map((e) => `${e.key.trim()}=${e.value}`);
+      svcObj.environment = activeEnv.map((e) => `${e.key.trim()}=${escapeComposeEnvValue(e.value)}`);
     }
 
     // Volumes

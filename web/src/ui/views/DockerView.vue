@@ -15,6 +15,7 @@ import {
   mdiFileDocumentOutline,
   mdiFolderOutline,
   mdiHarddisk,
+  mdiKeyVariant,
   mdiLayers,
   mdiMagnify,
   mdiOpenInNew,
@@ -39,6 +40,7 @@ import ComposeFormEditor from '../components/ComposeFormEditor.vue';
 import CodeMirrorEditor from '../components/CodeMirrorEditor.vue';
 import DockerTerminalModal, { type TerminalContainerOption } from '../components/DockerTerminalModal.vue';
 import CatalogQuestionWizard from '../components/CatalogQuestionWizard.vue';
+import DockerRegistriesModal from '../components/DockerRegistriesModal.vue';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import SortableTh from '../components/SortableTh.vue';
@@ -172,7 +174,11 @@ async function updateTelemetry() {
   isUpdatingTelemetry = true;
   try {
     const apps = await services.apps.listApps();
-    nasState.dockerApps = apps;
+    if (apps && Array.isArray(apps)) {
+      if (apps.length > 0 || nasState.dockerApps.length === 0) {
+        nasState.dockerApps = apps;
+      }
+    }
   } catch {
     // background telemetry
   } finally {
@@ -198,7 +204,7 @@ async function runTelemetryLoop() {
   if (!isViewActive) return;
   await updateTelemetry();
   if (isViewActive) {
-    telemetryTimer = setTimeout(runTelemetryLoop, 1000);
+    telemetryTimer = setTimeout(runTelemetryLoop, 2500);
   }
 }
 
@@ -476,15 +482,15 @@ function selectCatalogTemplate(tmpl: AppCatalogTemplate | null) {
 }
 
 const isDeployingApp = ref(false);
+const isRegistriesModalOpen = ref(false);
 
 async function handleDeployApp(data: { appId: string; title: string; composeYaml: string }) {
   if (isDeployingApp.value) return;
   isDeployingApp.value = true;
   const targetId = toZfsSafeSlug(data.appId || data.title) || 'app';
-  notify('info', `Deploying "${targetId}"... Pulling container images and starting stack.`);
   try {
     await services.apps.createApp(targetId, data.composeYaml, data.title || targetId);
-    notify('success', `App "${targetId}" deployed successfully`);
+    notify('info', `Deploying "${targetId}" in background. Pulling container images and starting stack...`);
     isInstallModalOpen.value = false;
     await refreshApps();
   } catch (err: any) {
@@ -509,10 +515,10 @@ function openEditModal(app: DockerApp) {
 async function handleSaveAppEdit(data: { appId: string; title: string; composeYaml: string }) {
   if (!editingApp.value || isUpdatingApp.value) return;
   isUpdatingApp.value = true;
-  notify('info', `Updating and redeploying "${editingApp.value.appId}"...`);
+  const appId = editingApp.value.appId;
   try {
     await services.apps.updateApp(editingApp.value.name, data.composeYaml, data.title);
-    notify('success', `App "${data.appId}" updated and redeployed successfully`);
+    notify('info', `Updating "${appId}" in background. Pulling images and restarting stack...`);
     isEditModalOpen.value = false;
     await refreshApps();
   } catch (err: any) {
@@ -642,9 +648,8 @@ function openTerminalForContainer(
 // =============================================================================
 async function startApp(app: DockerApp) {
   try {
-    notify('info', `Starting app "${app.appId}"...`);
     await services.apps.startApp(app.name);
-    notify('success', `App "${app.appId}" started`);
+    notify('info', `Starting "${app.appId}" in background (pulling images if needed)...`);
     await refreshApps();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to start App');
@@ -857,6 +862,16 @@ onUnmounted(() => {
         >
           <MdiIcon :path="mdiFolderOutline" size="16" style="color: var(--accent-primary)" />
           <span>Dataset: {{ nasState.dockerConfig?.dataset || nasState.dockerConfig?.pool || 'None' }}</span>
+        </button>
+
+        <button
+          class="btn btn-sm"
+          style="display: flex; align-items: center; gap: 6px"
+          title="Container registry credentials (Docker Hub, GHCR, private registries)"
+          @click="isRegistriesModalOpen = true"
+        >
+          <MdiIcon :path="mdiKeyVariant" size="16" style="color: var(--accent-primary)" />
+          Registries
         </button>
 
         <button class="btn btn-sm" style="display: flex; align-items: center; gap: 6px" @click="openCatalogModal">
@@ -1091,7 +1106,13 @@ onUnmounted(() => {
                   style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 16px; height: 16px"
                 >
                   <span
-                    v-if="app.state === 'RUNNING'"
+                    v-if="app.state === 'DEPLOYING'"
+                    class="spinner-sm"
+                    style="width: 12px; height: 12px; border-width: 2px; border-color: var(--accent-primary); border-top-color: transparent"
+                    title="Deploying stack in background..."
+                  ></span>
+                  <span
+                    v-else-if="app.state === 'RUNNING'"
                     style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px rgba(34, 197, 94, 0.4)"
                   ></span>
                   <span
@@ -1109,15 +1130,51 @@ onUnmounted(() => {
                 </div>
 
                 <div>
-                  <div style="font-weight: 600; font-size: 12px; color: var(--text-primary)">
-                    {{ app.title || app.appId }}
+                  <div style="display: flex; align-items: center; gap: 6px">
+                    <span style="font-weight: 600; font-size: 12px; color: var(--text-primary)">
+                      {{ app.title || app.appId }}
+                    </span>
+                    <span
+                      v-if="app.state === 'DEPLOYING'"
+                      class="badge badge-info"
+                      style="font-size: 10px; padding: 1px 6px; display: inline-flex; align-items: center; gap: 4px"
+                      :title="app.statusText"
+                    >
+                      <span class="spinner-sm" style="width: 10px; height: 10px; border-width: 1.5px"></span>
+                      Deploying
+                    </span>
+                    <span
+                      v-else-if="app.state === 'ERROR'"
+                      class="badge badge-danger"
+                      style="font-size: 10px; padding: 1px 6px"
+                      :title="app.statusText"
+                    >
+                      Error
+                    </span>
                   </div>
                   <div
+                    v-if="app.state === 'DEPLOYING'"
+                    class="mono"
+                    style="font-size: 11px; color: var(--accent-primary); margin-top: 1px"
+                    :title="app.statusText"
+                  >
+                    {{ app.statusText }}
+                  </div>
+                  <div
+                    v-else-if="app.state === 'ERROR'"
+                    class="mono"
+                    style="font-size: 11px; color: var(--danger); margin-top: 1px"
+                    :title="app.statusText"
+                  >
+                    {{ app.statusText }}
+                  </div>
+                  <div
+                    v-else
                     class="mono"
                     style="font-size: 11.5px; color: var(--text-secondary); cursor: help"
                     :title="`Services: ${app.services.join(', ') || 'none'}`"
                   >
-                    {{ app.appId }} · {{ app.services.length }} service{{ app.services.length === 1 ? '' : 's' }}
+                    {{ app.appId }} · {{ app.services.length }} service{{ app.services.length === 1 ? '' : 's' }} · {{ app.statusText }}
                   </div>
                 </div>
               </div>
@@ -1238,7 +1295,16 @@ onUnmounted(() => {
             <td style="padding: 10px 14px; min-width: 240px; text-align: right">
               <div style="display: flex; gap: 6px; justify-content: flex-end; align-items: center; white-space: nowrap; flex-shrink: 0">
                 <button
-                  v-if="app.state === 'RUNNING'"
+                  v-if="app.state === 'DEPLOYING'"
+                  class="btn btn-sm btn-icon"
+                  style="flex-shrink: 0; opacity: 0.6; cursor: not-allowed"
+                  title="Deployment in progress in background..."
+                  disabled
+                >
+                  <span class="spinner-sm" style="width: 14px; height: 14px; border-width: 2px"></span>
+                </button>
+                <button
+                  v-else-if="app.state === 'RUNNING'"
                   class="btn btn-sm btn-icon btn-warning"
                   style="flex-shrink: 0"
                   title="Stop Application"
@@ -1268,7 +1334,7 @@ onUnmounted(() => {
                   <MdiIcon :path="mdiConsole" size="16" />
                 </button>
                 <button
-                  v-if="app.state !== 'RUNNING'"
+                  v-if="app.state !== 'RUNNING' && app.state !== 'DEPLOYING'"
                   class="btn btn-sm btn-icon btn-success"
                   style="flex-shrink: 0"
                   title="Start Application"
@@ -1486,7 +1552,7 @@ onUnmounted(() => {
                 <td style="padding: 8px"><span class="badge badge-info">{{ c.serviceName }}</span></td>
                 <td class="mono" style="padding: 8px; font-size: 11px">{{ c.image }}</td>
                 <td style="padding: 8px">
-                  <span class="badge" :class="c.state === 'RUNNING' ? 'badge-success' : 'badge-neutral'">{{ c.state }}</span>
+                  <span class="badge" :class="c.state === 'RUNNING' ? 'badge-success' : (c.state === 'COMPLETED' ? 'badge-info' : 'badge-neutral')">{{ c.state }}</span>
                 </td>
                 <td style="padding: 8px; width: 85px; min-width: 85px; max-width: 85px; white-space: nowrap; font-variant-numeric: tabular-nums" class="mono">{{ c.cpuPercent.toFixed(1) }}%</td>
                 <td style="padding: 8px; width: 105px; min-width: 105px; max-width: 105px; white-space: nowrap; font-variant-numeric: tabular-nums" class="mono">{{ c.memoryMib }} MiB</td>
@@ -1963,6 +2029,8 @@ onUnmounted(() => {
     <!-- ===================================================================== -->
     <!-- MODAL: TrueNAS SCALE App Configuration Wizard                         -->
     <!-- ===================================================================== -->
+    <DockerRegistriesModal v-if="isRegistriesModalOpen" @close="isRegistriesModalOpen = false" />
+
     <CatalogQuestionWizard
       v-if="isQuestionWizardOpen && wizardCatalogApp"
       :app="wizardCatalogApp"
@@ -2031,15 +2099,15 @@ onUnmounted(() => {
             </div>
             <div>
               <span style="color: var(--text-secondary)">Mountpoint:</span>
-              <span style="color: var(--accent-primary); margin-left: 6px">/nas/{{ selectedDatasetToSave.replace(/^\//, '') }}</span>
+              <span style="color: var(--accent-primary); margin-left: 6px">/mnt/{{ selectedDatasetToSave.replace(/^\//, '') }}</span>
             </div>
             <div>
               <span style="color: var(--text-secondary)">App Volumes:</span>
-              <span style="color: var(--accent-primary); margin-left: 6px">/nas/{{ selectedDatasetToSave.replace(/^\//, '') }}/appdata</span>
+              <span style="color: var(--accent-primary); margin-left: 6px">/mnt/{{ selectedDatasetToSave.replace(/^\//, '') }}/appdata</span>
             </div>
             <div>
               <span style="color: var(--text-secondary)">Docker Data Root:</span>
-              <span style="color: var(--accent-primary); margin-left: 6px">/nas/{{ selectedDatasetToSave.replace(/^\//, '') }}/docker</span>
+              <span style="color: var(--accent-primary); margin-left: 6px">/mnt/{{ selectedDatasetToSave.replace(/^\//, '') }}/docker</span>
             </div>
           </div>
         </div>

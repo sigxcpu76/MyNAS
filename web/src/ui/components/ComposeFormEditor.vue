@@ -153,7 +153,7 @@ const zfsDatasetPaths = computed(() => {
       if (d.mountpoint && d.mountpoint !== 'none' && d.mountpoint !== 'legacy') {
         paths.push(d.mountpoint);
       } else {
-        paths.push(`/nas/${cleanPool}/${d.name.split('/').pop()}`);
+        paths.push(`/mnt/${cleanPool}/${d.name.split('/').pop()}`);
       }
     }
   }
@@ -162,7 +162,7 @@ const zfsDatasetPaths = computed(() => {
 
 const appsPoolName = computed(() => nasState.dockerConfig?.pool || nasState.systemConfig?.mainPool || 'tank');
 const appsPoolAppdataDir = computed(
-  () => nasState.dockerConfig?.appdataDataset || `/nas/${appsPoolName.value}/apps`
+  () => nasState.dockerConfig?.appdataDataset || `/mnt/${appsPoolName.value}/apps`
 );
 
 function defaultAppdataMount(appId: string, subfolder = 'data'): string {
@@ -1130,7 +1130,7 @@ function copyYaml() {
                   Storage & Volume Mounts
                 </span>
                 <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px">
-                  Mount ZFS datasets (under <code class="mono" style="color: var(--accent-primary)">/nas/{{ appsPoolName }}</code>) or persistent Docker named volumes into the container.
+                  Mount ZFS datasets (under <code class="mono" style="color: var(--accent-primary)">/mnt/{{ appsPoolName }}</code>) or persistent Docker named volumes into the container.
                 </div>
               </div>
               <button class="btn btn-sm btn-primary" style="display: inline-flex; align-items: center; gap: 4px" @click="addVolumeMount(activeService)">
@@ -1202,15 +1202,15 @@ function copyYaml() {
                       <option value="">Choose preset / dataset...</option>
                       <optgroup label="App Data Presets">
                         <option :value="defaultAppdataMount(form.appId, 'data')">
-                          App Data (/nas/{{ appsPoolName }}/apps/{{ form.appId || 'app' }}/data)
+                          App Data (/mnt/{{ appsPoolName }}/apps/{{ form.appId || 'app' }}/data)
                         </option>
                         <option :value="defaultAppdataMount(form.appId, 'config')">
-                          App Config (/nas/{{ appsPoolName }}/apps/{{ form.appId || 'app' }}/config)
+                          App Config (/mnt/{{ appsPoolName }}/apps/{{ form.appId || 'app' }}/config)
                         </option>
                       </optgroup>
                       <optgroup label="Shared Media & Downloads">
-                        <option :value="`/nas/${appsPoolName}/media`">Media (/nas/{{ appsPoolName }}/media)</option>
-                        <option :value="`/nas/${appsPoolName}/downloads`">Downloads (/nas/{{ appsPoolName }}/downloads)</option>
+                        <option :value="`/mnt/${appsPoolName}/media`">Media (/mnt/{{ appsPoolName }}/media)</option>
+                        <option :value="`/mnt/${appsPoolName}/downloads`">Downloads (/mnt/{{ appsPoolName }}/downloads)</option>
                       </optgroup>
                       <optgroup v-if="zfsDatasetPaths.length > 0" label="Existing ZFS Datasets">
                         <option v-for="d in zfsDatasetPaths" :key="d" :value="d">
@@ -1263,7 +1263,7 @@ function copyYaml() {
                       <PathSelector
                         v-model="v.source"
                         :placeholder="defaultAppdataMount(form.appId, 'data')"
-                        :root-hint="`/nas/${appsPoolName}`"
+                        :root-hint="`/mnt/${appsPoolName}`"
                       />
                     </div>
                   </div>

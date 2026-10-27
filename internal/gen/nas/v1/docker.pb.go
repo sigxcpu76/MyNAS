@@ -2247,6 +2247,381 @@ func (x *CheckHostPortsResponse) GetPorts() []*HostPortStatus {
 	return nil
 }
 
+type DockerRegistry struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Registry host, e.g. "docker.io", "ghcr.io", "registry.example.com:5000".
+	Server   string `protobuf:"bytes,2,opt,name=server,proto3" json:"server,omitempty"`
+	Username string `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`
+	// Password or access token. Write-only: never returned by the API.
+	Password    string `protobuf:"bytes,4,opt,name=password,proto3" json:"password,omitempty"`
+	HasPassword bool   `protobuf:"varint,5,opt,name=has_password,json=hasPassword,proto3" json:"has_password,omitempty"`
+	Description string `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
+	// "ok" when the last `docker login` verification succeeded, otherwise the error text.
+	LastLoginStatus string `protobuf:"bytes,7,opt,name=last_login_status,json=lastLoginStatus,proto3" json:"last_login_status,omitempty"`
+	LastLoginTime   string `protobuf:"bytes,8,opt,name=last_login_time,json=lastLoginTime,proto3" json:"last_login_time,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *DockerRegistry) Reset() {
+	*x = DockerRegistry{}
+	mi := &file_nas_v1_docker_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DockerRegistry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DockerRegistry) ProtoMessage() {}
+
+func (x *DockerRegistry) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_docker_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DockerRegistry.ProtoReflect.Descriptor instead.
+func (*DockerRegistry) Descriptor() ([]byte, []int) {
+	return file_nas_v1_docker_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *DockerRegistry) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DockerRegistry) GetServer() string {
+	if x != nil {
+		return x.Server
+	}
+	return ""
+}
+
+func (x *DockerRegistry) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *DockerRegistry) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+func (x *DockerRegistry) GetHasPassword() bool {
+	if x != nil {
+		return x.HasPassword
+	}
+	return false
+}
+
+func (x *DockerRegistry) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *DockerRegistry) GetLastLoginStatus() string {
+	if x != nil {
+		return x.LastLoginStatus
+	}
+	return ""
+}
+
+func (x *DockerRegistry) GetLastLoginTime() string {
+	if x != nil {
+		return x.LastLoginTime
+	}
+	return ""
+}
+
+type ListDockerRegistriesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDockerRegistriesRequest) Reset() {
+	*x = ListDockerRegistriesRequest{}
+	mi := &file_nas_v1_docker_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDockerRegistriesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDockerRegistriesRequest) ProtoMessage() {}
+
+func (x *ListDockerRegistriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_docker_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDockerRegistriesRequest.ProtoReflect.Descriptor instead.
+func (*ListDockerRegistriesRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_docker_proto_rawDescGZIP(), []int{35}
+}
+
+type ListDockerRegistriesResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	DockerRegistries []*DockerRegistry      `protobuf:"bytes,1,rep,name=docker_registries,json=dockerRegistries,proto3" json:"docker_registries,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ListDockerRegistriesResponse) Reset() {
+	*x = ListDockerRegistriesResponse{}
+	mi := &file_nas_v1_docker_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDockerRegistriesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDockerRegistriesResponse) ProtoMessage() {}
+
+func (x *ListDockerRegistriesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_docker_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDockerRegistriesResponse.ProtoReflect.Descriptor instead.
+func (*ListDockerRegistriesResponse) Descriptor() ([]byte, []int) {
+	return file_nas_v1_docker_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *ListDockerRegistriesResponse) GetDockerRegistries() []*DockerRegistry {
+	if x != nil {
+		return x.DockerRegistries
+	}
+	return nil
+}
+
+type GetDockerRegistryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDockerRegistryRequest) Reset() {
+	*x = GetDockerRegistryRequest{}
+	mi := &file_nas_v1_docker_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDockerRegistryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDockerRegistryRequest) ProtoMessage() {}
+
+func (x *GetDockerRegistryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_docker_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDockerRegistryRequest.ProtoReflect.Descriptor instead.
+func (*GetDockerRegistryRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_docker_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *GetDockerRegistryRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type CreateDockerRegistryRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	DockerRegistryId string                 `protobuf:"bytes,1,opt,name=docker_registry_id,json=dockerRegistryId,proto3" json:"docker_registry_id,omitempty"`
+	DockerRegistry   *DockerRegistry        `protobuf:"bytes,2,opt,name=docker_registry,json=dockerRegistry,proto3" json:"docker_registry,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *CreateDockerRegistryRequest) Reset() {
+	*x = CreateDockerRegistryRequest{}
+	mi := &file_nas_v1_docker_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateDockerRegistryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateDockerRegistryRequest) ProtoMessage() {}
+
+func (x *CreateDockerRegistryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_docker_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateDockerRegistryRequest.ProtoReflect.Descriptor instead.
+func (*CreateDockerRegistryRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_docker_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *CreateDockerRegistryRequest) GetDockerRegistryId() string {
+	if x != nil {
+		return x.DockerRegistryId
+	}
+	return ""
+}
+
+func (x *CreateDockerRegistryRequest) GetDockerRegistry() *DockerRegistry {
+	if x != nil {
+		return x.DockerRegistry
+	}
+	return nil
+}
+
+type UpdateDockerRegistryRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	DockerRegistry *DockerRegistry        `protobuf:"bytes,1,opt,name=docker_registry,json=dockerRegistry,proto3" json:"docker_registry,omitempty"`
+	UpdateMask     *fieldmaskpb.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *UpdateDockerRegistryRequest) Reset() {
+	*x = UpdateDockerRegistryRequest{}
+	mi := &file_nas_v1_docker_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateDockerRegistryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateDockerRegistryRequest) ProtoMessage() {}
+
+func (x *UpdateDockerRegistryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_docker_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateDockerRegistryRequest.ProtoReflect.Descriptor instead.
+func (*UpdateDockerRegistryRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_docker_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *UpdateDockerRegistryRequest) GetDockerRegistry() *DockerRegistry {
+	if x != nil {
+		return x.DockerRegistry
+	}
+	return nil
+}
+
+func (x *UpdateDockerRegistryRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
+	if x != nil {
+		return x.UpdateMask
+	}
+	return nil
+}
+
+type DeleteDockerRegistryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteDockerRegistryRequest) Reset() {
+	*x = DeleteDockerRegistryRequest{}
+	mi := &file_nas_v1_docker_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteDockerRegistryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteDockerRegistryRequest) ProtoMessage() {}
+
+func (x *DeleteDockerRegistryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_docker_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteDockerRegistryRequest.ProtoReflect.Descriptor instead.
+func (*DeleteDockerRegistryRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_docker_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *DeleteDockerRegistryRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
 var File_nas_v1_docker_proto protoreflect.FileDescriptor
 
 const file_nas_v1_docker_proto_rawDesc = "" +
@@ -2458,7 +2833,33 @@ const file_nas_v1_docker_proto_rawDesc = "" +
 	"\tavailable\x18\x03 \x01(\bR\tavailable\x12\x1a\n" +
 	"\tin_use_by\x18\x04 \x01(\tR\ainUseBy\"F\n" +
 	"\x16CheckHostPortsResponse\x12,\n" +
-	"\x05ports\x18\x01 \x03(\v2\x16.nas.v1.HostPortStatusR\x05portsB2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
+	"\x05ports\x18\x01 \x03(\v2\x16.nas.v1.HostPortStatusR\x05ports\"\xa1\x03\n" +
+	"\x0eDockerRegistry\x12\x18\n" +
+	"\x04name\x18\x01 \x01(\tB\x04\xe2A\x01\bR\x04name\x12\x1c\n" +
+	"\x06server\x18\x02 \x01(\tB\x04\xe2A\x01\x02R\x06server\x12 \n" +
+	"\busername\x18\x03 \x01(\tB\x04\xe2A\x01\x02R\busername\x12 \n" +
+	"\bpassword\x18\x04 \x01(\tB\x04\xe2A\x01\x04R\bpassword\x12'\n" +
+	"\fhas_password\x18\x05 \x01(\bB\x04\xe2A\x01\x03R\vhasPassword\x12 \n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\x120\n" +
+	"\x11last_login_status\x18\a \x01(\tB\x04\xe2A\x01\x03R\x0flastLoginStatus\x12,\n" +
+	"\x0flast_login_time\x18\b \x01(\tB\x04\xe2A\x01\x03R\rlastLoginTime:h\xeaAe\n" +
+	"\x1dnas.sigxcpu.io/DockerRegistry\x12\"dockerRegistries/{docker_registry}*\x10dockerRegistries2\x0edockerRegistry\"\x1d\n" +
+	"\x1bListDockerRegistriesRequest\"c\n" +
+	"\x1cListDockerRegistriesResponse\x12C\n" +
+	"\x11docker_registries\x18\x01 \x03(\v2\x16.nas.v1.DockerRegistryR\x10dockerRegistries\"V\n" +
+	"\x18GetDockerRegistryRequest\x12:\n" +
+	"\x04name\x18\x01 \x01(\tB&\xe2A\x01\x02\xfaA\x1f\n" +
+	"\x1dnas.sigxcpu.io/DockerRegistryR\x04name\"\x92\x01\n" +
+	"\x1bCreateDockerRegistryRequest\x12,\n" +
+	"\x12docker_registry_id\x18\x01 \x01(\tR\x10dockerRegistryId\x12E\n" +
+	"\x0fdocker_registry\x18\x02 \x01(\v2\x16.nas.v1.DockerRegistryB\x04\xe2A\x01\x02R\x0edockerRegistry\"\xa1\x01\n" +
+	"\x1bUpdateDockerRegistryRequest\x12E\n" +
+	"\x0fdocker_registry\x18\x01 \x01(\v2\x16.nas.v1.DockerRegistryB\x04\xe2A\x01\x02R\x0edockerRegistry\x12;\n" +
+	"\vupdate_mask\x18\x02 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
+	"updateMask\"Y\n" +
+	"\x1bDeleteDockerRegistryRequest\x12:\n" +
+	"\x04name\x18\x01 \x01(\tB&\xe2A\x01\x02\xfaA\x1f\n" +
+	"\x1dnas.sigxcpu.io/DockerRegistryR\x04nameB2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
 
 var (
 	file_nas_v1_docker_proto_rawDescOnce sync.Once
@@ -2472,7 +2873,7 @@ func file_nas_v1_docker_proto_rawDescGZIP() []byte {
 	return file_nas_v1_docker_proto_rawDescData
 }
 
-var file_nas_v1_docker_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
+var file_nas_v1_docker_proto_msgTypes = make([]protoimpl.MessageInfo, 41)
 var file_nas_v1_docker_proto_goTypes = []any{
 	(*DockerContainer)(nil),                // 0: nas.v1.DockerContainer
 	(*ListDockerContainersRequest)(nil),    // 1: nas.v1.ListDockerContainersRequest
@@ -2508,27 +2909,38 @@ var file_nas_v1_docker_proto_goTypes = []any{
 	(*CheckHostPortsRequest)(nil),          // 31: nas.v1.CheckHostPortsRequest
 	(*HostPortStatus)(nil),                 // 32: nas.v1.HostPortStatus
 	(*CheckHostPortsResponse)(nil),         // 33: nas.v1.CheckHostPortsResponse
-	(*fieldmaskpb.FieldMask)(nil),          // 34: google.protobuf.FieldMask
+	(*DockerRegistry)(nil),                 // 34: nas.v1.DockerRegistry
+	(*ListDockerRegistriesRequest)(nil),    // 35: nas.v1.ListDockerRegistriesRequest
+	(*ListDockerRegistriesResponse)(nil),   // 36: nas.v1.ListDockerRegistriesResponse
+	(*GetDockerRegistryRequest)(nil),       // 37: nas.v1.GetDockerRegistryRequest
+	(*CreateDockerRegistryRequest)(nil),    // 38: nas.v1.CreateDockerRegistryRequest
+	(*UpdateDockerRegistryRequest)(nil),    // 39: nas.v1.UpdateDockerRegistryRequest
+	(*DeleteDockerRegistryRequest)(nil),    // 40: nas.v1.DeleteDockerRegistryRequest
+	(*fieldmaskpb.FieldMask)(nil),          // 41: google.protobuf.FieldMask
 }
 var file_nas_v1_docker_proto_depIdxs = []int32{
 	0,  // 0: nas.v1.ListDockerContainersResponse.docker_containers:type_name -> nas.v1.DockerContainer
 	0,  // 1: nas.v1.CreateDockerContainerRequest.docker_container:type_name -> nas.v1.DockerContainer
 	0,  // 2: nas.v1.UpdateDockerContainerRequest.docker_container:type_name -> nas.v1.DockerContainer
-	34, // 3: nas.v1.UpdateDockerContainerRequest.update_mask:type_name -> google.protobuf.FieldMask
+	41, // 3: nas.v1.UpdateDockerContainerRequest.update_mask:type_name -> google.protobuf.FieldMask
 	14, // 4: nas.v1.DockerApp.containers:type_name -> nas.v1.DockerAppContainer
 	13, // 5: nas.v1.DockerApp.portals:type_name -> nas.v1.DockerAppPortal
 	12, // 6: nas.v1.ListDockerAppsResponse.docker_apps:type_name -> nas.v1.DockerApp
 	12, // 7: nas.v1.CreateDockerAppRequest.docker_app:type_name -> nas.v1.DockerApp
 	12, // 8: nas.v1.UpdateDockerAppRequest.docker_app:type_name -> nas.v1.DockerApp
-	34, // 9: nas.v1.UpdateDockerAppRequest.update_mask:type_name -> google.protobuf.FieldMask
+	41, // 9: nas.v1.UpdateDockerAppRequest.update_mask:type_name -> google.protobuf.FieldMask
 	26, // 10: nas.v1.UpdateDockerConfigRequest.docker_config:type_name -> nas.v1.DockerConfig
-	34, // 11: nas.v1.UpdateDockerConfigRequest.update_mask:type_name -> google.protobuf.FieldMask
+	41, // 11: nas.v1.UpdateDockerConfigRequest.update_mask:type_name -> google.protobuf.FieldMask
 	32, // 12: nas.v1.CheckHostPortsResponse.ports:type_name -> nas.v1.HostPortStatus
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	34, // 13: nas.v1.ListDockerRegistriesResponse.docker_registries:type_name -> nas.v1.DockerRegistry
+	34, // 14: nas.v1.CreateDockerRegistryRequest.docker_registry:type_name -> nas.v1.DockerRegistry
+	34, // 15: nas.v1.UpdateDockerRegistryRequest.docker_registry:type_name -> nas.v1.DockerRegistry
+	41, // 16: nas.v1.UpdateDockerRegistryRequest.update_mask:type_name -> google.protobuf.FieldMask
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_nas_v1_docker_proto_init() }
@@ -2542,7 +2954,7 @@ func file_nas_v1_docker_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nas_v1_docker_proto_rawDesc), len(file_nas_v1_docker_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   34,
+			NumMessages:   41,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

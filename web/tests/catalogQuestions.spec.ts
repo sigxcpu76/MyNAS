@@ -71,10 +71,10 @@ describe('catalogQuestions domain helpers', () => {
     ],
   };
 
-  it('correctly maps default answers and substitutes /mnt/ with /nas/', () => {
+  it('correctly maps default answers with /mnt/', () => {
     const defaults = getQuestionsDefaultAnswers(sampleApp, 'tank');
     expect(defaults['network.web_port']).toBe('5006');
-    expect(defaults['storage.data']).toBe('/nas/tank/actual-budget/data');
+    expect(defaults['storage.data']).toBe('/mnt/tank/actual-budget/data');
     expect(defaults['actual_budget.password']).toBe('mysecret');
     expect(defaults['run_as.user']).toBe('1000');
   });

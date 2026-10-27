@@ -28,8 +28,8 @@ type stubZfsEnginePort struct {
 func newStubZfsEnginePort() *stubZfsEnginePort {
 	return &stubZfsEnginePort{
 		pools: map[string]domain.ZfsPool{
-			"tank": {ID: "tank", PoolName: "tank", State: "ONLINE", Mountpoint: "/nas/tank"},
-			"fast": {ID: "fast", PoolName: "fast", State: "ONLINE", Mountpoint: "/nas/fast"},
+			"tank": {ID: "tank", PoolName: "tank", State: "ONLINE", Mountpoint: "/mnt/tank"},
+			"fast": {ID: "fast", PoolName: "fast", State: "ONLINE", Mountpoint: "/mnt/fast"},
 		},
 		datasets:  make(map[string]domain.ZfsDataset),
 		volumes:   make(map[string]domain.ZfsVolume),
@@ -47,7 +47,7 @@ func (s *stubZfsEnginePort) ListPools(ctx context.Context) ([]domain.ZfsPool, er
 
 func (s *stubZfsEnginePort) CreatePool(ctx context.Context, pool domain.ZfsPool) (*domain.ZfsPool, error) {
 	if pool.Mountpoint == "" {
-		pool.Mountpoint = "/nas/" + pool.ID
+		pool.Mountpoint = "/mnt/" + pool.ID
 	}
 	s.pools[pool.ID] = pool
 	return &pool, nil
@@ -107,7 +107,7 @@ func (k *stubKvmPort) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*
 		vm.Disks = []domain.VirtualMachineDisk{
 			{
 				ID:       domain.GenerateVMDiskName(vm.ID, 0),
-				DiskPath: fmt.Sprintf("/nas/mypool/vms/%s.raw", domain.GenerateVMDiskName(vm.ID, 0)),
+				DiskPath: fmt.Sprintf("/mnt/mypool/vms/%s.raw", domain.GenerateVMDiskName(vm.ID, 0)),
 			},
 		}
 	}
@@ -280,8 +280,8 @@ func TestZfsServiceLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreatePool failed: %v", err)
 	}
-	if createdPool.Mountpoint != "/nas/archive" {
-		t.Fatalf("expected mountpoint /nas/archive, got %s", createdPool.Mountpoint)
+	if createdPool.Mountpoint != "/mnt/archive" {
+		t.Fatalf("expected mountpoint /mnt/archive, got %s", createdPool.Mountpoint)
 	}
 
 	scrubbed, err := svc.ScrubPool(ctx, "archive")

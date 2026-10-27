@@ -79,7 +79,7 @@ func (a *Adapter) GetConfig(ctx context.Context) (*domain.SystemConfig, error) {
 
 	if mainPool != "" {
 		systemDataset = fmt.Sprintf("%s/%s", mainPool, cfg.System.SystemDataset)
-		poolMount := fmt.Sprintf("/nas/%s", mainPool)
+		poolMount := fmt.Sprintf("/mnt/%s", mainPool)
 		if p, pErr := a.zfsPort.GetPool(ctx, mainPool); pErr == nil && p != nil && p.Mountpoint != "" && p.Mountpoint != "none" {
 			poolMount = p.Mountpoint
 		}
@@ -139,7 +139,7 @@ func (a *Adapter) SelectMainPool(ctx context.Context, poolName string, autoImpor
 	}
 
 	datasetPath := fmt.Sprintf("%s/%s", cleanPool, dsName)
-	poolMount := fmt.Sprintf("/nas/%s", cleanPool)
+	poolMount := fmt.Sprintf("/mnt/%s", cleanPool)
 	if p != nil && p.Mountpoint != "" && p.Mountpoint != "none" && p.Mountpoint != "legacy" {
 		poolMount = p.Mountpoint
 	}
@@ -248,7 +248,7 @@ func (a *Adapter) DiscoverPools(ctx context.Context) ([]domain.DiscoveredPool, e
 	for _, p := range pools {
 		cleanID := strings.TrimPrefix(p.ID, "zfsPools/")
 		hasSys := false
-		poolMount := fmt.Sprintf("/nas/%s", cleanID)
+		poolMount := fmt.Sprintf("/mnt/%s", cleanID)
 		if p.Mountpoint != "" && p.Mountpoint != "none" && p.Mountpoint != "legacy" {
 			poolMount = p.Mountpoint
 		}

@@ -586,6 +586,46 @@ service NasService {
   }
 
   // ---------------------------------------------------------------------------
+  // Container Registry Credentials
+  // ---------------------------------------------------------------------------
+
+  rpc ListDockerRegistries(ListDockerRegistriesRequest) returns (ListDockerRegistriesResponse) {
+    option (google.api.http) = {
+      get: "/v1/dockerRegistries"
+    };
+  }
+
+  rpc GetDockerRegistry(GetDockerRegistryRequest) returns (DockerRegistry) {
+    option (google.api.http) = {
+      get: "/v1/{name=dockerRegistries/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateDockerRegistry(CreateDockerRegistryRequest) returns (DockerRegistry) {
+    option (google.api.http) = {
+      post: "/v1/dockerRegistries"
+      body: "docker_registry"
+    };
+    option (google.api.method_signature) = "docker_registry,docker_registry_id";
+  }
+
+  rpc UpdateDockerRegistry(UpdateDockerRegistryRequest) returns (DockerRegistry) {
+    option (google.api.http) = {
+      patch: "/v1/{docker_registry.name=dockerRegistries/*}"
+      body: "docker_registry"
+    };
+    option (google.api.method_signature) = "docker_registry,update_mask";
+  }
+
+  rpc DeleteDockerRegistry(DeleteDockerRegistryRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=dockerRegistries/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  // ---------------------------------------------------------------------------
   // Host Filesystem Directory Browser
   // ---------------------------------------------------------------------------
 
@@ -686,6 +726,20 @@ service NasService {
       delete: "/v1/{name=cifsShares/*}"
     };
     option (google.api.method_signature) = "name";
+  }
+
+  rpc GetCifsGlobalConfig(GetCifsGlobalConfigRequest) returns (CifsGlobalConfig) {
+    option (google.api.http) = {
+      get: "/v1/cifsGlobalConfig"
+    };
+  }
+
+  rpc UpdateCifsGlobalConfig(UpdateCifsGlobalConfigRequest) returns (CifsGlobalConfig) {
+    option (google.api.http) = {
+      patch: "/v1/cifsGlobalConfig"
+      body: "global_config"
+    };
+    option (google.api.method_signature) = "global_config,update_mask";
   }
 
   // ---------------------------------------------------------------------------

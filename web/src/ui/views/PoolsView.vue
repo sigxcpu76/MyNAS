@@ -5,7 +5,6 @@ import {
   mdiCheck,
   mdiCheckCircleOutline,
   mdiClose,
-  mdiCogOutline,
   mdiDatabase,
   mdiDatabaseCheck,
   mdiDatabaseExportOutline,
@@ -15,6 +14,7 @@ import {
   mdiHarddisk,
   mdiLockOutline,
   mdiMagnify,
+  mdiPencil,
   mdiPlus,
   mdiRefresh,
   mdiShieldCheckOutline,
@@ -375,7 +375,7 @@ async function handleCreatePool() {
       vdevLayout: primaryDataVdev?.layout || 'mirror',
       devices: allDevices,
       compression: poolForm.compression || 'lz4',
-      mountpoint: poolForm.mountpoint || `/nas/${poolForm.poolId.trim()}`,
+      mountpoint: poolForm.mountpoint || `/mnt/${poolForm.poolId.trim()}`,
       vdevs,
     });
     notify(
@@ -1046,10 +1046,10 @@ function viewPoolDatasets(poolName: string) {
             </button>
             <button
               class="btn btn-sm btn-icon"
-              title="Configure Sync & VDEVs"
+              title="Edit Sync & VDEVs"
               @click="openPoolConfig(p)"
             >
-              <MdiIcon :path="mdiCogOutline" size="14" />
+              <MdiIcon :path="mdiPencil" size="14" />
             </button>
             <button
               class="btn btn-sm btn-icon"
@@ -1099,7 +1099,7 @@ function viewPoolDatasets(poolName: string) {
               <input
                 v-model="poolForm.mountpoint"
                 class="input mono"
-                :placeholder="poolForm.poolId ? `/nas/${poolForm.poolId.trim()}` : '/nas/<pool-name>'"
+                :placeholder="poolForm.poolId ? `/mnt/${poolForm.poolId.trim()}` : '/mnt/<pool-name>'"
               />
             </div>
 
@@ -1475,7 +1475,7 @@ function viewPoolDatasets(poolName: string) {
             <div class="form-group">
               <label>Mountpoint</label>
               <input
-                :value="configuringPool.mountpoint || `/nas/${configuringPool.poolName || configuringPool.name.replace(/^zfsPools\//, '')}`"
+                :value="configuringPool.mountpoint || `/mnt/${configuringPool.poolName || configuringPool.name.replace(/^zfsPools\//, '')}`"
                 class="input mono"
                 disabled
                 style="background: rgba(0, 0, 0, 0.25); color: var(--text-secondary); cursor: not-allowed"

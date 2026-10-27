@@ -25,6 +25,8 @@ type User struct {
 	SystemAccount       bool
 	Password            string
 	IsAdmin             bool
+	SMBEnabled          bool
+	SMBPassword         string
 }
 
 func (u *User) Validate() error {

@@ -67,7 +67,7 @@ questions:
 `
 
 func TestParseQuestionsYAML(t *testing.T) {
-	groups, flat := ParseQuestionsYAML([]byte(sampleTrueNASQuestionsYAML), "actual-budget", "tank", "/nas/tank/apps")
+	groups, flat := ParseQuestionsYAML([]byte(sampleTrueNASQuestionsYAML), "actual-budget", "tank", "/mnt/tank/apps")
 
 	if len(flat) == 0 {
 		t.Fatalf("expected parsed questions, got none")
@@ -91,8 +91,8 @@ func TestParseQuestionsYAML(t *testing.T) {
 			if q.Type != "hostpath" {
 				t.Errorf("expected hostpath type, got %s", q.Type)
 			}
-			if !strings.HasPrefix(q.DefaultValue, "/nas/") {
-				t.Errorf("expected /nas/ path, got %s", q.DefaultValue)
+			if !strings.HasPrefix(q.DefaultValue, "/mnt/") {
+				t.Errorf("expected /mnt/ path, got %s", q.DefaultValue)
 			}
 			if q.MountPath != "/data" {
 				t.Errorf("expected mount path /data, got %s", q.MountPath)
@@ -123,7 +123,7 @@ func TestGenerateComposeFromQuestions(t *testing.T) {
 		ContainerImage: "ghcr.io/actualbudget/actual-server:latest",
 		DefaultPort:    5006,
 	}
-	_, flat := ParseQuestionsYAML([]byte(sampleTrueNASQuestionsYAML), "actual-budget", "tank", "/nas/tank/apps")
+	_, flat := ParseQuestionsYAML([]byte(sampleTrueNASQuestionsYAML), "actual-budget", "tank", "/mnt/tank/apps")
 	app.Questions = flat
 
 	answers := map[string]string{
@@ -131,7 +131,7 @@ func TestGenerateComposeFromQuestions(t *testing.T) {
 		"actual_budget.password": "custompass123",
 	}
 
-	compose := GenerateComposeFromQuestions(app, answers, "tank", "/nas/tank/apps")
+	compose := GenerateComposeFromQuestions(app, answers, "tank", "/mnt/tank/apps")
 
 	if !strings.Contains(compose, `"5050:5006"`) {
 		t.Errorf("expected port mapping 5050:5006 in compose, got:\n%s", compose)

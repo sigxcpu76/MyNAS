@@ -70,7 +70,7 @@ func NewAdapterWithStateDir(stateDir string) *Adapter {
 }
 
 // EnsureHostPermissions ensures the libvirt/qemu user has group access to block devices (disk/kvm)
-// and that AppArmor profiles allow access to ZFS zvols (/dev/zvol/**, /dev/zd*) and NAS storage (/nas/**).
+// and that AppArmor profiles allow access to ZFS zvols (/dev/zvol/**, /dev/zd*) and NAS storage (/mnt/**, /nas/**).
 func EnsureHostPermissions() error {
 	// 1. Add libvirt-qemu / qemu user to disk and kvm groups
 	for _, user := range []string{"libvirt-qemu", "qemu"} {
@@ -91,27 +91,43 @@ func EnsureHostPermissions() error {
 			_ = os.MkdirAll(d, 0755)
 		}
 
-		ruleBlock := "# Allow QEMU access to ZFS zvols and NAS storage\n/dev/zvol/** rwk,\n/dev/zd* rwk,\n/nas/** rwk,\n"
-		helperRule := "# Allow virt-aa-helper access to ZFS zvols and NAS storage\n/dev/zvol/** rw,\n/dev/zd* rw,\n/nas/** rw,\n"
-		libvirtdRule := "# Allow libvirtd mount operations for zvols and nas storage\nmount options=(rw, bind) /dev/zvol/** -> /{,var/}run/libvirt/qemu/*{,/},\nmount options=(rw, bind) /nas/** -> /{,var/}run/libvirt/qemu/*{,/},\n/dev/zvol/** rwk,\n/dev/zd* rwk,\n/nas/** rwk,\n"
+		ruleBlock := "# Allow QEMU access to ZFS zvols and NAS storage\n/dev/zvol/** rwk,\n/dev/zd* rwk,\n/mnt/** rwk,\n/nas/** rwk,\n"
+		helperRule := "# Allow virt-aa-helper access to ZFS zvols and NAS storage\n/dev/zvol/** rw,\n/dev/zd* rw,\n/mnt/** rw,\n/nas/** rw,\n"
 
 		_ = os.WriteFile("/etc/apparmor.d/local/abstractions/libvirt-qemu", []byte(ruleBlock), 0644)
 		_ = os.WriteFile("/etc/apparmor.d/abstractions/libvirt-qemu.d/mynas", []byte(ruleBlock), 0644)
 		_ = os.WriteFile("/etc/apparmor.d/local/usr.lib.libvirt.virt-aa-helper", []byte(helperRule), 0644)
-		_ = os.WriteFile("/etc/apparmor.d/local/usr.sbin.libvirtd", []byte(libvirtdRule), 0644)
 
+		// On modern kernels (Linux 6.8+ / Debian 13 / Proxmox PVE), the legacy host libvirtd daemon AppArmor profile
+		// breaks UNIX domain socket creation due to fine-grained network unix mediation mismatch.
+		// Confining the libvirtd daemon itself is deprecated and unnecessary because guest VMs are fully confined
+		// by virt-aa-helper and libvirt-qemu profiles. Disable the host daemon profile to allow libvirtd sockets to function.
+		_ = os.MkdirAll("/etc/apparmor.d/disable", 0755)
+		if _, err := os.Stat("/etc/apparmor.d/usr.sbin.libvirtd"); err == nil {
+			_ = os.Symlink("/etc/apparmor.d/usr.sbin.libvirtd", "/etc/apparmor.d/disable/usr.sbin.libvirtd")
+			_ = exec.Command("apparmor_parser", "-R", "/etc/apparmor.d/usr.sbin.libvirtd").Run()
+		}
 		_ = exec.Command("apparmor_parser", "-r", "/etc/apparmor.d/usr.lib.libvirt.virt-aa-helper").Run()
-		_ = exec.Command("apparmor_parser", "-r", "/etc/apparmor.d/usr.sbin.libvirtd").Run()
 	}
 
-	// 3. Ensure permissions on /nas directory structure
-	_ = os.Chmod("/nas", 0755)
-	if entries, err := os.ReadDir("/nas"); err == nil {
-		for _, e := range entries {
-			poolPath := filepath.Join("/nas", e.Name())
-			_ = os.Chmod(poolPath, 0755)
-			_ = os.Chmod(filepath.Join(poolPath, "isos"), 0755)
-			_ = os.Chmod(filepath.Join(poolPath, "vms"), 0755)
+	// 3. Ensure libvirtd service and sockets are active
+	if _, err := exec.LookPath("systemctl"); err == nil {
+		if _, err := exec.LookPath("libvirtd"); err == nil {
+			_ = exec.Command("systemctl", "reset-failed", "libvirtd", "libvirtd.socket", "libvirtd-ro.socket", "libvirtd-admin.socket").Run()
+			_ = exec.Command("systemctl", "start", "libvirtd.socket", "libvirtd.service").Run()
+		}
+	}
+
+	// 4. Ensure permissions on /mnt and /nas directory structure
+	for _, base := range []string{"/mnt", "/nas"} {
+		_ = os.Chmod(base, 0755)
+		if entries, err := os.ReadDir(base); err == nil {
+			for _, e := range entries {
+				poolPath := filepath.Join(base, e.Name())
+				_ = os.Chmod(poolPath, 0755)
+				_ = os.Chmod(filepath.Join(poolPath, "isos"), 0755)
+				_ = os.Chmod(filepath.Join(poolPath, "vms"), 0755)
+			}
 		}
 	}
 
@@ -728,16 +744,20 @@ func (a *Adapter) CreateVM(ctx context.Context, vm domain.VirtualMachine) (*doma
 }
 
 func (a *Adapter) UpdateVM(ctx context.Context, vm domain.VirtualMachine, fields []string) (*domain.VirtualMachine, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	existing, ok := a.vms[vm.ID]
-	if !ok {
-		if a.hasVirsh() {
-			if dom, err := a.getDomainFromVirsh(ctx, vm.ID); err == nil && dom != nil {
-				existing = *dom
-				ok = true
-			}
+	var existing domain.VirtualMachine
+	var ok bool
+
+	if a.hasVirsh() {
+		if dom, err := a.getDomainFromVirsh(ctx, vm.ID); err == nil && dom != nil {
+			existing = *dom
+			ok = true
 		}
+	}
+
+	if !ok {
+		a.mu.Lock()
+		existing, ok = a.vms[vm.ID]
+		a.mu.Unlock()
 		if !ok {
 			return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, vm.ID)
 		}
@@ -757,9 +777,7 @@ func (a *Adapter) UpdateVM(ctx context.Context, vm domain.VirtualMachine, fields
 	}
 	if vm.MemoryMiB >= 128 {
 		existing.MemoryMiB = vm.MemoryMiB
-	}
-	if vm.BalloonMinMiB > 0 {
-		existing.BalloonMinMiB = vm.BalloonMinMiB
+		existing.BalloonMinMiB = vm.MemoryMiB
 	}
 	if vm.Hugepages != "" {
 		existing.Hugepages = vm.Hugepages
@@ -778,13 +796,28 @@ func (a *Adapter) UpdateVM(ctx context.Context, vm domain.VirtualMachine, fields
 	if vm.DisplayType != "" {
 		existing.DisplayType = vm.DisplayType
 	}
-	if len(vm.Disks) > 0 {
+	hasDisksPath := false
+	hasNicsPath := false
+	for _, p := range fields {
+		if p == "disks" {
+			hasDisksPath = true
+		}
+		if p == "network_interfaces" || p == "networkInterfaces" {
+			hasNicsPath = true
+		}
+	}
+
+	if hasDisksPath {
+		existing.Disks = vm.Disks
+	} else if len(vm.Disks) > 0 {
 		existing.Disks = vm.Disks
 	}
 	if vm.CdromIsoImage != "" {
 		existing.CdromIsoImage = vm.CdromIsoImage
 	}
-	if len(vm.NetworkIfaces) > 0 {
+	if hasNicsPath {
+		existing.NetworkIfaces = vm.NetworkIfaces
+	} else if len(vm.NetworkIfaces) > 0 {
 		existing.NetworkIfaces = vm.NetworkIfaces
 	}
 	if vm.CloudInit.User != "" || len(vm.CloudInit.SSHPublicKeys) > 0 || vm.CloudInit.IPConfig != "" {
@@ -801,6 +834,7 @@ func (a *Adapter) UpdateVM(ctx context.Context, vm domain.VirtualMachine, fields
 	}
 
 	if a.hasVirsh() {
+		a.sanitizeAndEnsureDisks(&existing)
 		xmlStr := buildDomainXML(existing)
 		cmd := exec.CommandContext(ctx, "virsh", "define", "/dev/stdin")
 		cmd.Stdin = strings.NewReader(xmlStr)
@@ -810,7 +844,9 @@ func (a *Adapter) UpdateVM(ctx context.Context, vm domain.VirtualMachine, fields
 		}
 	}
 
+	a.mu.Lock()
 	a.vms[vm.ID] = existing
+	a.mu.Unlock()
 	cp := existing
 	return &cp, nil
 }
@@ -1564,12 +1600,8 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 `, vm.Description))
 	}
 	sb.WriteString(fmt.Sprintf(`  <memory unit='MiB'>%d</memory>
-`, vm.MemoryMiB))
-
-	if vm.BalloonMinMiB > 0 {
-		sb.WriteString(fmt.Sprintf(`  <currentMemory unit='MiB'>%d</currentMemory>
-`, vm.BalloonMinMiB))
-	}
+  <currentMemory unit='MiB'>%d</currentMemory>
+`, vm.MemoryMiB, vm.MemoryMiB))
 
 	if vm.Hugepages != "" && vm.Hugepages != "off" {
 		sb.WriteString(`  <memoryBacking>
@@ -1777,7 +1809,7 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 	sb.WriteString(`    <channel type='unix'>
       <target type='virtio' name='org.qemu.guest_agent.0'/>
     </channel>
-    <memballoon model='virtio'/>
+    <memballoon model='none'/>
     <graphics type='vnc' port='-1' autoport='yes' listen='127.0.0.1'>
       <listen type='address' address='127.0.0.1'/>
     </graphics>

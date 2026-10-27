@@ -181,6 +181,26 @@ var defaultSpecs = []Spec{
 		RequiredBy:  []string{"CIFS / SMB Folder Sharing"},
 	},
 	{
+		ID:          "avahi-daemon",
+		Module:      "discovery",
+		DisplayName: "Avahi mDNS/Bonjour Discovery Daemon (avahi-daemon)",
+		Category:    "SHARING",
+		Kind:        "DAEMON",
+		Target:      "avahi-daemon",
+		VersionArgs: []string{"--version"},
+		RequiredBy:  []string{"Network Browsing (mDNS / Bonjour / Apple)"},
+	},
+	{
+		ID:          "wsdd",
+		Module:      "discovery",
+		DisplayName: "Web Services Dynamic Discovery (wsdd)",
+		Category:    "SHARING",
+		Kind:        "DAEMON",
+		Target:      "wsdd",
+		VersionArgs: []string{"-h"},
+		RequiredBy:  []string{"Windows Network Discovery (WSD)"},
+	},
+	{
 		ID:          "webdav-builtin",
 		Module:      "webdav",
 		DisplayName: "Embedded Go WebDAV Server & VFS Engine",
@@ -495,11 +515,22 @@ func (c *SystemChecker) CheckAll(ctx context.Context) ([]domain.Prerequisite, er
 		}
 
 		// Binary or Daemon lookup
-		resolvedPath, err := lookPathWithSbin(spec.Target)
+		targetBinary := spec.Target
+		versionArgs := spec.VersionArgs
+		if spec.ID == "wsdd" {
+			if _, err := lookPathWithSbin(targetBinary); err != nil {
+				if _, err2 := lookPathWithSbin("wsdd2"); err2 == nil {
+					targetBinary = "wsdd2"
+					versionArgs = []string{"-h"}
+				}
+			}
+		}
+
+		resolvedPath, err := lookPathWithSbin(targetBinary)
 		if err == nil {
 			p.BinaryOrPath = resolvedPath
 			p.Status = domain.StatusInstalled
-			p.Version = detectVersion(ctx, resolvedPath, spec.VersionArgs)
+			p.Version = detectVersion(ctx, resolvedPath, versionArgs)
 			p.Details = fmt.Sprintf("Found executable at %s", resolvedPath)
 		} else {
 			p.Status = domain.StatusMissing
@@ -551,7 +582,7 @@ func (c *SystemChecker) GetReport(ctx context.Context) (domain.PrerequisitesRepo
 			missing = append(missing, item)
 
 			// Collect package requirements
-			pkgs := PackagesForPrereq(item.ID, flavor.PackageManager)
+			pkgs := PackagesForPrereq(item.ID, flavor.PackageManager, flavor)
 			for _, pkg := range pkgs {
 				if _, seen := pkgSet[pkg]; !seen {
 					pkgSet[pkg] = struct{}{}

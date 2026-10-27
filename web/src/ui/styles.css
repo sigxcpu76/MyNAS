@@ -1174,6 +1174,26 @@ select option {
   color: var(--text-primary);
 }
 
+.modal-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.modal-close-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
 /* Large Full-Screen Responsive Modal for Code & Form Editors */
 .modal-card-xlarge {
   width: 95vw !important;
@@ -1205,7 +1225,7 @@ select option {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  z-index: 200;
+  z-index: 9999;
 }
 
 .toast {
@@ -1246,6 +1266,17 @@ select option {
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   display: inline-block;
+}
+
+.spinner-sm {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 @keyframes spin {

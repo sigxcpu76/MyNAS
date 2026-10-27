@@ -41,6 +41,8 @@ type User struct {
 	SystemAccount       bool                   `protobuf:"varint,14,opt,name=system_account,json=systemAccount,proto3" json:"system_account,omitempty"`
 	Password            string                 `protobuf:"bytes,15,opt,name=password,proto3" json:"password,omitempty"`
 	IsAdmin             bool                   `protobuf:"varint,16,opt,name=is_admin,json=isAdmin,proto3" json:"is_admin,omitempty"`
+	SmbEnabled          bool                   `protobuf:"varint,17,opt,name=smb_enabled,json=smbEnabled,proto3" json:"smb_enabled,omitempty"`
+	SmbPassword         string                 `protobuf:"bytes,18,opt,name=smb_password,json=smbPassword,proto3" json:"smb_password,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -185,6 +187,20 @@ func (x *User) GetIsAdmin() bool {
 		return x.IsAdmin
 	}
 	return false
+}
+
+func (x *User) GetSmbEnabled() bool {
+	if x != nil {
+		return x.SmbEnabled
+	}
+	return false
+}
+
+func (x *User) GetSmbPassword() string {
+	if x != nil {
+		return x.SmbPassword
+	}
+	return ""
 }
 
 type ListUsersRequest struct {
@@ -899,7 +915,7 @@ var File_nas_v1_user_proto protoreflect.FileDescriptor
 
 const file_nas_v1_user_proto_rawDesc = "" +
 	"\n" +
-	"\x11nas/v1/user.proto\x12\x06nas.v1\x1a\x1fgoogle/api/field_behavior.proto\x1a\x19google/api/resource.proto\x1a google/protobuf/field_mask.proto\"\xdb\x04\n" +
+	"\x11nas/v1/user.proto\x12\x06nas.v1\x1a\x1fgoogle/api/field_behavior.proto\x1a\x19google/api/resource.proto\x1a google/protobuf/field_mask.proto\"\xa5\x05\n" +
 	"\x04User\x12\x18\n" +
 	"\x04name\x18\x01 \x01(\tB\x04\xe2A\x01\bR\x04name\x12 \n" +
 	"\busername\x18\x02 \x01(\tB\x04\xe2A\x01\x03R\busername\x12\x10\n" +
@@ -919,7 +935,10 @@ const file_nas_v1_user_proto_rawDesc = "" +
 	"\x06locked\x18\r \x01(\bR\x06locked\x12+\n" +
 	"\x0esystem_account\x18\x0e \x01(\bB\x04\xe2A\x01\x03R\rsystemAccount\x12 \n" +
 	"\bpassword\x18\x0f \x01(\tB\x04\xe2A\x01\x04R\bpassword\x12\x19\n" +
-	"\bis_admin\x18\x10 \x01(\bR\aisAdmin:3\xeaA0\n" +
+	"\bis_admin\x18\x10 \x01(\bR\aisAdmin\x12\x1f\n" +
+	"\vsmb_enabled\x18\x11 \x01(\bR\n" +
+	"smbEnabled\x12'\n" +
+	"\fsmb_password\x18\x12 \x01(\tB\x04\xe2A\x01\x04R\vsmbPassword:3\xeaA0\n" +
 	"\x13nas.sigxcpu.io/User\x12\fusers/{user}*\x05users2\x04user\"\x86\x01\n" +
 	"\x10ListUsersRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +

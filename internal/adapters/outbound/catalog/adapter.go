@@ -60,7 +60,7 @@ func NewAdapter(cacheDir string) *Adapter {
 		httpClient:  &http.Client{Timeout: 30 * time.Second},
 		catalogURL:  defaultCatalogURL,
 		appsPool:    "tank",
-		appdataPath: "/nas/tank/apps",
+		appdataPath: "/mnt/tank/apps",
 	}
 
 	// 1. Seed high-quality offline apps
@@ -281,7 +281,7 @@ func (a *Adapter) SetAppsPool(pool string) {
 	pool = strings.TrimSpace(strings.TrimPrefix(pool, "zfsPools/"))
 	if pool != "" {
 		a.appsPool = pool
-		a.appdataPath = fmt.Sprintf("/nas/%s/apps", pool)
+		a.appdataPath = fmt.Sprintf("/mnt/%s/apps", pool)
 	}
 }
 
@@ -307,16 +307,16 @@ func (a *Adapter) getAppdataPath() string {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	if a.appdataPath != "" {
-		if strings.HasPrefix(a.appdataPath, "/nas/") {
+		if strings.HasPrefix(a.appdataPath, "/mnt/") || strings.HasPrefix(a.appdataPath, "/nas/") {
 			return a.appdataPath
 		}
 		clean := strings.TrimPrefix(a.appdataPath, "/")
-		return "/nas/" + clean
+		return "/mnt/" + clean
 	}
 	if a.appsPool != "" {
-		return fmt.Sprintf("/nas/%s/apps", a.appsPool)
+		return fmt.Sprintf("/mnt/%s/apps", a.appsPool)
 	}
-	return "/nas/tank/apps"
+	return "/mnt/tank/apps"
 }
 
 func (a *Adapter) ensureComposeYAML(app domain.CatalogApp) domain.CatalogApp {
@@ -328,14 +328,16 @@ func (a *Adapter) ensureComposeYAML(app domain.CatalogApp) domain.CatalogApp {
 	}
 	appdataPath := a.getAppdataPath()
 	app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/tank/appdata", appdataPath)
-	app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/nas/tank/apps", appdataPath)
+	app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/mnt/tank/apps", appdataPath)
+	app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/mnt/tank/apps", appdataPath)
 	pool := a.getAppsPool()
 	if pool == "" {
 		pool = "tank"
 	}
-	mediaPath := fmt.Sprintf("/nas/%s/media", pool)
+	mediaPath := fmt.Sprintf("/mnt/%s/media", pool)
 	app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/tank/media", mediaPath)
-	app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/nas/tank/media", mediaPath)
+	app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/mnt/tank/media", mediaPath)
+	app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/mnt/tank/media", mediaPath)
 	return app
 }
 
@@ -813,8 +815,8 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
       - PUID=1000
       - PGID=1000
     volumes:
-      - /nas/tank/apps/%s/config:/var/syncthing
-      - /nas/tank/media:/var/syncthing/Sync
+      - /mnt/tank/apps/%s/config:/var/syncthing
+      - /mnt/tank/media:/var/syncthing/Sync
 `, image, appID, port, appID), port
 
 	case "wg-easy":
@@ -835,7 +837,7 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
       - WG_HOST=your-server-ip
       - PASSWORD=admin
     volumes:
-      - /nas/tank/apps/%s:/etc/wireguard
+      - /mnt/tank/apps/%s:/etc/wireguard
 `, image, appID, port, appID), port
 
 	case "ollama":
@@ -849,7 +851,7 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
     ports:
       - "%d:11434"
     volumes:
-      - /nas/tank/apps/%s:/root/.ollama
+      - /mnt/tank/apps/%s:/root/.ollama
 `, image, appID, port, appID), port
 
 	case "uptime-kuma":
@@ -863,7 +865,7 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
     ports:
       - "%d:3001"
     volumes:
-      - /nas/tank/apps/%s:/app/data
+      - /mnt/tank/apps/%s:/app/data
 `, image, appID, port, appID), port
 
 	case "vaultwarden":
@@ -879,7 +881,7 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
     environment:
       - WEBSOCKET_ENABLED=true
     volumes:
-      - /nas/tank/apps/%s:/data
+      - /mnt/tank/apps/%s:/data
 `, image, appID, port, appID), port
 
 	case "pihole":
@@ -898,8 +900,8 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
       - TZ=Etc/UTC
       - WEBPASSWORD=admin
     volumes:
-      - /nas/tank/apps/%s/etc-pihole:/etc/pihole
-      - /nas/tank/apps/%s/etc-dnsmasq.d:/etc/dnsmasq.d
+      - /mnt/tank/apps/%s/etc-pihole:/etc/pihole
+      - /mnt/tank/apps/%s/etc-dnsmasq.d:/etc/dnsmasq.d
 `, image, appID, port, appID, appID), port
 
 	case "plex":
@@ -916,8 +918,8 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
       - PGID=1000
       - VERSION=docker
     volumes:
-      - /nas/tank/apps/%s:/config
-      - /nas/tank/media:/media
+      - /mnt/tank/apps/%s:/config
+      - /mnt/tank/media:/media
 `, image, appID, appID), port
 
 	case "home-assistant":
@@ -930,7 +932,7 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
     restart: unless-stopped
     network_mode: host
     volumes:
-      - /nas/tank/apps/%s:/config
+      - /mnt/tank/apps/%s:/config
       - /etc/localtime:/etc/localtime:ro
 `, image, appID, appID), port
 
@@ -947,8 +949,8 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
       - "53:53/udp"
       - "%d:3000/tcp"
     volumes:
-      - /nas/tank/apps/%s/work:/opt/adguardhome/work
-      - /nas/tank/apps/%s/conf:/opt/adguardhome/conf
+      - /mnt/tank/apps/%s/work:/opt/adguardhome/work
+      - /mnt/tank/apps/%s/conf:/opt/adguardhome/conf
 `, image, appID, port, appID, appID), port
 
 	case "actual-budget":
@@ -962,7 +964,7 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
     ports:
       - "%d:5006"
     volumes:
-      - /nas/tank/apps/%s:/data
+      - /mnt/tank/apps/%s:/data
 `, image, appID, port, appID), port
 
 	case "nginx-proxy-manager":
@@ -994,8 +996,8 @@ services:
     environment:
       - DISABLE_IPV6=true
     volumes:
-      - /nas/tank/apps/%s/data:/data
-      - /nas/tank/apps/%s/letsencrypt:/etc/letsencrypt
+      - /mnt/tank/apps/%s/data:/data
+      - /mnt/tank/apps/%s/letsencrypt:/etc/letsencrypt
 `, image, appID, port, appID, appID), port
 
 	case "qbittorrent":
@@ -1016,8 +1018,8 @@ services:
       - TZ=Etc/UTC
       - WEBUI_PORT=8080
     volumes:
-      - /nas/tank/apps/%s/config:/config
-      - /nas/tank/media/downloads:/downloads
+      - /mnt/tank/apps/%s/config:/config
+      - /mnt/tank/media/downloads:/downloads
 `, image, appID, port, appID), port
 
 	case "transmission":
@@ -1037,8 +1039,8 @@ services:
       - PGID=1000
       - TZ=Etc/UTC
     volumes:
-      - /nas/tank/apps/%s/config:/config
-      - /nas/tank/media/downloads:/downloads
+      - /mnt/tank/apps/%s/config:/config
+      - /mnt/tank/media/downloads:/downloads
 `, image, appID, port, appID), port
 
 	case "radarr":
@@ -1056,8 +1058,8 @@ services:
       - PGID=1000
       - TZ=Etc/UTC
     volumes:
-      - /nas/tank/apps/%s/config:/config
-      - /nas/tank/media:/media
+      - /mnt/tank/apps/%s/config:/config
+      - /mnt/tank/media:/media
 `, image, appID, port, appID), port
 
 	case "sonarr":
@@ -1075,8 +1077,8 @@ services:
       - PGID=1000
       - TZ=Etc/UTC
     volumes:
-      - /nas/tank/apps/%s/config:/config
-      - /nas/tank/media:/media
+      - /mnt/tank/apps/%s/config:/config
+      - /mnt/tank/media:/media
 `, image, appID, port, appID), port
 
 	case "dockge":
@@ -1091,8 +1093,8 @@ services:
       - "%d:5001"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /nas/tank/apps/%s/data:/app/data
-      - /nas/tank/apps/stacks:/opt/stacks
+      - /mnt/tank/apps/%s/data:/app/data
+      - /mnt/tank/apps/stacks:/opt/stacks
 `, image, appID, port, appID), port
 
 	case "portainer":
@@ -1118,7 +1120,7 @@ services:
       - "9000:9000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /nas/tank/apps/%s/data:/data
+      - /mnt/tank/apps/%s/data:/data
 `, image, appID, port, appID), port
 
 	case "audiobookshelf":
@@ -1135,9 +1137,9 @@ services:
       - AUDIOBOOKSHELF_UID=1000
       - AUDIOBOOKSHELF_GID=1000
     volumes:
-      - /nas/tank/apps/%s/config:/config
-      - /nas/tank/apps/%s/metadata:/metadata
-      - /nas/tank/media/audiobooks:/audiobooks
+      - /mnt/tank/apps/%s/config:/config
+      - /mnt/tank/apps/%s/metadata:/metadata
+      - /mnt/tank/media/audiobooks:/audiobooks
 `, image, appID, port, appID, appID), port
 
 	case "paperless-ngx":
@@ -1154,9 +1156,9 @@ services:
       - USERMAP_UID=1000
       - USERMAP_GID=1000
     volumes:
-      - /nas/tank/apps/%s/data:/usr/src/paperless/data
-      - /nas/tank/apps/%s/media:/usr/src/paperless/media
-      - /nas/tank/apps/%s/consume:/usr/src/paperless/consume
+      - /mnt/tank/apps/%s/data:/usr/src/paperless/data
+      - /mnt/tank/apps/%s/media:/usr/src/paperless/media
+      - /mnt/tank/apps/%s/consume:/usr/src/paperless/consume
 `, image, appID, port, appID, appID, appID), port
 	}
 
@@ -1178,7 +1180,7 @@ services:
       - PGID=1000
       - TZ=Etc/UTC
     volumes:
-      - /nas/tank/apps/%s:/data
+      - /mnt/tank/apps/%s:/data
 `, appID, image, appID, port, appID), port
 }
 
@@ -1208,7 +1210,7 @@ func (a *Adapter) seedDefaultApps() {
       - POSTGRES_PASSWORD=nextcloud
       - REDIS_HOST=redis
     volumes:
-      - /nas/tank/apps/nextcloud:/var/www/html
+      - /mnt/tank/apps/nextcloud:/var/www/html
     depends_on:
       - db
       - redis
@@ -1221,7 +1223,7 @@ func (a *Adapter) seedDefaultApps() {
       - POSTGRES_USER=nextcloud
       - POSTGRES_PASSWORD=nextcloud
     volumes:
-      - /nas/tank/apps/nextcloud-db:/var/lib/postgresql/data
+      - /mnt/tank/apps/nextcloud-db:/var/lib/postgresql/data
   redis:
     image: redis:alpine
     container_name: nextcloud-redis
@@ -1246,9 +1248,9 @@ func (a *Adapter) seedDefaultApps() {
     ports:
       - "8096:8096"
     volumes:
-      - /nas/tank/apps/jellyfin/config:/config
-      - /nas/tank/apps/jellyfin/cache:/cache
-      - /nas/tank/media:/media:ro
+      - /mnt/tank/apps/jellyfin/config:/config
+      - /mnt/tank/apps/jellyfin/cache:/cache
+      - /mnt/tank/media:/media:ro
 `,
 		},
 		{
@@ -1354,8 +1356,8 @@ func (a *Adapter) seedDefaultApps() {
     environment:
       - DISABLE_IPV6=true
     volumes:
-      - /nas/tank/apps/nginx-proxy-manager/data:/data
-      - /nas/tank/apps/nginx-proxy-manager/letsencrypt:/etc/letsencrypt
+      - /mnt/tank/apps/nginx-proxy-manager/data:/data
+      - /mnt/tank/apps/nginx-proxy-manager/letsencrypt:/etc/letsencrypt
 `,
 		},
 		{

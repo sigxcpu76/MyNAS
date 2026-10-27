@@ -56,6 +56,16 @@ type Adapter struct {
 	containers   map[string]domain.DockerContainer
 	statsCacheMu sync.RWMutex
 	statsCache   map[string]containerStatsRecord
+	statsInFlight map[string]bool
+
+	deployingApps   map[string]string
+	deployingErrors map[string]string
+	deployCancel    map[string]context.CancelFunc
+
+	// guards registry credential files (config.json / registries.json)
+	registryMu sync.Mutex
+	// registryVerify overrides `docker login` verification (tests only).
+	registryVerify func(ctx context.Context, server, user, pass string) error
 }
 
 func (a *Adapter) SetLogger(l *slog.Logger) {
@@ -149,11 +159,16 @@ func NewAdapterFull(socketPath string, unitsDir string) *Adapter {
 		hasSocket:    hasSocket,
 		hasCompose:   hasCompose,
 		composeCmd:   composeCmd,
-		containers:   make(map[string]domain.DockerContainer),
-		statsCache:   make(map[string]containerStatsRecord),
+		containers:      make(map[string]domain.DockerContainer),
+		statsCache:      make(map[string]containerStatsRecord),
+		statsInFlight:   make(map[string]bool),
+		deployingApps:   make(map[string]string),
+		deployingErrors: make(map[string]string),
+		deployCancel:    make(map[string]context.CancelFunc),
 	}
 
 	a.loadPersistedUnits()
+	a.seedRegistriesFromHome()
 	return a
 }
 
@@ -163,14 +178,18 @@ func NewAdapterWithClient(client *http.Client, baseEndpoint string) *Adapter {
 	_ = os.MkdirAll(unitsDir, 0755)
 
 	return &Adapter{
-		logger:       slog.Default().With("subsystem", "docker"),
-		client:       client,
-		baseEndpoint: baseEndpoint,
-		unitsDir:     unitsDir,
-		hasSocket:    true,
-		hasCompose:   false,
-		containers:   make(map[string]domain.DockerContainer),
-		statsCache:   make(map[string]containerStatsRecord),
+		logger:          slog.Default().With("subsystem", "docker"),
+		client:          client,
+		baseEndpoint:    baseEndpoint,
+		unitsDir:        unitsDir,
+		hasSocket:       true,
+		hasCompose:      false,
+		containers:      make(map[string]domain.DockerContainer),
+		statsCache:      make(map[string]containerStatsRecord),
+		statsInFlight:   make(map[string]bool),
+		deployingApps:   make(map[string]string),
+		deployingErrors: make(map[string]string),
+		deployCancel:    make(map[string]context.CancelFunc),
 	}
 }
 
@@ -213,6 +232,11 @@ func (a *Adapter) runCompose(ctx context.Context, unitDir string, projectName st
 		return fmt.Errorf("docker compose CLI is not available on host")
 	}
 	composeFile := filepath.Join(unitDir, "compose.yaml")
+	if len(args) > 0 && args[0] == "up" {
+		if data, err := os.ReadFile(composeFile); err == nil {
+			a.ensureExternalNetworks(ctx, string(data))
+		}
+	}
 	var cmdArgs []string
 	if len(a.composeCmd) > 1 {
 		// e.g. ["docker", "compose"] -> ["compose", "-f", file, "-p", project, ...args]
@@ -224,16 +248,19 @@ func (a *Adapter) runCompose(ctx context.Context, unitDir string, projectName st
 
 	cmd := exec.CommandContext(ctx, a.composeCmd[0], cmdArgs...)
 	cmd.Dir = unitDir
-	if a.socketPath != "" {
-		cmd.Env = append(os.Environ(), fmt.Sprintf("DOCKER_HOST=unix://%s", a.socketPath))
-	}
+	cmd.Env = a.dockerCLIEnv()
 	var errBuf bytes.Buffer
 	cmd.Stderr = &errBuf
 	cmd.Stdout = io.Discard
 
 	if err := cmd.Run(); err != nil {
-		details := strings.TrimSpace(errBuf.String())
-		a.logError("compose_"+strings.Join(args, "_"), projectName, err, details)
+		details := filterComposeOutput(errBuf.String())
+		op := "compose_" + strings.Join(args, "_")
+		if isComposeCanceled(err, details) {
+			a.logger.Info("docker compose operation canceled", "subsystem", "docker", "operation", op, "resource", projectName)
+		} else {
+			a.logError(op, projectName, err, details)
+		}
 		return fmt.Errorf("docker compose %s failed: %w (details: %s)", strings.Join(args, " "), err, details)
 	}
 	return nil
@@ -273,7 +300,7 @@ func GenerateComposeYAML(c domain.DockerContainer) string {
 	if len(c.Environment) > 0 {
 		sb.WriteString("    environment:\n")
 		for _, e := range c.Environment {
-			sb.WriteString(fmt.Sprintf("      - %q\n", e))
+			sb.WriteString(fmt.Sprintf("      - %q\n", EscapeComposeEnvString(e)))
 		}
 	}
 	if len(c.Command) > 0 {
@@ -467,7 +494,7 @@ func (a *Adapter) GetContainer(ctx context.Context, id string) (*domain.DockerCo
 						var cpuPct float64
 						var memMiB int64
 						if inspect.State.Running {
-							cpuPct, memMiB, _, _, _, _ = a.getLiveStats(ctx, inspect.ID)
+							cpuPct, memMiB, _, _, _, _ = a.getLiveStats(ctx, inspect.ID, true)
 						}
 
 						res := &domain.DockerContainer{
@@ -1053,6 +1080,9 @@ func (a *Adapter) ensureImage(ctx context.Context, image string) {
 	}
 	pullURL := fmt.Sprintf("%s/images/create?fromImage=%s", a.baseURL(), url.QueryEscape(image))
 	if req, err := http.NewRequestWithContext(ctx, http.MethodPost, pullURL, nil); err == nil {
+		if auth := a.registryAuthHeader(image); auth != "" {
+			req.Header.Set("X-Registry-Auth", auth)
+		}
 		if resp, err := a.client.Do(req); err == nil {
 			_, _ = io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close()
@@ -1060,50 +1090,81 @@ func (a *Adapter) ensureImage(ctx context.Context, image string) {
 	}
 }
 
-func (a *Adapter) getLiveStats(ctx context.Context, id string) (float64, int64, int64, int64, int64, int64) {
+func (a *Adapter) getLiveStats(ctx context.Context, id string, allowSync bool) (float64, int64, int64, int64, int64, int64) {
 	a.statsCacheMu.RLock()
 	cached, hasCache := a.statsCache[id]
+	inFlight := false
+	if a.statsInFlight != nil {
+		inFlight = a.statsInFlight[id]
+	}
 	a.statsCacheMu.RUnlock()
 
-	// If cache is fresh (< 800ms old), return it immediately so HTTP handlers respond in ~1ms
-	if hasCache && time.Since(cached.updated) < 800*time.Millisecond {
+	// If cache is fresh (< 3 seconds old), return it immediately
+	if hasCache && time.Since(cached.updated) < 3*time.Second {
 		return cached.cpuPct, cached.memMiB, cached.netRx, cached.netTx, cached.rxRate, cached.txRate
 	}
 
-	tctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	if !hasCache && allowSync && a.hasSocket {
+		a.fetchStatsAsync(id)
+		a.statsCacheMu.RLock()
+		cached, hasCache = a.statsCache[id]
+		a.statsCacheMu.RUnlock()
+		if hasCache {
+			return cached.cpuPct, cached.memMiB, cached.netRx, cached.netTx, cached.rxRate, cached.txRate
+		}
+		return 0, 0, 0, 0, 0, 0
+	}
+
+	// Trigger async background refresh if not already in flight so API callers never stall on Docker's CPU sampling
+	if !inFlight && a.hasSocket {
+		a.statsCacheMu.Lock()
+		if a.statsInFlight == nil {
+			a.statsInFlight = make(map[string]bool)
+		}
+		if !a.statsInFlight[id] {
+			a.statsInFlight[id] = true
+			go a.fetchStatsAsync(id)
+		}
+		a.statsCacheMu.Unlock()
+	}
+
+	if hasCache {
+		return cached.cpuPct, cached.memMiB, cached.netRx, cached.netTx, cached.rxRate, cached.txRate
+	}
+	return 0, 0, 0, 0, 0, 0
+}
+
+func (a *Adapter) fetchStatsAsync(id string) {
+	defer func() {
+		a.statsCacheMu.Lock()
+		if a.statsInFlight != nil {
+			delete(a.statsInFlight, id)
+		}
+		a.statsCacheMu.Unlock()
+	}()
+
+	tctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	statsURL := fmt.Sprintf("%s/containers/%s/stats?stream=false", a.baseURL(), url.PathEscape(id))
 	req, err := http.NewRequestWithContext(tctx, http.MethodGet, statsURL, nil)
 	if err != nil {
-		if hasCache {
-			return cached.cpuPct, cached.memMiB, cached.netRx, cached.netTx, cached.rxRate, cached.txRate
-		}
-		return 0, 0, 0, 0, 0, 0
+		return
 	}
 
 	resp, err := a.client.Do(req)
 	if err != nil {
-		if hasCache {
-			return cached.cpuPct, cached.memMiB, cached.netRx, cached.netTx, cached.rxRate, cached.txRate
-		}
-		return 0, 0, 0, 0, 0, 0
+		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		if hasCache {
-			return cached.cpuPct, cached.memMiB, cached.netRx, cached.netTx, cached.rxRate, cached.txRate
-		}
-		return 0, 0, 0, 0, 0, 0
+		return
 	}
 
 	var stats dockerStats
 	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
-		if hasCache {
-			return cached.cpuPct, cached.memMiB, cached.netRx, cached.netTx, cached.rxRate, cached.txRate
-		}
-		return 0, 0, 0, 0, 0, 0
+		return
 	}
 
 	var cpuPercent float64
@@ -1124,7 +1185,9 @@ func (a *Adapter) getLiveStats(ctx context.Context, id string) (float64, int64, 
 		netTx += int64(n.TxBytes)
 	}
 
-	// Never downgrade a non-zero memory or monotonic network counter if Docker returned an incomplete sample
+	now := time.Now()
+	a.statsCacheMu.Lock()
+	cached, hasCache := a.statsCache[id]
 	if hasCache {
 		if memMiB == 0 && cached.memMiB > 0 {
 			memMiB = cached.memMiB
@@ -1138,7 +1201,6 @@ func (a *Adapter) getLiveStats(ctx context.Context, id string) (float64, int64, 
 	}
 
 	var rxRate, txRate int64
-	now := time.Now()
 	if hasCache && !cached.updated.IsZero() {
 		dt := now.Sub(cached.updated).Seconds()
 		if dt >= 0.4 {
@@ -1154,7 +1216,6 @@ func (a *Adapter) getLiveStats(ctx context.Context, id string) (float64, int64, 
 		}
 	}
 
-	a.statsCacheMu.Lock()
 	a.statsCache[id] = containerStatsRecord{
 		cpuPct:  cpuPercent,
 		memMiB:  memMiB,
@@ -1165,13 +1226,11 @@ func (a *Adapter) getLiveStats(ctx context.Context, id string) (float64, int64, 
 		updated: now,
 	}
 	a.statsCacheMu.Unlock()
-
-	return cpuPercent, memMiB, netRx, netTx, rxRate, txRate
 }
 
 func stripDockerLogHeaders(data []byte) string {
 	if len(data) < 8 {
-		return string(data)
+		return strings.ToValidUTF8(string(data), "")
 	}
 	if (data[0] == 1 || data[0] == 2) && data[1] == 0 && data[2] == 0 && data[3] == 0 {
 		var sb strings.Builder
@@ -1193,10 +1252,10 @@ func stripDockerLogHeaders(data []byte) string {
 			}
 		}
 		if sb.Len() > 0 {
-			return sb.String()
+			return strings.ToValidUTF8(sb.String(), "")
 		}
 	}
-	return string(data)
+	return strings.ToValidUTF8(string(data), "")
 }
 
 func containsString(slice []string, val string) bool {
@@ -1311,10 +1370,9 @@ func (a *Adapter) GetApp(ctx context.Context, id string) (*domain.DockerApp, err
 	return a.buildApp(ctx, id, liveContainers)
 }
 
-// CreateApp deploys a new Docker Compose Application.
+// CreateApp deploys a new Docker Compose Application asynchronously in the background.
 func (a *Adapter) CreateApp(ctx context.Context, app domain.DockerApp) (*domain.DockerApp, error) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 
 	if app.ID == "" && app.Name != "" {
 		app.ID = domain.ToZfsSafeSlug(app.Name)
@@ -1330,47 +1388,55 @@ func (a *Adapter) CreateApp(ctx context.Context, app domain.DockerApp) (*domain.
 
 	// When no host is specified in mapping, pick a random high port in 32000+ range
 	app.ComposeYAML = a.NormalizeComposePorts(ctx, app.ComposeYAML)
+	app.ComposeYAML = NormalizeComposeEnvironment(app.ComposeYAML)
 
 	// Preemptively check if all published host ports are available
 	if err := a.checkComposeHostPortsAvailable(ctx, app.ComposeYAML, app.ID); err != nil {
+		a.mu.Unlock()
 		return nil, err
 	}
 
 	appDir := filepath.Join(a.unitsDir, app.ID)
 	if err := os.MkdirAll(appDir, 0755); err != nil {
+		a.mu.Unlock()
 		return nil, fmt.Errorf("failed to create app directory: %w", err)
 	}
 
 	composeFile := filepath.Join(appDir, "compose.yaml")
 	if err := os.WriteFile(composeFile, []byte(app.ComposeYAML), 0644); err != nil {
+		a.mu.Unlock()
 		return nil, fmt.Errorf("failed to write compose.yaml: %w", err)
 	}
 
 	if !a.hasSocket {
+		a.mu.Unlock()
 		return nil, fmt.Errorf("docker daemon socket %s is not available", a.socketPath)
 	}
 	if !a.hasCompose {
+		a.mu.Unlock()
 		return nil, fmt.Errorf("docker compose CLI is not available on host")
 	}
 
-	if err := a.runCompose(ctx, appDir, app.ID, "up", "-d", "--remove-orphans"); err != nil {
-		return nil, fmt.Errorf("failed to deploy compose app: %w", err)
-	}
+	a.startDeploymentLocked(appDir, app.ID, "Deploying stack (pulling images & starting containers)...")
 
 	liveContainers := a.fetchLiveContainers(ctx)
-	return a.buildApp(ctx, app.ID, liveContainers)
+	built, err := a.buildApp(ctx, app.ID, liveContainers)
+	a.mu.Unlock()
+
+	return built, err
 }
 
-// UpdateApp reconfigures and redeploys an existing Docker Compose Application.
+// UpdateApp reconfigures and redeploys an existing Docker Compose Application asynchronously in the background.
 func (a *Adapter) UpdateApp(ctx context.Context, app domain.DockerApp, fields []string) (*domain.DockerApp, error) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 
 	// When no host is specified in mapping, pick a random high port in 32000+ range
 	app.ComposeYAML = a.NormalizeComposePorts(ctx, app.ComposeYAML)
+	app.ComposeYAML = NormalizeComposeEnvironment(app.ComposeYAML)
 
 	// Preemptively check if all published host ports are available
 	if err := a.checkComposeHostPortsAvailable(ctx, app.ComposeYAML, app.ID); err != nil {
+		a.mu.Unlock()
 		return nil, err
 	}
 
@@ -1378,32 +1444,57 @@ func (a *Adapter) UpdateApp(ctx context.Context, app domain.DockerApp, fields []
 	composeFile := filepath.Join(appDir, "compose.yaml")
 
 	if err := os.MkdirAll(appDir, 0755); err != nil {
+		a.mu.Unlock()
 		return nil, fmt.Errorf("failed to create app directory: %w", err)
 	}
 
 	if err := os.WriteFile(composeFile, []byte(app.ComposeYAML), 0644); err != nil {
+		a.mu.Unlock()
 		return nil, fmt.Errorf("failed to update compose.yaml: %w", err)
 	}
 
 	if !a.hasSocket {
+		a.mu.Unlock()
 		return nil, fmt.Errorf("docker daemon socket %s is not available", a.socketPath)
 	}
 	if !a.hasCompose {
+		a.mu.Unlock()
 		return nil, fmt.Errorf("docker compose CLI is not available on host")
 	}
 
-	if err := a.runCompose(ctx, appDir, app.ID, "up", "-d", "--remove-orphans"); err != nil {
-		return nil, fmt.Errorf("failed to redeploy compose app: %w", err)
-	}
+	a.startDeploymentLocked(appDir, app.ID, "Deploying stack (pulling images & restarting containers)...")
 
 	liveContainers := a.fetchLiveContainers(ctx)
-	return a.buildApp(ctx, app.ID, liveContainers)
+	built, err := a.buildApp(ctx, app.ID, liveContainers)
+	a.mu.Unlock()
+
+	return built, err
+}
+
+func (a *Adapter) waitForDeployment(id string, maxWait time.Duration) {
+	deadline := time.Now().Add(maxWait)
+	for time.Now().Before(deadline) {
+		a.mu.RLock()
+		deploying := false
+		if a.deployingApps != nil {
+			_, deploying = a.deployingApps[id]
+		}
+		a.mu.RUnlock()
+		if !deploying {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 // DeleteApp tears down a Docker Compose Application and purges its persisted descriptor.
 func (a *Adapter) DeleteApp(ctx context.Context, id string, deleteVolumes bool) error {
+	a.cancelDeployment(id, 15*time.Second)
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
+	delete(a.deployingApps, id)
+	delete(a.deployingErrors, id)
 
 	appDir := filepath.Join(a.unitsDir, id)
 	if a.hasCompose && a.hasSocket {
@@ -1418,7 +1509,9 @@ func (a *Adapter) DeleteApp(ctx context.Context, id string, deleteVolumes bool) 
 	return nil
 }
 
-// StartApp starts all stopped containers in a Docker Compose Application.
+// StartApp starts a Docker Compose Application. `docker compose up` may need to pull images, which
+// can take far longer than an HTTP/gRPC request deadline, so it runs in the background and the app
+// reports state DEPLOYING until it finishes.
 func (a *Adapter) StartApp(ctx context.Context, id string) (*domain.DockerApp, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -1433,13 +1526,13 @@ func (a *Adapter) StartApp(ctx context.Context, id string) (*domain.DockerApp, e
 	appDir := filepath.Join(a.unitsDir, id)
 	composePath := filepath.Join(appDir, "compose.yaml")
 	if _, err := os.Stat(composePath); err == nil {
-		if content, err := os.ReadFile(composePath); err == nil {
-			if err := a.checkComposeHostPortsAvailable(ctx, string(content), id); err != nil {
-				return nil, err
+		if _, busy := a.deployingApps[id]; !busy {
+			if content, err := os.ReadFile(composePath); err == nil {
+				if err := a.checkComposeHostPortsAvailable(ctx, string(content), id); err != nil {
+					return nil, err
+				}
 			}
-		}
-		if err := a.runCompose(ctx, appDir, id, "up", "-d", "--remove-orphans"); err != nil {
-			return nil, err
+			a.startDeploymentLocked(appDir, id, "Starting stack (pulling images if needed)...")
 		}
 	}
 
@@ -1449,6 +1542,7 @@ func (a *Adapter) StartApp(ctx context.Context, id string) (*domain.DockerApp, e
 
 // StopApp stops all containers in a Docker Compose Application.
 func (a *Adapter) StopApp(ctx context.Context, id string) (*domain.DockerApp, error) {
+	a.cancelDeployment(id, 15*time.Second)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -1473,6 +1567,7 @@ func (a *Adapter) StopApp(ctx context.Context, id string) (*domain.DockerApp, er
 
 // RestartApp restarts all containers in a Docker Compose Application.
 func (a *Adapter) RestartApp(ctx context.Context, id string) (*domain.DockerApp, error) {
+	a.waitForDeployment(id, 5*time.Second)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -1505,7 +1600,7 @@ func (a *Adapter) GetAppLogs(ctx context.Context, id string, tail int, serviceNa
 		}
 		out, err := a.runComposeOutput(ctx, appDir, id, args...)
 		if err == nil {
-			return out, nil
+			return strings.ToValidUTF8(out, ""), nil
 		}
 	}
 
@@ -1526,15 +1621,13 @@ func (a *Adapter) runComposeOutput(ctx context.Context, unitDir string, projectN
 
 	cmd := exec.CommandContext(ctx, a.composeCmd[0], cmdArgs...)
 	cmd.Dir = unitDir
-	if a.socketPath != "" {
-		cmd.Env = append(os.Environ(), fmt.Sprintf("DOCKER_HOST=unix://%s", a.socketPath))
-	}
+	cmd.Env = a.dockerCLIEnv()
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
 
 	if err := cmd.Run(); err != nil {
-		return outBuf.String(), fmt.Errorf("docker compose %s failed: %w (details: %s)", strings.Join(args, " "), err, strings.TrimSpace(errBuf.String()))
+		return outBuf.String(), fmt.Errorf("docker compose %s failed: %w (details: %s)", strings.Join(args, " "), err, filterComposeOutput(errBuf.String()))
 	}
 	return outBuf.String(), nil
 }
@@ -1769,7 +1862,7 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 	composePath := filepath.Join(a.unitsDir, appID, "compose.yaml")
 	var composeYAML string
 	if data, err := os.ReadFile(composePath); err == nil {
-		composeYAML = string(data)
+		composeYAML = prettifyComposeYAML(string(data))
 	}
 
 	services, parsedPorts, parsedVols, mgmtPort, rawPortals, _ := parseComposeYAML(composeYAML)
@@ -1780,6 +1873,8 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 	var totalNetRx, totalNetTx int64
 	var totalNetRxRate, totalNetTxRate int64
 	runningCount := 0
+	completedCount := 0
+	failedCount := 0
 
 	for _, c := range liveContainers {
 		proj := c.Labels["com.docker.compose.project"]
@@ -1803,8 +1898,16 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 				svcName = cleanName
 			}
 			stateUpper := strings.ToUpper(c.State)
+			statusClean := strings.TrimSpace(c.Status)
+			isCompleted := strings.HasPrefix(statusClean, "Exited (0)") || strings.Contains(statusClean, "Exited (0)")
+
 			if stateUpper == "RUNNING" {
 				runningCount++
+			} else if isCompleted {
+				completedCount++
+				stateUpper = "COMPLETED"
+			} else if stateUpper == "EXITED" || stateUpper == "DEAD" {
+				failedCount++
 			}
 			var ports []string
 			for _, p := range c.Ports {
@@ -1833,7 +1936,7 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 			var netRx, netTx int64
 			var rxRate, txRate int64
 			if stateUpper == "RUNNING" && a.hasSocket {
-				cpuPct, memMiB, netRx, netTx, rxRate, txRate = a.getLiveStats(ctx, c.ID)
+				cpuPct, memMiB, netRx, netTx, rxRate, txRate = a.getLiveStats(ctx, c.ID, false)
 			}
 
 			totalCPU += cpuPct
@@ -1885,15 +1988,30 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 	total := len(appContainers)
 	if total > 0 && runningCount == total {
 		state = "RUNNING"
+	} else if runningCount > 0 && failedCount == 0 {
+		// All non-running containers are completed one-shot / init tasks (Exited 0)
+		state = "RUNNING"
 	} else if runningCount > 0 {
 		state = "PARTIALLY_RUNNING"
 	}
 
 	statusText := fmt.Sprintf("%d/%d running", runningCount, total)
-	if total == 0 {
+	if completedCount > 0 && runningCount > 0 && failedCount == 0 {
+		statusText = fmt.Sprintf("%d/%d running (%d completed)", runningCount, total, completedCount)
+	} else if total == 0 {
 		statusText = "No containers deployed"
 	} else if runningCount == 0 {
 		statusText = "Stopped"
+	}
+
+	if a.deployingApps != nil {
+		if msg, isDeploying := a.deployingApps[appID]; isDeploying {
+			state = "DEPLOYING"
+			statusText = msg
+		} else if errMsg, hasErr := a.deployingErrors[appID]; hasErr && runningCount == 0 {
+			state = "ERROR"
+			statusText = errMsg
+		}
 	}
 
 	portSet := make(map[string]bool)
@@ -2189,22 +2307,14 @@ func (a *Adapter) GetConfig(ctx context.Context) (*domain.DockerConfig, error) {
 		// Main pool is the ONLY choice for roots for apps
 		availablePools = []string{mainPool}
 		if a.zfsPort != nil {
-			if datasets, err := a.zfsPort.ListDatasets(ctx, mainPool); err == nil {
-				for _, d := range datasets {
-					availableDatasets = append(availableDatasets, d.DatasetPath)
-				}
-			}
+			availableDatasets = a.listDatasetPaths(ctx, mainPool)
 		}
 	} else if a.zfsPort != nil {
 		if pools, err := a.zfsPort.ListPools(ctx); err == nil && len(pools) > 0 {
 			for _, p := range pools {
 				cleanID := strings.TrimPrefix(p.ID, "zfsPools/")
 				availablePools = append(availablePools, cleanID)
-				if datasets, err := a.zfsPort.ListDatasets(ctx, p.ID); err == nil {
-					for _, d := range datasets {
-						availableDatasets = append(availableDatasets, d.DatasetPath)
-					}
-				}
+				availableDatasets = append(availableDatasets, a.listDatasetPaths(ctx, p.ID)...)
 			}
 		}
 	}
@@ -2226,6 +2336,9 @@ func (a *Adapter) GetConfig(ctx context.Context) (*domain.DockerConfig, error) {
 				cfg.Pool = mainPool
 				if !strings.HasPrefix(cfg.Dataset, mainPool+"/") && cfg.Dataset != mainPool {
 					cfg.Dataset = fmt.Sprintf("%s/apps", mainPool)
+					if slices.Contains(availableDatasets, fmt.Sprintf("%s/ix-apps", mainPool)) && !slices.Contains(availableDatasets, cfg.Dataset) {
+						cfg.Dataset = fmt.Sprintf("%s/ix-apps", mainPool)
+					}
 				}
 				cfg.DatasetSelected = true
 				cfg.PoolSelected = true
@@ -2239,8 +2352,8 @@ func (a *Adapter) GetConfig(ctx context.Context) (*domain.DockerConfig, error) {
 				parts := strings.Split(cfg.Dataset, "/")
 				cfg.Pool = parts[0]
 			}
-			if cfg.Mountpoint == "" || strings.HasPrefix(cfg.Mountpoint, "/tank") || (!strings.HasPrefix(cfg.Mountpoint, "/nas/") && cfg.Pool != "") {
-				poolMount := fmt.Sprintf("/nas/%s", cfg.Pool)
+			if cfg.Mountpoint == "" || strings.HasPrefix(cfg.Mountpoint, "/tank") || (!strings.HasPrefix(cfg.Mountpoint, "/mnt/") && !strings.HasPrefix(cfg.Mountpoint, "/nas/") && cfg.Pool != "") {
+				poolMount := fmt.Sprintf("/mnt/%s", cfg.Pool)
 				if a.zfsPort != nil {
 					if p, err := a.zfsPort.GetPool(ctx, cfg.Pool); err == nil && p != nil && p.Mountpoint != "" && p.Mountpoint != "none" {
 						poolMount = p.Mountpoint
@@ -2253,10 +2366,10 @@ func (a *Adapter) GetConfig(ctx context.Context) (*domain.DockerConfig, error) {
 				}
 				cfg.Mountpoint = fmt.Sprintf("%s/%s", strings.TrimRight(poolMount, "/"), datasetSuffix)
 			}
-			if cfg.AppdataPath == "" || strings.HasPrefix(cfg.AppdataPath, "/tank") || (!strings.HasPrefix(cfg.AppdataPath, "/nas/") && cfg.Pool != "") {
+			if cfg.AppdataPath == "" || strings.HasPrefix(cfg.AppdataPath, "/tank") || (!strings.HasPrefix(cfg.AppdataPath, "/mnt/") && !strings.HasPrefix(cfg.AppdataPath, "/nas/") && cfg.Pool != "") {
 				cfg.AppdataPath = cfg.Mountpoint
 			}
-			if cfg.DockerDataRoot == "" || strings.HasPrefix(cfg.DockerDataRoot, "/tank") || (!strings.HasPrefix(cfg.DockerDataRoot, "/nas/") && cfg.Pool != "") {
+			if cfg.DockerDataRoot == "" || strings.HasPrefix(cfg.DockerDataRoot, "/tank") || (!strings.HasPrefix(cfg.DockerDataRoot, "/mnt/") && !strings.HasPrefix(cfg.DockerDataRoot, "/nas/") && cfg.Pool != "") {
 				cfg.DockerDataRoot = filepath.Join(cfg.Mountpoint, "docker")
 			}
 			cfg.AppdataDataset = cfg.AppdataPath
@@ -2273,13 +2386,18 @@ func (a *Adapter) GetConfig(ctx context.Context) (*domain.DockerConfig, error) {
 	// Default to main pool (or first pool if unconfigured)
 	defaultPool := availablePools[0]
 	defaultDataset := fmt.Sprintf("%s/apps", defaultPool)
-	poolMount := fmt.Sprintf("/nas/%s", defaultPool)
+	if slices.Contains(availableDatasets, fmt.Sprintf("%s/ix-apps", defaultPool)) && !slices.Contains(availableDatasets, defaultDataset) {
+		defaultDataset = fmt.Sprintf("%s/ix-apps", defaultPool)
+	}
+	poolMount := fmt.Sprintf("/mnt/%s", defaultPool)
 	if a.zfsPort != nil {
 		if p, err := a.zfsPort.GetPool(ctx, defaultPool); err == nil && p != nil && p.Mountpoint != "" && p.Mountpoint != "none" {
 			poolMount = p.Mountpoint
 		}
 	}
-	defaultMountpoint := fmt.Sprintf("%s/apps", strings.TrimRight(poolMount, "/"))
+	dsSuffix := strings.TrimPrefix(defaultDataset, defaultPool)
+	dsSuffix = strings.TrimPrefix(dsSuffix, "/")
+	defaultMountpoint := fmt.Sprintf("%s/%s", strings.TrimRight(poolMount, "/"), dsSuffix)
 	return &domain.DockerConfig{
 		Dataset:           defaultDataset,
 		Pool:              defaultPool,
@@ -2325,7 +2443,7 @@ func (a *Adapter) UpdateConfig(ctx context.Context, cfg domain.DockerConfig) (*d
 		datasetID = strings.Join(parts[1:], "/")
 	}
 
-	poolMount := fmt.Sprintf("/nas/%s", pool)
+	poolMount := fmt.Sprintf("/mnt/%s", pool)
 	if a.zfsPort != nil {
 		if p, err := a.zfsPort.GetPool(ctx, pool); err == nil && p != nil && p.Mountpoint != "" && p.Mountpoint != "none" {
 			poolMount = p.Mountpoint
@@ -2378,11 +2496,7 @@ func (a *Adapter) UpdateConfig(ctx context.Context, cfg domain.DockerConfig) (*d
 		if pools, err := a.zfsPort.ListPools(ctx); err == nil && len(pools) > 0 {
 			for _, p := range pools {
 				availablePools = append(availablePools, p.ID)
-				if datasets, err := a.zfsPort.ListDatasets(ctx, p.ID); err == nil {
-					for _, d := range datasets {
-						availableDatasets = append(availableDatasets, d.DatasetPath)
-					}
-				}
+				availableDatasets = append(availableDatasets, a.listDatasetPaths(ctx, p.ID)...)
 			}
 		}
 	}
@@ -2405,15 +2519,15 @@ func (a *Adapter) ListDirectories(ctx context.Context, reqPath string) (*domain.
 		if cfg != nil && cfg.Mountpoint != "" {
 			reqPath = cfg.Mountpoint
 		} else if cfg != nil && cfg.Pool != "" {
-			reqPath = fmt.Sprintf("/nas/%s", cfg.Pool)
+			reqPath = fmt.Sprintf("/mnt/%s", cfg.Pool)
 		} else {
-			reqPath = "/nas"
+			reqPath = "/mnt"
 		}
 	}
 
 	cleanPath := filepath.Clean(reqPath)
 	if strings.HasPrefix(cleanPath, "/tank") {
-		cleanPath = "/nas" + cleanPath
+		cleanPath = "/mnt" + cleanPath
 	}
 	if !filepath.IsAbs(cleanPath) {
 		cleanPath = "/" + cleanPath
@@ -2521,14 +2635,15 @@ func (a *Adapter) isPortOwnedByApp(ctx context.Context, port int, proto string, 
 							ps = fmt.Sprintf("%s/%s", tgt, prt)
 						}
 					}
-					hPort, cPort := parsePortMapping(ps)
+					hPort, _ := parsePortMapping(ps)
 					if hPort != "" {
-						cleanHPort := strings.TrimSuffix(strings.TrimSuffix(hPort, "/tcp"), "/udp")
+						cleanHPort := hPort
 						if idx := strings.LastIndex(cleanHPort, ":"); idx != -1 {
 							cleanHPort = cleanHPort[idx+1:]
 						}
+						// parsePortMapping strips the "/proto" suffix, so derive the protocol from the raw spec.
 						pProto := "tcp"
-						if strings.HasSuffix(cPort, "/udp") || strings.HasSuffix(hPort, "/udp") {
+						if strings.HasSuffix(strings.ToLower(strings.TrimSpace(ps)), "/udp") {
 							pProto = "udp"
 						}
 						if num, err := strconv.Atoi(cleanHPort); err == nil && num == port {
@@ -2731,17 +2846,17 @@ func (a *Adapter) checkComposeHostPortsAvailable(ctx context.Context, composeYAM
 				continue
 			}
 
-			hostP, contP := parsePortMapping(ps)
+			hostP, _ := parsePortMapping(ps)
 			if hostP == "" {
 				continue // Internal container port or not published to host
 			}
 
+			// parsePortMapping strips the "/proto" suffix, so derive the protocol from the raw spec.
 			proto := "tcp"
-			if strings.HasSuffix(contP, "/udp") || strings.HasSuffix(hostP, "/udp") {
+			if strings.HasSuffix(strings.ToLower(strings.TrimSpace(ps)), "/udp") {
 				proto = "udp"
 			}
-			cleanHostP := strings.TrimSuffix(hostP, "/tcp")
-			cleanHostP = strings.TrimSuffix(cleanHostP, "/udp")
+			cleanHostP := hostP
 			if idx := strings.LastIndex(cleanHostP, ":"); idx != -1 {
 				cleanHostP = cleanHostP[idx+1:]
 			}
@@ -2953,4 +3068,113 @@ func (a *Adapter) NormalizeComposePorts(ctx context.Context, composeYAML string)
 		return composeYAML
 	}
 	return buf.String()
+}
+
+// listDatasetPaths returns dataset names for a pool, preferring a cheap name-only listing when the
+// ZFS port supports it (avoids per-dataset property and snapshot statistics collection).
+func (a *Adapter) listDatasetPaths(ctx context.Context, poolID string) []string {
+	if a.zfsPort == nil {
+		return nil
+	}
+	if lister, ok := a.zfsPort.(interface {
+		ListDatasetPaths(ctx context.Context, poolID string) ([]string, error)
+	}); ok {
+		if names, err := lister.ListDatasetPaths(ctx, poolID); err == nil {
+			return names
+		}
+	}
+	var names []string
+	if datasets, err := a.zfsPort.ListDatasets(ctx, poolID); err == nil {
+		for _, d := range datasets {
+			names = append(names, d.DatasetPath)
+		}
+	}
+	return names
+}
+
+// startDeploymentLocked marks the app as deploying and runs `docker compose up -d` in the background
+// with its own long-lived context, so client request deadlines cannot cancel image pulls.
+// Caller must hold a.mu. A second call while a deployment is in flight is a no-op.
+func (a *Adapter) startDeploymentLocked(dir, id, msg string) {
+	if _, busy := a.deployingApps[id]; busy {
+		return
+	}
+	if a.deployCancel == nil {
+		a.deployCancel = make(map[string]context.CancelFunc)
+	}
+	bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	a.deployingApps[id] = msg
+	a.deployCancel[id] = cancel
+	delete(a.deployingErrors, id)
+
+	go func() {
+		defer cancel()
+		runErr := a.runCompose(bgCtx, dir, id, "up", "-d", "--remove-orphans")
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		delete(a.deployCancel, id)
+		if _, stillDeploying := a.deployingApps[id]; !stillDeploying {
+			return
+		}
+		delete(a.deployingApps, id)
+		if runErr != nil && !isComposeCanceled(runErr, "") {
+			a.deployingErrors[id] = fmt.Sprintf("Deployment failed: %v", runErr)
+		}
+	}()
+}
+
+// cancelDeployment aborts an in-flight background deployment (if any) and waits for it to exit.
+func (a *Adapter) cancelDeployment(id string, maxWait time.Duration) {
+	a.mu.Lock()
+	cancel := a.deployCancel[id]
+	a.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	a.waitForDeployment(id, maxWait)
+}
+
+// ensureExternalNetworks creates any networks a compose file declares as `external: true` that do not
+// exist yet. Compose refuses to start ("declared as external, but could not be found") otherwise,
+// which happens for imported TrueNAS apps (e.g. proxy_net) or after the Docker data root is reset.
+func (a *Adapter) ensureExternalNetworks(ctx context.Context, composeYAML string) {
+	var doc struct {
+		Networks map[string]struct {
+			External any    `yaml:"external"`
+			Name     string `yaml:"name"`
+		} `yaml:"networks"`
+	}
+	if err := yaml.Unmarshal([]byte(composeYAML), &doc); err != nil {
+		return
+	}
+	for key, n := range doc.Networks {
+		name := key
+		switch ext := n.External.(type) {
+		case bool:
+			if !ext {
+				continue
+			}
+		case map[string]any: // legacy form: external: {name: foo}
+			if v, ok := ext["name"].(string); ok && v != "" {
+				name = v
+			}
+		default:
+			continue
+		}
+		if n.Name != "" {
+			name = n.Name
+		}
+		inspect := exec.CommandContext(ctx, "docker", "network", "inspect", name)
+		inspect.Env = a.dockerCLIEnv()
+		if inspect.Run() == nil {
+			continue
+		}
+		create := exec.CommandContext(ctx, "docker", "network", "create", name)
+		create.Env = a.dockerCLIEnv()
+		if out, err := create.CombinedOutput(); err != nil {
+			a.logError("network_create", name, err, string(out))
+		} else {
+			a.logger.Info("created missing external docker network", "subsystem", "docker", "network", name)
+		}
+	}
 }

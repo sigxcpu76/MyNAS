@@ -7,6 +7,7 @@
 import {
   type AuthSession,
   type CifsShare,
+  type CifsGlobalConfig,
   type DirectoryList,
   type Disk,
   type DockerApp,
@@ -34,6 +35,8 @@ import {
   type ZfsDataset,
   type ZfsPool,
   type ZfsVolume,
+  DockerRegistry,
+  DockerRegistryInput,
 } from '../domain/models';
 import type {
   AuthPort,
@@ -177,7 +180,7 @@ export class ZfsService {
     return this.zfsPort.createPool(poolId.trim(), {
       vdevLayout: pool.vdevLayout || 'mirror',
       compression: pool.compression || 'lz4',
-      mountpoint: pool.mountpoint || `/nas/${poolId.trim()}`,
+      mountpoint: pool.mountpoint || `/mnt/${poolId.trim()}`,
       ...pool,
     });
   }
@@ -619,6 +622,27 @@ export class DockerAppService {
   async checkHostPorts(ports: number[], protocol?: string, excludeAppId?: string): Promise<HostPortStatus[]> {
     return this.appPort.checkHostPorts(ports, protocol, excludeAppId);
   }
+
+  async listRegistries(): Promise<DockerRegistry[]> {
+    return this.appPort.listRegistries();
+  }
+
+  async saveRegistry(input: DockerRegistryInput, existingName?: string): Promise<DockerRegistry> {
+    const clean: DockerRegistryInput = {
+      server: input.server.trim(),
+      username: input.username.trim(),
+      password: input.password ?? '',
+      description: (input.description ?? '').trim(),
+    };
+    if (!clean.server) throw new Error('Registry server is required');
+    if (!clean.username) throw new Error('Username is required');
+    if (!existingName && !clean.password) throw new Error('Password or access token is required');
+    return existingName ? this.appPort.updateRegistry(existingName, clean) : this.appPort.createRegistry(clean);
+  }
+
+  async deleteRegistry(name: string): Promise<void> {
+    return this.appPort.deleteRegistry(name);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -730,6 +754,17 @@ export class ShareService {
 
   async deleteCifsShare(shareIdOrName: string): Promise<void> {
     return this.sharePort.deleteCifsShare(ResourceNames.cifsShare(shareIdOrName));
+  }
+
+  async getCifsGlobalConfig(): Promise<CifsGlobalConfig> {
+    return this.sharePort.getCifsGlobalConfig();
+  }
+
+  async updateCifsGlobalConfig(
+    config: Partial<CifsGlobalConfig>,
+    updateMask?: string[]
+  ): Promise<CifsGlobalConfig> {
+    return this.sharePort.updateCifsGlobalConfig(config, updateMask);
   }
 
   // WebDAV

@@ -3,7 +3,9 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
   mdiAlert,
   mdiAlertCircle,
+  mdiCheck,
   mdiClose,
+  mdiContentCopy,
   mdiHelpCircle,
   mdiInformation,
 } from '@mdi/js';
@@ -13,6 +15,31 @@ import { activeModal, closeActiveModal } from '../modal';
 const confirmBtnRef = ref<HTMLButtonElement | null>(null);
 const promptInputRef = ref<HTMLInputElement | null>(null);
 const phraseInputRef = ref<HTMLInputElement | null>(null);
+const copiedPhrase = ref(false);
+
+async function copyPhrase() {
+  if (!activeModal.value?.confirmPhrase) return;
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(activeModal.value.confirmPhrase);
+    } else {
+      const textarea = document.createElement('textarea');
+      textarea.value = activeModal.value.confirmPhrase;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    copiedPhrase.value = true;
+    setTimeout(() => {
+      copiedPhrase.value = false;
+    }, 2000);
+  } catch {
+    // Fallback if clipboard API is restricted
+  }
+}
 
 const phraseMatches = computed(
   () => !activeModal.value?.confirmPhrase || activeModal.value.confirmPhraseValue === activeModal.value.confirmPhrase
@@ -143,7 +170,7 @@ onUnmounted(() => {
           </h3>
         </div>
         <button
-          class="btn-icon btn-sm"
+          class="modal-close-btn"
           type="button"
           aria-label="Close"
           @click="handleCancel"
@@ -179,9 +206,20 @@ onUnmounted(() => {
 
         <!-- Type-to-confirm safety gate -->
         <div v-if="activeModal.confirmPhrase" class="confirm-prompt-group">
-          <label class="confirm-prompt-label" for="confirm-phrase-input">
-            Type <code class="mono confirm-phrase">{{ activeModal.confirmPhrase }}</code> to confirm
-          </label>
+          <div class="confirm-prompt-header">
+            <span class="confirm-prompt-label">
+              Type <code class="mono confirm-phrase" title="Click to copy" @click="copyPhrase">{{ activeModal.confirmPhrase }}</code> to confirm
+            </span>
+            <button
+              type="button"
+              class="phrase-copy-btn"
+              :title="copiedPhrase ? 'Copied to clipboard' : 'Copy phrase'"
+              @click="copyPhrase"
+            >
+              <MdiIcon :path="copiedPhrase ? mdiCheck : mdiContentCopy" size="13" />
+              <span>{{ copiedPhrase ? 'Copied' : 'Copy' }}</span>
+            </button>
+          </div>
           <input
             id="confirm-phrase-input"
             ref="phraseInputRef"
@@ -192,7 +230,6 @@ onUnmounted(() => {
             autocapitalize="off"
             spellcheck="false"
             :placeholder="activeModal.confirmPhrase"
-            @paste.prevent
           />
         </div>
 
@@ -265,6 +302,26 @@ onUnmounted(() => {
   gap: 14px;
 }
 
+.modal-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.modal-close-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
 .confirm-icon-box {
   width: 42px;
   height: 42px;
@@ -329,6 +386,13 @@ onUnmounted(() => {
   gap: 6px;
 }
 
+.confirm-prompt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .confirm-prompt-label {
   font-size: 12.5px;
   font-weight: 600;
@@ -338,8 +402,38 @@ onUnmounted(() => {
 .confirm-phrase {
   color: var(--danger-text);
   background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
   padding: 1px 6px;
   border-radius: 4px;
+  cursor: pointer;
+  user-select: all;
+  transition: filter 0.15s ease;
+}
+
+.confirm-phrase:hover {
+  filter: brightness(1.2);
+}
+
+.phrase-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.4;
+}
+
+.phrase-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
 }
 
 .confirm-checkbox-row {

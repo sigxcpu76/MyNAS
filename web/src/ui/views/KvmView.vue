@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { services } from '../../container';
 import {
   formatBytes,
@@ -23,6 +23,7 @@ import SortableTh from '../components/SortableTh.vue';
 import { useTableSort } from '../composables/useTableSort';
 import { generateNanosecondId, generateVMDiskFilePath, generateVMDiskName, generateZvolDiskPath, toZfsSafeSlug } from '../../domain/id';
 import {
+  mdiAlertCircleOutline,
   mdiClose,
   mdiCog,
   mdiConsole,
@@ -56,7 +57,6 @@ const inspectingVm = ref<VirtualMachine | null>(null);
 const inspectorTab = ref<'summary' | 'hardware' | 'cloudinit' | 'snapshots'>('summary');
 const cloningVm = ref<VirtualMachine | null>(null);
 const showCreateWizard = ref(false);
-const wizardStep = ref(1);
 
 // Snapshot state
 const snapshotsList = ref<VirtualMachineSnapshot[]>([]);
@@ -126,7 +126,6 @@ const editCpuForm = reactive({
 const showEditMemoryModal = ref(false);
 const editMemoryForm = reactive({
   memoryMib: 4096,
-  balloonMinMib: 2048,
   hugepages: 'off',
 });
 
@@ -143,6 +142,41 @@ const editDisplayForm = reactive({
   displayType: 'virtio-gpu',
 });
 
+const showEditDiskModal = ref(false);
+const editingDiskId = ref('');
+const editDiskForm = reactive({
+  bus: 'scsi',
+  diskPath: '',
+  sizeGib: 32,
+  cacheMode: 'none',
+  discard: true,
+  iothread: true,
+});
+
+const showEditNicModal = ref(false);
+const editingNicId = ref('');
+const editNicForm = reactive({
+  model: 'virtio',
+  bridge: 'br0',
+  vlanTag: 0,
+  macAddress: '',
+  firewall: true,
+});
+
+// Modal error & saving states
+const isSavingDisk = ref(false);
+const editDiskError = ref('');
+const isSavingNic = ref(false);
+const editNicError = ref('');
+const isSavingCpu = ref(false);
+const editCpuError = ref('');
+const isSavingMemory = ref(false);
+const editMemoryError = ref('');
+const isSavingPlatform = ref(false);
+const editPlatformError = ref('');
+const isSavingDisplay = ref(false);
+const editDisplayError = ref('');
+
 // Clone Form
 const cloneForm = reactive({
   newId: '',
@@ -151,9 +185,26 @@ const cloneForm = reactive({
   linkedClone: true,
 });
 
-// Create Wizard Form
+export interface WizardDisk {
+  id: string;
+  bus: string;
+  diskPath: string;
+  sizeGib: number;
+  cacheMode: string;
+  discard: boolean;
+  iothread: boolean;
+}
+
+export interface WizardNic {
+  id: string;
+  model: string;
+  bridge: string;
+  vlanTag: number;
+  firewall: boolean;
+}
+
+// Create VM Hardware Form
 const wizardForm = reactive({
-  // Step 1: General
   vmId: '',
   vmName: '',
   osVariant: 'debian12',
@@ -161,43 +212,52 @@ const wizardForm = reactive({
   autostart: true,
   startupDelaySeconds: 0,
 
-  // Step 2: System
-  machineType: 'i440fx',
+  machineType: 'q35',
   biosType: 'seabios',
   tpmVersion: 'none',
   secureBoot: false,
   bootIso: '',
 
-  // Step 3: Disks
-  diskBus: 'scsi',
-  diskPath: '',
-  diskSizeGib: 32,
-  diskCache: 'none',
-  diskDiscard: true,
-  diskIothread: true,
-
-  // Step 4: CPU
   sockets: 1,
   cores: 2,
   cpuType: 'host',
   numa: false,
 
-  // Step 5: Memory
   memoryMib: 4096,
-  balloonMinMib: 2048,
   hugepages: 'off',
 
-  // Step 6: Network
-  netModel: 'virtio',
-  netBridge: 'virbr0',
-  vlanTag: 0,
-  firewall: true,
+  displayType: 'virtio-gpu',
 
-  // Step 7: Cloud-Init
+  disks: [] as WizardDisk[],
+  networkInterfaces: [] as WizardNic[],
+
+  showCloudInit: false,
   ciUser: 'admin',
   ciPassword: '',
   ciSshKeys: '',
   ciIpConfig: 'dhcp',
+});
+
+const wizardEditModal = ref<'cpu' | 'memory' | 'platform' | 'display' | 'disk' | 'nic' | null>(null);
+const editingWizardDiskIndex = ref<number>(-1);
+const editingWizardNicIndex = ref<number>(-1);
+
+const editingDiskBuffer = reactive<WizardDisk>({
+  id: 'sda',
+  bus: 'scsi',
+  diskPath: '',
+  sizeGib: 32,
+  cacheMode: 'none',
+  discard: true,
+  iothread: false,
+});
+
+const editingNicBuffer = reactive<WizardNic>({
+  id: 'net0',
+  model: 'virtio',
+  bridge: 'br0',
+  vlanTag: 0,
+  firewall: true,
 });
 
 // Computed properties
@@ -341,8 +401,36 @@ function bridgeOptionsFor(current: string): BridgeOption[] {
 }
 
 function onVmNameInput() {
-  wizardForm.vmId = toZfsSafeSlug(wizardForm.vmName);
-  wizardForm.diskPath = suggestedDiskPath.value;
+  const oldId = wizardForm.vmId;
+  const newId = toZfsSafeSlug(wizardForm.vmName);
+  wizardForm.vmId = newId;
+
+  // Auto-update default disk paths if they followed the previous auto-generated name
+  wizardForm.disks.forEach((d, i) => {
+    const oldExpected = generateZvolDiskPath(mainPool.value, oldId, i);
+    if (!d.diskPath || d.diskPath === oldExpected) {
+      d.diskPath = generateZvolDiskPath(mainPool.value, newId, i);
+    }
+  });
+}
+
+function onOsVariantChange() {
+  if (wizardForm.osVariant === 'win2k22') {
+    wizardForm.machineType = 'q35';
+    wizardForm.biosType = 'ovmf';
+    wizardForm.tpmVersion = 'v2.0';
+    wizardForm.secureBoot = true;
+  } else if (wizardForm.osVariant.startsWith('freebsd')) {
+    wizardForm.machineType = 'q35';
+    wizardForm.biosType = 'ovmf';
+    wizardForm.tpmVersion = 'none';
+    wizardForm.secureBoot = false;
+  } else {
+    wizardForm.machineType = 'q35';
+    wizardForm.biosType = 'seabios';
+    wizardForm.tpmVersion = 'none';
+    wizardForm.secureBoot = false;
+  }
 }
 
 function openCreateWizard() {
@@ -352,30 +440,114 @@ function openCreateWizard() {
   wizardForm.description = '';
   wizardForm.autostart = true;
   wizardForm.startupDelaySeconds = 0;
-  wizardForm.machineType = 'i440fx';
+  wizardForm.machineType = 'q35';
   wizardForm.biosType = 'seabios';
   wizardForm.tpmVersion = 'none';
   wizardForm.secureBoot = false;
-  wizardForm.bootIso = '';
-  wizardForm.diskBus = 'scsi';
-  wizardForm.diskPath = suggestedDiskPath.value;
-  wizardForm.diskSizeGib = 32;
-  wizardForm.diskCache = 'none';
-  wizardForm.diskDiscard = true;
-  wizardForm.diskIothread = true;
+  wizardForm.bootIso = nasState.isos.length > 0 ? nasState.isos[0].path : '';
   wizardForm.sockets = 1;
   wizardForm.cores = 2;
   wizardForm.cpuType = 'host';
   wizardForm.numa = false;
   wizardForm.memoryMib = 4096;
-  wizardForm.balloonMinMib = 2048;
   wizardForm.hugepages = 'off';
-  wizardForm.netModel = 'virtio';
-  wizardForm.netBridge = defaultBridge.value || 'ens3';
-  wizardForm.vlanTag = 0;
-  wizardForm.firewall = true;
-  wizardStep.value = 1;
+  wizardForm.displayType = 'virtio-gpu';
+
+  wizardForm.disks = [
+    {
+      id: 'sda',
+      bus: 'scsi',
+      diskPath: generateZvolDiskPath(mainPool.value, wizardForm.vmId, 0),
+      sizeGib: 32,
+      cacheMode: 'none',
+      discard: true,
+      iothread: false,
+    },
+  ];
+
+  wizardForm.networkInterfaces = [
+    {
+      id: 'net0',
+      model: 'virtio',
+      bridge: defaultBridge.value || 'br0',
+      vlanTag: 0,
+      firewall: true,
+    },
+  ];
+
+  wizardForm.showCloudInit = false;
+  wizardForm.ciUser = 'admin';
+  wizardForm.ciPassword = '';
+  wizardForm.ciSshKeys = '';
+  wizardForm.ciIpConfig = 'dhcp';
+
+  wizardEditModal.value = null;
   showCreateWizard.value = true;
+}
+
+function addWizardDisk() {
+  const idx = wizardForm.disks.length;
+  const letter = String.fromCharCode(97 + (idx % 26));
+  wizardForm.disks.push({
+    id: `sd${letter}`,
+    bus: 'scsi',
+    diskPath: generateZvolDiskPath(mainPool.value, wizardForm.vmId || 'vm', idx),
+    sizeGib: 32,
+    cacheMode: 'none',
+    discard: true,
+    iothread: false,
+  });
+}
+
+function removeWizardDisk(index: number) {
+  wizardForm.disks.splice(index, 1);
+}
+
+function openEditWizardDisk(index: number) {
+  editingWizardDiskIndex.value = index;
+  const d = wizardForm.disks[index];
+  Object.assign(editingDiskBuffer, d);
+  wizardEditModal.value = 'disk';
+}
+
+function saveEditWizardDisk() {
+  if (editingWizardDiskIndex.value >= 0 && editingWizardDiskIndex.value < wizardForm.disks.length) {
+    Object.assign(wizardForm.disks[editingWizardDiskIndex.value], editingDiskBuffer);
+  }
+  wizardEditModal.value = null;
+}
+
+function addWizardNic() {
+  const idx = wizardForm.networkInterfaces.length;
+  wizardForm.networkInterfaces.push({
+    id: `net${idx}`,
+    model: 'virtio',
+    bridge: defaultBridge.value || 'br0',
+    vlanTag: 0,
+    firewall: true,
+  });
+}
+
+function removeWizardNic(index: number) {
+  wizardForm.networkInterfaces.splice(index, 1);
+}
+
+function openEditWizardNic(index: number) {
+  editingWizardNicIndex.value = index;
+  const nic = wizardForm.networkInterfaces[index];
+  Object.assign(editingNicBuffer, nic);
+  wizardEditModal.value = 'nic';
+}
+
+function saveEditWizardNic() {
+  if (editingWizardNicIndex.value >= 0 && editingWizardNicIndex.value < wizardForm.networkInterfaces.length) {
+    Object.assign(wizardForm.networkInterfaces[editingWizardNicIndex.value], editingNicBuffer);
+  }
+  wizardEditModal.value = null;
+}
+
+function openWizardEdit(component: 'cpu' | 'memory' | 'platform' | 'display') {
+  wizardEditModal.value = component;
 }
 
 function openTakeSnapshotModal() {
@@ -396,16 +568,65 @@ function openAddDiskModal() {
   showAddDiskModal.value = true;
 }
 
+const transitioningVms = reactive<Record<string, 'starting' | 'stopping' | 'rebooting'>>({});
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+let fastPollTimer: ReturnType<typeof setTimeout> | null = null;
+
+function triggerFastPolling(attempts = 20) {
+  if (fastPollTimer) {
+    clearTimeout(fastPollTimer);
+    fastPollTimer = null;
+  }
+  let count = 0;
+  const poll = async () => {
+    count++;
+    await refreshVms(true);
+    if (Object.keys(transitioningVms).length > 0 && count < attempts) {
+      fastPollTimer = setTimeout(poll, 1000);
+    }
+  };
+  fastPollTimer = setTimeout(poll, 1000);
+}
+
 // Lifecycle
 onMounted(async () => {
   await Promise.all([refreshVms(), refreshIsos()]);
+  pollTimer = setInterval(async () => {
+    await refreshVms(true);
+  }, 3000);
 });
 
-async function refreshVms() {
+onUnmounted(() => {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+  if (fastPollTimer) {
+    clearTimeout(fastPollTimer);
+    fastPollTimer = null;
+  }
+});
+
+async function refreshVms(silent: boolean | Event = false) {
+  const isSilent = typeof silent === 'boolean' ? silent : false;
   try {
-    nasState.vms = await services.kvm.listVirtualMachines();
+    const list = await services.kvm.listVirtualMachines();
+    nasState.vms = list;
+
+    // Check if any transitioning VM reached its expected state
+    for (const [name, target] of Object.entries(transitioningVms)) {
+      const found = list.find((v) => v.name === name);
+      if (!found) {
+        delete transitioningVms[name];
+      } else if (target === 'stopping' && found.state === 'STOPPED') {
+        delete transitioningVms[name];
+      } else if (target === 'starting' && found.state === 'RUNNING') {
+        delete transitioningVms[name];
+      }
+    }
+
     if (inspectingVm.value) {
-      const updated = nasState.vms.find((v) => v.name === inspectingVm.value?.name);
+      const updated = list.find((v) => v.name === inspectingVm.value?.name);
       if (updated) {
         inspectingVm.value = updated;
         if (inspectorTab.value === 'snapshots') {
@@ -414,7 +635,9 @@ async function refreshVms() {
       }
     }
   } catch (err: any) {
-    notify('error', err?.message || 'Failed to refresh virtual machines');
+    if (!isSilent) {
+      notify('error', err?.message || 'Failed to refresh virtual machines');
+    }
   }
 }
 
@@ -442,6 +665,8 @@ async function handlePowerAction(
 ) {
   try {
     if (action === 'start') {
+      transitioningVms[vm.name] = 'starting';
+      triggerFastPolling();
       await services.kvm.startVirtualMachine(vm.name);
       notify('success', `Started VM ${vm.vmName}`);
     } else if (action === 'stop') {
@@ -464,6 +689,8 @@ async function handlePowerAction(
         if (!res.confirmed) return;
         force = Boolean(res.checkboxChecked);
       }
+      transitioningVms[vm.name] = 'stopping';
+      triggerFastPolling();
       await services.kvm.stopVirtualMachine(vm.name, force);
       notify('success', `${force ? 'Force stopped' : 'Shut down'} VM ${vm.vmName}`);
     } else if (action === 'reboot') {
@@ -486,9 +713,13 @@ async function handlePowerAction(
         if (!res.confirmed) return;
         force = Boolean(res.checkboxChecked);
       }
+      transitioningVms[vm.name] = 'rebooting';
+      triggerFastPolling();
       await services.kvm.rebootVirtualMachine(vm.name, force);
       notify('success', `${force ? 'Force reset' : 'Rebooted'} VM ${vm.vmName}`);
     } else if (action === 'reset') {
+      transitioningVms[vm.name] = 'rebooting';
+      triggerFastPolling();
       await services.kvm.resetVirtualMachine(vm.name);
       notify('success', `Hard reset VM ${vm.vmName}`);
     } else if (action === 'pause') {
@@ -498,8 +729,9 @@ async function handlePowerAction(
       await services.kvm.resumeVirtualMachine(vm.name);
       notify('success', `Resumed VM ${vm.vmName}`);
     }
-    await refreshVms();
+    await refreshVms(true);
   } catch (err: any) {
+    delete transitioningVms[vm.name];
     notify('error', err?.message || `Failed to execute ${action} on VM`);
   }
 }
@@ -759,9 +991,157 @@ async function handleAddNic() {
   }
 }
 
+// Edit / Detach Disks
+function openEditDiskModal(disk: VirtualMachineDisk) {
+  if (!inspectingVm.value) return;
+  editingDiskId.value = disk.id;
+  editDiskError.value = '';
+  isSavingDisk.value = false;
+  editDiskForm.bus = disk.bus || 'scsi';
+  editDiskForm.diskPath = disk.diskPath || '';
+  editDiskForm.sizeGib = disk.sizeBytes ? Math.round(disk.sizeBytes / (1024 * 1024 * 1024)) : 32;
+  editDiskForm.cacheMode = disk.cacheMode || 'none';
+  editDiskForm.discard = disk.discard ?? true;
+  editDiskForm.iothread = disk.iothread ?? true;
+  showEditDiskModal.value = true;
+}
+
+async function handleSaveEditDisk() {
+  if (!inspectingVm.value) return;
+  editDiskError.value = '';
+  const currentDisks = inspectingVm.value.disks ? [...inspectingVm.value.disks] : [];
+  const idx = currentDisks.findIndex((d) => d.id === editingDiskId.value);
+  if (idx === -1) {
+    editDiskError.value = `Selected disk "${editingDiskId.value}" not found on VM "${inspectingVm.value.vmName}"`;
+    notify('error', editDiskError.value);
+    return;
+  }
+  const updatedDisk: VirtualMachineDisk = {
+    ...currentDisks[idx],
+    bus: editDiskForm.bus,
+    diskPath: editDiskForm.diskPath.trim(),
+    sizeBytes: editDiskForm.sizeGib * 1024 * 1024 * 1024,
+    cacheMode: editDiskForm.cacheMode,
+    discard: editDiskForm.discard,
+    iothread: editDiskForm.iothread,
+  };
+  currentDisks[idx] = updatedDisk;
+
+  isSavingDisk.value = true;
+  try {
+    await services.kvm.updateVirtualMachine(
+      inspectingVm.value.name,
+      { disks: currentDisks },
+      ['disks']
+    );
+    notify('success', `Updated hard disk ${editingDiskId.value}`);
+    showEditDiskModal.value = false;
+    await refreshVms();
+  } catch (err: any) {
+    const msg = err?.message || 'Failed to update hard disk';
+    editDiskError.value = msg;
+    notify('error', msg);
+  } finally {
+    isSavingDisk.value = false;
+  }
+}
+
+async function handleDeleteDisk(disk: VirtualMachineDisk) {
+  if (!inspectingVm.value) return;
+  const ok = window.confirm(`Are you sure you want to detach disk ${disk.id} (${disk.diskPath}) from ${inspectingVm.value.vmName}? The underlying storage volume will not be destroyed.`);
+  if (!ok) return;
+
+  const currentDisks = (inspectingVm.value.disks || []).filter((d) => d.id !== disk.id);
+  try {
+    await services.kvm.updateVirtualMachine(
+      inspectingVm.value.name,
+      { disks: currentDisks },
+      ['disks']
+    );
+    notify('success', `Detached disk ${disk.id}`);
+    await refreshVms();
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to detach disk');
+  }
+}
+
+// Edit / Remove Network Interfaces
+function openEditNicModal(nic: VirtualMachineNetworkInterface) {
+  if (!inspectingVm.value) return;
+  editingNicId.value = nic.id;
+  editNicError.value = '';
+  isSavingNic.value = false;
+  editNicForm.model = nic.model || 'virtio';
+  editNicForm.bridge = nic.bridge || 'br0';
+  editNicForm.vlanTag = nic.vlanTag || 0;
+  editNicForm.macAddress = nic.macAddress || '';
+  editNicForm.firewall = nic.firewall ?? true;
+  showEditNicModal.value = true;
+}
+
+async function handleSaveEditNic() {
+  if (!inspectingVm.value) return;
+  editNicError.value = '';
+  const currentNics = inspectingVm.value.networkInterfaces ? [...inspectingVm.value.networkInterfaces] : [];
+  const idx = currentNics.findIndex((n) => n.id === editingNicId.value);
+  if (idx === -1) {
+    editNicError.value = `Selected network interface "${editingNicId.value}" not found on VM "${inspectingVm.value.vmName}"`;
+    notify('error', editNicError.value);
+    return;
+  }
+  const updatedNic: VirtualMachineNetworkInterface = {
+    ...currentNics[idx],
+    model: editNicForm.model,
+    bridge: editNicForm.bridge,
+    vlanTag: editNicForm.vlanTag > 0 ? editNicForm.vlanTag : undefined,
+    macAddress: editNicForm.macAddress.trim() || undefined,
+    firewall: editNicForm.firewall,
+  };
+  currentNics[idx] = updatedNic;
+
+  isSavingNic.value = true;
+  try {
+    await services.kvm.updateVirtualMachine(
+      inspectingVm.value.name,
+      { networkInterfaces: currentNics },
+      ['network_interfaces']
+    );
+    notify('success', `Updated network interface ${editingNicId.value}`);
+    showEditNicModal.value = false;
+    await refreshVms();
+  } catch (err: any) {
+    const msg = err?.message || 'Failed to update network interface';
+    editNicError.value = msg;
+    notify('error', msg);
+  } finally {
+    isSavingNic.value = false;
+  }
+}
+
+async function handleDeleteNic(nic: VirtualMachineNetworkInterface) {
+  if (!inspectingVm.value) return;
+  const ok = window.confirm(`Are you sure you want to remove network interface ${nic.id} (${nic.bridge}) from ${inspectingVm.value.vmName}?`);
+  if (!ok) return;
+
+  const currentNics = (inspectingVm.value.networkInterfaces || []).filter((n) => n.id !== nic.id);
+  try {
+    await services.kvm.updateVirtualMachine(
+      inspectingVm.value.name,
+      { networkInterfaces: currentNics },
+      ['network_interfaces']
+    );
+    notify('success', `Removed network interface ${nic.id}`);
+    await refreshVms();
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to remove network interface');
+  }
+}
+
 // Hardware Edit Handlers
 function openEditCpuModal() {
   if (!inspectingVm.value) return;
+  editCpuError.value = '';
+  isSavingCpu.value = false;
   editCpuForm.sockets = inspectingVm.value.sockets || 1;
   editCpuForm.cores = inspectingVm.value.cores || inspectingVm.value.vcpus || 1;
   editCpuForm.vcpus = inspectingVm.value.vcpus || (editCpuForm.sockets * editCpuForm.cores);
@@ -772,7 +1152,9 @@ function openEditCpuModal() {
 
 async function handleUpdateCpu() {
   if (!inspectingVm.value) return;
+  editCpuError.value = '';
   const vcpus = editCpuForm.sockets * editCpuForm.cores;
+  isSavingCpu.value = true;
   try {
     await services.kvm.updateVirtualMachine(
       inspectingVm.value.name,
@@ -789,26 +1171,33 @@ async function handleUpdateCpu() {
     showEditCpuModal.value = false;
     await refreshVms();
   } catch (err: any) {
-    notify('error', err?.message || 'Failed to update CPU settings');
+    const msg = err?.message || 'Failed to update CPU settings';
+    editCpuError.value = msg;
+    notify('error', msg);
+  } finally {
+    isSavingCpu.value = false;
   }
 }
 
 function openEditMemoryModal() {
   if (!inspectingVm.value) return;
+  editMemoryError.value = '';
+  isSavingMemory.value = false;
   editMemoryForm.memoryMib = inspectingVm.value.memoryMib || 2048;
-  editMemoryForm.balloonMinMib = inspectingVm.value.balloonMinMib || editMemoryForm.memoryMib;
   editMemoryForm.hugepages = inspectingVm.value.hugepages || 'off';
   showEditMemoryModal.value = true;
 }
 
 async function handleUpdateMemory() {
   if (!inspectingVm.value) return;
+  editMemoryError.value = '';
+  isSavingMemory.value = true;
   try {
     await services.kvm.updateVirtualMachine(
       inspectingVm.value.name,
       {
         memoryMib: editMemoryForm.memoryMib,
-        balloonMinMib: editMemoryForm.balloonMinMib,
+        balloonMinMib: editMemoryForm.memoryMib,
         hugepages: editMemoryForm.hugepages,
       },
       ['memory_mib', 'balloon_min_mib', 'hugepages']
@@ -817,12 +1206,18 @@ async function handleUpdateMemory() {
     showEditMemoryModal.value = false;
     await refreshVms();
   } catch (err: any) {
-    notify('error', err?.message || 'Failed to update memory settings');
+    const msg = err?.message || 'Failed to update memory settings';
+    editMemoryError.value = msg;
+    notify('error', msg);
+  } finally {
+    isSavingMemory.value = false;
   }
 }
 
 function openEditPlatformModal() {
   if (!inspectingVm.value) return;
+  editPlatformError.value = '';
+  isSavingPlatform.value = false;
   let mach = inspectingVm.value.machineType || 'i440fx';
   if (mach === 'pc' || mach.startsWith('pc-i440fx')) {
     mach = 'i440fx';
@@ -838,6 +1233,8 @@ function openEditPlatformModal() {
 
 async function handleUpdatePlatform() {
   if (!inspectingVm.value) return;
+  editPlatformError.value = '';
+  isSavingPlatform.value = true;
   try {
     await services.kvm.updateVirtualMachine(
       inspectingVm.value.name,
@@ -853,18 +1250,26 @@ async function handleUpdatePlatform() {
     showEditPlatformModal.value = false;
     await refreshVms();
   } catch (err: any) {
-    notify('error', err?.message || 'Failed to update platform settings');
+    const msg = err?.message || 'Failed to update platform settings';
+    editPlatformError.value = msg;
+    notify('error', msg);
+  } finally {
+    isSavingPlatform.value = false;
   }
 }
 
 function openEditDisplayModal() {
   if (!inspectingVm.value) return;
+  editDisplayError.value = '';
+  isSavingDisplay.value = false;
   editDisplayForm.displayType = inspectingVm.value.displayType || 'virtio-gpu';
   showEditDisplayModal.value = true;
 }
 
 async function handleUpdateDisplay() {
   if (!inspectingVm.value) return;
+  editDisplayError.value = '';
+  isSavingDisplay.value = true;
   try {
     await services.kvm.updateVirtualMachine(
       inspectingVm.value.name,
@@ -877,7 +1282,11 @@ async function handleUpdateDisplay() {
     showEditDisplayModal.value = false;
     await refreshVms();
   } catch (err: any) {
-    notify('error', err?.message || 'Failed to update display settings');
+    const msg = err?.message || 'Failed to update display settings';
+    editDisplayError.value = msg;
+    notify('error', msg);
+  } finally {
+    isSavingDisplay.value = false;
   }
 }
 
@@ -935,25 +1344,28 @@ async function handleDeleteVm(vm: VirtualMachine) {
 async function handleWizardSubmit() {
   const targetId = toZfsSafeSlug(wizardForm.vmId || wizardForm.vmName) || 'vm';
   const vcpus = wizardForm.sockets * wizardForm.cores;
-  const diskPath = wizardForm.diskPath.trim() || generateZvolDiskPath(mainPool.value, targetId, 0);
-  const primaryDisk: VirtualMachineDisk = {
-    id: `${wizardForm.diskBus}0`,
-    bus: wizardForm.diskBus,
-    diskPath,
-    sizeBytes: wizardForm.diskSizeGib * 1024 * 1024 * 1024,
-    cacheMode: wizardForm.diskCache,
-    discard: wizardForm.diskDiscard,
-    iothread: wizardForm.diskIothread,
-    backup: true,
-  };
 
-  const primaryNic: VirtualMachineNetworkInterface = {
-    id: 'net0',
-    model: wizardForm.netModel,
-    bridge: wizardForm.netBridge,
-    vlanTag: wizardForm.vlanTag > 0 ? wizardForm.vlanTag : undefined,
-    firewall: wizardForm.firewall,
-  };
+  const disks: VirtualMachineDisk[] = wizardForm.disks.map((d, i) => {
+    const diskPath = d.diskPath.trim() || generateZvolDiskPath(mainPool.value, targetId, i);
+    return {
+      id: d.id || `sd${String.fromCharCode(97 + i)}`,
+      bus: d.bus,
+      diskPath,
+      sizeBytes: d.sizeGib * 1024 * 1024 * 1024,
+      cacheMode: d.cacheMode,
+      discard: d.discard,
+      iothread: d.iothread,
+      backup: true,
+    };
+  });
+
+  const nics: VirtualMachineNetworkInterface[] = wizardForm.networkInterfaces.map((nic, i) => ({
+    id: nic.id || `net${i}`,
+    model: nic.model,
+    bridge: nic.bridge,
+    vlanTag: nic.vlanTag > 0 ? nic.vlanTag : undefined,
+    firewall: nic.firewall,
+  }));
 
   const sshKeys = wizardForm.ciSshKeys
     .split('\n')
@@ -973,15 +1385,16 @@ async function handleWizardSubmit() {
       cpuType: wizardForm.cpuType,
       numa: wizardForm.numa,
       memoryMib: wizardForm.memoryMib,
-      balloonMinMib: wizardForm.balloonMinMib,
+      balloonMinMib: wizardForm.memoryMib,
       hugepages: wizardForm.hugepages,
       machineType: wizardForm.machineType,
       biosType: wizardForm.biosType,
       tpmVersion: wizardForm.tpmVersion,
       secureBoot: wizardForm.secureBoot,
       cdromIsoImage: wizardForm.bootIso || undefined,
-      disks: [primaryDisk],
-      networkInterfaces: [primaryNic],
+      displayType: wizardForm.displayType || 'virtio-gpu',
+      disks,
+      networkInterfaces: nics,
       cloudInit: {
         user: wizardForm.ciUser,
         password: wizardForm.ciPassword,
@@ -999,7 +1412,6 @@ async function handleWizardSubmit() {
       }
     }
     showCreateWizard.value = false;
-    wizardStep.value = 1;
     await refreshVms();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to deploy virtual machine');
@@ -1060,7 +1472,7 @@ async function handleWizardSubmit() {
             />
           </div>
 
-          <button class="btn btn-sm" @click="refreshVms">
+          <button class="btn btn-sm" @click="refreshVms()">
             <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" /> Refresh
           </button>
 
@@ -1123,6 +1535,20 @@ async function handleWizardSubmit() {
                 <div class="font-semibold" style="color: var(--text-primary); cursor: pointer" @click="openInspector(vm)">
                   {{ vm.vmName }}
                   <span v-if="vm.isTemplate" class="badge badge-warning" style="font-size: 9px; margin-left: 4px">TEMPLATE</span>
+                  <span
+                    v-if="transitioningVms[vm.name]"
+                    class="badge mono badge-warning"
+                    style="font-size: 9px; margin-left: 6px"
+                  >
+                    {{ transitioningVms[vm.name] === 'stopping' ? 'SHUTTING DOWN' : transitioningVms[vm.name] === 'starting' ? 'STARTING' : 'REBOOTING' }}
+                  </span>
+                  <span
+                    v-else-if="vm.state === 'STOPPED'"
+                    class="badge mono badge-neutral"
+                    style="font-size: 9px; margin-left: 6px"
+                  >
+                    STOPPED
+                  </span>
                 </div>
                 <div
                   v-if="vm.name.replace('virtualMachines/', '') !== vm.vmName"
@@ -1168,6 +1594,7 @@ async function handleWizardSubmit() {
                   <button
                     v-if="vm.state === 'STOPPED'"
                     class="btn btn-xs btn-success"
+                    :disabled="Boolean(transitioningVms[vm.name])"
                     title="Start VM"
                     @click="handlePowerAction(vm, 'start')"
                   >
@@ -1176,6 +1603,7 @@ async function handleWizardSubmit() {
                   <button
                     v-else-if="vm.state === 'PAUSED'"
                     class="btn btn-xs btn-primary"
+                    :disabled="Boolean(transitioningVms[vm.name])"
                     title="Resume VM"
                     @click="handlePowerAction(vm, 'resume')"
                   >
@@ -1186,6 +1614,7 @@ async function handleWizardSubmit() {
                   <button
                     v-if="vm.state === 'RUNNING'"
                     class="btn btn-xs"
+                    :disabled="Boolean(transitioningVms[vm.name])"
                     title="Pause VM"
                     @click="handlePowerAction(vm, 'pause')"
                   >
@@ -1196,6 +1625,7 @@ async function handleWizardSubmit() {
                   <button
                     v-if="vm.state === 'RUNNING'"
                     class="btn btn-xs"
+                    :disabled="Boolean(transitioningVms[vm.name])"
                     title="Reboot VM (Hold Shift to Force Reset)"
                     @click="handlePowerAction(vm, 'reboot', $event)"
                   >
@@ -1206,6 +1636,7 @@ async function handleWizardSubmit() {
                   <button
                     v-if="vm.state === 'RUNNING'"
                     class="btn btn-xs btn-warning"
+                    :disabled="Boolean(transitioningVms[vm.name])"
                     title="Shutdown VM (Hold Shift to Force Stop)"
                     @click="handlePowerAction(vm, 'stop', $event)"
                   >
@@ -1231,13 +1662,13 @@ async function handleWizardSubmit() {
                     <MdiIcon :path="mdiContentCopy" size="13" />
                   </button>
 
-                  <!-- Inspect / Hardware -->
+                  <!-- Edit / Hardware Inspector -->
                   <button
                     class="btn btn-xs"
-                    title="Inspect Hardware & Snapshots"
+                    title="Edit VM & Hardware"
                     @click="openInspector(vm)"
                   >
-                    <MdiIcon :path="mdiCog" size="13" />
+                    <MdiIcon :path="mdiPencil" size="13" />
                   </button>
 
                   <!-- Delete -->
@@ -1410,6 +1841,14 @@ async function handleWizardSubmit() {
                   {{ inspectingVm.vmName }}
                 </h3>
                 <span
+                  v-if="transitioningVms[inspectingVm.name]"
+                  class="badge mono badge-warning"
+                  style="font-size: 11px"
+                >
+                  {{ transitioningVms[inspectingVm.name] === 'stopping' ? 'SHUTTING DOWN...' : transitioningVms[inspectingVm.name] === 'starting' ? 'STARTING...' : 'REBOOTING...' }}
+                </span>
+                <span
+                  v-else
                   class="badge mono"
                   :class="inspectingVm.state === 'RUNNING' ? 'badge-success' : 'badge-neutral'"
                   style="font-size: 11px"
@@ -1428,6 +1867,7 @@ async function handleWizardSubmit() {
             <button
               v-if="inspectingVm.state !== 'RUNNING'"
               class="btn btn-sm btn-success"
+              :disabled="Boolean(transitioningVms[inspectingVm.name])"
               @click="handlePowerAction(inspectingVm, 'start', $event)"
             >
               <MdiIcon :path="mdiPlay" size="14" style="margin-right: 4px" /> Start
@@ -1435,6 +1875,7 @@ async function handleWizardSubmit() {
             <template v-else>
               <button
                 class="btn btn-sm"
+                :disabled="Boolean(transitioningVms[inspectingVm.name])"
                 title="Reboot VM (Hold Shift to Force Reset)"
                 @click="handlePowerAction(inspectingVm, 'reboot', $event)"
               >
@@ -1442,6 +1883,7 @@ async function handleWizardSubmit() {
               </button>
               <button
                 class="btn btn-sm btn-warning"
+                :disabled="Boolean(transitioningVms[inspectingVm.name])"
                 title="Shutdown VM (Hold Shift to Force Stop)"
                 @click="handlePowerAction(inspectingVm, 'stop', $event)"
               >
@@ -1450,13 +1892,13 @@ async function handleWizardSubmit() {
             </template>
             <button
               class="btn btn-sm btn-primary"
-              :disabled="inspectingVm.state !== 'RUNNING'"
+              :disabled="inspectingVm.state !== 'RUNNING' || Boolean(transitioningVms[inspectingVm.name])"
               @click="handleOpenConsole(inspectingVm)"
             >
               <MdiIcon :path="mdiConsole" size="14" style="margin-right: 4px" /> Console
             </button>
-            <button class="btn btn-sm" @click="inspectingVm = null">
-              <MdiIcon :path="mdiClose" size="16" />
+            <button class="modal-close-btn" type="button" aria-label="Close" @click="inspectingVm = null">
+              <MdiIcon :path="mdiClose" size="18" />
             </button>
           </div>
         </div>
@@ -1520,7 +1962,7 @@ async function handleWizardSubmit() {
                   </span>
                 </div>
                 <div class="text-muted" style="font-size: 11px; margin-top: 4px">
-                  Ballooning Target: {{ formatBytes((inspectingVm.balloonMinMib || inspectingVm.memoryMib) * 1024 * 1024) }}
+                  Fixed Dedicated Memory
                 </div>
               </div>
 
@@ -1580,7 +2022,7 @@ async function handleWizardSubmit() {
                   <tr>
                     <th style="width: 200px">Device</th>
                     <th>Configuration</th>
-                    <th style="text-align: right; width: 120px">Actions</th>
+                    <th style="text-align: right; width: 140px">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1603,7 +2045,7 @@ async function handleWizardSubmit() {
                     <td class="font-semibold">Memory</td>
                     <td class="mono" style="font-size: 12px">
                       {{ formatBytes(inspectingVm.memoryMib * 1024 * 1024) }}
-                      (Ballooning Min: {{ formatBytes((inspectingVm.balloonMinMib || inspectingVm.memoryMib) * 1024 * 1024) }}, Hugepages: {{ inspectingVm.hugepages || 'off' }})
+                      (Fixed, Hugepages: {{ inspectingVm.hugepages || 'off' }})
                     </td>
                     <td style="text-align: right">
                       <button class="btn btn-xs" @click.stop="openEditMemoryModal">
@@ -1627,7 +2069,13 @@ async function handleWizardSubmit() {
                   </tr>
 
                   <!-- Hard Disks -->
-                  <tr v-for="d in inspectingVm.disks" :key="d.id">
+                  <tr
+                    v-for="d in inspectingVm.disks"
+                    :key="d.id"
+                    @dblclick="openEditDiskModal(d)"
+                    style="cursor: pointer"
+                    title="Double click to edit hard disk"
+                  >
                     <td class="font-semibold">
                       Hard Disk (<code class="mono">{{ d.id }}</code>)
                     </td>
@@ -1635,7 +2083,14 @@ async function handleWizardSubmit() {
                       {{ d.diskPath }} ({{ formatBytes(d.sizeBytes) }}, Bus: {{ d.bus }}, Cache: {{ d.cacheMode || 'none' }}, Discard: {{ d.discard ? 'on' : 'off' }}, IOThread: {{ d.iothread ? 'on' : 'off' }})
                     </td>
                     <td style="text-align: right">
-                      <span class="badge badge-success" style="font-size: 10px">ACTIVE</span>
+                      <div style="display: inline-flex; gap: 6px; align-items: center">
+                        <button class="btn btn-xs" @click.stop="openEditDiskModal(d)" title="Edit disk">
+                          <MdiIcon :path="mdiPencil" size="12" /> Edit
+                        </button>
+                        <button class="btn btn-xs btn-danger" @click.stop="handleDeleteDisk(d)" title="Detach disk">
+                          <MdiIcon :path="mdiTrashCan" size="12" /> Detach
+                        </button>
+                      </div>
                     </td>
                   </tr>
 
@@ -1667,7 +2122,13 @@ async function handleWizardSubmit() {
                   </tr>
 
                   <!-- Network Devices -->
-                  <tr v-for="nic in inspectingVm.networkInterfaces" :key="nic.id">
+                  <tr
+                    v-for="nic in inspectingVm.networkInterfaces"
+                    :key="nic.id"
+                    @dblclick="openEditNicModal(nic)"
+                    style="cursor: pointer"
+                    title="Double click to edit network device"
+                  >
                     <td class="font-semibold">
                       Network (<code class="mono">{{ nic.id }}</code>)
                     </td>
@@ -1676,7 +2137,14 @@ async function handleWizardSubmit() {
                       <span v-if="nic.vlanTag" style="color: var(--accent-primary)">, VLAN: {{ nic.vlanTag }}</span>
                     </td>
                     <td style="text-align: right">
-                      <span class="badge badge-neutral" style="font-size: 10px">BR: {{ nic.bridge }}</span>
+                      <div style="display: inline-flex; gap: 6px; align-items: center">
+                        <button class="btn btn-xs" @click.stop="openEditNicModal(nic)" title="Edit network device">
+                          <MdiIcon :path="mdiPencil" size="12" /> Edit
+                        </button>
+                        <button class="btn btn-xs btn-danger" @click.stop="handleDeleteNic(nic)" title="Remove network device">
+                          <MdiIcon :path="mdiTrashCan" size="12" /> Remove
+                        </button>
+                      </div>
                     </td>
                   </tr>
 
@@ -1984,6 +2452,161 @@ async function handleWizardSubmit() {
     </div>
 
     <!-- ======================================================================= -->
+    <!-- EDIT HARD DISK MODAL -->
+    <!-- ======================================================================= -->
+    <div v-if="showEditDiskModal" class="modal-backdrop">
+      <div class="modal-card" style="max-width: 500px">
+        <div class="modal-header">
+          <h3 class="modal-title">Edit Hard Disk ({{ editingDiskId }})</h3>
+          <button class="btn btn-sm" @click="showEditDiskModal = false">
+            <MdiIcon :path="mdiClose" size="16" />
+          </button>
+        </div>
+        <form @submit.prevent="handleSaveEditDisk" style="padding: 16px; display: flex; flex-direction: column; gap: 14px">
+          <div
+            v-if="editDiskError"
+            style="
+              background: var(--btn-danger-bg);
+              border: 1px solid var(--btn-danger-border);
+              color: var(--btn-danger-text);
+              padding: 10px 14px;
+              border-radius: 6px;
+              font-size: 13px;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            "
+          >
+            <MdiIcon :path="mdiAlertCircleOutline" size="16" />
+            <span>{{ editDiskError }}</span>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Bus Device</label>
+              <select v-model="editDiskForm.bus" class="select mono">
+                <option value="scsi">VirtIO SCSI (Recommended)</option>
+                <option value="virtio">VirtIO Block</option>
+                <option value="sata">SATA</option>
+                <option value="nvme">NVMe</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Size (GiB)</label>
+              <input v-model.number="editDiskForm.sizeGib" type="number" min="1" class="input mono" required />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Storage Path (ZFS ZVol or QCOW2)</label>
+            <input
+              v-model="editDiskForm.diskPath"
+              list="zvol-list-edit"
+              class="input mono"
+              placeholder="/dev/zvol/tank/vm-disk1"
+              required
+            />
+            <datalist id="zvol-list-edit">
+              <option v-for="zpath in availableZvols" :key="zpath" :value="zpath" />
+            </datalist>
+          </div>
+          <div class="form-group">
+            <label>Cache Mode</label>
+            <select v-model="editDiskForm.cacheMode" class="select mono">
+              <option value="none">none (Default / Direct I/O)</option>
+              <option value="writeback">writeback</option>
+              <option value="writethrough">writethrough</option>
+              <option value="unsafe">unsafe</option>
+            </select>
+          </div>
+          <div style="display: flex; gap: 16px; font-size: 13px">
+            <label style="display: flex; align-items: center; gap: 6px">
+              <input v-model="editDiskForm.discard" type="checkbox" /> Discard / TRIM
+            </label>
+            <label style="display: flex; align-items: center; gap: 6px">
+              <input v-model="editDiskForm.iothread" type="checkbox" /> IOThread
+            </label>
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px">
+            <button type="button" class="btn" :disabled="isSavingDisk" @click="showEditDiskModal = false">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="isSavingDisk">
+              <span v-if="isSavingDisk" class="spinner-sm" style="margin-right: 6px"></span>
+              {{ isSavingDisk ? 'Saving...' : 'Save Changes' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ======================================================================= -->
+    <!-- EDIT NETWORK DEVICE MODAL -->
+    <!-- ======================================================================= -->
+    <div v-if="showEditNicModal" class="modal-backdrop">
+      <div class="modal-card" style="max-width: 480px">
+        <div class="modal-header">
+          <h3 class="modal-title">Edit Network Device ({{ editingNicId }})</h3>
+          <button class="btn btn-sm" @click="showEditNicModal = false">
+            <MdiIcon :path="mdiClose" size="16" />
+          </button>
+        </div>
+        <form @submit.prevent="handleSaveEditNic" style="padding: 16px; display: flex; flex-direction: column; gap: 14px">
+          <div
+            v-if="editNicError"
+            style="
+              background: var(--btn-danger-bg);
+              border: 1px solid var(--btn-danger-border);
+              color: var(--btn-danger-text);
+              padding: 10px 14px;
+              border-radius: 6px;
+              font-size: 13px;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            "
+          >
+            <MdiIcon :path="mdiAlertCircleOutline" size="16" />
+            <span>{{ editNicError }}</span>
+          </div>
+
+          <div class="form-group">
+            <label>Model</label>
+            <select v-model="editNicForm.model" class="select mono">
+              <option value="virtio">VirtIO (paravirtualized)</option>
+              <option value="e1000">Intel E1000</option>
+              <option value="rtl8139">Realtek RTL8139</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Bridge / LAN Interface</label>
+            <select v-model="editNicForm.bridge" class="select mono" required>
+              <option v-for="b in bridgeOptionsFor(editNicForm.bridge)" :key="b.name" :value="b.name">{{ b.label }}</option>
+            </select>
+            <span class="helper">Host bridge (e.g. vmbr0) or physical interface (e.g. ens3) for direct LAN bridging</span>
+          </div>
+          <div class="form-group">
+            <label>VLAN Tag (0 = Untagged)</label>
+            <input v-model.number="editNicForm.vlanTag" type="number" min="0" max="4094" class="input mono" />
+          </div>
+          <div class="form-group">
+            <label>MAC Address (optional / blank to preserve)</label>
+            <input v-model="editNicForm.macAddress" type="text" placeholder="52:54:00:xx:xx:xx" class="input mono" />
+          </div>
+          <div style="display: flex; gap: 16px; font-size: 13px">
+            <label style="display: flex; align-items: center; gap: 6px">
+              <input v-model="editNicForm.firewall" type="checkbox" /> MAC Spoofing Filter
+            </label>
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px">
+            <button type="button" class="btn" :disabled="isSavingNic" @click="showEditNicModal = false">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="isSavingNic">
+              <span v-if="isSavingNic" class="spinner-sm" style="margin-right: 6px"></span>
+              {{ isSavingNic ? 'Saving...' : 'Save Changes' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ======================================================================= -->
     <!-- EDIT PROCESSORS MODAL -->
     <!-- ======================================================================= -->
     <div v-if="showEditCpuModal" class="modal-backdrop">
@@ -1995,6 +2618,24 @@ async function handleWizardSubmit() {
           </button>
         </div>
         <form @submit.prevent="handleUpdateCpu" style="padding: 16px; display: flex; flex-direction: column; gap: 14px">
+          <div
+            v-if="editCpuError"
+            style="
+              background: var(--btn-danger-bg);
+              border: 1px solid var(--btn-danger-border);
+              color: var(--btn-danger-text);
+              padding: 10px 14px;
+              border-radius: 6px;
+              font-size: 13px;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            "
+          >
+            <MdiIcon :path="mdiAlertCircleOutline" size="16" />
+            <span>{{ editCpuError }}</span>
+          </div>
+
           <div class="form-grid">
             <div class="form-group">
               <label>Sockets</label>
@@ -2031,8 +2672,11 @@ async function handleWizardSubmit() {
             Note: Changes to CPU topology and model take effect on next VM restart.
           </div>
           <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px">
-            <button type="button" class="btn" @click="showEditCpuModal = false">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <button type="button" class="btn" :disabled="isSavingCpu" @click="showEditCpuModal = false">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="isSavingCpu">
+              <span v-if="isSavingCpu" class="spinner-sm" style="margin-right: 6px"></span>
+              {{ isSavingCpu ? 'Saving...' : 'Save Changes' }}
+            </button>
           </div>
         </form>
       </div>
@@ -2050,14 +2694,28 @@ async function handleWizardSubmit() {
           </button>
         </div>
         <form @submit.prevent="handleUpdateMemory" style="padding: 16px; display: flex; flex-direction: column; gap: 14px">
+          <div
+            v-if="editMemoryError"
+            style="
+              background: var(--btn-danger-bg);
+              border: 1px solid var(--btn-danger-border);
+              color: var(--btn-danger-text);
+              padding: 10px 14px;
+              border-radius: 6px;
+              font-size: 13px;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            "
+          >
+            <MdiIcon :path="mdiAlertCircleOutline" size="16" />
+            <span>{{ editMemoryError }}</span>
+          </div>
+
           <div class="form-group">
             <label>Memory Size (MiB)</label>
             <input v-model.number="editMemoryForm.memoryMib" type="number" min="256" step="256" class="input mono" required />
             <span class="helper">{{ formatBytes(editMemoryForm.memoryMib * 1024 * 1024) }}</span>
-          </div>
-          <div class="form-group">
-            <label>Minimum Memory / Ballooning (MiB)</label>
-            <input v-model.number="editMemoryForm.balloonMinMib" type="number" min="256" step="256" class="input mono" required />
           </div>
           <div class="form-group">
             <label>Hugepages</label>
@@ -2071,8 +2729,11 @@ async function handleWizardSubmit() {
             Note: Memory modifications take effect immediately or on next VM restart.
           </div>
           <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px">
-            <button type="button" class="btn" @click="showEditMemoryModal = false">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <button type="button" class="btn" :disabled="isSavingMemory" @click="showEditMemoryModal = false">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="isSavingMemory">
+              <span v-if="isSavingMemory" class="spinner-sm" style="margin-right: 6px"></span>
+              {{ isSavingMemory ? 'Saving...' : 'Save Changes' }}
+            </button>
           </div>
         </form>
       </div>
@@ -2090,6 +2751,24 @@ async function handleWizardSubmit() {
           </button>
         </div>
         <form @submit.prevent="handleUpdatePlatform" style="padding: 16px; display: flex; flex-direction: column; gap: 14px">
+          <div
+            v-if="editPlatformError"
+            style="
+              background: var(--btn-danger-bg);
+              border: 1px solid var(--btn-danger-border);
+              color: var(--btn-danger-text);
+              padding: 10px 14px;
+              border-radius: 6px;
+              font-size: 13px;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            "
+          >
+            <MdiIcon :path="mdiAlertCircleOutline" size="16" />
+            <span>{{ editPlatformError }}</span>
+          </div>
+
           <div class="form-group">
             <label>Machine Chipset Architecture</label>
             <select v-model="editPlatformForm.machineType" class="select mono">
@@ -2119,8 +2798,11 @@ async function handleWizardSubmit() {
             Note: Changing machine chipset or BIOS type requires a full VM restart and can alter device bus addresses.
           </div>
           <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px">
-            <button type="button" class="btn" @click="showEditPlatformModal = false">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <button type="button" class="btn" :disabled="isSavingPlatform" @click="showEditPlatformModal = false">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="isSavingPlatform">
+              <span v-if="isSavingPlatform" class="spinner-sm" style="margin-right: 6px"></span>
+              {{ isSavingPlatform ? 'Saving...' : 'Save Changes' }}
+            </button>
           </div>
         </form>
       </div>
@@ -2138,6 +2820,24 @@ async function handleWizardSubmit() {
           </button>
         </div>
         <form @submit.prevent="handleUpdateDisplay" style="padding: 16px; display: flex; flex-direction: column; gap: 14px">
+          <div
+            v-if="editDisplayError"
+            style="
+              background: var(--btn-danger-bg);
+              border: 1px solid var(--btn-danger-border);
+              color: var(--btn-danger-text);
+              padding: 10px 14px;
+              border-radius: 6px;
+              font-size: 13px;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            "
+          >
+            <MdiIcon :path="mdiAlertCircleOutline" size="16" />
+            <span>{{ editDisplayError }}</span>
+          </div>
+
           <div class="form-group">
             <label>Display Device / GPU</label>
             <select v-model="editDisplayForm.displayType" class="select mono">
@@ -2152,8 +2852,11 @@ async function handleWizardSubmit() {
             Note: Changes to display adapter take effect on next VM restart.
           </div>
           <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px">
-            <button type="button" class="btn" @click="showEditDisplayModal = false">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <button type="button" class="btn" :disabled="isSavingDisplay" @click="showEditDisplayModal = false">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="isSavingDisplay">
+              <span v-if="isSavingDisplay" class="spinner-sm" style="margin-right: 6px"></span>
+              {{ isSavingDisplay ? 'Saving...' : 'Save Changes' }}
+            </button>
           </div>
         </form>
       </div>
@@ -2198,51 +2901,33 @@ async function handleWizardSubmit() {
     </div>
 
     <!-- ======================================================================= -->
-    <!-- PROXMOX-STYLE MULTI-STEP CREATION WIZARD -->
+    <!-- NEW VM CREATION: HARDWARE CONFIGURATION TABLE MODAL -->
     <!-- ======================================================================= -->
     <div v-if="showCreateWizard" class="modal-backdrop">
-      <div class="modal-card" style="max-width: 780px; width: 95vw; height: min(760px, 92vh); display: flex; flex-direction: column">
-        <!-- Wizard Header -->
+      <div class="modal-card" style="max-width: 880px; width: 95vw; max-height: 92vh; display: flex; flex-direction: column">
+        <!-- Modal Header -->
         <div class="modal-header" style="flex-shrink: 0">
-          <div>
-            <h3 class="modal-title">Create Virtual Machine</h3>
-            <div class="text-muted" style="font-size: 12px; margin-top: 2px">
-              Step {{ wizardStep }} of 7:
-              <span v-if="wizardStep === 1">General Settings</span>
-              <span v-else-if="wizardStep === 2">System & Firmware</span>
-              <span v-else-if="wizardStep === 3">Disks</span>
-              <span v-else-if="wizardStep === 4">CPU & Topology</span>
-              <span v-else-if="wizardStep === 5">Memory & Ballooning</span>
-              <span v-else-if="wizardStep === 6">Network Interfaces</span>
-              <span v-else-if="wizardStep === 7">Cloud-Init & Confirm</span>
+          <div style="display: flex; align-items: center; gap: 12px">
+            <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(56, 189, 248, 0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+              <MdiIcon :path="mdiServer" size="20" style="color: var(--accent-primary)" />
+            </div>
+            <div>
+              <h3 class="modal-title">Create Virtual Machine</h3>
+              <div class="text-muted" style="font-size: 12px; margin-top: 2px">
+                Configure hardware and system resources for the new guest domain
+              </div>
             </div>
           </div>
-          <button class="btn btn-sm" @click="showCreateWizard = false">
-            <MdiIcon :path="mdiClose" size="16" />
+          <button class="modal-close-btn" type="button" aria-label="Close" @click="showCreateWizard = false">
+            <MdiIcon :path="mdiClose" size="18" />
           </button>
         </div>
 
-        <!-- Wizard Step Indicators -->
-        <div style="flex-shrink: 0; display: flex; border-bottom: 1px solid var(--border-subtle); background: var(--bg-base)">
-          <div
-            v-for="s in [1, 2, 3, 4, 5, 6, 7]"
-            :key="s"
-            style="flex: 1; padding: 10px 4px; text-align: center; font-size: 11px; font-weight: 600; cursor: pointer"
-            :style="{
-              color: wizardStep === s ? 'var(--accent-primary)' : 'var(--text-secondary)',
-              borderBottom: wizardStep === s ? '2px solid var(--accent-primary)' : '2px solid transparent',
-            }"
-            @click="wizardStep = s"
-          >
-            {{ ['General', 'System', 'Disks', 'CPU', 'RAM', 'Network', 'Confirm'][s - 1] }}
-          </div>
-        </div>
-
-        <!-- Wizard Step Body -->
-        <div style="flex: 1; min-height: 0; padding: 20px; overflow-y: auto">
-          <!-- Step 1: General -->
-          <div v-if="wizardStep === 1" class="form-grid" style="grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 16px">
-            <div class="form-group">
+        <!-- Modal Body -->
+        <div style="flex: 1; min-height: 0; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px">
+          <!-- General VM info bar -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; padding: 14px 16px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-subtle); border-radius: 8px">
+            <div class="form-group" style="margin: 0">
               <label>VM Name</label>
               <input
                 v-model="wizardForm.vmName"
@@ -2252,7 +2937,7 @@ async function handleWizardSubmit() {
                 required
               />
             </div>
-            <div class="form-group">
+            <div class="form-group" style="margin: 0">
               <label>VM Domain ID</label>
               <input
                 v-model="wizardForm.vmId"
@@ -2260,233 +2945,480 @@ async function handleWizardSubmit() {
                 placeholder="e.g. debian-server"
                 required
               />
-              <small style="color: var(--text-muted); font-size: 11px">Derived from VM name</small>
             </div>
-            <div class="form-group">
+            <div class="form-group" style="margin: 0">
               <label>Operating System</label>
-              <select v-model="wizardForm.osVariant" class="select mono">
+              <select v-model="wizardForm.osVariant" class="select mono" @change="onOsVariantChange">
                 <option value="debian12">Debian 12 (Bookworm)</option>
                 <option value="ubuntu24.04">Ubuntu 24.04 LTS</option>
                 <option value="almalinux9">AlmaLinux / RHEL 9</option>
                 <option value="freebsd14.0">FreeBSD 14 / OPNsense</option>
-                <option value="win2k22">Windows Server 2022 / Windows 11</option>
+                <option value="win2k22">Windows Server 2022 / 11</option>
+                <option value="generic">Generic Linux 6.x</option>
               </select>
             </div>
-            <div class="form-group">
-              <label>Description</label>
-              <input v-model="wizardForm.description" class="input" placeholder="Application node" />
-            </div>
-            <div class="form-group" style="grid-column: 1 / -1; padding-top: 4px; border-top: 1px solid var(--border-subtle)">
-              <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 8px 0 0; cursor: pointer">
-                <input v-model="wizardForm.autostart" type="checkbox" /> Autostart domain when host boots
-              </label>
-            </div>
-          </div>
-
-          <!-- Step 2: System -->
-          <div v-if="wizardStep === 2" class="form-grid">
-            <div class="form-group">
-              <label>Machine Type</label>
-              <select v-model="wizardForm.machineType" class="select mono">
-                <option value="q35">q35 (Modern PCIe Architecture)</option>
-                <option value="i440fx">i440fx (Legacy PCI)</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>BIOS / Firmware</label>
-              <select v-model="wizardForm.biosType" class="select mono">
-                <option value="ovmf">OVMF (UEFI - Modern, Secure Boot)</option>
-                <option value="seabios">SeaBIOS (Legacy BIOS)</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>vTPM 2.0 Security</label>
-              <select v-model="wizardForm.tpmVersion" class="select mono">
-                <option value="v2.0">TPM 2.0 (Required for Windows 11)</option>
-                <option value="none">Disabled</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Secure Boot</label>
-              <select v-model="wizardForm.secureBoot" class="select mono">
-                <option :value="true">Enabled</option>
-                <option :value="false">Disabled</option>
-              </select>
-            </div>
-            <div class="form-group" style="grid-column: span 2">
-              <label>Boot / Installation Media (ISO Image)</label>
-              <select v-model="wizardForm.bootIso" class="select mono">
-                <option value="">-- No Boot Media / PXE Network Boot --</option>
-                <option v-for="iso in nasState.isos" :key="iso.path" :value="iso.path">
-                  {{ iso.name }} ({{ iso.sizeFormatted }})
-                </option>
-              </select>
-            </div>
-          </div>
-
-          <!-- Step 3: Disks -->
-          <div v-if="wizardStep === 3" class="form-grid">
-            <div class="form-group">
-              <label>Bus Interface</label>
-              <select v-model="wizardForm.diskBus" class="select mono">
-                <option value="scsi">VirtIO SCSI (Recommended)</option>
-                <option value="virtio">VirtIO Block</option>
-                <option value="sata">SATA</option>
-                <option value="nvme">NVMe</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Disk Size (GiB)</label>
-              <input v-model.number="wizardForm.diskSizeGib" type="number" min="1" class="input mono" required />
-            </div>
-            <div class="form-group" style="grid-column: span 2">
-              <label>Storage Path (Raw image, QCOW2 or ZVol)</label>
-              <input
-                v-model="wizardForm.diskPath"
-                list="zvol-list-wiz"
-                class="input mono"
-                :placeholder="suggestedDiskPath"
-              />
-              <datalist id="zvol-list-wiz">
-                <option v-for="zpath in availableZvols" :key="zpath" :value="zpath" />
-              </datalist>
-            </div>
-            <div style="grid-column: 1 / -1; display: flex; align-items: center; gap: 24px">
+            <div class="form-group" style="margin: 0; display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 6px">
               <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 0; cursor: pointer">
-                <input v-model="wizardForm.diskDiscard" type="checkbox" /> Discard / TRIM
-              </label>
-              <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 0; cursor: pointer">
-                <input v-model="wizardForm.diskIothread" type="checkbox" /> Dedicated IOThread
+                <input v-model="wizardForm.autostart" type="checkbox" /> Autostart on boot
               </label>
             </div>
           </div>
 
-          <!-- Step 4: CPU -->
-          <div v-if="wizardStep === 4" class="form-grid">
-            <div class="form-group">
-              <label>Sockets</label>
-              <select v-model.number="wizardForm.sockets" class="select mono">
-                <option v-for="n in socketOptions" :key="n" :value="n">{{ n }}</option>
-              </select>
+          <!-- Hardware Configuration Table Card -->
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px">
+              <div style="font-weight: 600; font-size: 14px">
+                Hardware Configuration
+              </div>
+              <div style="display: flex; gap: 8px">
+                <button class="btn btn-xs" type="button" @click="addWizardDisk">
+                  <MdiIcon :path="mdiPlus" size="13" /> Add Hard Disk
+                </button>
+                <button class="btn btn-xs" type="button" @click="addWizardNic">
+                  <MdiIcon :path="mdiPlus" size="13" /> Add Network Device
+                </button>
+              </div>
             </div>
-            <div class="form-group">
-              <label>Cores</label>
-              <select v-model.number="wizardForm.cores" class="select mono">
-                <option v-for="n in coreOptionsFor(wizardForm.cores)" :key="n" :value="n">{{ n }}</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>CPU Type / Model</label>
-              <select v-model="wizardForm.cpuType" class="select mono">
-                <option value="host">host (Pass-through host CPU features)</option>
-                <option value="kvm64">kvm64 (Safe standard KVM)</option>
-                <option value="x86-64-v2-AES">x86-64-v2-AES</option>
-                <option value="EPYC">EPYC</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>NUMA Topology</label>
-              <select v-model="wizardForm.numa" class="select mono">
-                <option :value="false">Disabled</option>
-                <option :value="true">Enabled</option>
-              </select>
+
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th style="width: 190px">Device</th>
+                    <th>Configuration</th>
+                    <th style="text-align: right; width: 130px">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Processors -->
+                  <tr style="cursor: pointer" title="Click to edit processors" @click="openWizardEdit('cpu')">
+                    <td class="font-semibold">Processors</td>
+                    <td class="mono" style="font-size: 12px">
+                      {{ wizardForm.sockets * wizardForm.cores }} vCPU ({{ wizardForm.sockets }} sockets, {{ wizardForm.cores }} cores) [Type: {{ wizardForm.cpuType }}]
+                      <span v-if="wizardForm.numa" class="badge badge-neutral" style="margin-left: 6px; font-size: 10px">NUMA</span>
+                    </td>
+                    <td style="text-align: right">
+                      <button class="btn btn-xs" type="button" @click.stop="openWizardEdit('cpu')">
+                        <MdiIcon :path="mdiPencil" size="12" /> Edit
+                      </button>
+                    </td>
+                  </tr>
+
+                  <!-- Memory -->
+                  <tr style="cursor: pointer" title="Click to edit memory" @click="openWizardEdit('memory')">
+                    <td class="font-semibold">Memory</td>
+                    <td class="mono" style="font-size: 12px">
+                      {{ formatBytes(wizardForm.memoryMib * 1024 * 1024) }}
+                      (Fixed, Hugepages: {{ wizardForm.hugepages }})
+                    </td>
+                    <td style="text-align: right">
+                      <button class="btn btn-xs" type="button" @click.stop="openWizardEdit('memory')">
+                        <MdiIcon :path="mdiPencil" size="12" /> Edit
+                      </button>
+                    </td>
+                  </tr>
+
+                  <!-- Machine & BIOS -->
+                  <tr style="cursor: pointer" title="Click to edit machine & BIOS" @click="openWizardEdit('platform')">
+                    <td class="font-semibold">Machine & BIOS</td>
+                    <td class="mono" style="font-size: 12px">
+                      BIOS: {{ wizardForm.biosType.toUpperCase() }} | Machine: {{ wizardForm.machineType }} | TPM: {{ wizardForm.tpmVersion }}
+                      <span v-if="wizardForm.secureBoot" class="badge badge-neutral" style="margin-left: 6px; font-size: 10px">Secure Boot</span>
+                    </td>
+                    <td style="text-align: right">
+                      <button class="btn btn-xs" type="button" @click.stop="openWizardEdit('platform')">
+                        <MdiIcon :path="mdiPencil" size="12" /> Edit
+                      </button>
+                    </td>
+                  </tr>
+
+                  <!-- Hard Disks -->
+                  <tr v-for="(disk, idx) in wizardForm.disks" :key="disk.id">
+                    <td class="font-semibold">
+                      Hard Disk (<code class="mono">{{ disk.id }}</code>)
+                    </td>
+                    <td class="mono" style="font-size: 12px">
+                      {{ disk.diskPath }} ({{ disk.sizeGib }} GiB, Bus: {{ disk.bus }}, Cache: {{ disk.cacheMode }}, Discard: {{ disk.discard ? 'on' : 'off' }}, IOThread: {{ disk.iothread ? 'on' : 'off' }})
+                    </td>
+                    <td style="text-align: right">
+                      <div style="display: inline-flex; gap: 4px">
+                        <button class="btn btn-xs" type="button" @click.stop="openEditWizardDisk(idx)">
+                          <MdiIcon :path="mdiPencil" size="12" /> Edit
+                        </button>
+                        <button
+                          v-if="wizardForm.disks.length > 1"
+                          class="btn btn-xs btn-danger"
+                          type="button"
+                          title="Remove disk"
+                          @click.stop="removeWizardDisk(idx)"
+                        >
+                          <MdiIcon :path="mdiTrashCan" size="12" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+
+                  <!-- CD/DVD Drive (Select ISO image) -->
+                  <tr>
+                    <td class="font-semibold">CD/DVD Drive</td>
+                    <td style="font-size: 12px">
+                      <select v-model="wizardForm.bootIso" class="select select-sm mono" style="width: 100%; max-width: 440px">
+                        <option value="">-- No Boot Media / PXE Network Boot --</option>
+                        <option v-for="iso in nasState.isos" :key="iso.path" :value="iso.path">
+                          {{ iso.name }} ({{ iso.sizeFormatted }})
+                        </option>
+                      </select>
+                    </td>
+                    <td style="text-align: right">
+                      <button
+                        v-if="wizardForm.bootIso"
+                        class="btn btn-xs"
+                        type="button"
+                        title="Clear ISO image selection"
+                        @click="wizardForm.bootIso = ''"
+                      >
+                        <MdiIcon :path="mdiClose" size="12" /> Clear
+                      </button>
+                      <span v-else class="text-muted" style="font-size: 11px">No ISO</span>
+                    </td>
+                  </tr>
+
+                  <!-- Network Interfaces -->
+                  <tr v-for="(nic, idx) in wizardForm.networkInterfaces" :key="nic.id">
+                    <td class="font-semibold">
+                      Network (<code class="mono">{{ nic.id }}</code>)
+                    </td>
+                    <td class="mono" style="font-size: 12px">
+                      Bridge: {{ nic.bridge }}, Model: {{ nic.model }}
+                      <span v-if="nic.vlanTag" style="color: var(--accent-primary)">, VLAN: {{ nic.vlanTag }}</span>
+                      <span v-if="nic.firewall" style="color: var(--text-muted)">, Firewall: on</span>
+                    </td>
+                    <td style="text-align: right">
+                      <div style="display: inline-flex; gap: 4px">
+                        <button class="btn btn-xs" type="button" @click.stop="openEditWizardNic(idx)">
+                          <MdiIcon :path="mdiPencil" size="12" /> Edit
+                        </button>
+                        <button
+                          v-if="wizardForm.networkInterfaces.length > 1"
+                          class="btn btn-xs btn-danger"
+                          type="button"
+                          title="Remove network interface"
+                          @click.stop="removeWizardNic(idx)"
+                        >
+                          <MdiIcon :path="mdiTrashCan" size="12" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+
+                  <!-- Display -->
+                  <tr style="cursor: pointer" title="Click to edit display" @click="openWizardEdit('display')">
+                    <td class="font-semibold">Display / Graphics</td>
+                    <td class="mono" style="font-size: 12px">
+                      {{ wizardForm.displayType || 'virtio-gpu' }} (VNC Display: Auto)
+                    </td>
+                    <td style="text-align: right">
+                      <button class="btn btn-xs" type="button" @click.stop="openWizardEdit('display')">
+                        <MdiIcon :path="mdiPencil" size="12" /> Edit
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <!-- Step 5: Memory -->
-          <div v-if="wizardStep === 5" class="form-grid">
-            <div class="form-group">
-              <label>Memory (MiB)</label>
-              <input v-model.number="wizardForm.memoryMib" type="number" min="512" step="256" class="input mono" required />
+          <!-- Cloud-Init Optional Collapsible -->
+          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 16px">
+            <div
+              style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none"
+              @click="wizardForm.showCloudInit = !wizardForm.showCloudInit"
+            >
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px">
+                <MdiIcon :path="mdiCog" size="16" style="color: var(--text-secondary)" />
+                <span>Cloud-Init Configuration (Optional)</span>
+              </div>
+              <button type="button" class="btn btn-xs">
+                {{ wizardForm.showCloudInit ? 'Collapse' : 'Expand' }}
+              </button>
             </div>
-            <div class="form-group">
-              <label>Minimum Memory (Ballooning MiB)</label>
-              <input v-model.number="wizardForm.balloonMinMib" type="number" min="256" step="256" class="input mono" required />
-            </div>
-          </div>
-
-          <!-- Step 6: Network -->
-          <div v-if="wizardStep === 6" class="form-grid">
-            <div class="form-group">
-              <label>Model</label>
-              <select v-model="wizardForm.netModel" class="select mono">
-                <option value="virtio">VirtIO (paravirtualized)</option>
-                <option value="e1000">Intel E1000</option>
-                <option value="rtl8139">Realtek RTL8139</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Bridge / LAN Interface</label>
-              <select v-model="wizardForm.netBridge" class="select mono" required>
-                <option v-for="b in bridgeOptionsFor(wizardForm.netBridge)" :key="b.name" :value="b.name">{{ b.label }}</option>
-              </select>
-              <span class="helper">Host bridge (e.g. vmbr0) or physical interface (e.g. ens3) to bridge directly to physical LAN</span>
-            </div>
-            <div class="form-group">
-              <label>VLAN Tag (0 = Untagged)</label>
-              <input v-model.number="wizardForm.vlanTag" type="number" min="0" max="4094" class="input mono" />
-            </div>
-          </div>
-
-          <!-- Step 7: Cloud-Init & Confirm -->
-          <div v-if="wizardStep === 7" style="display: flex; flex-direction: column; gap: 14px">
-            <div class="form-grid">
+            <div v-if="wizardForm.showCloudInit" class="form-grid" style="margin-top: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px">
               <div class="form-group">
                 <label>Cloud-Init User</label>
-                <input v-model="wizardForm.ciUser" class="input mono" />
+                <input v-model="wizardForm.ciUser" class="input mono" placeholder="admin" />
               </div>
               <div class="form-group">
                 <label>Password</label>
-                <input v-model="wizardForm.ciPassword" type="password" class="input mono" />
+                <input v-model="wizardForm.ciPassword" type="password" class="input mono" placeholder="Leave empty for key-only" />
               </div>
               <div class="form-group" style="grid-column: span 2">
                 <label>SSH Public Keys</label>
-                <textarea v-model="wizardForm.ciSshKeys" class="input mono" rows="2" placeholder="ssh-ed25519 ..."></textarea>
+                <textarea v-model="wizardForm.ciSshKeys" class="input mono" rows="2" placeholder="ssh-ed25519 AAAA..."></textarea>
               </div>
-            </div>
-
-            <!-- Confirmation Summary Card -->
-            <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px; font-size: 12px">
-              <div style="font-weight: 700; margin-bottom: 8px">Summary</div>
-              <div><strong>VM Domain:</strong> <span class="mono">{{ wizardForm.vmId }}</span></div>
-              <div><strong>Topology:</strong> <span class="mono">{{ wizardForm.sockets * wizardForm.cores }} vCPUs ({{ wizardForm.sockets }}s/{{ wizardForm.cores }}c) [{{ wizardForm.cpuType }}]</span></div>
-              <div><strong>Memory:</strong> <span class="mono">{{ formatBytes(wizardForm.memoryMib * 1024 * 1024) }} (Balloon: {{ formatBytes(wizardForm.balloonMinMib * 1024 * 1024) }})</span></div>
-              <div><strong>System:</strong> <span class="mono">{{ wizardForm.machineType }} / {{ wizardForm.biosType.toUpperCase() }} (TPM: {{ wizardForm.tpmVersion }})</span></div>
-              <div><strong>Disk:</strong> <span class="mono">{{ wizardForm.diskBus }} ({{ wizardForm.diskSizeGib }} GiB)</span></div>
-              <div><strong>Network:</strong> <span class="mono">{{ wizardForm.netModel }} on {{ wizardForm.netBridge }}</span></div>
             </div>
           </div>
         </div>
 
-        <!-- Wizard Navigation Footer -->
+        <!-- Modal Footer -->
         <div style="flex-shrink: 0; padding: 14px 20px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center">
+          <button type="button" class="btn" @click="showCreateWizard = false">
+            Cancel
+          </button>
           <button
             type="button"
-            class="btn"
-            :disabled="wizardStep === 1"
-            @click="wizardStep--"
+            class="btn btn-primary"
+            :disabled="!wizardForm.vmName || !wizardForm.vmId"
+            @click="handleWizardSubmit"
           >
-            Previous
+            Create Virtual Machine
           </button>
+        </div>
+      </div>
+    </div>
 
-          <div style="display: flex; gap: 10px">
-            <button
-              v-if="wizardStep < 7"
-              type="button"
-              class="btn btn-primary"
-              @click="wizardStep++"
-            >
-              Next
-            </button>
-            <button
-              v-else
-              type="button"
-              class="btn btn-primary"
-              @click="handleWizardSubmit"
-            >
-              Create VM
-            </button>
+    <!-- WIZARD SUB-MODAL: CPU -->
+    <div v-if="wizardEditModal === 'cpu'" class="modal-backdrop" style="z-index: 1050">
+      <div class="modal-card" style="max-width: 480px">
+        <div class="modal-header">
+          <h3 class="modal-title">Edit Processors</h3>
+          <button class="modal-close-btn" type="button" aria-label="Close" @click="wizardEditModal = null">
+            <MdiIcon :path="mdiClose" size="18" />
+          </button>
+        </div>
+        <div class="modal-body form-grid">
+          <div class="form-group">
+            <label>Sockets</label>
+            <select v-model.number="wizardForm.sockets" class="select mono">
+              <option v-for="n in socketOptions" :key="n" :value="n">{{ n }}</option>
+            </select>
           </div>
+          <div class="form-group">
+            <label>Cores</label>
+            <select v-model.number="wizardForm.cores" class="select mono">
+              <option v-for="n in coreOptionsFor(wizardForm.cores)" :key="n" :value="n">{{ n }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>CPU Type / Model</label>
+            <select v-model="wizardForm.cpuType" class="select mono">
+              <option value="host">host (Pass-through host CPU)</option>
+              <option value="kvm64">kvm64 (Safe standard KVM)</option>
+              <option value="x86-64-v2-AES">x86-64-v2-AES</option>
+              <option value="EPYC">EPYC</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>NUMA Topology</label>
+            <select v-model="wizardForm.numa" class="select mono">
+              <option :value="false">Disabled</option>
+              <option :value="true">Enabled</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" @click="wizardEditModal = null">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- WIZARD SUB-MODAL: MEMORY -->
+    <div v-if="wizardEditModal === 'memory'" class="modal-backdrop" style="z-index: 1050">
+      <div class="modal-card" style="max-width: 480px">
+        <div class="modal-header">
+          <h3 class="modal-title">Edit Memory</h3>
+          <button class="modal-close-btn" type="button" aria-label="Close" @click="wizardEditModal = null">
+            <MdiIcon :path="mdiClose" size="18" />
+          </button>
+        </div>
+        <div class="modal-body form-grid">
+          <div class="form-group" style="grid-column: span 2">
+            <label>Memory Size (MiB)</label>
+            <input v-model.number="wizardForm.memoryMib" type="number" min="512" step="256" class="input mono" required />
+            <span class="helper">{{ formatBytes(wizardForm.memoryMib * 1024 * 1024) }}</span>
+          </div>
+          <div class="form-group" style="grid-column: span 2">
+            <label>Hugepages</label>
+            <select v-model="wizardForm.hugepages" class="select mono">
+              <option value="off">Disabled (Standard 4KiB pages)</option>
+              <option value="2M">2 MiB Hugepages</option>
+              <option value="1G">1 GiB Hugepages</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" @click="wizardEditModal = null">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- WIZARD SUB-MODAL: PLATFORM / BIOS -->
+    <div v-if="wizardEditModal === 'platform'" class="modal-backdrop" style="z-index: 1050">
+      <div class="modal-card" style="max-width: 480px">
+        <div class="modal-header">
+          <h3 class="modal-title">Edit Machine & BIOS</h3>
+          <button class="modal-close-btn" type="button" aria-label="Close" @click="wizardEditModal = null">
+            <MdiIcon :path="mdiClose" size="18" />
+          </button>
+        </div>
+        <div class="modal-body form-grid">
+          <div class="form-group">
+            <label>Machine Type</label>
+            <select v-model="wizardForm.machineType" class="select mono">
+              <option value="q35">q35 (Modern PCIe Architecture)</option>
+              <option value="i440fx">i440fx (Legacy PCI)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>BIOS / Firmware</label>
+            <select v-model="wizardForm.biosType" class="select mono">
+              <option value="ovmf">OVMF (UEFI - Modern, Secure Boot)</option>
+              <option value="seabios">SeaBIOS (Legacy BIOS)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>vTPM 2.0 Security</label>
+            <select v-model="wizardForm.tpmVersion" class="select mono">
+              <option value="v2.0">TPM 2.0 (Required for Windows 11)</option>
+              <option value="none">Disabled</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Secure Boot</label>
+            <select v-model="wizardForm.secureBoot" class="select mono">
+              <option :value="true">Enabled</option>
+              <option :value="false">Disabled</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" @click="wizardEditModal = null">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- WIZARD SUB-MODAL: HARD DISK -->
+    <div v-if="wizardEditModal === 'disk'" class="modal-backdrop" style="z-index: 1050">
+      <div class="modal-card" style="max-width: 520px">
+        <div class="modal-header">
+          <h3 class="modal-title">Edit Hard Disk ({{ editingDiskBuffer.id }})</h3>
+          <button class="modal-close-btn" type="button" aria-label="Close" @click="wizardEditModal = null">
+            <MdiIcon :path="mdiClose" size="18" />
+          </button>
+        </div>
+        <div class="modal-body form-grid">
+          <div class="form-group">
+            <label>Bus Interface</label>
+            <select v-model="editingDiskBuffer.bus" class="select mono">
+              <option value="scsi">VirtIO SCSI (Recommended)</option>
+              <option value="virtio">VirtIO Block</option>
+              <option value="sata">SATA</option>
+              <option value="nvme">NVMe</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Disk Size (GiB)</label>
+            <input v-model.number="editingDiskBuffer.sizeGib" type="number" min="1" class="input mono" required />
+          </div>
+          <div class="form-group" style="grid-column: span 2">
+            <label>Storage Path (Raw, QCOW2 or ZVol)</label>
+            <input
+              v-model="editingDiskBuffer.diskPath"
+              list="zvol-list-wiz"
+              class="input mono"
+              :placeholder="suggestedDiskPath"
+            />
+            <datalist id="zvol-list-wiz">
+              <option v-for="zpath in availableZvols" :key="zpath" :value="zpath" />
+            </datalist>
+          </div>
+          <div class="form-group">
+            <label>Cache Mode</label>
+            <select v-model="editingDiskBuffer.cacheMode" class="select mono">
+              <option value="none">none (Direct I/O - Recommended)</option>
+              <option value="writethrough">writethrough</option>
+              <option value="writeback">writeback</option>
+              <option value="unsafe">unsafe</option>
+            </select>
+          </div>
+          <div class="form-group" style="display: flex; flex-direction: column; justify-content: center; gap: 8px">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 0; cursor: pointer">
+              <input v-model="editingDiskBuffer.discard" type="checkbox" /> Discard / TRIM
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 0; cursor: pointer">
+              <input v-model="editingDiskBuffer.iothread" type="checkbox" /> Dedicated IOThread
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" @click="wizardEditModal = null">Cancel</button>
+          <button type="button" class="btn btn-primary" @click="saveEditWizardDisk">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- WIZARD SUB-MODAL: NETWORK -->
+    <div v-if="wizardEditModal === 'nic'" class="modal-backdrop" style="z-index: 1050">
+      <div class="modal-card" style="max-width: 480px">
+        <div class="modal-header">
+          <h3 class="modal-title">Edit Network Device ({{ editingNicBuffer.id }})</h3>
+          <button class="modal-close-btn" type="button" aria-label="Close" @click="wizardEditModal = null">
+            <MdiIcon :path="mdiClose" size="18" />
+          </button>
+        </div>
+        <div class="modal-body form-grid">
+          <div class="form-group">
+            <label>Model</label>
+            <select v-model="editingNicBuffer.model" class="select mono">
+              <option value="virtio">VirtIO (paravirtualized)</option>
+              <option value="e1000">Intel E1000</option>
+              <option value="rtl8139">Realtek RTL8139</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Bridge / LAN Interface</label>
+            <select v-model="editingNicBuffer.bridge" class="select mono" required>
+              <option v-for="b in bridgeOptionsFor(editingNicBuffer.bridge)" :key="b.name" :value="b.name">{{ b.label }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>VLAN Tag (0 = Untagged)</label>
+            <input v-model.number="editingNicBuffer.vlanTag" type="number" min="0" max="4094" class="input mono" />
+          </div>
+          <div class="form-group" style="display: flex; align-items: center; padding-top: 20px">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 0; cursor: pointer">
+              <input v-model="editingNicBuffer.firewall" type="checkbox" /> MAC Spoofing Filter
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" @click="wizardEditModal = null">Cancel</button>
+          <button type="button" class="btn btn-primary" @click="saveEditWizardNic">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- WIZARD SUB-MODAL: DISPLAY -->
+    <div v-if="wizardEditModal === 'display'" class="modal-backdrop" style="z-index: 1050">
+      <div class="modal-card" style="max-width: 440px">
+        <div class="modal-header">
+          <h3 class="modal-title">Edit Display / Graphics</h3>
+          <button class="modal-close-btn" type="button" aria-label="Close" @click="wizardEditModal = null">
+            <MdiIcon :path="mdiClose" size="18" />
+          </button>
+        </div>
+        <div class="modal-body form-grid">
+          <div class="form-group" style="grid-column: span 2">
+            <label>Graphics Controller</label>
+            <select v-model="wizardForm.displayType" class="select mono">
+              <option value="virtio-gpu">virtio-gpu (Recommended, 3D accelerated)</option>
+              <option value="qxl">qxl (SPICE / 2D optimized)</option>
+              <option value="std">std (Standard VGA compatible)</option>
+              <option value="cirrus">cirrus (Legacy)</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" @click="wizardEditModal = null">Done</button>
         </div>
       </div>
     </div>

@@ -32,6 +32,46 @@ message CifsShare {
   string create_mask = 10;
   string directory_mask = 11;
   bool enabled = 12;
+  repeated string read_list = 13;
+  repeated string write_list = 14;
+  string force_user = 15;
+  string force_group = 16;
+  string guest_account = 17;
+  bool guest_only = 18;
+  string force_create_mode = 19;
+  string force_directory_mode = 20;
+  bool shadow_copy = 21;
+  bool time_machine = 22;
+  bool recycle_bin = 23;
+}
+
+message CifsGlobalConfig {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/CifsGlobalConfig"
+    pattern: "cifsGlobalConfig"
+    singular: "cifsGlobalConfig"
+    plural: "cifsGlobalConfigs"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string workgroup = 2;
+  string server_string = 3;
+  string security = 4;
+  string map_to_guest = 5;
+  string guest_account = 6;
+  int32 max_log_size = 7;
+  bool disable_spoolss = 8;
+  bool fruit_aapl = 9;
+  bool wsdd_enabled = 10;
+}
+
+message GetCifsGlobalConfigRequest {
+  string name = 1;
+}
+
+message UpdateCifsGlobalConfigRequest {
+  CifsGlobalConfig global_config = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
 }
 
 message ListCifsSharesRequest {

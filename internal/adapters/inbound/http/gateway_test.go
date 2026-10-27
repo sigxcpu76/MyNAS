@@ -216,10 +216,10 @@ func setupTestServer(t *testing.T) *httptest.Server {
 
 	zfsPort := &stubZfsPort{
 		pools: map[string]domain.ZfsPool{
-			"tank": {ID: "tank", PoolName: "tank", State: "ONLINE", Mountpoint: "/nas/tank"},
+			"tank": {ID: "tank", PoolName: "tank", State: "ONLINE", Mountpoint: "/mnt/tank"},
 		},
 		datasets: map[string]domain.ZfsDataset{
-			"tank/media": {PoolID: "tank", ID: "media", DatasetPath: "tank/media", Mountpoint: "/nas/tank/media"},
+			"tank/media": {PoolID: "tank", ID: "media", DatasetPath: "tank/media", Mountpoint: "/mnt/tank/media"},
 		},
 	}
 	systemSvc := application.NewSystemService(system.NewAdapter(zfsPort, prereqChecker))
@@ -240,7 +240,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 		config: domain.DockerConfig{
 			Pool:            "tank",
 			Dataset:         "tank/apps",
-			AppdataPath:     "/nas/tank/apps",
+			AppdataPath:     "/mnt/tank/apps",
 			DatasetSelected: true,
 		},
 	}

@@ -370,8 +370,8 @@ func newVMCmd(rootOpts *RootOptions) *cobra.Command {
 			fmt.Fprintf(rootOpts.Out, "State:           %s\n", vm.GetState())
 			fmt.Fprintf(rootOpts.Out, "CPU:             %d vCPUs (%d sockets, %d cores) [Type: %s]\n",
 				vm.GetVcpus(), vm.GetSockets(), vm.GetCores(), vm.GetCpuType())
-			fmt.Fprintf(rootOpts.Out, "Memory:          %d MiB (Balloon min: %d MiB, Hugepages: %s)\n",
-				vm.GetMemoryMib(), vm.GetBalloonMinMib(), vm.GetHugepages())
+			fmt.Fprintf(rootOpts.Out, "Memory:          %d MiB (Fixed, Hugepages: %s)\n",
+				vm.GetMemoryMib(), vm.GetHugepages())
 			fmt.Fprintf(rootOpts.Out, "Firmware:        BIOS=%s, Machine=%s, TPM=%s, SecureBoot=%t\n",
 				vm.GetBiosType(), vm.GetMachineType(), vm.GetTpmVersion(), vm.GetSecureBoot())
 			fmt.Fprintf(rootOpts.Out, "Display / VNC:   %s | Port %d (%s)\n",
