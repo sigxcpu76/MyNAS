@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
+import { mdiClose, mdiCog, mdiDelete, mdiPencil, mdiPlus } from '@mdi/js';
 import { services } from '../../container';
 import type { CifsGlobalConfig, CifsShare, WebdavShare } from '../../domain/models';
+import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import SortableTh from '../components/SortableTh.vue';
 import PathSelector from '../components/PathSelector.vue';
@@ -439,14 +441,16 @@ async function handleDeleteWebdav(share: WebdavShare) {
             :disabled="!cifsModuleStatus.enabled"
             @click="showGlobalSettings = true"
           >
-            ⚙ Samba Settings
+            <MdiIcon :path="mdiCog" size="14" style="margin-right: 4px" />
+            Samba Settings
           </button>
           <button
             class="btn btn-primary btn-sm"
             :disabled="!cifsModuleStatus.enabled"
             @click="showCreateCifs = !showCreateCifs"
           >
-            {{ !cifsModuleStatus.enabled ? 'CIFS Disabled' : showCreateCifs ? 'Cancel' : '+ Add SMB Share' }}
+            <MdiIcon :path="showCreateCifs ? mdiClose : mdiPlus" size="14" style="margin-right: 4px" />
+            {{ !cifsModuleStatus.enabled ? 'CIFS Disabled' : showCreateCifs ? 'Cancel' : 'Add SMB Share' }}
           </button>
         </div>
       </div>
@@ -747,7 +751,7 @@ async function handleDeleteWebdav(share: WebdavShare) {
               <SortableTh :sort="cifsSort" sort-key="share">SMB Share</SortableTh>
               <SortableTh :sort="cifsSort" sort-key="acl">Access ACLs</SortableTh>
               <SortableTh :sort="cifsSort" sort-key="mode">Permissions & Features</SortableTh>
-              <th>Actions</th>
+              <th style="width: 90px; text-align: right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -771,10 +775,10 @@ async function handleDeleteWebdav(share: WebdavShare) {
                     <SkeletonBox width="45px" height="20px" rounded="10px" />
                   </div>
                 </td>
-                <td>
-                  <div style="display: inline-flex; gap: 6px">
-                    <SkeletonBox width="26px" height="26px" rounded="4px" />
-                    <SkeletonBox width="26px" height="26px" rounded="4px" />
+                <td style="text-align: right">
+                  <div style="display: inline-flex; gap: 6px; justify-content: flex-end">
+                    <SkeletonBox width="28px" height="28px" rounded="4px" />
+                    <SkeletonBox width="28px" height="28px" rounded="4px" />
                   </div>
                 </td>
               </tr>
@@ -823,11 +827,23 @@ async function handleDeleteWebdav(share: WebdavShare) {
                   Mask: {{ s.createMask || '0664' }} / {{ s.directoryMask || '0775' }}
                 </div>
               </td>
-              <td>
-                <div style="display: flex; gap: 6px">
-                  <button class="btn btn-sm" @click="startEditCifs(s)">Edit</button>
-                  <button class="btn btn-danger btn-sm" @click="handleDeleteCifs(s)">
-                    Del
+              <td style="text-align: right">
+                <div style="display: inline-flex; gap: 6px; justify-content: flex-end">
+                  <button
+                    class="btn btn-sm btn-icon"
+                    title="Edit SMB Share"
+                    aria-label="Edit SMB Share"
+                    @click="startEditCifs(s)"
+                  >
+                    <MdiIcon :path="mdiPencil" size="14" />
+                  </button>
+                  <button
+                    class="btn btn-danger btn-sm btn-icon"
+                    title="Delete SMB Share"
+                    aria-label="Delete SMB Share"
+                    @click="handleDeleteCifs(s)"
+                  >
+                    <MdiIcon :path="mdiDelete" size="14" />
                   </button>
                 </div>
               </td>
@@ -844,7 +860,8 @@ async function handleDeleteWebdav(share: WebdavShare) {
           <h3 class="card-title">WebDAV Shares</h3>
         </div>
         <button class="btn btn-primary btn-sm" @click="showCreateWebdav = !showCreateWebdav">
-          {{ showCreateWebdav ? 'Cancel' : '+ Add WebDAV Share' }}
+          <MdiIcon :path="showCreateWebdav ? mdiClose : mdiPlus" size="14" style="margin-right: 4px" />
+          {{ showCreateWebdav ? 'Cancel' : 'Add WebDAV Share' }}
         </button>
       </div>
 
@@ -953,7 +970,7 @@ async function handleDeleteWebdav(share: WebdavShare) {
               <SortableTh :sort="webdavSort" sort-key="endpoint">Endpoint URL</SortableTh>
               <SortableTh :sort="webdavSort" sort-key="identity">Allowed Identity</SortableTh>
               <SortableTh :sort="webdavSort" sort-key="access">Access</SortableTh>
-              <th>Actions</th>
+              <th style="width: 90px; text-align: right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -972,10 +989,10 @@ async function handleDeleteWebdav(share: WebdavShare) {
                   </div>
                 </td>
                 <td><SkeletonBox width="60px" height="20px" rounded="10px" /></td>
-                <td>
-                  <div style="display: inline-flex; gap: 6px">
-                    <SkeletonBox width="26px" height="26px" rounded="4px" />
-                    <SkeletonBox width="26px" height="26px" rounded="4px" />
+                <td style="text-align: right">
+                  <div style="display: inline-flex; gap: 6px; justify-content: flex-end">
+                    <SkeletonBox width="28px" height="28px" rounded="4px" />
+                    <SkeletonBox width="28px" height="28px" rounded="4px" />
                   </div>
                 </td>
               </tr>
@@ -1001,11 +1018,23 @@ async function handleDeleteWebdav(share: WebdavShare) {
                   {{ w.readOnly ? 'RO' : 'RW' }}
                 </span>
               </td>
-              <td>
-                <div style="display: flex; gap: 6px">
-                  <button class="btn btn-sm" @click="startEditWebdav(w)">Edit</button>
-                  <button class="btn btn-danger btn-sm" @click="handleDeleteWebdav(w)">
-                    Del
+              <td style="text-align: right">
+                <div style="display: inline-flex; gap: 6px; justify-content: flex-end">
+                  <button
+                    class="btn btn-sm btn-icon"
+                    title="Edit WebDAV Share"
+                    aria-label="Edit WebDAV Share"
+                    @click="startEditWebdav(w)"
+                  >
+                    <MdiIcon :path="mdiPencil" size="14" />
+                  </button>
+                  <button
+                    class="btn btn-danger btn-sm btn-icon"
+                    title="Delete WebDAV Share"
+                    aria-label="Delete WebDAV Share"
+                    @click="handleDeleteWebdav(w)"
+                  >
+                    <MdiIcon :path="mdiDelete" size="14" />
                   </button>
                 </div>
               </td>

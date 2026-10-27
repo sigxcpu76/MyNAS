@@ -127,4 +127,59 @@ describe('CIFS Shares & Global Config Mappers', () => {
     const browseButtons = wrapper.findAll('button[title="Browse Folders..."]');
     expect(browseButtons.length).toBeGreaterThanOrEqual(1);
   });
+
+  it('renders edit and delete icon buttons for Samba and WebDAV shares', async () => {
+    const { mount } = await import('@vue/test-utils');
+    const { default: SharesView } = await import('../src/ui/views/SharesView.vue');
+    const { default: MdiIcon } = await import('../src/ui/components/MdiIcon.vue');
+    const { nasState } = await import('../src/ui/store');
+
+    nasState.cifsShares = [
+      {
+        name: 'cifsShares/test-share',
+        shareName: 'test-share',
+        path: '/tank/test',
+        comment: 'Test share',
+        readOnly: false,
+        browseable: true,
+        guestOk: false,
+      } as any,
+    ];
+    nasState.webdavShares = [
+      {
+        name: 'webdavShares/test-webdav',
+        urlPrefix: '/webdav/test',
+        path: '/tank/test',
+        description: 'Test WebDAV',
+        readOnly: false,
+        enabled: true,
+      } as any,
+    ];
+
+    const wrapper = mount(SharesView);
+
+    // Check CIFS action buttons
+    const editCifsBtn = wrapper.find('button[title="Edit SMB Share"]');
+    expect(editCifsBtn.exists()).toBe(true);
+    expect(editCifsBtn.classes()).toContain('btn-icon');
+    expect(editCifsBtn.findComponent(MdiIcon).exists()).toBe(true);
+
+    const deleteCifsBtn = wrapper.find('button[title="Delete SMB Share"]');
+    expect(deleteCifsBtn.exists()).toBe(true);
+    expect(deleteCifsBtn.classes()).toContain('btn-icon');
+    expect(deleteCifsBtn.classes()).toContain('btn-danger');
+    expect(deleteCifsBtn.findComponent(MdiIcon).exists()).toBe(true);
+
+    // Check WebDAV action buttons
+    const editWebdavBtn = wrapper.find('button[title="Edit WebDAV Share"]');
+    expect(editWebdavBtn.exists()).toBe(true);
+    expect(editWebdavBtn.classes()).toContain('btn-icon');
+    expect(editWebdavBtn.findComponent(MdiIcon).exists()).toBe(true);
+
+    const deleteWebdavBtn = wrapper.find('button[title="Delete WebDAV Share"]');
+    expect(deleteWebdavBtn.exists()).toBe(true);
+    expect(deleteWebdavBtn.classes()).toContain('btn-icon');
+    expect(deleteWebdavBtn.classes()).toContain('btn-danger');
+    expect(deleteWebdavBtn.findComponent(MdiIcon).exists()).toBe(true);
+  });
 });
