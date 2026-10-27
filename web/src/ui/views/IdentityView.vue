@@ -4,6 +4,7 @@ import { services } from '../../container';
 import type { Group, User } from '../../domain/models';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import SortableTh from '../components/SortableTh.vue';
+import UserGroupSelector from '../components/UserGroupSelector.vue';
 import { useTableSort } from '../composables/useTableSort';
 import { nasState, notify } from '../store';
 import { confirmDelete } from '../modal';
@@ -329,11 +330,20 @@ async function handleDeleteGroup(g: Group) {
           </div>
           <div class="form-group">
             <label>Primary Group</label>
-            <input v-model="userForm.primaryGroup" class="input mono" placeholder="nasusers" />
+            <UserGroupSelector
+              v-model="userForm.primaryGroup"
+              type="group"
+              placeholder="nasusers"
+            />
           </div>
           <div class="form-group">
             <label>Supplementary Groups (comma-separated)</label>
-            <input v-model="userForm.supplementaryGroupsText" class="input mono" placeholder="docker, kvm, sudo" />
+            <UserGroupSelector
+              v-model="userForm.supplementaryGroupsText"
+              type="group"
+              :multiple="true"
+              placeholder="docker, kvm, sudo"
+            />
           </div>
           <div class="form-group">
             <label>Login Shell</label>
@@ -404,11 +414,18 @@ async function handleDeleteGroup(g: Group) {
           </div>
           <div class="form-group">
             <label>Primary Group</label>
-            <input v-model="editUserForm.primaryGroup" class="input mono" />
+            <UserGroupSelector
+              v-model="editUserForm.primaryGroup"
+              type="group"
+            />
           </div>
           <div class="form-group">
             <label>Supplementary Groups</label>
-            <input v-model="editUserForm.supplementaryGroupsText" class="input mono" />
+            <UserGroupSelector
+              v-model="editUserForm.supplementaryGroupsText"
+              type="group"
+              :multiple="true"
+            />
           </div>
           <div class="form-group">
             <label>Login Shell</label>
@@ -609,7 +626,12 @@ async function handleDeleteGroup(g: Group) {
           </div>
           <div class="form-group">
             <label>Members (comma-separated usernames)</label>
-            <input v-model="groupForm.membersText" class="input mono" placeholder="admin, nasuser" />
+            <UserGroupSelector
+              v-model="groupForm.membersText"
+              type="user"
+              :multiple="true"
+              placeholder="Select group members..."
+            />
           </div>
         </div>
         <div style="margin-top: 10px; display: flex; justify-content: flex-end">
@@ -634,7 +656,14 @@ async function handleDeleteGroup(g: Group) {
         <span class="mono" style="font-size: 12px">
           Members of {{ editingGroup.groupName }}:
         </span>
-        <input v-model="editGroupMembersText" class="input mono" style="flex: 1" />
+        <div style="flex: 1">
+          <UserGroupSelector
+            v-model="editGroupMembersText"
+            type="user"
+            :multiple="true"
+            placeholder="Select group members..."
+          />
+        </div>
         <button class="btn btn-primary btn-sm" @click="handleSaveGroupEdit">Save</button>
         <button class="btn btn-sm" @click="editingGroup = null">Cancel</button>
       </div>

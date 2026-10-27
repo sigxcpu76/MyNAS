@@ -5,6 +5,7 @@ import type { CifsGlobalConfig, CifsShare, WebdavShare } from '../../domain/mode
 import SkeletonBox from '../components/SkeletonBox.vue';
 import SortableTh from '../components/SortableTh.vue';
 import PathSelector from '../components/PathSelector.vue';
+import UserGroupSelector from '../components/UserGroupSelector.vue';
 import { useTableSort } from '../composables/useTableSort';
 import { getModuleAvailability, nasState, notify } from '../store';
 import { confirmDelete } from '../modal';
@@ -496,24 +497,60 @@ async function handleDeleteWebdav(share: WebdavShare) {
           </div>
           <div class="form-group">
             <label>Valid Users (comma-separated)</label>
-            <input v-model="cifsForm.validUsersText" class="input mono" placeholder="alice, bob" />
+            <UserGroupSelector
+              v-model="cifsForm.validUsersText"
+              type="user"
+              :multiple="true"
+              placeholder="Select users..."
+            />
           </div>
           <div class="form-group">
             <label>Valid Groups (comma-separated)</label>
-            <input v-model="cifsForm.validGroupsText" class="input mono" placeholder="nasusers, family" />
+            <UserGroupSelector
+              v-model="cifsForm.validGroupsText"
+              type="group"
+              :multiple="true"
+              placeholder="Select groups..."
+            />
           </div>
           <div class="form-group">
             <label>Force User / Force Group</label>
             <div style="display: flex; gap: 6px">
-              <input v-model="cifsForm.forceUser" class="input mono" placeholder="user (optional)" style="width: 50%" />
-              <input v-model="cifsForm.forceGroup" class="input mono" placeholder="group (optional)" style="width: 50%" />
+              <div style="width: 50%">
+                <UserGroupSelector
+                  v-model="cifsForm.forceUser"
+                  type="user"
+                  placeholder="user (optional)"
+                />
+              </div>
+              <div style="width: 50%">
+                <UserGroupSelector
+                  v-model="cifsForm.forceGroup"
+                  type="group"
+                  placeholder="group (optional)"
+                />
+              </div>
             </div>
           </div>
           <div class="form-group">
             <label>Read-Only List / Write List</label>
             <div style="display: flex; gap: 6px">
-              <input v-model="cifsForm.readListText" class="input mono" placeholder="read-only users" style="width: 50%" />
-              <input v-model="cifsForm.writeListText" class="input mono" placeholder="write users" style="width: 50%" />
+              <div style="width: 50%">
+                <UserGroupSelector
+                  v-model="cifsForm.readListText"
+                  type="user"
+                  :multiple="true"
+                  placeholder="read-only users"
+                />
+              </div>
+              <div style="width: 50%">
+                <UserGroupSelector
+                  v-model="cifsForm.writeListText"
+                  type="user"
+                  :multiple="true"
+                  placeholder="write users"
+                />
+              </div>
             </div>
           </div>
           <div class="form-group">
@@ -525,7 +562,11 @@ async function handleDeleteWebdav(share: WebdavShare) {
           </div>
           <div class="form-group">
             <label>Guest User Mapping</label>
-            <input v-model="cifsForm.guestAccount" class="input mono" placeholder="nobody" />
+            <UserGroupSelector
+              v-model="cifsForm.guestAccount"
+              type="user"
+              placeholder="nobody"
+            />
           </div>
         </div>
 
@@ -591,24 +632,60 @@ async function handleDeleteWebdav(share: WebdavShare) {
           </div>
           <div class="form-group">
             <label>Valid Users</label>
-            <input v-model="editCifsForm.validUsersText" class="input mono" placeholder="alice, bob" />
+            <UserGroupSelector
+              v-model="editCifsForm.validUsersText"
+              type="user"
+              :multiple="true"
+              placeholder="Select users..."
+            />
           </div>
           <div class="form-group">
             <label>Valid Groups</label>
-            <input v-model="editCifsForm.validGroupsText" class="input mono" placeholder="family" />
+            <UserGroupSelector
+              v-model="editCifsForm.validGroupsText"
+              type="group"
+              :multiple="true"
+              placeholder="Select groups..."
+            />
           </div>
           <div class="form-group">
             <label>Force User / Force Group</label>
             <div style="display: flex; gap: 6px">
-              <input v-model="editCifsForm.forceUser" class="input mono" placeholder="user" style="width: 50%" />
-              <input v-model="editCifsForm.forceGroup" class="input mono" placeholder="group" style="width: 50%" />
+              <div style="width: 50%">
+                <UserGroupSelector
+                  v-model="editCifsForm.forceUser"
+                  type="user"
+                  placeholder="user (optional)"
+                />
+              </div>
+              <div style="width: 50%">
+                <UserGroupSelector
+                  v-model="editCifsForm.forceGroup"
+                  type="group"
+                  placeholder="group (optional)"
+                />
+              </div>
             </div>
           </div>
           <div class="form-group">
             <label>Read-Only List / Write List</label>
             <div style="display: flex; gap: 6px">
-              <input v-model="editCifsForm.readListText" class="input mono" placeholder="read-only users" style="width: 50%" />
-              <input v-model="editCifsForm.writeListText" class="input mono" placeholder="write users" style="width: 50%" />
+              <div style="width: 50%">
+                <UserGroupSelector
+                  v-model="editCifsForm.readListText"
+                  type="user"
+                  :multiple="true"
+                  placeholder="read-only users"
+                />
+              </div>
+              <div style="width: 50%">
+                <UserGroupSelector
+                  v-model="editCifsForm.writeListText"
+                  type="user"
+                  :multiple="true"
+                  placeholder="write users"
+                />
+              </div>
             </div>
           </div>
           <div class="form-group">
@@ -620,7 +697,11 @@ async function handleDeleteWebdav(share: WebdavShare) {
           </div>
           <div class="form-group">
             <label>Guest User Mapping</label>
-            <input v-model="editCifsForm.guestAccount" class="input mono" placeholder="nobody" />
+            <UserGroupSelector
+              v-model="editCifsForm.guestAccount"
+              type="user"
+              placeholder="nobody"
+            />
           </div>
         </div>
 
@@ -793,11 +874,21 @@ async function handleDeleteWebdav(share: WebdavShare) {
           </div>
           <div class="form-group">
             <label>Allowed Users</label>
-            <input v-model="webdavForm.allowedUsersText" class="input mono" placeholder="admin, nasuser" />
+            <UserGroupSelector
+              v-model="webdavForm.allowedUsersText"
+              type="user"
+              :multiple="true"
+              placeholder="Select allowed users..."
+            />
           </div>
           <div class="form-group">
             <label>Allowed Groups</label>
-            <input v-model="webdavForm.allowedGroupsText" class="input mono" placeholder="nasusers" />
+            <UserGroupSelector
+              v-model="webdavForm.allowedGroupsText"
+              type="group"
+              :multiple="true"
+              placeholder="Select allowed groups..."
+            />
           </div>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px">
@@ -833,7 +924,11 @@ async function handleDeleteWebdav(share: WebdavShare) {
           </div>
           <div class="form-group">
             <label>Allowed Users</label>
-            <input v-model="editWebdavForm.allowedUsersText" class="input mono" />
+            <UserGroupSelector
+              v-model="editWebdavForm.allowedUsersText"
+              type="user"
+              :multiple="true"
+            />
           </div>
           <div class="form-group">
             <label>Description</label>
@@ -954,7 +1049,12 @@ async function handleDeleteWebdav(share: WebdavShare) {
             </div>
             <div class="form-group">
               <label>Guest System Account</label>
-              <input v-model="globalForm.guestAccount" class="input mono" placeholder="nobody" required />
+              <UserGroupSelector
+                v-model="globalForm.guestAccount"
+                type="user"
+                placeholder="nobody"
+                :include-system="true"
+              />
             </div>
             <div class="form-group">
               <label>Max Log Size (KB)</label>
