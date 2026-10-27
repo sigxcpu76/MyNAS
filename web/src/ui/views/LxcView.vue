@@ -10,6 +10,7 @@ import {
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import SortableTh from '../components/SortableTh.vue';
+import FileDropzone from '../components/FileDropzone.vue';
 import { useTableSort } from '../composables/useTableSort';
 import { services } from '../../container';
 import { nasState, notify, refreshLxcTemplates as storeRefreshTemplates } from '../store';
@@ -113,11 +114,16 @@ onUnmounted(() => {
 
 // Templates Repository Actions
 const templateFileInput = ref<HTMLInputElement | null>(null);
+const templateDropzoneRef = ref<any>(null);
 const isUploadingTemplate = ref(false);
 const templateUploadProgress = ref<{ percent: number; loaded: number; total: number; filename: string } | null>(null);
 
 function triggerTemplateUpload() {
-  templateFileInput.value?.click();
+  if (templateDropzoneRef.value) {
+    templateDropzoneRef.value.openFileDialog();
+  } else {
+    templateFileInput.value?.click();
+  }
 }
 
 async function refreshTemplates() {
@@ -128,9 +134,7 @@ async function refreshTemplates() {
   }
 }
 
-async function handleUploadTemplate(e: Event) {
-  const target = e.target as HTMLInputElement;
-  const file = target.files?.[0];
+async function uploadTemplateFile(file: File) {
   if (!file) return;
 
   isUploadingTemplate.value = true;
@@ -159,6 +163,18 @@ async function handleUploadTemplate(e: Event) {
     templateUploadProgress.value = null;
     if (templateFileInput.value) templateFileInput.value.value = '';
   }
+}
+
+async function handleUploadTemplate(e: Event) {
+  const target = e.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (file) {
+    await uploadTemplateFile(file);
+  }
+}
+
+function handleInvalidTemplateFile(filename: string, reason: string) {
+  notify('error', reason);
 }
 
 async function handleDeleteTemplate(tmpl: StorageImage) {
@@ -499,32 +515,19 @@ async function handleDelete(lx: LxcContainer) {
       </div>
     </div>
 
-    <!-- Active Upload Progress Banner -->
-    <div
-      v-if="isUploadingTemplate && templateUploadProgress"
-      style="
-        background: var(--bg-base);
-        border: 1px solid var(--accent-primary);
-        border-radius: 8px;
-        padding: 12px 16px;
-        margin: 0 16px 16px 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      "
-    >
-      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px">
-        <div style="display: flex; align-items: center; gap: 8px; font-weight: 600">
-          <MdiIcon :path="mdiUpload" size="16" style="color: var(--accent-primary)" />
-          <span>Uploading <span class="mono">{{ templateUploadProgress.filename }}</span></span>
-        </div>
-        <div class="mono" style="font-size: 12px; color: var(--text-secondary)">
-          {{ formatBytes(templateUploadProgress.loaded) }} / {{ formatBytes(templateUploadProgress.total) }} ({{ templateUploadProgress.percent }}%)
-        </div>
-      </div>
-      <div class="progress-bar" style="height: 8px">
-        <div class="progress-fill" :style="{ width: `${templateUploadProgress.percent}%` }"></div>
-      </div>
+    <!-- Drag & Drop Template Dropzone -->
+    <div style="margin: 0 16px 16px 16px">
+      <FileDropzone
+        ref="templateDropzoneRef"
+        accept=".tar.gz,.tar.xz,.tar.zst,.tar,.tgz"
+        label="Drag & drop template archive here, or click to browse"
+        sublabel="Supports .tar.gz, .tar.xz, .tar.zst, .tar, .tgz templates"
+        :icon="mdiArchiveOutline"
+        :is-uploading="isUploadingTemplate"
+        :progress="templateUploadProgress"
+        @file-selected="uploadTemplateFile"
+        @invalid-file="handleInvalidTemplateFile"
+      />
     </div>
 
     <!-- Templates Table -->

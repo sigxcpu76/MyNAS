@@ -20,6 +20,7 @@ import NoVncModal from '../components/NoVncModal.vue';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import SortableTh from '../components/SortableTh.vue';
+import FileDropzone from '../components/FileDropzone.vue';
 import { useTableSort } from '../composables/useTableSort';
 import { generateNanosecondId, generateVMDiskFilePath, generateVMDiskName, generateZvolDiskPath, toZfsSafeSlug } from '../../domain/id';
 import {
@@ -859,11 +860,16 @@ async function handleEjectMedia() {
 
 // ISO Repository Actions
 const isoFileInput = ref<HTMLInputElement | null>(null);
+const isoDropzoneRef = ref<any>(null);
 const isUploadingIso = ref(false);
 const isoUploadProgress = ref<{ percent: number; loaded: number; total: number; filename: string } | null>(null);
 
 function triggerIsoUpload() {
-  isoFileInput.value?.click();
+  if (isoDropzoneRef.value) {
+    isoDropzoneRef.value.openFileDialog();
+  } else {
+    isoFileInput.value?.click();
+  }
 }
 
 async function refreshIsos() {
@@ -874,9 +880,7 @@ async function refreshIsos() {
   }
 }
 
-async function handleUploadIso(e: Event) {
-  const target = e.target as HTMLInputElement;
-  const file = target.files?.[0];
+async function uploadIsoFile(file: File) {
   if (!file) return;
 
   isUploadingIso.value = true;
@@ -905,6 +909,18 @@ async function handleUploadIso(e: Event) {
     isoUploadProgress.value = null;
     if (isoFileInput.value) isoFileInput.value.value = '';
   }
+}
+
+async function handleUploadIso(e: Event) {
+  const target = e.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (file) {
+    await uploadIsoFile(file);
+  }
+}
+
+function handleInvalidIsoFile(filename: string, reason: string) {
+  notify('error', reason);
 }
 
 async function handleDeleteIso(iso: StorageImage) {
@@ -1718,32 +1734,19 @@ async function handleWizardSubmit() {
         </div>
       </div>
 
-      <!-- Active Upload Progress Banner -->
-      <div
-        v-if="isUploadingIso && isoUploadProgress"
-        style="
-          background: var(--bg-base);
-          border: 1px solid var(--accent-primary);
-          border-radius: 8px;
-          padding: 12px 16px;
-          margin: 0 16px 16px 16px;
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        "
-      >
-        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px">
-          <div style="display: flex; align-items: center; gap: 8px; font-weight: 600">
-            <MdiIcon :path="mdiUpload" size="16" style="color: var(--accent-primary)" />
-            <span>Uploading <span class="mono">{{ isoUploadProgress.filename }}</span></span>
-          </div>
-          <div class="mono" style="font-size: 12px; color: var(--text-secondary)">
-            {{ formatBytes(isoUploadProgress.loaded) }} / {{ formatBytes(isoUploadProgress.total) }} ({{ isoUploadProgress.percent }}%)
-          </div>
-        </div>
-        <div class="progress-bar" style="height: 8px">
-          <div class="progress-fill" :style="{ width: `${isoUploadProgress.percent}%` }"></div>
-        </div>
+      <!-- Drag & Drop ISO Dropzone -->
+      <div style="margin: 0 16px 16px 16px">
+        <FileDropzone
+          ref="isoDropzoneRef"
+          accept=".iso,.img"
+          label="Drag & drop ISO file here, or click to browse"
+          sublabel="Supports .iso and .img installer images"
+          :icon="mdiDisc"
+          :is-uploading="isUploadingIso"
+          :progress="isoUploadProgress"
+          @file-selected="uploadIsoFile"
+          @invalid-file="handleInvalidIsoFile"
+        />
       </div>
 
       <!-- ISO Table -->
