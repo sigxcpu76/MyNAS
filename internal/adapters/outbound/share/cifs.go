@@ -264,53 +264,85 @@ func (a *CifsAdapter) UpdateShare(ctx context.Context, share domain.CifsShare, f
 	if !ok {
 		return nil, fmt.Errorf("%w: cifs share %q", domain.ErrNotFound, share.ID)
 	}
-	if share.Path != "" {
+
+	applyAll := len(fields) == 0
+	hasField := func(names ...string) bool {
+		if applyAll {
+			return true
+		}
+		for _, f := range fields {
+			for _, name := range names {
+				if f == name {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	if hasField("path") && (!applyAll || share.Path != "") {
 		existing.Path = share.Path
 	}
-	if share.Comment != "" {
+	if hasField("comment") && (!applyAll || share.Comment != "") {
 		existing.Comment = share.Comment
 	}
-	existing.ReadOnly = share.ReadOnly
-	existing.GuestOk = share.GuestOk
-	existing.GuestOnly = share.GuestOnly
-	if share.GuestAccount != "" {
+	if hasField("read_only", "readOnly") {
+		existing.ReadOnly = share.ReadOnly
+	}
+	if hasField("guest_ok", "guestOk") {
+		existing.GuestOk = share.GuestOk
+	}
+	if hasField("guest_only", "guestOnly") {
+		existing.GuestOnly = share.GuestOnly
+	}
+	if hasField("guest_account", "guestAccount") && (!applyAll || share.GuestAccount != "") {
 		existing.GuestAccount = share.GuestAccount
 	}
-	existing.Browseable = share.Browseable
-	existing.Enabled = share.Enabled
-	if share.ValidUsers != nil {
+	if hasField("browseable") {
+		existing.Browseable = share.Browseable
+	}
+	if hasField("enabled") {
+		existing.Enabled = share.Enabled
+	}
+	if hasField("valid_users", "validUsers") && (!applyAll || share.ValidUsers != nil) {
 		existing.ValidUsers = share.ValidUsers
 	}
-	if share.ValidGroups != nil {
+	if hasField("valid_groups", "validGroups") && (!applyAll || share.ValidGroups != nil) {
 		existing.ValidGroups = share.ValidGroups
 	}
-	if share.ReadList != nil {
+	if hasField("read_list", "readList") && (!applyAll || share.ReadList != nil) {
 		existing.ReadList = share.ReadList
 	}
-	if share.WriteList != nil {
+	if hasField("write_list", "writeList") && (!applyAll || share.WriteList != nil) {
 		existing.WriteList = share.WriteList
 	}
-	if share.ForceUser != "" {
+	if hasField("force_user", "forceUser") && (!applyAll || share.ForceUser != "") {
 		existing.ForceUser = share.ForceUser
 	}
-	if share.ForceGroup != "" {
+	if hasField("force_group", "forceGroup") && (!applyAll || share.ForceGroup != "") {
 		existing.ForceGroup = share.ForceGroup
 	}
-	if share.CreateMask != "" {
+	if hasField("create_mask", "createMask") && (!applyAll || share.CreateMask != "") {
 		existing.CreateMask = share.CreateMask
 	}
-	if share.DirectoryMask != "" {
+	if hasField("directory_mask", "directoryMask") && (!applyAll || share.DirectoryMask != "") {
 		existing.DirectoryMask = share.DirectoryMask
 	}
-	if share.ForceCreateMode != "" {
+	if hasField("force_create_mode", "forceCreateMode") && (!applyAll || share.ForceCreateMode != "") {
 		existing.ForceCreateMode = share.ForceCreateMode
 	}
-	if share.ForceDirectoryMode != "" {
+	if hasField("force_directory_mode", "forceDirectoryMode") && (!applyAll || share.ForceDirectoryMode != "") {
 		existing.ForceDirectoryMode = share.ForceDirectoryMode
 	}
-	existing.ShadowCopy = share.ShadowCopy
-	existing.TimeMachine = share.TimeMachine
-	existing.RecycleBin = share.RecycleBin
+	if hasField("shadow_copy", "shadowCopy") {
+		existing.ShadowCopy = share.ShadowCopy
+	}
+	if hasField("time_machine", "timeMachine") {
+		existing.TimeMachine = share.TimeMachine
+	}
+	if hasField("recycle_bin", "recycleBin") {
+		existing.RecycleBin = share.RecycleBin
+	}
 
 	a.shares[share.ID] = existing
 	_ = a.syncSambaConfig()

@@ -128,4 +128,25 @@ func TestCifsAdapter_LifecycleAndSync(t *testing.T) {
 	if !reloadedShare.ShadowCopy || !reloadedShare.TimeMachine || !reloadedShare.RecycleBin {
 		t.Errorf("expected VFS flags preserved on reload")
 	}
+
+	// 6. Test updating share with update mask to clear fields
+	updated, err := adapter2.UpdateShare(ctx, domain.CifsShare{
+		ID:          "media",
+		ValidUsers:  nil,
+		ValidGroups: nil,
+	}, []string{"valid_users", "valid_groups"})
+	if err != nil {
+		t.Fatalf("failed to update share with mask: %v", err)
+	}
+	if len(updated.ValidUsers) != 0 || len(updated.ValidGroups) != 0 {
+		t.Errorf("expected valid_users and valid_groups cleared, got %v / %v", updated.ValidUsers, updated.ValidGroups)
+	}
+
+	confBytes2, err := os.ReadFile(adapter2.configPath)
+	if err != nil {
+		t.Fatalf("failed to read generated config after update: %v", err)
+	}
+	if strings.Contains(string(confBytes2), "valid users =") {
+		t.Errorf("expected 'valid users =' omitted after clearing validUsers and validGroups, got:\n%s", string(confBytes2))
+	}
 }

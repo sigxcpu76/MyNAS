@@ -76,18 +76,38 @@ func (a *WebdavAdapter) UpdateShare(ctx context.Context, share domain.WebdavShar
 	if !ok {
 		return nil, fmt.Errorf("%w: webdav share %q", domain.ErrNotFound, share.ID)
 	}
-	if share.Path != "" {
+
+	applyAll := len(fields) == 0
+	hasField := func(names ...string) bool {
+		if applyAll {
+			return true
+		}
+		for _, f := range fields {
+			for _, name := range names {
+				if f == name {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	if hasField("path") && (!applyAll || share.Path != "") {
 		existing.Path = share.Path
 	}
-	if share.Description != "" {
+	if hasField("description") && (!applyAll || share.Description != "") {
 		existing.Description = share.Description
 	}
-	existing.ReadOnly = share.ReadOnly
-	existing.Enabled = share.Enabled
-	if share.AllowedUsers != nil {
+	if hasField("read_only", "readOnly") {
+		existing.ReadOnly = share.ReadOnly
+	}
+	if hasField("enabled") {
+		existing.Enabled = share.Enabled
+	}
+	if hasField("allowed_users", "allowedUsers") && (!applyAll || share.AllowedUsers != nil) {
 		existing.AllowedUsers = share.AllowedUsers
 	}
-	if share.AllowedGroups != nil {
+	if hasField("allowed_groups", "allowedGroups") && (!applyAll || share.AllowedGroups != nil) {
 		existing.AllowedGroups = share.AllowedGroups
 	}
 	_ = a.registerShare(existing)
