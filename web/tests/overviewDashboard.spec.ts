@@ -220,4 +220,154 @@ describe('Overview Dashboard & Telemetry', () => {
     expect(formatUptime(3665)).toBe('1h 1m');
     expect(formatUptime(90060)).toBe('1d 1h 1m');
   });
+
+  describe('Dashboard Customization, Drag-and-Drop, and Resizing', () => {
+    it('enters and exits edit mode when clicking customize dashboard', async () => {
+      const wrapper = mount(OverviewView);
+      expect(wrapper.find('.dashboard-edit-banner').exists()).toBe(false);
+
+      // Click Customize Dashboard
+      const editBtn = wrapper.find('.edit-dashboard-btn');
+      expect(editBtn.exists()).toBe(true);
+      await editBtn.trigger('click');
+
+      // Edit banner should be visible
+      expect(wrapper.find('.dashboard-edit-banner').exists()).toBe(true);
+      expect(wrapper.find('.widget-edit-toolbar').exists()).toBe(true);
+
+      // Click Done Editing
+      const doneBtn = wrapper.find('.done-edit-btn');
+      expect(doneBtn.exists()).toBe(true);
+      await doneBtn.trigger('click');
+
+      expect(wrapper.find('.dashboard-edit-banner').exists()).toBe(false);
+      expect(wrapper.find('.widget-edit-toolbar').exists()).toBe(false);
+    });
+
+    it('allows resizing a widget using column span pills in edit mode', async () => {
+      const wrapper = mount(OverviewView);
+      await wrapper.find('.edit-dashboard-btn').trigger('click');
+
+      const firstWidget = wrapper.find('.widget-wrapper');
+      expect(firstWidget.classes()).toContain('col-span-12');
+
+      // Find span buttons for the first widget (kpis allowed [6, 12])
+      const spanButtons = firstWidget.findAll('.span-btn');
+      expect(spanButtons.length).toBeGreaterThanOrEqual(2);
+
+      // Click the 1/2 span button
+      const halfBtn = spanButtons.find((btn) => btn.text().includes('1/2'));
+      expect(halfBtn).toBeDefined();
+      await halfBtn!.trigger('click');
+
+      // Should now have class col-span-6
+      expect(firstWidget.classes()).toContain('col-span-6');
+      expect(store.get('nas_dashboard_layout_v1')).toContain('"colSpan":6');
+    });
+
+    it('allows removing a widget from the dashboard', async () => {
+      const wrapper = mount(OverviewView);
+      await wrapper.find('.edit-dashboard-btn').trigger('click');
+
+      const initialCount = wrapper.findAll('.widget-wrapper').length;
+      expect(initialCount).toBe(6);
+
+      // Remove the first widget
+      const removeBtn = wrapper.find('.remove-btn');
+      await removeBtn.trigger('click');
+
+      expect(wrapper.findAll('.widget-wrapper').length).toBe(initialCount - 1);
+      expect(store.get('nas_dashboard_layout_v1')).toBeDefined();
+    });
+
+    it('allows reordering widgets using move left/right buttons', async () => {
+      const wrapper = mount(OverviewView);
+      await wrapper.find('.edit-dashboard-btn').trigger('click');
+
+      let widgets = wrapper.findAll('.widget-wrapper');
+      const firstLabel = widgets[0].find('.widget-type-label').text();
+      const secondLabel = widgets[1].find('.widget-type-label').text();
+      expect(firstLabel).not.toEqual(secondLabel);
+
+      // Move first widget right
+      const moveRightBtn = widgets[0].find('.move-right-btn');
+      await moveRightBtn.trigger('click');
+
+      widgets = wrapper.findAll('.widget-wrapper');
+      expect(widgets[1].find('.widget-type-label').text()).toEqual(firstLabel);
+      expect(widgets[0].find('.widget-type-label').text()).toEqual(secondLabel);
+    });
+
+    it('allows adding a new widget from the widget catalog modal', async () => {
+      const wrapper = mount(OverviewView);
+      await wrapper.find('.edit-dashboard-btn').trigger('click');
+
+      const initialCount = wrapper.findAll('.widget-wrapper').length;
+
+      // Open Add Widget Modal
+      await wrapper.find('.add-widget-btn').trigger('click');
+      expect(wrapper.find('.modal-dialog').exists()).toBe(true);
+      expect(wrapper.text()).toContain('Add Widget to Dashboard');
+
+      // Find Disks widget card in catalog
+      const catalogCards = wrapper.findAll('.catalog-card');
+      const disksCard = catalogCards.find((c) => c.text().includes('Physical Disks'));
+      expect(disksCard).toBeDefined();
+
+      const addBtn = disksCard!.find('button.btn');
+      await addBtn.trigger('click');
+
+      // Close modal
+      await wrapper.find('.modal-footer button').trigger('click');
+      expect(wrapper.find('.modal-dialog').exists()).toBe(false);
+
+      // Should have 1 more widget and include disks
+      const widgets = wrapper.findAll('.widget-wrapper');
+      expect(widgets.length).toBe(initialCount + 1);
+      expect(wrapper.text()).toContain('Physical Disks');
+    });
+
+    it('resets layout to default when clicking reset default', async () => {
+      const wrapper = mount(OverviewView);
+      await wrapper.find('.edit-dashboard-btn').trigger('click');
+
+      // Remove a couple widgets
+      await wrapper.find('.remove-btn').trigger('click');
+      await wrapper.find('.remove-btn').trigger('click');
+      expect(wrapper.findAll('.widget-wrapper').length).toBe(4);
+
+      // Click Reset Default
+      await wrapper.find('.reset-layout-btn').trigger('click');
+      expect(wrapper.findAll('.widget-wrapper').length).toBe(6);
+    });
+
+    it('reorders widgets via drag and drop', async () => {
+      const wrapper = mount(OverviewView);
+      await wrapper.find('.edit-dashboard-btn').trigger('click');
+
+      let widgets = wrapper.findAll('.widget-wrapper');
+      const firstLabel = widgets[0].find('.widget-type-label').text();
+      const secondLabel = widgets[1].find('.widget-type-label').text();
+
+      // Drag first widget over second and drop
+      const dataTransfer = {
+        setData: vi.fn(),
+        getData: vi.fn(),
+        effectAllowed: '',
+      };
+
+      await widgets[0].trigger('dragstart', { dataTransfer });
+      expect(widgets[0].classes()).toContain('is-dragging');
+
+      await widgets[1].trigger('dragover');
+      expect(widgets[1].classes()).toContain('is-drag-over');
+
+      await widgets[1].trigger('drop');
+      await widgets[0].trigger('dragend');
+
+      widgets = wrapper.findAll('.widget-wrapper');
+      expect(widgets[0].find('.widget-type-label').text()).toBe(secondLabel);
+      expect(widgets[1].find('.widget-type-label').text()).toBe(firstLabel);
+    });
+  });
 });
