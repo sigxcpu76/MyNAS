@@ -1429,10 +1429,12 @@ func resolveHostNetworkTarget(target string) (netType string, devName string) {
 	return "user", ""
 }
 
-// EnsureHostBridging ensures that if a Linux bridge (such as br0) has a physical uplink interface
-// (e.g. ens3 in nested virtualization or environments with MAC anti-spoofing),
-// ebtables L2 SNAT and DNAT rules are configured so that nested VMs can bidirectionally
-// communicate on the host's LAN (ARP, unicast, IP) and access the default gateway and Internet.
+// EnsureHostBridging ensures that if a Linux bridge (such as br0) is used,
+// packets between virtual machines and the physical LAN are forwarded cleanly.
+// When container runtimes like Docker are installed, Docker sets iptables FORWARD default policy
+// to DROP, and the kernel bridge netfilter (net.bridge.bridge-nf-call-iptables) intercepts bridged
+// packets and drops them. We configure sysctl to disable bridge-nf packet interception, add explicit
+// bridge ACCEPT rules in iptables FORWARD and DOCKER-USER chains, and clean up any obsolete ebtables rules.
 func EnsureHostBridging() error {
 	if os.Geteuid() != 0 {
 		return nil
@@ -1441,115 +1443,49 @@ func EnsureHostBridging() error {
 	// 1. Enable IPv4 packet forwarding
 	_ = exec.Command("sysctl", "-w", "net.ipv4.ip_forward=1").Run()
 
-	// 2. Check for standard bridges
-	bridges := []string{"br0", "vmbr0"}
-	var activeBridge string
-	for _, b := range bridges {
-		if isLinuxBridge(b) {
-			activeBridge = b
-			break
-		}
-	}
-	if activeBridge == "" {
-		return nil
-	}
+	// 2. Disable netfilter interception for bridged packets so Docker's FORWARD DROP policy does not block VM bridge traffic
+	_ = exec.Command("sysctl", "-w", "net.bridge.bridge-nf-call-iptables=0").Run()
+	_ = exec.Command("sysctl", "-w", "net.bridge.bridge-nf-call-ip6tables=0").Run()
+	_ = exec.Command("sysctl", "-w", "net.bridge.bridge-nf-call-arptables=0").Run()
 
-	// 3. Find physical uplink port enslaved to the active bridge
-	brifDir := filepath.Join("/sys/class/net", activeBridge, "brif")
-	entries, err := os.ReadDir(brifDir)
-	if err != nil {
-		return nil
-	}
-
-	var uplink string
-	var uplinkMAC string
-	for _, e := range entries {
-		name := e.Name()
-		if strings.HasPrefix(name, "vnet") || strings.HasPrefix(name, "tap") || strings.HasPrefix(name, "veth") {
-			continue
-		}
-		macBytes, err := os.ReadFile(filepath.Join("/sys/class/net", name, "address"))
-		if err == nil {
-			uplink = name
-			uplinkMAC = strings.TrimSpace(string(macBytes))
-			break
-		}
-	}
-
-	if uplink == "" || uplinkMAC == "" {
-		return nil
-	}
-
-	// 4. Find primary IPv4 on the bridge
-	var hostIP string
-	if ifi, err := net.InterfaceByName(activeBridge); err == nil {
-		if addrs, err := ifi.Addrs(); err == nil {
-			for _, addr := range addrs {
-				if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
-					if ip4 := ipNet.IP.To4(); ip4 != nil {
-						hostIP = ip4.String()
-						break
-					}
-				}
-			}
-		}
-	}
-
-	if hostIP == "" {
-		return nil
-	}
-
-	// 5. Ensure ebtables rules
-	if _, err := exec.LookPath("ebtables"); err == nil {
-		rules := [][]string{
-			{"-t", "nat", "-A", "POSTROUTING", "!", "-s", uplinkMAC, "-o", uplink, "-j", "snat", "--to-src", uplinkMAC, "--snat-arp"},
-			{"-t", "nat", "-A", "PREROUTING", "-p", "IPv4", "-d", uplinkMAC, "-i", uplink, "!", "--ip-dst", hostIP, "-j", "dnat", "--to-dst", "ff:ff:ff:ff:ff:ff"},
-			{"-t", "nat", "-A", "PREROUTING", "-p", "ARP", "-d", uplinkMAC, "-i", uplink, "!", "--arp-ip-dst", hostIP, "-j", "dnat", "--to-dst", "ff:ff:ff:ff:ff:ff"},
-			{"-t", "nat", "-A", "PREROUTING", "-p", "IPv6", "-d", uplinkMAC, "-i", uplink, "-j", "dnat", "--to-dst", "ff:ff:ff:ff:ff:ff"},
-		}
-
-		checkRules := [][]string{
-			{"-t", "nat", "-C", "POSTROUTING", "!", "-s", uplinkMAC, "-o", uplink, "-j", "snat", "--to-src", uplinkMAC, "--snat-arp"},
-			{"-t", "nat", "-C", "PREROUTING", "-p", "IPv4", "-d", uplinkMAC, "-i", uplink, "!", "--ip-dst", hostIP, "-j", "dnat", "--to-dst", "ff:ff:ff:ff:ff:ff"},
-			{"-t", "nat", "-C", "PREROUTING", "-p", "ARP", "-d", uplinkMAC, "-i", uplink, "!", "--arp-ip-dst", hostIP, "-j", "dnat", "--to-dst", "ff:ff:ff:ff:ff:ff"},
-			{"-t", "nat", "-C", "PREROUTING", "-p", "IPv6", "-d", uplinkMAC, "-i", uplink, "-j", "dnat", "--to-dst", "ff:ff:ff:ff:ff:ff"},
-		}
-
-		for i, cr := range checkRules {
-			if err := exec.Command("ebtables", cr...).Run(); err != nil {
-				_ = exec.Command("ebtables", rules[i]...).Run()
-			}
-		}
-
-		// Save rules for persistent reload across boots
-		if ebtablesSave, err := exec.LookPath("ebtables-save"); err == nil {
-			if out, err := exec.Command(ebtablesSave).Output(); err == nil && len(out) > 0 {
-				_ = os.WriteFile("/etc/mynas-ebtables.rules", out, 0644)
-			}
-		}
-
-		// Ensure systemd service exists and is enabled
-		servicePath := "/etc/systemd/system/mynas-ebtables.service"
-		if _, err := os.Stat(servicePath); os.IsNotExist(err) {
-			unitContent := `[Unit]
-Description=MyNAS ebtables rules for VM bridging
-After=network.target
-
-[Service]
-Type=oneshot
-ExecStart=/bin/sh -c "test -f /etc/mynas-ebtables.rules && /usr/sbin/ebtables-restore < /etc/mynas-ebtables.rules || true"
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
+	// Persist sysctl bridge settings across reboots
+	sysctlConfig := `# Managed by nasctl for KVM VM bridging
+net.ipv4.ip_forward = 1
+net.bridge.bridge-nf-call-iptables = 0
+net.bridge.bridge-nf-call-ip6tables = 0
+net.bridge.bridge-nf-call-arptables = 0
 `
-			_ = os.WriteFile(servicePath, []byte(unitContent), 0644)
-			_ = exec.Command("systemctl", "daemon-reload").Run()
-			_ = exec.Command("systemctl", "enable", "mynas-ebtables.service").Run()
+	_ = os.WriteFile("/etc/sysctl.d/99-nas-bridge.conf", []byte(sysctlConfig), 0644)
+
+	// Clean up legacy mynas-ebtables service / rules if present
+	_ = exec.Command("systemctl", "disable", "--now", "mynas-ebtables.service").Run()
+	_ = os.Remove("/etc/systemd/system/mynas-ebtables.service")
+	_ = os.Remove("/etc/mynas-ebtables.rules")
+
+	// 3. For standard bridges (br0, vmbr0, virbr0), ensure iptables FORWARD and DOCKER-USER allow bridged traffic
+	bridges := []string{"br0", "vmbr0", "virbr0"}
+	if iptables, err := exec.LookPath("iptables"); err == nil {
+		// If physdev module is loaded, also allow all bridged packets explicitly
+		if exec.Command(iptables, "-C", "FORWARD", "-m", "physdev", "--physdev-is-bridged", "-j", "ACCEPT").Run() != nil {
+			_ = exec.Command(iptables, "-I", "FORWARD", "-m", "physdev", "--physdev-is-bridged", "-j", "ACCEPT").Run()
+		}
+
+		for _, b := range bridges {
+			if !isLinuxBridge(b) {
+				continue
+			}
+			// Allow intra-bridge forwarding in FORWARD
+			if exec.Command(iptables, "-C", "FORWARD", "-i", b, "-o", b, "-j", "ACCEPT").Run() != nil {
+				_ = exec.Command(iptables, "-I", "FORWARD", "-i", b, "-o", b, "-j", "ACCEPT").Run()
+			}
+			// Allow intra-bridge forwarding in DOCKER-USER (if chain exists)
+			if exec.Command(iptables, "-C", "DOCKER-USER", "-i", b, "-o", b, "-j", "ACCEPT").Run() != nil {
+				_ = exec.Command(iptables, "-I", "DOCKER-USER", "-i", b, "-o", b, "-j", "ACCEPT").Run()
+			}
 		}
 	}
 
-	// 6. If host has no functional IPv6 transit, reject forwarded IPv6 to avoid 120s connection timeouts
+	// 4. If host has no functional IPv6 transit, reject forwarded IPv6 to avoid 120s connection timeouts
 	if _, err := exec.LookPath("ip6tables"); err == nil {
 		if exec.Command("ping6", "-c", "1", "-W", "1", "2606:4700:4700::1111").Run() != nil {
 			if err := exec.Command("ip6tables", "-C", "FORWARD", "-j", "REJECT", "--reject-with", "icmp6-no-route").Run(); err != nil {
