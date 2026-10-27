@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
+import { mdiDelete, mdiPencil } from '@mdi/js';
 import { services } from '../../container';
 import type { Group, User } from '../../domain/models';
+import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import SortableTh from '../components/SortableTh.vue';
 import UserGroupSelector from '../components/UserGroupSelector.vue';
@@ -10,7 +12,12 @@ import { nasState, notify } from '../store';
 import { confirmDelete } from '../modal';
 
 const userSort = useTableSort(
-  () => nasState.users,
+  () => {
+    if (nasState.includeSystemAccounts) {
+      return nasState.users;
+    }
+    return nasState.users.filter((u) => u.uid >= 1000 && u.uid <= 10000);
+  },
   {
     username: (u: User) => u.username,
     groups: (u: User) => u.primaryGroup,
@@ -21,7 +28,12 @@ const userSort = useTableSort(
 );
 
 const groupSort = useTableSort(
-  () => nasState.groups,
+  () => {
+    if (nasState.includeSystemGroups) {
+      return nasState.groups;
+    }
+    return nasState.groups.filter((g) => g.gid >= 1000 && g.gid <= 10000);
+  },
   {
     name: (g: Group) => g.groupName,
     gid: (g: Group) => g.gid,
@@ -29,13 +41,31 @@ const groupSort = useTableSort(
   }
 );
 
+function getNextAvailableUid(): number {
+  const used = new Set(nasState.users.map((u) => u.uid));
+  for (let uid = 1000; uid <= 10000; uid++) {
+    if (!used.has(uid)) return uid;
+  }
+  const max = Math.max(1000, ...Array.from(used));
+  return max + 1;
+}
+
+function getNextAvailableGid(): number {
+  const used = new Set(nasState.groups.map((g) => g.gid));
+  for (let gid = 1000; gid <= 10000; gid++) {
+    if (!used.has(gid)) return gid;
+  }
+  const max = Math.max(1000, ...Array.from(used));
+  return max + 1;
+}
+
 const showCreateUser = ref(false);
 const userForm = reactive({
   userId: '',
   fullName: '',
-  uid: 1005,
-  primaryGroup: 'nasusers',
-  supplementaryGroupsText: 'docker, kvm',
+  uid: 1000,
+  primaryGroup: '',
+  supplementaryGroupsText: '',
   homeDirectory: '',
   shell: '/bin/bash',
   password: '',
@@ -43,7 +73,7 @@ const userForm = reactive({
   smbEnabled: true,
   sshEnabled: true,
   sshPasswordAuth: true,
-  sshAuthorizedKeysText: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINasApplianceKey admin@nas',
+  sshAuthorizedKeysText: '',
   locked: false,
   isAdmin: false,
 });
@@ -67,9 +97,46 @@ const editUserForm = reactive({
 const showCreateGroup = ref(false);
 const groupForm = reactive({
   groupId: '',
-  gid: 2010,
-  membersText: 'admin',
+  gid: 1000,
+  membersText: '',
 });
+
+const duplicateUidUser = computed(() => {
+  if (!userForm.uid) return null;
+  return nasState.users.find((u) => u.uid === userForm.uid) || null;
+});
+
+const duplicateGidGroup = computed(() => {
+  if (!groupForm.gid) return null;
+  return nasState.groups.find((g) => g.gid === groupForm.gid) || null;
+});
+
+function toggleCreateUser() {
+  showCreateUser.value = !showCreateUser.value;
+  if (showCreateUser.value) {
+    userForm.userId = '';
+    userForm.fullName = '';
+    userForm.uid = getNextAvailableUid();
+    userForm.primaryGroup = nasState.groups.find((g) => g.gid >= 1000 && g.gid <= 10000)?.groupName || '';
+    userForm.supplementaryGroupsText = '';
+    userForm.homeDirectory = '';
+    userForm.shell = '/bin/bash';
+    userForm.password = '';
+    userForm.smbPassword = '';
+    userForm.sshAuthorizedKeysText = '';
+    userForm.locked = false;
+    userForm.isAdmin = false;
+  }
+}
+
+function toggleCreateGroup() {
+  showCreateGroup.value = !showCreateGroup.value;
+  if (showCreateGroup.value) {
+    groupForm.groupId = '';
+    groupForm.gid = getNextAvailableGid();
+    groupForm.membersText = '';
+  }
+}
 
 const editingGroup = ref<Group | null>(null);
 const editGroupMembersText = ref('');
@@ -84,6 +151,14 @@ async function refreshIdentity() {
 }
 
 async function handleCreateUser() {
+  if (duplicateUidUser.value) {
+    notify('error', `UID ${userForm.uid} is already used by user "${duplicateUidUser.value.username}".`);
+    return;
+  }
+  if (userForm.uid < 1000 || userForm.uid > 10000) {
+    notify('error', 'UID must be between 1000 and 10000.');
+    return;
+  }
   try {
     const supplementaryGroups = userForm.supplementaryGroupsText
       .split(',')
@@ -112,8 +187,10 @@ async function handleCreateUser() {
     });
     notify('success', `Created Linux user ${created.username} (UID ${created.uid})`);
     userForm.userId = '';
+    userForm.fullName = '';
     userForm.password = '';
     userForm.smbPassword = '';
+    userForm.sshAuthorizedKeysText = '';
     showCreateUser.value = false;
     await refreshIdentity();
   } catch (err: any) {
@@ -219,6 +296,14 @@ async function handleDeleteUser(u: User) {
 }
 
 async function handleCreateGroup() {
+  if (duplicateGidGroup.value) {
+    notify('error', `GID ${groupForm.gid} is already used by group "${duplicateGidGroup.value.groupName}".`);
+    return;
+  }
+  if (groupForm.gid < 1000 || groupForm.gid > 10000) {
+    notify('error', 'GID must be between 1000 and 10000.');
+    return;
+  }
   try {
     const members = groupForm.membersText
       .split(',')
@@ -230,6 +315,7 @@ async function handleCreateGroup() {
     });
     notify('success', `Created Linux group ${created.groupName} (GID ${created.gid})`);
     groupForm.groupId = '';
+    groupForm.membersText = '';
     showCreateGroup.value = false;
     await refreshIdentity();
   } catch (err: any) {
@@ -297,7 +383,7 @@ async function handleDeleteGroup(g: Group) {
             />
             Show System Accounts
           </label>
-          <button class="btn btn-primary" @click="showCreateUser = !showCreateUser">
+          <button class="btn btn-primary" @click="toggleCreateUser">
             {{ showCreateUser ? 'Cancel' : '+ Create User' }}
           </button>
         </div>
@@ -326,14 +412,25 @@ async function handleDeleteGroup(g: Group) {
           </div>
           <div class="form-group">
             <label>UID</label>
-            <input v-model.number="userForm.uid" type="number" min="1000" class="input mono" />
+            <input
+              v-model.number="userForm.uid"
+              type="number"
+              min="1000"
+              max="10000"
+              class="input mono"
+              :class="{ 'input-error': duplicateUidUser }"
+              required
+            />
+            <div v-if="duplicateUidUser" style="color: var(--danger); font-size: 11px; margin-top: 4px">
+              UID {{ userForm.uid }} is already in use by {{ duplicateUidUser.username }}
+            </div>
           </div>
           <div class="form-group">
             <label>Primary Group</label>
             <UserGroupSelector
               v-model="userForm.primaryGroup"
               type="group"
-              placeholder="nasusers"
+              placeholder="Select primary group..."
             />
           </div>
           <div class="form-group">
@@ -342,7 +439,7 @@ async function handleDeleteGroup(g: Group) {
               v-model="userForm.supplementaryGroupsText"
               type="group"
               :multiple="true"
-              placeholder="docker, kvm, sudo"
+              placeholder="Select supplementary groups..."
             />
           </div>
           <div class="form-group">
@@ -578,11 +675,21 @@ async function handleDeleteGroup(g: Group) {
               </td>
               <td>
                 <div style="display: flex; gap: 6px">
-                  <button class="btn btn-sm" @click="startEditUser(u)">
-                    Edit / SSH Keys
+                  <button
+                    class="btn btn-sm btn-icon"
+                    title="Edit User & SSH Keys"
+                    aria-label="Edit User & SSH Keys"
+                    @click="startEditUser(u)"
+                  >
+                    <MdiIcon :path="mdiPencil" size="14" />
                   </button>
-                  <button class="btn btn-danger btn-sm" @click="handleDeleteUser(u)">
-                    Del
+                  <button
+                    class="btn btn-danger btn-sm btn-icon"
+                    title="Delete User"
+                    aria-label="Delete User"
+                    @click="handleDeleteUser(u)"
+                  >
+                    <MdiIcon :path="mdiDelete" size="14" />
                   </button>
                 </div>
               </td>
@@ -599,9 +706,19 @@ async function handleDeleteGroup(g: Group) {
           <h3 class="card-title">Groups</h3>
         </div>
 
-        <button class="btn btn-primary btn-sm" @click="showCreateGroup = !showCreateGroup">
-          {{ showCreateGroup ? 'Cancel' : '+ Create Group' }}
-        </button>
+        <div style="display: flex; align-items: center; gap: 12px">
+          <label style="font-size: 12px; display: flex; align-items: center; gap: 6px">
+            <input
+              v-model="nasState.includeSystemGroups"
+              type="checkbox"
+              @change="refreshIdentity"
+            />
+            Show System Groups
+          </label>
+          <button class="btn btn-primary btn-sm" @click="toggleCreateGroup">
+            {{ showCreateGroup ? 'Cancel' : '+ Create Group' }}
+          </button>
+        </div>
       </div>
 
       <form
@@ -622,7 +739,18 @@ async function handleDeleteGroup(g: Group) {
           </div>
           <div class="form-group">
             <label>GID</label>
-            <input v-model.number="groupForm.gid" type="number" min="100" class="input mono" />
+            <input
+              v-model.number="groupForm.gid"
+              type="number"
+              min="1000"
+              max="10000"
+              class="input mono"
+              :class="{ 'input-error': duplicateGidGroup }"
+              required
+            />
+            <div v-if="duplicateGidGroup" style="color: var(--danger); font-size: 11px; margin-top: 4px">
+              GID {{ groupForm.gid }} is already in use by group "{{ duplicateGidGroup.groupName }}"
+            </div>
           </div>
           <div class="form-group">
             <label>Members (comma-separated usernames)</label>
@@ -698,9 +826,21 @@ async function handleDeleteGroup(g: Group) {
               </td>
               <td>
                 <div style="display: flex; gap: 6px">
-                  <button class="btn btn-sm" @click="startEditGroup(g)">Edit Members</button>
-                  <button class="btn btn-danger btn-sm" @click="handleDeleteGroup(g)">
-                    Del
+                  <button
+                    class="btn btn-sm btn-icon"
+                    title="Edit Group Members"
+                    aria-label="Edit Group Members"
+                    @click="startEditGroup(g)"
+                  >
+                    <MdiIcon :path="mdiPencil" size="14" />
+                  </button>
+                  <button
+                    class="btn btn-danger btn-sm btn-icon"
+                    title="Delete Group"
+                    aria-label="Delete Group"
+                    @click="handleDeleteGroup(g)"
+                  >
+                    <MdiIcon :path="mdiDelete" size="14" />
                   </button>
                 </div>
               </td>

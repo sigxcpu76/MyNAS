@@ -31,8 +31,8 @@ func NewAdapter() *Adapter {
 		users:        make(map[string]domain.User),
 		groups:       make(map[string]domain.Group),
 		passwordHash: make(map[string]string),
-		nextUID:      1050,
-		nextGID:      1050,
+		nextUID:      1000,
+		nextGID:      1000,
 	}
 	a.loadFromLinuxSystem()
 	a.loadSambaUsers()
@@ -94,16 +94,17 @@ func (a *Adapter) loadFromLinuxSystem() {
 			} else {
 				members = []string{}
 			}
+			isSystemGroup := gid < 1000 || gid > 10000
 			g := domain.Group{
 				ID:          parts[0],
 				GroupName:   parts[0],
 				GID:         int32(gid),
 				Members:     members,
-				SystemGroup: gid < 1000 && parts[0] != "users",
+				SystemGroup: isSystemGroup,
 			}
 			a.groups[g.ID] = g
 			gidToName[int32(gid)] = g.GroupName
-			if int32(gid) >= a.nextGID && gid < 60000 {
+			if int32(gid) >= a.nextGID && gid <= 10000 {
 				a.nextGID = int32(gid) + 1
 			}
 		}
@@ -130,7 +131,7 @@ func (a *Adapter) loadFromLinuxSystem() {
 			gecos := strings.Split(parts[4], ",")[0]
 			homeDir := parts[5]
 			shell := parts[6]
-			isSystem := uid < 1000 && username != "root"
+			isSystem := uid < 1000 || uid > 10000
 			sshEnabled := !strings.HasSuffix(shell, "nologin") && !strings.HasSuffix(shell, "false")
 
 			var suppGroups []string
@@ -171,7 +172,7 @@ func (a *Adapter) loadFromLinuxSystem() {
 				IsAdmin:             isAdmin,
 			}
 			a.users[username] = u
-			if int32(uid) >= a.nextUID && uid < 60000 {
+			if int32(uid) >= a.nextUID && uid <= 10000 {
 				a.nextUID = int32(uid) + 1
 			}
 		}
@@ -285,12 +286,50 @@ func (a *Adapter) syncSambaUser(username, password string) {
 	}
 }
 
+func (a *Adapter) findNextAvailableUIDLocked() int32 {
+	used := make(map[int32]bool, len(a.users))
+	for _, u := range a.users {
+		used[u.UID] = true
+	}
+	for uid := int32(1000); uid <= 10000; uid++ {
+		if !used[uid] {
+			return uid
+		}
+	}
+	var maxUID int32 = 1000
+	for uid := range used {
+		if uid > maxUID && uid < 60000 {
+			maxUID = uid
+		}
+	}
+	return maxUID + 1
+}
+
+func (a *Adapter) findNextAvailableGIDLocked() int32 {
+	used := make(map[int32]bool, len(a.groups))
+	for _, g := range a.groups {
+		used[g.GID] = true
+	}
+	for gid := int32(1000); gid <= 10000; gid++ {
+		if !used[gid] {
+			return gid
+		}
+	}
+	var maxGID int32 = 1000
+	for gid := range used {
+		if gid > maxGID && gid < 60000 {
+			maxGID = gid
+		}
+	}
+	return maxGID + 1
+}
+
 func (a *Adapter) ListUsers(ctx context.Context, includeSystem bool) ([]domain.User, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	var out []domain.User
 	for _, u := range a.users {
-		if !includeSystem && u.SystemAccount {
+		if !includeSystem && (u.UID < 1000 || u.UID > 10000 || u.SystemAccount) {
 			continue
 		}
 		cp := u
@@ -318,9 +357,15 @@ func (a *Adapter) CreateUser(ctx context.Context, user domain.User) (*domain.Use
 	if _, exists := a.users[user.ID]; exists {
 		return nil, fmt.Errorf("%w: linux user %q", domain.ErrAlreadyExists, user.ID)
 	}
+
 	if user.UID <= 0 {
-		user.UID = a.nextUID
-		a.nextUID++
+		user.UID = a.findNextAvailableUIDLocked()
+	} else {
+		for _, existing := range a.users {
+			if existing.UID == user.UID {
+				return nil, fmt.Errorf("%w: UID %d is already in use by user %q", domain.ErrAlreadyExists, user.UID, existing.Username)
+			}
+		}
 	}
 	if user.PrimaryGroup == "" {
 		user.PrimaryGroup = "users"
@@ -389,6 +434,16 @@ func (a *Adapter) UpdateUser(ctx context.Context, user domain.User, fields []str
 	if !ok {
 		return nil, fmt.Errorf("%w: linux user %q", domain.ErrNotFound, user.ID)
 	}
+
+	if user.UID > 0 && user.UID != existing.UID {
+		for _, other := range a.users {
+			if other.ID != user.ID && other.UID == user.UID {
+				return nil, fmt.Errorf("%w: UID %d is already in use by user %q", domain.ErrAlreadyExists, user.UID, other.Username)
+			}
+		}
+		existing.UID = user.UID
+	}
+
 	if user.FullName != "" {
 		existing.FullName = user.FullName
 	}
@@ -473,7 +528,7 @@ func (a *Adapter) ListGroups(ctx context.Context, includeSystem bool) ([]domain.
 	defer a.mu.RUnlock()
 	var out []domain.Group
 	for _, g := range a.groups {
-		if !includeSystem && g.SystemGroup {
+		if !includeSystem && (g.GID < 1000 || g.GID > 10000 || g.SystemGroup) {
 			continue
 		}
 		out = append(out, g)
@@ -498,10 +553,17 @@ func (a *Adapter) CreateGroup(ctx context.Context, group domain.Group) (*domain.
 	if _, exists := a.groups[group.ID]; exists {
 		return nil, fmt.Errorf("%w: linux group %q", domain.ErrAlreadyExists, group.ID)
 	}
+
 	if group.GID <= 0 {
-		group.GID = a.nextGID
-		a.nextGID++
+		group.GID = a.findNextAvailableGIDLocked()
+	} else {
+		for _, existing := range a.groups {
+			if existing.GID == group.GID {
+				return nil, fmt.Errorf("%w: GID %d is already in use by group %q", domain.ErrAlreadyExists, group.GID, existing.GroupName)
+			}
+		}
 	}
+
 	if group.Members == nil {
 		group.Members = []string{}
 	}
@@ -520,9 +582,16 @@ func (a *Adapter) UpdateGroup(ctx context.Context, group domain.Group, fields []
 	if !ok {
 		return nil, fmt.Errorf("%w: linux group %q", domain.ErrNotFound, group.ID)
 	}
-	if group.GID > 0 {
+
+	if group.GID > 0 && group.GID != existing.GID {
+		for _, other := range a.groups {
+			if other.ID != group.ID && other.GID == group.GID {
+				return nil, fmt.Errorf("%w: GID %d is already in use by group %q", domain.ErrAlreadyExists, group.GID, other.GroupName)
+			}
+		}
 		existing.GID = group.GID
 	}
+
 	if group.Members != nil {
 		existing.Members = group.Members
 	}

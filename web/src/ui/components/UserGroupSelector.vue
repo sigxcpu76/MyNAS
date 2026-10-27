@@ -88,7 +88,10 @@ const selectedValues = computed<string[]>(() => {
 // Base list of options from store
 const rawOptions = computed<SelectorOption[]>(() => {
   if (props.type === 'user') {
-    const list: User[] = nasState.users || [];
+    let list: User[] = nasState.users || [];
+    if (!props.includeSystem) {
+      list = list.filter((u) => u.uid >= 1000 && u.uid <= 10000 && !u.systemAccount);
+    }
     return list.map((u) => ({
       value: u.username,
       label: u.username,
