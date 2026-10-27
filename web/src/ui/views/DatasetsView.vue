@@ -25,7 +25,10 @@ import {
 } from '../../domain/models';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
-import { confirmModal, nasState, notify, refreshAllData, refreshZfsSubresources } from '../store';
+import SortableTh from '../components/SortableTh.vue';
+import { sortHierarchy, useTableSort } from '../composables/useTableSort';
+import { confirmDelete } from '../modal';
+import { nasState, notify, refreshAllData, refreshZfsSubresources } from '../store';
 
 const selectedPool = ref<string>('all');
 const searchQuery = ref('');
@@ -281,6 +284,39 @@ const visibleNodes = computed<DatasetNode[]>(() => {
   return flattenTree(hierarchyTree.value);
 });
 
+// Column sorting (in tree mode siblings are sorted, keeping children under their parent)
+const datasetSort = useTableSort(visibleNodes, {
+  name: (n) => n.name,
+  pool: (n) => n.poolName,
+  usage: (n) => n.usedBytes,
+  snapshots: (n) => n.snapshotsCount || 0,
+});
+
+// Child node id -> parent node id, derived from the assembled tree
+const datasetParentIds = computed(() => {
+  const map = new Map<string, string>();
+  const walk = (nodes: DatasetNode[]) => {
+    for (const n of nodes) {
+      for (const c of n.children) map.set(c.id, n.id);
+      walk(n.children);
+    }
+  };
+  walk(hierarchyTree.value);
+  return map;
+});
+
+const sortedNodes = computed<DatasetNode[]>(() => {
+  if (!datasetSort.key.value) return visibleNodes.value;
+  if (viewMode.value === 'flat' || searchQuery.value.trim()) return datasetSort.sorted.value;
+  // Collapsed descendants are already excluded from visibleNodes
+  return sortHierarchy(
+    visibleNodes.value,
+    (n) => n.id,
+    (n) => datasetParentIds.value.get(n.id),
+    datasetSort.compare
+  );
+});
+
 function toggleCollapse(nodeId: string) {
   if (collapsedPaths.value.has(nodeId)) {
     collapsedPaths.value.delete(nodeId);
@@ -385,16 +421,16 @@ async function handleTakeSnapshot() {
   }
 }
 
-async function handleDeleteDataset(name: string) {
-  const shortName = name.replace(/^zfsPools\/[^/]+\/datasets\//, '');
-  const confirmed = await confirmModal({
-    title: 'Delete ZFS Dataset',
-    tone: 'danger',
-    message: `Are you sure you want to delete dataset "${shortName}"?`,
-    details: 'ALL DATA, child datasets, and snapshots under this dataset will be PERMANENTLY DESTROYED.',
+async function handleDeleteDataset(ds: ZfsDataset) {
+  const name = ds.name;
+  const shortName = ds.datasetPath || name.replace(/^zfsPools\/[^/]+\/datasets\//, '');
+  const res = await confirmDelete({
+    kind: 'Dataset',
+    name: shortName,
+    details: 'All data, child datasets and snapshots under it will be destroyed.',
     confirmText: 'Delete Dataset',
   });
-  if (!confirmed) return;
+  if (!res.confirmed) return;
 
   try {
     await services.zfs.deleteDataset(name, true);
@@ -420,15 +456,11 @@ onMounted(async () => {
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px">
         <div>
           <div style="display: flex; align-items: center; gap: 10px">
-            <MdiIcon :path="mdiFolderOutline" size="24" style="color: var(--accent-primary)" />
-            <h2 class="card-title" style="font-size: 19px; margin: 0">ZFS Datasets</h2>
+            <h2 class="card-title" style="font-size: 19px; margin: 0">Datasets</h2>
             <span class="badge badge-info" style="font-size: 12px">
               {{ allDatasets.length }} {{ allDatasets.length === 1 ? 'Dataset' : 'Datasets' }}
             </span>
           </div>
-          <p class="card-subtitle" style="margin-top: 4px; font-size: 13px">
-            POSIX filesystems, hierarchical child folders, quotas, reservations, sync policies, and snapshot trees.
-          </p>
         </div>
 
         <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
@@ -493,12 +525,11 @@ onMounted(async () => {
         <table class="data-table">
           <thead>
             <tr>
-              <th style="min-width: 260px">Dataset Name & Hierarchy</th>
-              <th style="min-width: 100px">Pool</th>
-              <th style="min-width: 180px">Mountpoint</th>
-              <th style="min-width: 150px">Space Usage</th>
+              <SortableTh :sort="datasetSort" sort-key="name" style="min-width: 260px">Name</SortableTh>
+              <SortableTh :sort="datasetSort" sort-key="pool" style="min-width: 100px">Pool</SortableTh>
+              <SortableTh :sort="datasetSort" sort-key="usage" style="min-width: 150px">Space Usage</SortableTh>
               <th style="min-width: 210px">Properties</th>
-              <th style="min-width: 110px">Snapshots</th>
+              <SortableTh :sort="datasetSort" sort-key="snapshots" style="min-width: 110px">Snapshots</SortableTh>
               <th style="min-width: 150px; text-align: right">Actions</th>
             </tr>
           </thead>
@@ -513,7 +544,6 @@ onMounted(async () => {
                   </div>
                 </td>
                 <td><SkeletonBox width="60px" height="20px" rounded="10px" /></td>
-                <td><SkeletonBox width="120px" height="14px" /></td>
                 <td><SkeletonBox width="90px" height="14px" /></td>
                 <td><SkeletonBox width="110px" height="14px" /></td>
                 <td><SkeletonBox width="45px" height="20px" rounded="10px" /></td>
@@ -528,17 +558,17 @@ onMounted(async () => {
             </template>
 
             <tr v-else-if="visibleNodes.length === 0">
-              <td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 36px">
+              <td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 36px">
                 <div v-if="searchQuery">
                   No datasets match filter "<strong>{{ searchQuery }}</strong>".
                 </div>
                 <div v-else>
-                  No datasets found. Click <strong>"New Dataset"</strong> above to create one.
+                  No datasets.
                 </div>
               </td>
             </tr>
 
-            <tr v-for="node in visibleNodes" :key="node.id" class="tree-row">
+            <tr v-for="node in sortedNodes" :key="node.id" class="tree-row">
               <!-- Name & Hierarchy -->
               <td>
                 <div
@@ -564,7 +594,7 @@ onMounted(async () => {
                   />
 
                   <div style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
-                    <span class="mono font-semibold" style="font-size: 13px" :title="node.fullName">
+                    <span class="mono font-semibold" style="font-size: 12px" :title="node.fullName">
                       {{ node.name }}
                     </span>
                     <span v-if="node.isPoolRoot" class="badge badge-info mono" style="font-size: 10px; margin-left: 6px">
@@ -584,17 +614,10 @@ onMounted(async () => {
                 </span>
               </td>
 
-              <!-- Mountpoint -->
-              <td>
-                <span class="mono" style="font-size: 12px; color: var(--text-secondary)" :title="node.mountpoint || '-'">
-                  {{ node.mountpoint || '-' }}
-                </span>
-              </td>
-
               <!-- Space Usage & Quotas -->
               <td>
                 <div>
-                  <div class="mono" style="font-weight: 700; font-size: 13px">{{ formatBytes(node.usedBytes) }}</div>
+                  <div class="mono" style="font-weight: 700; font-size: 12px">{{ formatBytes(node.usedBytes) }}</div>
                   <div style="font-size: 11px; color: var(--text-secondary); margin-top: 1px">
                     Quota: {{ node.quotaBytes && node.quotaBytes > 0 ? formatBytes(node.quotaBytes) : 'Unlimited' }}
                     <span v-if="node.reservationBytes && node.reservationBytes > 0" style="margin-left: 4px; color: var(--accent-primary)">
@@ -661,7 +684,7 @@ onMounted(async () => {
                     v-if="!node.isPoolRoot"
                     class="btn btn-danger btn-sm btn-icon"
                     title="Delete Dataset"
-                    @click="handleDeleteDataset(node.raw.name)"
+                    @click="handleDeleteDataset(node.raw)"
                   >
                     <MdiIcon :path="mdiDelete" size="13" />
                   </button>
@@ -683,12 +706,11 @@ onMounted(async () => {
     </div>
 
     <!-- Create Dataset Modal -->
-    <div v-if="showCreateDataset" class="modal-overlay" @click.self="showCreateDataset = false">
+    <div v-if="showCreateDataset" class="modal-overlay">
       <div class="modal-container" style="max-width: 580px; width: 100%">
         <div class="modal-header">
           <div style="display: flex; align-items: center; gap: 10px">
-            <MdiIcon :path="mdiFolderOutline" size="20" style="color: var(--accent-primary)" />
-            <h3 class="card-title" style="margin: 0">Create New ZFS Dataset</h3>
+            <h3 class="card-title" style="margin: 0">Create Dataset</h3>
           </div>
           <button class="btn btn-sm btn-icon" @click="showCreateDataset = false">
             <MdiIcon :path="mdiClose" size="16" />
@@ -772,7 +794,7 @@ onMounted(async () => {
     </div>
 
     <!-- Edit Dataset Modal -->
-    <div v-if="editingDataset" class="modal-overlay" @click.self="editingDataset = null">
+    <div v-if="editingDataset" class="modal-overlay">
       <div class="modal-container" style="max-width: 540px; width: 100%">
         <div class="modal-header">
           <div style="display: flex; align-items: center; gap: 10px">
@@ -788,6 +810,9 @@ onMounted(async () => {
 
         <form @submit.prevent="handleSaveEditDataset">
           <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px">
+            <div v-if="editingDataset.mountpoint" style="font-size: 12px; color: var(--text-secondary)">
+              Mountpoint: <span class="mono" style="color: var(--text-primary)">{{ editingDataset.mountpoint }}</span>
+            </div>
             <div class="form-grid">
               <div class="form-group">
                 <label>Compression</label>
@@ -848,7 +873,7 @@ onMounted(async () => {
     </div>
 
     <!-- Take Snapshot Modal -->
-    <div v-if="snapshotModalDataset" class="modal-overlay" @click.self="snapshotModalDataset = null">
+    <div v-if="snapshotModalDataset" class="modal-overlay">
       <div class="modal-container" style="max-width: 440px; width: 100%">
         <div class="modal-header">
           <div style="display: flex; align-items: center; gap: 8px">

@@ -11,6 +11,8 @@ import {
 import { services } from '../../container';
 import type { Prerequisite, PrerequisiteSummary } from '../../domain/models';
 import MdiIcon from '../components/MdiIcon.vue';
+import SortableTh from '../components/SortableTh.vue';
+import { useTableSort } from '../composables/useTableSort';
 import { nasState, notify } from '../store';
 
 const checking = ref(false);
@@ -29,6 +31,23 @@ const installedList = computed(() => {
   const items = summary.value?.installedPrerequisites ?? nasState.prerequisites.filter((p) => p.status === 'INSTALLED');
   if (categoryFilter.value === 'ALL') return items;
   return items.filter((p) => p.category === categoryFilter.value);
+});
+
+const missingSort = useTableSort(missingList, {
+  name: (p: Prerequisite) => p.displayName,
+  category: (p: Prerequisite) => p.category,
+  kind: (p: Prerequisite) => p.kind,
+  target: (p: Prerequisite) => p.binaryOrPath,
+  status: (p: Prerequisite) => p.status,
+  requiredBy: (p: Prerequisite) => (p.requiredBy || []).length,
+});
+
+const installedSort = useTableSort(installedList, {
+  name: (p: Prerequisite) => p.displayName,
+  category: (p: Prerequisite) => p.category,
+  kind: (p: Prerequisite) => p.kind,
+  target: (p: Prerequisite) => p.binaryOrPath,
+  requiredBy: (p: Prerequisite) => (p.requiredBy || []).length,
 });
 
 const installedCount = computed(() => {
@@ -95,9 +114,7 @@ onMounted(() => {
       <div class="card-header" style="flex-wrap: wrap; gap: 14px">
         <div>
           <div style="display: flex; align-items: center; gap: 8px">
-            <h2 class="card-title" style="font-size: 18px">
-              Host System Prerequisites & Linux Compliance
-            </h2>
+            <h2 class="card-title" style="font-size: 18px">Prerequisites</h2>
             <span
               v-if="linuxFlavor"
               class="badge badge-neutral"
@@ -107,19 +124,16 @@ onMounted(() => {
               {{ linuxFlavor.prettyName || linuxFlavor.name }} ({{ linuxFlavor.packageManager }})
             </span>
           </div>
-          <p class="card-subtitle">
-            Detects host distribution, package manager, virtualization kernel modules, hypervisors, and storage tools.
-          </p>
         </div>
 
         <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
           <select v-model="categoryFilter" class="select">
             <option value="ALL">All Categories</option>
-            <option value="STORAGE">STORAGE (ZFS, S.M.A.R.T, NVMe)</option>
-            <option value="VIRTUALIZATION">VIRTUALIZATION (KVM, QEMU, libvirt, OVMF, vTPM)</option>
-            <option value="CONTAINERS">CONTAINERS (Docker, LXC)</option>
-            <option value="SHARING">SHARING (CIFS/Samba, WebDAV)</option>
-            <option value="SECURITY">SECURITY (OpenSSH)</option>
+            <option value="STORAGE">Storage</option>
+            <option value="VIRTUALIZATION">Virtualization</option>
+            <option value="CONTAINERS">Containers</option>
+            <option value="SHARING">Sharing</option>
+            <option value="SECURITY">Security</option>
           </select>
 
           <button
@@ -128,7 +142,7 @@ onMounted(() => {
             @click="loadReport(true)"
           >
             <MdiIcon :path="mdiRefresh" size="16" :class="{ 'spin-icon': checking }" />
-            {{ checking ? 'Probing System...' : 'Re-verify Prerequisites' }}
+            {{ checking ? 'Checking...' : 'Re-check' }}
           </button>
         </div>
       </div>
@@ -141,11 +155,11 @@ onMounted(() => {
           style="font-size: 13px; font-weight: 700; padding: 4px 10px; display: inline-flex; align-items: center; gap: 6px"
         >
           <MdiIcon :path="isFullyCompliant ? mdiCheckCircle : mdiAlertCircle" size="16" />
-          {{ isFullyCompliant ? '100% Fully Compliant' : `Action Required: ${missingCount} Missing` }}
+          {{ isFullyCompliant ? 'All Installed' : `Action Required: ${missingCount} Missing` }}
         </span>
 
         <span class="badge badge-success">
-          Installed & Verified: {{ installedCount }}
+          Installed: {{ installedCount }}
         </span>
 
         <span
@@ -164,7 +178,7 @@ onMounted(() => {
           @click="activeTab = 'missing'"
         >
           <MdiIcon :path="mdiAlertCircle" size="16" />
-          <span>Page 1: Missing & Remediation</span>
+          <span>Missing</span>
           <span
             v-if="missingCount > 0"
             class="count-badge"
@@ -187,7 +201,7 @@ onMounted(() => {
           @click="activeTab = 'installed'"
         >
           <MdiIcon :path="mdiCheckCircle" size="16" />
-          <span>Page 2: Installed & Compliant</span>
+          <span>Installed</span>
           <span class="count-badge">
             {{ installedCount }}
           </span>
@@ -202,7 +216,7 @@ onMounted(() => {
             <div style="display: flex; align-items: center; gap: 8px">
               <MdiIcon :path="mdiLinux" size="20" style="color: var(--accent-primary)" />
               <span style="font-weight: 700; font-size: 14px">
-                Compliance Remediation Command for {{ linuxFlavor?.prettyName || 'Host Distribution' }}
+                Install Command
               </span>
             </div>
             <button
@@ -218,7 +232,7 @@ onMounted(() => {
             <code>{{ summary.remediationScript }}</code>
           </div>
           <div style="margin-top: 8px; font-size: 12px; color: var(--text-secondary)">
-            Run this command as root (or with sudo) on your host to install all missing dependencies and enable compliance.
+            Run as root (or with sudo) on the host to install all missing dependencies.
           </div>
         </div>
 
@@ -226,14 +240,9 @@ onMounted(() => {
         <div v-if="missingList.length === 0" class="compliant-banner">
           <MdiIcon :path="mdiCheckCircle" size="36" style="color: var(--success-text)" />
           <div>
-            <h3 style="margin: 0 0 4px 0; font-size: 16px; color: var(--success-text)">
-              System Is 100% Compliant!
+            <h3 style="margin: 0; font-size: 16px; color: var(--success-text)">
+              All prerequisites are installed.
             </h3>
-            <p style="margin: 0; font-size: 13px; color: var(--text-secondary)">
-              All prerequisite packages, kernel modules, libraries, and binaries are present on
-              <strong style="color: var(--text-primary)">{{ linuxFlavor?.prettyName || 'the host' }}</strong>.
-              All NAS virtualization, container, storage, and sharing capabilities are ready.
-            </p>
           </div>
         </div>
 
@@ -242,17 +251,17 @@ onMounted(() => {
           <table class="data-table">
             <thead>
               <tr>
-                <th>Component / Prerequisite</th>
-                <th>Category</th>
-                <th>Kind</th>
-                <th>Target Identifier</th>
-                <th>Status</th>
-                <th>Required By Features</th>
-                <th>Exact Distro Installation Instruction</th>
+                <SortableTh :sort="missingSort" sort-key="name">Name</SortableTh>
+                <SortableTh :sort="missingSort" sort-key="category">Category</SortableTh>
+                <SortableTh :sort="missingSort" sort-key="kind">Kind</SortableTh>
+                <SortableTh :sort="missingSort" sort-key="target">Target</SortableTh>
+                <SortableTh :sort="missingSort" sort-key="status">Status</SortableTh>
+                <SortableTh :sort="missingSort" sort-key="requiredBy">Required By</SortableTh>
+                <th>Install</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in missingList" :key="item.name">
+              <tr v-for="item in missingSort.sorted.value" :key="item.name">
                 <td>
                   <div style="font-weight: 600">{{ item.displayName }}</div>
                   <div class="mono" style="font-size: 11px; color: var(--text-muted)">
@@ -303,17 +312,17 @@ onMounted(() => {
           <table class="data-table">
             <thead>
               <tr>
-                <th>Component / Prerequisite</th>
-                <th>Category</th>
-                <th>Kind</th>
-                <th>Resolved Path / Target</th>
+                <SortableTh :sort="installedSort" sort-key="name">Name</SortableTh>
+                <SortableTh :sort="installedSort" sort-key="category">Category</SortableTh>
+                <SortableTh :sort="installedSort" sort-key="kind">Kind</SortableTh>
+                <SortableTh :sort="installedSort" sort-key="target">Path / Target</SortableTh>
                 <th>Status</th>
                 <th>Version & Details</th>
-                <th>Required By Features</th>
+                <SortableTh :sort="installedSort" sort-key="requiredBy">Required By</SortableTh>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in installedList" :key="item.name">
+              <tr v-for="item in installedSort.sorted.value" :key="item.name">
                 <td>
                   <div style="font-weight: 600">{{ item.displayName }}</div>
                   <div class="mono" style="font-size: 11px; color: var(--text-muted)">

@@ -39,6 +39,8 @@ import SystemPoolModal from './components/SystemPoolModal.vue';
 import ConfirmModal from './components/ConfirmModal.vue';
 import VncConsoleStandalone from './components/VncConsoleStandalone.vue';
 import MdiIcon from './components/MdiIcon.vue';
+import SortableTh from './components/SortableTh.vue';
+import { useTableSort } from './composables/useTableSort';
 import ThemeSelector from './components/ThemeSelector.vue';
 import PrerequisitesTopBarButton from './components/PrerequisitesTopBarButton.vue';
 import PrerequisitesModal from './components/PrerequisitesModal.vue';
@@ -127,7 +129,7 @@ const navItems = computed<NavItem[]>(() => {
   const docker = getModuleAvailability('docker');
   const lxc = getModuleAvailability('lxc');
   return [
-    { id: 'overview', label: 'Overview Dashboard', icon: mdiViewDashboard, path: '/' },
+    { id: 'overview', label: 'Overview', icon: mdiViewDashboard, path: '/' },
     {
       id: 'storage-pools',
       label: 'Storage',
@@ -174,7 +176,7 @@ const navItems = computed<NavItem[]>(() => {
     },
     {
       id: 'kvm',
-      label: 'KVM Hypervisor + noVNC',
+      label: 'Virtual Machines',
       icon: mdiMonitor,
       badge: kvm.enabled ? nasState.vms.length : 'OFF',
       disabled: !kvm.enabled,
@@ -198,14 +200,14 @@ const navItems = computed<NavItem[]>(() => {
     },
     {
       id: 'shares',
-      label: 'CIFS & WebDAV Shares',
+      label: 'Shares',
       icon: mdiFolderNetwork,
       badge: nasState.cifsShares.length + nasState.webdavShares.length,
       path: getPathFromTab('shares'),
     },
     {
       id: 'identity',
-      label: 'Users, Groups & SSH',
+      label: 'Users & Groups',
       icon: mdiAccountGroup,
       badge: nasState.users.length,
       path: getPathFromTab('identity'),
@@ -222,7 +224,7 @@ const currentTabLabel = computed(() => {
     }
   }
   if (nasState.activeTab === 'zfs') return 'Storage · Pools';
-  return 'Overview Dashboard';
+  return 'Overview';
 });
 
 const activeTabModule = computed<ManagedModule | null>(() => {
@@ -248,6 +250,15 @@ const activeModuleStatus = computed(() => {
   if (!activeTabModule.value) return { enabled: true, missing: [] };
   return getModuleAvailability(activeTabModule.value);
 });
+
+const missingPrereqSort = useTableSort(
+  () => activeModuleStatus.value.missing,
+  {
+    name: (m) => m.displayName,
+    kind: (m) => m.kind,
+    target: (m) => m.binaryOrPath,
+  }
+);
 
 const hasFallbackPrereqs = computed(() =>
   nasState.prerequisites.some((p) => p.status === 'FALLBACK_ACTIVE' || p.fallbackMode)
@@ -364,21 +375,6 @@ onMounted(() => {
           </a>
         </template>
       </nav>
-
-      <div
-        style="
-          padding: 14px 16px;
-          border-top: 1px solid var(--border-subtle);
-          font-size: 11.5px;
-          color: var(--text-secondary);
-        "
-      >
-        <div style="color: var(--accent-primary); font-weight: 600">
-          NaN System Core
-        </div>
-        <div>ZFS · KVM · Docker · LXC</div>
-        <div>CIFS · WebDAV · Linux PAM</div>
-      </div>
     </aside>
 
     <!-- Main Content Area -->
@@ -388,11 +384,8 @@ onMounted(() => {
           <span style="font-weight: 600; font-size: 15px">
             {{ currentTabLabel }}
           </span>
-          <span
-            class="badge"
-            :class="hasFallbackPrereqs ? 'badge-warning' : 'badge-success'"
-          >
-            {{ hasFallbackPrereqs ? 'Fallback Mode' : 'Host Environment' }}
+          <span v-if="hasFallbackPrereqs" class="badge badge-warning">
+            Fallback Mode
           </span>
           <span v-if="nasState.lastRefreshed" class="card-subtitle mono">
             Synced {{ nasState.lastRefreshed }}
@@ -438,12 +431,12 @@ onMounted(() => {
             @click="refreshAllData"
           >
             <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" />
-            {{ nasState.loading ? 'Refreshing...' : 'Refresh Telemetry' }}
+            {{ nasState.loading ? 'Refreshing...' : 'Refresh' }}
           </button>
 
           <template v-if="nasState.authenticated && nasState.currentUser">
             <span class="badge badge-info">
-              {{ nasState.currentUser.username }} (UID {{ nasState.currentUser.uid }})
+              {{ nasState.currentUser.username }}
             </span>
             <button class="btn btn-sm" @click="handleLogout">
               <MdiIcon :path="mdiLogout" size="14" style="margin-right: 4px" />
@@ -461,7 +454,7 @@ onMounted(() => {
         >
           <div class="sync-status-chip">
             <div class="spinner" style="width: 14px; height: 14px; border-width: 2px"></div>
-            <span>Connecting to NaN (Not Another NAS) · Synchronizing topology...</span>
+            <span>Connecting...</span>
           </div>
           <OverviewSkeleton />
         </div>
@@ -476,10 +469,10 @@ onMounted(() => {
               <MdiIcon :path="mdiAlertCircle" size="26" style="color: var(--warning-text); flex-shrink: 0" />
               <div>
                 <div style="font-weight: 700; font-size: 14px; color: var(--warning-text)">
-                  Main ZFS Storage Pool Unconfigured — Non-ZFS Modules Paused
+                  No Main Pool Selected — Non-ZFS Modules Paused
                 </div>
                 <div style="font-size: 12.5px; color: var(--text-secondary); margin-top: 2px">
-                  Until a main pool is selected, modules other than ZFS (KVM, Docker, LXC, CIFS, WebDAV) are paused. Select or import a pool to initialize <code>.nas-system</code> datasets and recover your configuration.
+                  KVM, Docker, LXC, CIFS and WebDAV are paused until a main pool is selected. Select or import a pool to continue.
                 </div>
               </div>
             </div>
@@ -496,11 +489,10 @@ onMounted(() => {
             <div class="card-header">
               <div>
                 <h3 class="card-title" style="color: var(--danger-text)">
-                  Module Disabled — Required Host Binaries / Libraries Missing
+                  Module Disabled — Missing Prerequisites
                 </h3>
                 <p class="card-subtitle">
-                  This module is automatically disabled because one or more underlying Linux binaries,
-                  shared libraries, or kernel modules were not detected on the host.
+                  Required binaries, libraries, or kernel modules were not found on the host.
                 </p>
               </div>
               <button class="btn btn-primary btn-sm" @click="showPrerequisitesModal = true">
@@ -511,14 +503,14 @@ onMounted(() => {
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>Missing Prerequisite</th>
-                    <th>Kind</th>
-                    <th>Binary / Library Target</th>
+                    <SortableTh :sort="missingPrereqSort" sort-key="name">Missing Prerequisite</SortableTh>
+                    <SortableTh :sort="missingPrereqSort" sort-key="kind">Kind</SortableTh>
+                    <SortableTh :sort="missingPrereqSort" sort-key="target">Binary / Library Target</SortableTh>
                     <th>Installation Hint</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="m in activeModuleStatus.missing" :key="m.name">
+                  <tr v-for="m in missingPrereqSort.sorted.value" :key="m.name">
                     <td style="font-weight: 600">{{ m.displayName }}</td>
                     <td><span class="badge badge-danger">{{ m.kind }}</span></td>
                     <td class="mono">{{ m.binaryOrPath }}</td>

@@ -311,7 +311,7 @@ const ramChartOptions = computed<echarts.EChartsOption>(() => {
     return {
       backgroundColor: 'transparent',
       title: {
-        text: 'Loading Memory Telemetry...',
+        text: 'Loading...',
         left: 'center',
         top: 'middle',
         textStyle: { color: p.subtextColor, fontSize: 13 },
@@ -613,7 +613,7 @@ function getTempClass(temp: number): string {
     <div class="grid-4">
       <div class="card">
         <div class="card-header" style="margin-bottom: 6px">
-          <span class="card-subtitle">ZFS Storage</span>
+          <span class="card-subtitle">Storage</span>
           <span class="badge badge-success">{{ nasState.pools.length }} Pools</span>
         </div>
         <div style="font-size: 22px; font-weight: 700">
@@ -622,19 +622,17 @@ function getTempClass(temp: number): string {
             / {{ formatBytes(totalStorageBytes) }}
           </span>
         </div>
-        <p class="card-subtitle" style="margin-top: 6px">
-          Datasets, ZVols & LZ4/ZSTD compression
-        </p>
       </div>
 
       <div class="card">
         <div class="card-header" style="margin-bottom: 6px">
           <span class="card-subtitle">Processor & Load</span>
           <span
+            v-if="(telemetry?.cpu?.temperatureCelsius || 0) > 0"
             class="badge"
             :class="getTempClass(telemetry?.cpu?.temperatureCelsius || 0)"
           >
-            {{ (telemetry?.cpu?.temperatureCelsius || 0) > 0 ? `${telemetry?.cpu?.temperatureCelsius.toFixed(1)} °C` : 'Normal' }}
+            {{ telemetry?.cpu?.temperatureCelsius.toFixed(1) }} °C
           </span>
         </div>
         <div style="font-size: 22px; font-weight: 700">
@@ -685,14 +683,9 @@ function getTempClass(temp: number): string {
     <!-- ZFS Storage Pools: One Card Per Pool with ECharts Pie Charts -->
     <div>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px">
-        <div>
-          <h2 style="font-size: 18px; font-weight: 700; margin: 0">ZFS Storage Pools</h2>
-          <p class="card-subtitle" style="margin: 2px 0 0 0">
-            Real-time pool capacity allocation, vdev topologies & fragmentation
-          </p>
-        </div>
+        <h2 style="font-size: 18px; font-weight: 700; margin: 0">Pools</h2>
         <button class="btn btn-sm btn-primary" @click="navigateTo('zfs')">
-          Manage ZFS Pools
+          Manage Pools
         </button>
       </div>
 
@@ -734,11 +727,8 @@ function getTempClass(temp: number): string {
       </div>
 
       <div v-else-if="nasState.pools.length === 0" class="card" style="text-align: center; padding: 36px 20px">
-        <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px">No ZFS Storage Pools Configured</div>
-        <p class="card-subtitle" style="max-width: 500px; margin: 0 auto 16px auto">
-          Initialize or import your first ZFS storage pool to enable datasets, volumes, KVM images, and application containers.
-        </p>
-        <button class="btn btn-primary" @click="navigateTo('zfs')">Configure ZFS Pools</button>
+        <div style="font-size: 16px; font-weight: 600; margin-bottom: 16px">No pools configured.</div>
+        <button class="btn btn-primary" @click="navigateTo('zfs')">Configure Pools</button>
       </div>
 
       <div class="pool-cards-grid">
@@ -838,16 +828,14 @@ function getTempClass(temp: number): string {
       <!-- CPU Telemetry Card -->
       <div class="card">
         <div class="card-header">
-          <div>
-            <h3 class="card-title">Processor Telemetry</h3>
-            <p class="card-subtitle">Real-time CPU utilization, thermal monitoring & load</p>
-          </div>
+          <h3 class="card-title">Processor</h3>
           <span
+            v-if="(telemetry?.cpu?.temperatureCelsius || 0) > 0"
             class="badge"
             :class="getTempClass(telemetry?.cpu?.temperatureCelsius || 0)"
             style="font-size: 13px; font-weight: 600"
           >
-            {{ (telemetry?.cpu?.temperatureCelsius || 0) > 0 ? `${telemetry?.cpu?.temperatureCelsius.toFixed(1)} °C` : 'Active' }}
+            {{ telemetry?.cpu?.temperatureCelsius.toFixed(1) }} °C
           </span>
         </div>
 
@@ -896,7 +884,7 @@ function getTempClass(temp: number): string {
       <div class="card">
         <div class="card-header">
           <div>
-            <h3 class="card-title">Memory Allocation (RAM)</h3>
+            <h3 class="card-title">Memory</h3>
             <p class="card-subtitle">
               {{ formatBytes(telemetry?.memory?.availableBytes || 0) }} Available · {{ formatBytes(telemetry?.memory?.totalBytes || 0) }} Total
             </p>
@@ -942,39 +930,17 @@ function getTempClass(temp: number): string {
       </div>
     </div>
 
-    <!-- Static System & Hardware Info (Neofetch / Fastfetch Style) + Network Interfaces -->
+    <!-- Static System & Hardware Info + Network Interfaces -->
     <div class="grid-2">
-      <!-- Neofetch / Fastfetch Hardware Card -->
+      <!-- Hardware Info Card -->
       <div class="card fastfetch-card">
         <div class="card-header" style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px; margin-bottom: 12px">
-          <div>
-            <h3 class="card-title">System & Hardware Information</h3>
-            <p class="card-subtitle">Host platform specification (fastfetch / neofetch)</p>
-          </div>
+          <h3 class="card-title">System</h3>
           <span class="badge badge-neutral mono">{{ telemetry?.host?.architecture || 'x86_64' }}</span>
         </div>
 
         <div class="fastfetch-layout">
-          <!-- Terminal / Logo Art Side -->
-          <div class="fastfetch-logo">
-            <pre class="ascii-art">
- _  _       _  _ 
-| \| | __ _| \| |
-| .` |/ _` | .` |
-|_|\_|\__,_|_|\_|
- Not Another NAS 
-═════════════════</pre>
-            <div class="color-palette-dots">
-              <span class="color-dot dot-1"></span>
-              <span class="color-dot dot-2"></span>
-              <span class="color-dot dot-3"></span>
-              <span class="color-dot dot-4"></span>
-              <span class="color-dot dot-5"></span>
-              <span class="color-dot dot-6"></span>
-            </div>
-          </div>
-
-          <!-- Fastfetch Key-Value Rows -->
+          <!-- Key-Value Rows -->
           <div class="fastfetch-info">
             <div class="fetch-row">
               <span class="fetch-key">Host:</span>
@@ -1045,10 +1011,7 @@ function getTempClass(temp: number): string {
       <!-- Network Interface & Bandwidth Card (System Interface Only + In/Out Traffic Graph) -->
       <div class="card system-network-card">
         <div class="card-header" style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px; margin-bottom: 12px">
-          <div>
-            <h3 class="card-title">Network Interface & Bandwidth</h3>
-            <p class="card-subtitle">System primary adapter, IP addressing & real-time throughput</p>
-          </div>
+          <h3 class="card-title">Network</h3>
           <span
             v-if="systemInterface"
             class="badge"
@@ -1070,7 +1033,6 @@ function getTempClass(temp: number): string {
                 <strong class="mono" style="font-size: 16px; color: var(--accent-primary)">
                   {{ systemInterface.name }}
                 </strong>
-                <span class="badge badge-info" style="font-size: 11px">Primary / System</span>
                 <span v-if="systemInterface.speedMbps && systemInterface.speedMbps > 0" class="badge badge-neutral mono">
                   {{ systemInterface.speedMbps }} Mbps
                 </span>
@@ -1135,8 +1097,8 @@ function getTempClass(temp: number): string {
     <div class="grid-3">
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">KVM Virtual Machines</h3>
-          <button class="btn btn-sm" @click="navigateTo('kvm')">Open KVM</button>
+          <h3 class="card-title">Virtual Machines</h3>
+          <button class="btn btn-sm" @click="navigateTo('kvm')">Manage VMs</button>
         </div>
         <div v-if="nasState.loading && nasState.vms.length === 0" style="padding: 6px 0; display: flex; flex-direction: column; gap: 10px">
           <div v-for="s in 3" :key="s" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border-subtle)">
@@ -1167,7 +1129,7 @@ function getTempClass(temp: number): string {
 
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">Containers & Stacks</h3>
+          <h3 class="card-title">Apps & Containers</h3>
           <button class="btn btn-sm" @click="navigateTo('docker')">Manage Apps</button>
         </div>
         <div v-if="nasState.loading && nasState.dockerApps.length === 0 && nasState.lxcContainers.length === 0" style="padding: 6px 0; display: flex; flex-direction: column; gap: 10px">
@@ -1212,8 +1174,8 @@ function getTempClass(temp: number): string {
 
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">CIFS & WebDAV Shares</h3>
-          <button class="btn btn-sm" @click="navigateTo('shares')">Shares</button>
+          <h3 class="card-title">Shares</h3>
+          <button class="btn btn-sm" @click="navigateTo('shares')">Manage Shares</button>
         </div>
         <div v-if="nasState.loading && nasState.cifsShares.length === 0 && nasState.webdavShares.length === 0" style="padding: 6px 0; display: flex; flex-direction: column; gap: 10px">
           <div v-for="s in 3" :key="s" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border-subtle)">
@@ -1392,54 +1354,10 @@ function getTempClass(temp: number): string {
   gap: 2px;
 }
 
-/* Neofetch / Fastfetch Style Card */
+/* Hardware Info Card */
 .fastfetch-card {
   font-family: inherit;
 }
-
-.fastfetch-layout {
-  display: grid;
-  grid-template-columns: 154px 1fr;
-  gap: 18px;
-  align-items: flex-start;
-}
-
-.fastfetch-logo {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background: var(--bg-base);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 16px 8px;
-}
-
-.ascii-art {
-  font-family: var(--font-mono, monospace);
-  font-size: 11px;
-  line-height: 1.25;
-  color: var(--accent-primary);
-  margin: 0;
-  text-align: center;
-}
-
-.color-palette-dots {
-  display: flex;
-  gap: 4px;
-  margin-top: 14px;
-}
-
-.color-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-}
-.dot-1 { background: #f7768e; }
-.dot-2 { background: #9ece6a; }
-.dot-3 { background: #e0af68; }
-.dot-4 { background: #7aa2f7; }
-.dot-5 { background: #bb9af7; }
-.dot-6 { background: #7dcfff; }
 
 .fastfetch-info {
   display: flex;
@@ -1573,9 +1491,6 @@ function getTempClass(temp: number): string {
 
 @media (max-width: 900px) {
   .pool-cards-grid {
-    grid-template-columns: 1fr;
-  }
-  .fastfetch-layout {
     grid-template-columns: 1fr;
   }
   .system-iface-header {

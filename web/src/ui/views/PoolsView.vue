@@ -13,7 +13,6 @@ import {
   mdiDragVariant,
   mdiFlash,
   mdiHarddisk,
-  mdiLayersOutline,
   mdiLockOutline,
   mdiMagnify,
   mdiPlus,
@@ -31,6 +30,7 @@ import {
 } from '../../domain/models';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
+import { confirmDelete } from '../modal';
 import { confirmModal, nasState, notify, refreshAllData } from '../store';
 import { navigateTo } from '../router';
 
@@ -432,14 +432,13 @@ async function handleScrubPool(poolName: string) {
 
 async function handleDeletePool(poolName: string) {
   const shortName = poolName.replace(/^zfsPools\//, '');
-  const confirmed = await confirmModal({
-    title: 'Destroy ZFS Storage Pool',
-    tone: 'danger',
-    message: `Are you sure you want to permanently destroy pool "${shortName}"?`,
-    details: 'ALL DATA, datasets, snapshots, and block volumes in this pool will be PERMANENTLY DESTROYED. This action cannot be undone.',
+  const res = await confirmDelete({
+    kind: 'Pool',
+    name: shortName,
+    details: 'All data, datasets, snapshots and volumes in this pool will be destroyed.',
     confirmText: 'Destroy Pool',
   });
-  if (!confirmed) return;
+  if (!res.confirmed) return;
 
   try {
     await services.zfs.deletePool(poolName, true);
@@ -831,12 +830,8 @@ function viewPoolDatasets(poolName: string) {
       <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px">
         <div>
           <div style="display: flex; align-items: center; gap: 10px">
-            <MdiIcon :path="mdiDatabase" size="24" style="color: var(--accent-primary)" />
-            <h2 class="card-title" style="margin: 0; font-size: 20px">ZFS Storage Pools</h2>
+            <h2 class="card-title" style="margin: 0; font-size: 20px">Pools</h2>
           </div>
-          <p class="card-subtitle" style="margin-top: 4px; font-size: 13px">
-            Storage pool topologies, RAID redundancy, capacity allocations, scrub tasks, and tier VDEV management.
-          </p>
         </div>
 
         <div style="display: flex; align-items: center; gap: 10px">
@@ -890,10 +885,7 @@ function viewPoolDatasets(poolName: string) {
       style="padding: 48px 24px; text-align: center; color: var(--text-secondary)"
     >
       <MdiIcon :path="mdiDatabase" size="44" style="opacity: 0.35; margin-bottom: 12px; color: var(--accent-primary)" />
-      <div style="font-size: 16px; font-weight: 600; color: var(--text-primary)">No Storage Pools Found</div>
-      <p style="margin: 6px auto 18px; font-size: 13px; max-width: 480px; line-height: 1.5">
-        No OpenZFS storage pools are currently imported on the host. Click <strong>"New Pool"</strong> to design and create a storage pool.
-      </p>
+      <div style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 18px">No pools</div>
       <button class="btn btn-primary btn-sm" @click="openCreatePoolModal">
         <MdiIcon :path="mdiPlus" size="16" style="margin-right: 4px" />
         New Pool
@@ -928,9 +920,6 @@ function viewPoolDatasets(poolName: string) {
                   <MdiIcon :path="mdiDatabaseCheck" size="12" style="margin-right: 3px" />
                   MAIN POOL
                 </span>
-              </div>
-              <div class="mono" style="font-size: 11.5px; color: var(--text-muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
-                {{ p.mountpoint || `/nas/${p.poolName || p.name.replace(/^zfsPools\//, '')}` }}
               </div>
             </div>
           </div>
@@ -1082,20 +1071,14 @@ function viewPoolDatasets(poolName: string) {
     </div>
 
     <!-- Advanced Drag-and-Drop ZFS Storage Pool Infrastructure Builder Modal -->
-    <div v-if="showCreatePool" class="modal-overlay" @click.self="showCreatePool = false">
+    <div v-if="showCreatePool" class="modal-overlay">
       <div class="modal-container builder-modal-container">
         <!-- Modal Header -->
         <div class="modal-header">
           <div>
             <div style="display: flex; align-items: center; gap: 10px">
-              <MdiIcon :path="mdiLayersOutline" size="22" style="color: var(--accent-primary)" />
-              <h3 class="card-title" style="margin: 0; font-size: 18px">
-                ZFS Storage Pool Builder & Infrastructure Designer
-              </h3>
+              <h3 class="card-title" style="margin: 0; font-size: 18px">Create Pool</h3>
             </div>
-            <p class="card-subtitle" style="margin: 4px 0 0; font-size: 12.5px">
-              Drag unassigned host drives directly into target VDEVs. Configure Data, Cache (L2ARC), Log (SLOG), and Spare tiers with enterprise redundancy.
-            </p>
           </div>
           <button class="btn btn-sm btn-icon" @click="showCreatePool = false">
             <MdiIcon :path="mdiClose" size="16" />
@@ -1167,7 +1150,7 @@ function viewPoolDatasets(poolName: string) {
                   style="text-align: center; padding: 28px 12px; color: var(--text-muted); font-size: 12px"
                 >
                   <MdiIcon :path="mdiAlertCircleOutline" size="24" style="margin-bottom: 6px; opacity: 0.6" /><br />
-                  No unassigned drives available. All host drives are currently attached to imported ZFS pools.
+                  No unassigned drives.
                 </div>
 
                 <div
@@ -1236,8 +1219,7 @@ function viewPoolDatasets(poolName: string) {
             <div class="vdev-canvas-panel">
               <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
                 <div style="font-weight: 700; font-size: 13.5px; color: var(--text-primary); display: flex; align-items: center; gap: 6px">
-                  <MdiIcon :path="mdiTreeOutline" size="16" style="color: var(--accent-primary)" />
-                  <span>Configured VDEV Topology</span>
+                  <span>VDEVs</span>
                 </div>
 
                 <!-- Add Tier VDEV Buttons -->
@@ -1410,8 +1392,7 @@ function viewPoolDatasets(poolName: string) {
               <!-- Topology Capacity & Usable Storage Summary Banner -->
               <div class="capacity-summary-card">
                 <div style="font-weight: 700; font-size: 12.5px; color: var(--text-primary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px">
-                  <MdiIcon :path="mdiLayersOutline" size="16" style="color: var(--accent-primary)" />
-                  <span>Estimated Storage Architecture</span>
+                  <span>Estimated Capacity</span>
                 </div>
                 <div class="summary-metrics-grid">
                   <div>
@@ -1458,23 +1439,19 @@ function viewPoolDatasets(poolName: string) {
     </div>
 
     <!-- Advanced Drag-and-Drop ZFS Storage Pool Layout & Infrastructure Designer Modal (Edit) -->
-    <div v-if="configuringPool" class="modal-overlay" @click.self="configuringPool = null">
+    <div v-if="configuringPool" class="modal-overlay">
       <div class="modal-container builder-modal-container">
         <!-- Modal Header -->
         <div class="modal-header">
           <div>
             <div style="display: flex; align-items: center; gap: 10px">
-              <MdiIcon :path="mdiLayersOutline" size="22" style="color: var(--accent-primary)" />
               <h3 class="card-title" style="margin: 0; font-size: 18px">
-                ZFS Storage Pool Builder & Infrastructure Designer:
+                Configure Pool:
                 <span class="mono" style="color: var(--accent-primary)">
                   {{ configuringPool.poolName || configuringPool.name.replace(/^zfsPools\//, '') }}
                 </span>
               </h3>
             </div>
-            <p class="card-subtitle" style="margin: 4px 0 0; font-size: 12.5px">
-              Drag unassigned host drives directly into target VDEVs. Configure Data, Cache (L2ARC), Log (SLOG), and Spare tiers with enterprise redundancy.
-            </p>
           </div>
           <button class="btn btn-sm btn-icon" @click="configuringPool = null">
             <MdiIcon :path="mdiClose" size="16" />
@@ -1569,7 +1546,7 @@ function viewPoolDatasets(poolName: string) {
                   style="text-align: center; padding: 28px 12px; color: var(--text-muted); font-size: 12px"
                 >
                   <MdiIcon :path="mdiAlertCircleOutline" size="24" style="margin-bottom: 6px; opacity: 0.6" /><br />
-                  No unassigned drives available on host. All host drives are currently attached to pools.
+                  No unassigned drives.
                 </div>
 
                 <div
@@ -1638,8 +1615,7 @@ function viewPoolDatasets(poolName: string) {
             <div class="vdev-canvas-panel">
               <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
                 <div style="font-weight: 700; font-size: 13.5px; color: var(--text-primary); display: flex; align-items: center; gap: 6px">
-                  <MdiIcon :path="mdiTreeOutline" size="16" style="color: var(--accent-primary)" />
-                  <span>Configured VDEV Topology</span>
+                  <span>VDEVs</span>
                 </div>
 
                 <!-- Add Tier VDEV Buttons -->
@@ -1740,7 +1716,7 @@ function viewPoolDatasets(poolName: string) {
                   <!-- Validation Feedback Alert -->
                   <div class="vdev-validation-bar ok">
                     <MdiIcon :path="mdiCheckCircleOutline" size="14" />
-                    <span>Active operational pool tier ({{ vdev.state || 'ONLINE' }})</span>
+                    <span>Active ({{ vdev.state || 'ONLINE' }})</span>
                   </div>
                 </div>
 
@@ -1892,8 +1868,7 @@ function viewPoolDatasets(poolName: string) {
               <!-- Topology Capacity & Usable Storage Summary Banner -->
               <div class="capacity-summary-card">
                 <div style="font-weight: 700; font-size: 12.5px; color: var(--text-primary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px">
-                  <MdiIcon :path="mdiLayersOutline" size="16" style="color: var(--accent-primary)" />
-                  <span>Estimated Storage Architecture</span>
+                  <span>Estimated Capacity</span>
                 </div>
                 <div class="summary-metrics-grid">
                   <div>

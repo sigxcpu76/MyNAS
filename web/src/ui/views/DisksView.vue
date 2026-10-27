@@ -19,6 +19,8 @@ import {
 import { formatBytes, type Disk } from '../../domain/models';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
+import SortableTh from '../components/SortableTh.vue';
+import { useTableSort } from '../composables/useTableSort';
 import { nasState, notify, refreshAllData } from '../store';
 import { navigateTo } from '../router';
 
@@ -70,6 +72,42 @@ const filteredSmartParams = computed(() => {
   );
 });
 
+const diskSort = useTableSort(filteredDisks, {
+  device: (d) => d.diskId,
+  model: (d) => d.model || d.vendor,
+  type: (d) => d.type,
+  capacity: (d) => d.sizeBytes,
+  temp: (d) => (d.temperatureCelsius > 0 ? d.temperatureCelsius : null),
+  smart: (d) => d.smartStatus,
+  pool: (d) => d.owningZfsPool,
+  partitions: (d) => d.partitions?.length ?? 0,
+});
+
+/** Parses a numeric SMART field (e.g. "100"), returning null for "-" / "N/A". */
+function smartNumber(v: string | undefined): number | null {
+  if (!v) return null;
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+const smartParamSort = useTableSort(filteredSmartParams, {
+  id: (p) => p.id,
+  name: (p) => p.name,
+  // Raw values may contain units/suffixes; natural collation orders numeric prefixes numerically
+  raw: (p) => p.rawValue,
+  normalized: (p) => smartNumber(p.value),
+  status: (p) => p.status,
+  type: (p) => p.type || 'Standard',
+});
+
+const partitionSort = useTableSort(() => selectedDisk.value?.partitions ?? [], {
+  name: (p) => p.name,
+  path: (p) => p.devicePath,
+  size: (p) => p.sizeBytes,
+  mountpoint: (p) => p.mountpoint,
+  pool: (p) => p.owningZfsPool,
+});
+
 function getTempBadgeClass(temp: number) {
   if (temp <= 0) return 'badge-neutral';
   if (temp < 42) return 'badge-info';
@@ -106,8 +144,7 @@ function goToPool(poolName: string) {
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px">
         <div>
           <div style="display: flex; align-items: center; gap: 10px">
-            <MdiIcon :path="mdiHarddisk" size="24" style="color: var(--accent-primary)" />
-            <h2 class="card-title" style="font-size: 19px; margin: 0">Storage Disks</h2>
+            <h2 class="card-title" style="font-size: 19px; margin: 0">Disks</h2>
             <span v-if="nasState.loading && nasState.disks.length === 0" style="display: inline-flex">
               <SkeletonBox width="60px" height="20px" rounded="10px" />
             </span>
@@ -115,9 +152,6 @@ function goToPool(poolName: string) {
               {{ storageDisks.length }} {{ storageDisks.length === 1 ? 'Drive' : 'Drives' }}
             </span>
           </div>
-          <p class="card-subtitle" style="margin-top: 4px; font-size: 13px">
-            Physical drives discovered from Linux <code class="mono">/sys/block</code>, hardware telemetry, S.M.A.R.T. health, and ZFS pool allocation.
-          </p>
         </div>
 
         <div style="display: flex; align-items: center; gap: 10px">
@@ -145,14 +179,14 @@ function goToPool(poolName: string) {
         <table class="data-table">
           <thead>
             <tr>
-              <th style="min-width: 140px">Device</th>
-              <th style="min-width: 220px">Model / Vendor</th>
-              <th style="min-width: 90px">Type</th>
-              <th style="min-width: 100px">Capacity</th>
-              <th style="min-width: 100px">Temp</th>
-              <th style="min-width: 110px">S.M.A.R.T.</th>
-              <th style="min-width: 140px">Owning ZFS Pool</th>
-              <th style="min-width: 160px">Partitions</th>
+              <SortableTh :sort="diskSort" sort-key="device" style="min-width: 140px">Device</SortableTh>
+              <SortableTh :sort="diskSort" sort-key="model" style="min-width: 220px">Model / Vendor</SortableTh>
+              <SortableTh :sort="diskSort" sort-key="type" style="min-width: 90px">Type</SortableTh>
+              <SortableTh :sort="diskSort" sort-key="capacity" style="min-width: 100px">Capacity</SortableTh>
+              <SortableTh :sort="diskSort" sort-key="temp" style="min-width: 100px">Temp</SortableTh>
+              <SortableTh :sort="diskSort" sort-key="smart" style="min-width: 110px">S.M.A.R.T.</SortableTh>
+              <SortableTh :sort="diskSort" sort-key="pool" style="min-width: 140px">Pool</SortableTh>
+              <SortableTh :sort="diskSort" sort-key="partitions" style="min-width: 160px">Partitions</SortableTh>
               <th style="min-width: 90px; text-align: right">Actions</th>
             </tr>
           </thead>
@@ -185,15 +219,15 @@ function goToPool(poolName: string) {
             <tr v-else-if="filteredDisks.length === 0">
               <td colspan="9" style="text-align: center; color: var(--text-secondary); padding: 36px">
                 <div v-if="searchQuery">
-                  No storage disks match filter "<strong>{{ searchQuery }}</strong>".
+                  No disks match filter "<strong>{{ searchQuery }}</strong>".
                 </div>
                 <div v-else>
-                  No physical or virtual storage drives detected on the host.
+                  No disks detected.
                 </div>
               </td>
             </tr>
 
-            <tr v-for="d in filteredDisks" :key="d.diskId">
+            <tr v-for="d in diskSort.sorted.value" :key="d.diskId">
               <!-- Device -->
               <td>
                 <div style="display: flex; align-items: center; gap: 8px">
@@ -203,11 +237,8 @@ function goToPool(poolName: string) {
                     :style="{ color: d.type === 'NVME' ? 'var(--purple-text)' : (d.rotational ? 'var(--warning-text)' : 'var(--accent-primary)') }"
                   />
                   <div>
-                    <div class="mono" style="font-weight: 700; font-size: 13px; color: var(--text-primary)">
+                    <div class="mono" style="font-weight: 700; font-size: 12px; color: var(--text-primary)">
                       {{ d.diskId }}
-                    </div>
-                    <div class="mono" style="font-size: 11px; color: var(--text-secondary)">
-                      {{ d.devicePath }}
                     </div>
                   </div>
                 </div>
@@ -215,7 +246,7 @@ function goToPool(poolName: string) {
 
               <!-- Model / Vendor -->
               <td>
-                <div style="font-weight: 600; font-size: 13px">
+                <div style="font-weight: 600; font-size: 12px">
                   {{ d.model || d.vendor || '-' }}
                 </div>
                 <div v-if="d.serial" class="mono" style="font-size: 11px; color: var(--text-secondary)">
@@ -237,7 +268,7 @@ function goToPool(poolName: string) {
 
               <!-- Capacity -->
               <td>
-                <div class="mono" style="font-weight: 700; font-size: 13px">
+                <div class="mono" style="font-weight: 700; font-size: 12px">
                   {{ formatBytes(d.sizeBytes) }}
                 </div>
                 <div class="mono" style="font-size: 10.5px; color: var(--text-secondary)">
@@ -322,7 +353,7 @@ function goToPool(poolName: string) {
     </div>
 
     <!-- Disk Inspector Modal -->
-    <div v-if="selectedDisk" class="modal-overlay" @click.self="selectedDisk = null">
+    <div v-if="selectedDisk" class="modal-overlay">
       <div class="modal-container" style="max-width: 860px; width: 100%">
         <div class="modal-header">
           <div style="display: flex; align-items: center; gap: 10px">
@@ -333,7 +364,7 @@ function goToPool(poolName: string) {
             />
             <div>
               <h3 class="card-title" style="margin: 0; font-size: 15px">
-                Disk Inspector: <span class="mono">{{ selectedDisk.diskId }}</span>
+                Disk <span class="mono">{{ selectedDisk.diskId }}</span>
               </h3>
               <div class="mono" style="font-size: 11px; color: var(--text-secondary)">
                 {{ selectedDisk.model || selectedDisk.vendor || selectedDisk.devicePath }}
@@ -353,7 +384,7 @@ function goToPool(poolName: string) {
             @click="modalTab = 'smart'"
           >
             <MdiIcon :path="mdiSpeedometer" size="15" style="margin-right: 6px" />
-            S.M.A.R.T. Telemetry
+            S.M.A.R.T.
             <span class="badge badge-neutral" style="font-size: 10px; margin-left: 6px">
               {{ selectedDisk.smartParameters?.length || 0 }}
             </span>
@@ -364,7 +395,7 @@ function goToPool(poolName: string) {
             @click="modalTab = 'hardware'"
           >
             <MdiIcon :path="mdiInformationOutline" size="15" style="margin-right: 6px" />
-            Hardware & Sysfs
+            Hardware
           </button>
           <button
             class="modal-nav-tab"
@@ -425,7 +456,7 @@ function goToPool(poolName: string) {
           <div v-if="modalTab === 'smart'" style="display: flex; flex-direction: column; gap: 12px">
             <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap">
               <div style="font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px">
-                <span>Diagnostic Attributes & Parameters</span>
+                <span>Attributes</span>
                 <span class="badge badge-neutral mono" style="font-size: 10.5px">
                   {{ filteredSmartParams.length }} of {{ selectedDisk.smartParameters?.length || 0 }}
                 </span>
@@ -446,16 +477,16 @@ function goToPool(poolName: string) {
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th style="min-width: 45px">ID</th>
-                    <th style="min-width: 220px">Parameter Name</th>
-                    <th style="min-width: 150px">Raw Value</th>
-                    <th style="min-width: 110px">Normalized</th>
-                    <th style="min-width: 80px">Status</th>
-                    <th style="min-width: 85px">Type</th>
+                    <SortableTh :sort="smartParamSort" sort-key="id" style="min-width: 45px">ID</SortableTh>
+                    <SortableTh :sort="smartParamSort" sort-key="name" style="min-width: 220px">Parameter Name</SortableTh>
+                    <SortableTh :sort="smartParamSort" sort-key="raw" style="min-width: 150px">Raw Value</SortableTh>
+                    <SortableTh :sort="smartParamSort" sort-key="normalized" style="min-width: 110px">Normalized</SortableTh>
+                    <SortableTh :sort="smartParamSort" sort-key="status" style="min-width: 80px">Status</SortableTh>
+                    <SortableTh :sort="smartParamSort" sort-key="type" style="min-width: 85px">Type</SortableTh>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="sp in filteredSmartParams" :key="sp.id + '-' + sp.name">
+                  <tr v-for="sp in smartParamSort.sorted.value" :key="sp.id + '-' + sp.name">
                     <!-- ID -->
                     <td class="mono font-semibold" style="color: var(--text-secondary); font-size: 11px">
                       #{{ sp.id.toString().padStart(2, '0') }}
@@ -511,15 +542,12 @@ function goToPool(poolName: string) {
             </div>
             <div v-else style="color: var(--text-secondary); font-size: 12px; padding: 24px; text-align: center; background: var(--bg-base); border-radius: 6px">
               <span v-if="smartSearch">No parameters match filter "<strong>{{ smartSearch }}</strong>".</span>
-              <span v-else>No S.M.A.R.T. parameters reported for this storage device.</span>
+              <span v-else>No S.M.A.R.T. data.</span>
             </div>
           </div>
 
           <!-- TAB 2: HARDWARE & SYSFS -->
           <div v-else-if="modalTab === 'hardware'" style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px">
-            <div style="font-weight: 600; font-size: 13px; margin-bottom: 12px; color: var(--text-primary)">
-              Linux <code class="mono">/sys/block/{{ selectedDisk.diskId }}</code> Attributes
-            </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; font-size: 12px">
               <div><span style="color: var(--text-secondary)">Device Path:</span> <span class="mono font-semibold" style="margin-left: 6px">{{ selectedDisk.devicePath }}</span></div>
               <div><span style="color: var(--text-secondary)">Model:</span> <span class="font-semibold" style="margin-left: 6px">{{ selectedDisk.model || '-' }}</span></div>
@@ -540,7 +568,7 @@ function goToPool(poolName: string) {
             <!-- Device Aliases & Persistent Paths -->
             <div v-if="selectedDisk.aliases && selectedDisk.aliases.length > 0" style="margin-top: 14px; border-top: 1px solid var(--border-subtle); padding-top: 12px">
               <div style="font-weight: 600; font-size: 12px; margin-bottom: 6px; color: var(--text-primary)">
-                Persistent Device Aliases (by-id / by-path / by-uuid)
+                Device Aliases
               </div>
               <div style="display: flex; flex-direction: column; gap: 4px">
                 <code v-for="alias in selectedDisk.aliases" :key="alias" class="mono" style="font-size: 11px; color: var(--text-secondary); background: var(--bg-surface); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-subtle); word-break: break-all">
@@ -552,22 +580,19 @@ function goToPool(poolName: string) {
 
           <!-- TAB 3: PARTITIONS -->
           <div v-else-if="modalTab === 'partitions'">
-            <div style="font-weight: 600; font-size: 13px; margin-bottom: 8px">
-              Partitions Table ({{ selectedDisk.partitions?.length || 0 }})
-            </div>
             <div v-if="selectedDisk.partitions && selectedDisk.partitions.length > 0" class="table-wrap">
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>Partition</th>
-                    <th>Path</th>
-                    <th>Size</th>
-                    <th>Mountpoint</th>
-                    <th>ZFS Pool</th>
+                    <SortableTh :sort="partitionSort" sort-key="name">Partition</SortableTh>
+                    <SortableTh :sort="partitionSort" sort-key="path">Path</SortableTh>
+                    <SortableTh :sort="partitionSort" sort-key="size">Size</SortableTh>
+                    <SortableTh :sort="partitionSort" sort-key="mountpoint">Mountpoint</SortableTh>
+                    <SortableTh :sort="partitionSort" sort-key="pool">ZFS Pool</SortableTh>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="p in selectedDisk.partitions" :key="p.name">
+                  <tr v-for="p in partitionSort.sorted.value" :key="p.name">
                     <td class="mono font-semibold">{{ p.name }}</td>
                     <td class="mono" style="font-size: 11px">{{ p.devicePath }}</td>
                     <td class="mono">{{ formatBytes(p.sizeBytes) }}</td>
@@ -578,7 +603,7 @@ function goToPool(poolName: string) {
               </table>
             </div>
             <div v-else style="color: var(--text-secondary); font-size: 12px; padding: 12px; background: var(--bg-base); border-radius: 6px">
-              No partitions found. This device is managed as a whole block storage disk.
+              No partitions.
             </div>
           </div>
         </div>

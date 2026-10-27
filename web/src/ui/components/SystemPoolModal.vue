@@ -102,16 +102,13 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
+  <div class="modal-backdrop">
     <div class="modal-card">
       <div class="modal-header">
         <div style="display: flex; align-items: center; gap: 10px">
           <MdiIcon :path="mdiDatabase" size="22" style="color: var(--accent-primary, #3b82f6)" />
           <div>
             <h3 class="modal-title">Select Main Storage Pool</h3>
-            <p class="modal-subtitle">
-              Designate the primary ZFS pool to store system configuration, container state, and virtual machine metadata.
-            </p>
           </div>
         </div>
         <button class="btn btn-sm btn-icon" @click="emit('close')">

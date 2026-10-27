@@ -267,7 +267,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
+  <div class="modal-backdrop">
     <div
       class="modal-card docker-terminal-card"
       :class="{ 'docker-terminal-fullscreen': isFullscreen }"
@@ -395,7 +395,7 @@ onBeforeUnmount(() => {
       <!-- Quick status footer -->
       <div class="docker-terminal-footer">
         <span class="mono" style="font-size: 11px; color: var(--text-secondary)">
-          {{ currentContainer?.name || selectedContainerId }} &bull; {{ selectedShell }} &bull; Interactive PTY (VT100/xterm)
+          {{ currentContainer?.name || selectedContainerId }} &bull; {{ selectedShell }}
         </span>
         <span style="font-size: 11px; color: var(--text-secondary)">
           Press <kbd style="background: var(--bg-elevated); border: 1px solid var(--border-subtle); color: var(--text-primary); padding: 1px 4px; border-radius: 3px; font-size: 10px">Ctrl+C</kbd> or type <code class="mono" style="color: var(--accent-primary)">exit</code> to end session

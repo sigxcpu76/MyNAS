@@ -167,7 +167,7 @@ describe('Overview Dashboard & Telemetry', () => {
   it('renders RAM information with pie chart breakdown and formatted values', () => {
     const wrapper = mount(OverviewView);
 
-    expect(wrapper.text()).toContain('Memory Allocation (RAM)');
+    expect(wrapper.text()).toContain('Memory');
     expect(wrapper.text()).toContain('Services & Apps');
     expect(wrapper.text()).toContain('ZFS ARC Cache');
     expect(wrapper.text()).toContain('Buffers / Cache');
@@ -186,7 +186,7 @@ describe('Overview Dashboard & Telemetry', () => {
     expect(fastfetch.text()).toContain('American Megatrends Inc.');
     expect(fastfetch.text()).toContain('RTX A5000');
     expect(fastfetch.text()).toContain('AMD Radeon RX 6600');
-    expect(fastfetch.find('.ascii-art').exists()).toBe(true);
+    expect(fastfetch.find('.ascii-art').exists()).toBe(false);
   });
 
   it('renders system network interface with IPs, MAC, and live in/out throughput graph', () => {
@@ -197,7 +197,7 @@ describe('Overview Dashboard & Telemetry', () => {
 
     // Displays system interface only
     expect(netCard.text()).toContain('enp15s0');
-    expect(netCard.text()).toContain('Primary / System');
+    expect(netCard.text()).not.toContain('Primary / System');
     expect(netCard.text()).toContain('ONLINE');
     expect(netCard.text()).toContain('192.168.1.100');
     expect(netCard.text()).toContain('00:11:22:33:44:55');

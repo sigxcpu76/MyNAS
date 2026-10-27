@@ -95,7 +95,7 @@ describe('Prerequisites Top Bar Button & Modal', () => {
       const wrapper = mount(PrerequisitesModal);
 
       // Verify modal headers and status
-      expect(wrapper.text()).toContain('System Prerequisites & Host Compliance');
+      expect(wrapper.text()).toContain('Prerequisites');
       expect(wrapper.text()).toContain('Instructions to Fix Missing Prerequisites');
       expect(wrapper.text()).toContain('Copy Fix Command');
 

@@ -3,7 +3,30 @@ import { reactive, ref } from 'vue';
 import { services } from '../../container';
 import type { Group, User } from '../../domain/models';
 import SkeletonBox from '../components/SkeletonBox.vue';
-import { askModal, confirmModal, nasState, notify } from '../store';
+import SortableTh from '../components/SortableTh.vue';
+import { useTableSort } from '../composables/useTableSort';
+import { nasState, notify } from '../store';
+import { confirmDelete } from '../modal';
+
+const userSort = useTableSort(
+  () => nasState.users,
+  {
+    username: (u: User) => u.username,
+    groups: (u: User) => u.primaryGroup,
+    // Disabled SSH sorts first, then enabled users by number of authorized keys
+    ssh: (u: User) => (u.sshEnabled ? 1 + (u.sshAuthorizedKeys || []).length : 0),
+    status: (u: User) => (u.locked ? 'LOCKED' : 'ACTIVE'),
+  }
+);
+
+const groupSort = useTableSort(
+  () => nasState.groups,
+  {
+    name: (g: Group) => g.groupName,
+    gid: (g: Group) => g.gid,
+    members: (g: Group) => (g.members || []).length,
+  }
+);
 
 const showCreateUser = ref(false);
 const userForm = reactive({
@@ -152,13 +175,13 @@ async function handleSaveUserEdit() {
   }
 }
 
-async function handleDeleteUser(name: string) {
-  const shortName = name.replace(/^users\//, '');
-  const res = await askModal({
-    title: 'Delete Linux User',
-    tone: 'danger',
-    message: `Are you sure you want to delete user "${shortName}"?`,
-    details: 'The user account will be permanently removed from Linux PAM and /etc/passwd.',
+async function handleDeleteUser(u: User) {
+  const name = u.name;
+  const shortName = u.username || name.replace(/^users\//, '');
+  const res = await confirmDelete({
+    kind: 'User',
+    name: shortName,
+    details: 'The Linux user account will be permanently removed.',
     confirmText: 'Delete User',
     checkbox: {
       label: 'Also permanently remove user home directory and files',
@@ -219,16 +242,16 @@ async function handleSaveGroupEdit() {
   }
 }
 
-async function handleDeleteGroup(name: string) {
-  const shortName = name.replace(/^groups\//, '');
-  const confirmed = await confirmModal({
-    title: 'Delete Linux Group',
-    tone: 'danger',
-    message: `Are you sure you want to delete group "${shortName}"?`,
-    details: 'The group will be removed from /etc/group on the Linux host.',
+async function handleDeleteGroup(g: Group) {
+  const name = g.name;
+  const shortName = g.groupName || name.replace(/^groups\//, '');
+  const res = await confirmDelete({
+    kind: 'Group',
+    name: shortName,
+    details: 'The group will be removed from the Linux host.',
     confirmText: 'Delete Group',
   });
-  if (!confirmed) return;
+  if (!res.confirmed) return;
 
   try {
     await services.identity.deleteGroup(name);
@@ -246,13 +269,7 @@ async function handleDeleteGroup(name: string) {
     <div class="card">
       <div class="card-header">
         <div>
-          <h2 class="card-title" style="font-size: 17px">
-            Linux Users & OpenSSH Access Control (`users/{user}`)
-          </h2>
-          <p class="card-subtitle">
-            Manage `/etc/passwd` accounts, UID/GID membership, login shells, SSH daemon access, and
-            `~/.ssh/authorized_keys` public keys.
-          </p>
+          <h2 class="card-title" style="font-size: 17px">Users</h2>
         </div>
 
         <div style="display: flex; align-items: center; gap: 12px">
@@ -262,10 +279,10 @@ async function handleDeleteGroup(name: string) {
               type="checkbox"
               @change="refreshIdentity"
             />
-            Show System Accounts (`uid < 1000`)
+            Show System Accounts
           </label>
           <button class="btn btn-primary" @click="showCreateUser = !showCreateUser">
-            {{ showCreateUser ? 'Cancel' : '+ Create Linux User' }}
+            {{ showCreateUser ? 'Cancel' : '+ Create User' }}
           </button>
         </div>
       </div>
@@ -284,11 +301,11 @@ async function handleDeleteGroup(name: string) {
       >
         <div class="form-grid">
           <div class="form-group">
-            <label>Username (`user_id`)</label>
+            <label>Username</label>
             <input v-model="userForm.userId" class="input mono" placeholder="devops" required />
           </div>
           <div class="form-group">
-            <label>Full Name (GECOS)</label>
+            <label>Full Name</label>
             <input v-model="userForm.fullName" class="input" placeholder="DevOps Engineer" />
           </div>
           <div class="form-group">
@@ -319,7 +336,7 @@ async function handleDeleteGroup(name: string) {
         </div>
 
         <div class="form-group" style="margin-top: 12px">
-          <label>SSH Public Keys (`~/.ssh/authorized_keys`, one key per line)</label>
+          <label>SSH Public Keys (one per line)</label>
           <textarea
             v-model="userForm.sshAuthorizedKeysText"
             rows="2"
@@ -331,16 +348,16 @@ async function handleDeleteGroup(name: string) {
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; flex-wrap: wrap; gap: 12px">
           <div style="display: flex; gap: 16px; font-size: 12.5px">
             <label style="display: flex; align-items: center; gap: 6px">
-              <input v-model="userForm.sshEnabled" type="checkbox" /> Enable SSH Login (`AllowUsers`)
+              <input v-model="userForm.sshEnabled" type="checkbox" /> Enable SSH Login
             </label>
             <label style="display: flex; align-items: center; gap: 6px">
               <input v-model="userForm.sshPasswordAuth" type="checkbox" /> Allow SSH Password Auth
             </label>
             <label style="display: flex; align-items: center; gap: 6px">
-              <input v-model="userForm.isAdmin" type="checkbox" /> NAS Admin (`sudo`)
+              <input v-model="userForm.isAdmin" type="checkbox" /> NAS Admin
             </label>
           </div>
-          <button type="submit" class="btn btn-primary">Create User & Write SSH Keys</button>
+          <button type="submit" class="btn btn-primary">Create User</button>
         </div>
       </form>
 
@@ -356,7 +373,7 @@ async function handleDeleteGroup(name: string) {
         "
       >
         <div style="font-weight: 600; margin-bottom: 10px">
-          PATCH {{ editingUser.name }} — Identity, Groups & OpenSSH `authorized_keys`
+          Edit {{ editingUser.username }}
         </div>
         <div class="form-grid">
           <div class="form-group">
@@ -381,13 +398,17 @@ async function handleDeleteGroup(name: string) {
             </select>
           </div>
           <div class="form-group">
+            <label>Home Directory</label>
+            <input :value="editingUser.homeDirectory" class="input mono" readonly />
+          </div>
+          <div class="form-group">
             <label>New Password (leave blank to keep current)</label>
             <input v-model="editUserForm.password" type="password" class="input" />
           </div>
         </div>
 
         <div class="form-group" style="margin-top: 10px">
-          <label>SSH Public Keys (`~/.ssh/authorized_keys`)</label>
+          <label>SSH Public Keys (one per line)</label>
           <textarea
             v-model="editUserForm.sshAuthorizedKeysText"
             rows="3"
@@ -405,7 +426,7 @@ async function handleDeleteGroup(name: string) {
               <input v-model="editUserForm.sshPasswordAuth" type="checkbox" /> SSH Password Auth
             </label>
             <label style="display: flex; align-items: center; gap: 5px">
-              <input v-model="editUserForm.locked" type="checkbox" /> Lock Account (`usermod -L`)
+              <input v-model="editUserForm.locked" type="checkbox" /> Lock Account
             </label>
             <label style="display: flex; align-items: center; gap: 5px">
               <input v-model="editUserForm.isAdmin" type="checkbox" /> NAS Admin
@@ -414,7 +435,7 @@ async function handleDeleteGroup(name: string) {
           <div style="display: flex; gap: 8px">
             <button class="btn btn-sm" @click="editingUser = null">Cancel</button>
             <button class="btn btn-primary btn-sm" @click="handleSaveUserEdit">
-              Save User & SSH Policy
+              Save
             </button>
           </div>
         </div>
@@ -425,11 +446,10 @@ async function handleDeleteGroup(name: string) {
         <table class="data-table">
           <thead>
             <tr>
-              <th>Username / UID</th>
-              <th>Groups</th>
-              <th>Home & Shell</th>
-              <th>SSH Access & Keys</th>
-              <th>Status</th>
+              <SortableTh :sort="userSort" sort-key="username">Username / UID</SortableTh>
+              <SortableTh :sort="userSort" sort-key="groups">Groups</SortableTh>
+              <SortableTh :sort="userSort" sort-key="ssh">SSH Access & Keys</SortableTh>
+              <SortableTh :sort="userSort" sort-key="status">Status</SortableTh>
               <th>Actions</th>
             </tr>
           </thead>
@@ -449,12 +469,6 @@ async function handleDeleteGroup(name: string) {
                     <SkeletonBox width="160px" height="11px" />
                   </div>
                 </td>
-                <td>
-                  <div style="display: flex; flex-direction: column; gap: 4px">
-                    <SkeletonBox width="110px" height="13px" />
-                    <SkeletonBox width="80px" height="11px" />
-                  </div>
-                </td>
                 <td><SkeletonBox width="90px" height="20px" rounded="10px" /></td>
                 <td><SkeletonBox width="65px" height="20px" rounded="10px" /></td>
                 <td>
@@ -467,12 +481,12 @@ async function handleDeleteGroup(name: string) {
             </template>
 
             <tr v-else-if="nasState.users.length === 0">
-              <td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 32px">
-                No Linux user accounts found.
+              <td colspan="5" style="text-align: center; color: var(--text-secondary); padding: 32px">
+                No users.
               </td>
             </tr>
 
-            <tr v-for="u in nasState.users" :key="u.name">
+            <tr v-for="u in userSort.sorted.value" :key="u.name">
               <td>
                 <div style="font-weight: 600">
                   {{ u.username }}
@@ -489,10 +503,6 @@ async function handleDeleteGroup(name: string) {
                 <div style="font-size: 11px; color: var(--text-secondary)">
                   Groups: {{ (u.supplementaryGroups || []).join(', ') || '—' }}
                 </div>
-              </td>
-              <td class="mono" style="font-size: 12px">
-                <div>{{ u.homeDirectory }}</div>
-                <div style="font-size: 11px; color: var(--text-secondary)">{{ u.shell }}</div>
               </td>
               <td>
                 <span class="badge" :class="u.sshEnabled ? 'badge-success' : 'badge-neutral'">
@@ -522,7 +532,7 @@ async function handleDeleteGroup(name: string) {
                   <button class="btn btn-sm" @click="startEditUser(u)">
                     Edit / SSH Keys
                   </button>
-                  <button class="btn btn-danger btn-sm" @click="handleDeleteUser(u.name)">
+                  <button class="btn btn-danger btn-sm" @click="handleDeleteUser(u)">
                     Del
                   </button>
                 </div>
@@ -537,8 +547,7 @@ async function handleDeleteGroup(name: string) {
     <div class="card">
       <div class="card-header">
         <div>
-          <h3 class="card-title">Linux System Groups (`groups/{group}`)</h3>
-          <p class="card-subtitle">Manage POSIX group GIDs and user memberships (`/etc/group`)</p>
+          <h3 class="card-title">Groups</h3>
         </div>
 
         <button class="btn btn-primary btn-sm" @click="showCreateGroup = !showCreateGroup">
@@ -559,7 +568,7 @@ async function handleDeleteGroup(name: string) {
       >
         <div class="form-grid">
           <div class="form-group">
-            <label>Group Name (`group_id`)</label>
+            <label>Group Name</label>
             <input v-model="groupForm.groupId" class="input mono" placeholder="media-editors" required />
           </div>
           <div class="form-group">
@@ -594,7 +603,7 @@ async function handleDeleteGroup(name: string) {
           Members of {{ editingGroup.groupName }}:
         </span>
         <input v-model="editGroupMembersText" class="input mono" style="flex: 1" />
-        <button class="btn btn-primary btn-sm" @click="handleSaveGroupEdit">Save PATCH</button>
+        <button class="btn btn-primary btn-sm" @click="handleSaveGroupEdit">Save</button>
         <button class="btn btn-sm" @click="editingGroup = null">Cancel</button>
       </div>
 
@@ -602,14 +611,14 @@ async function handleDeleteGroup(name: string) {
         <table class="data-table">
           <thead>
             <tr>
-              <th>Group Name</th>
-              <th>GID</th>
-              <th>Members</th>
+              <SortableTh :sort="groupSort" sort-key="name">Group Name</SortableTh>
+              <SortableTh :sort="groupSort" sort-key="gid">GID</SortableTh>
+              <SortableTh :sort="groupSort" sort-key="members">Members</SortableTh>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="g in nasState.groups" :key="g.name">
+            <tr v-for="g in groupSort.sorted.value" :key="g.name">
               <td class="mono" style="font-weight: 600">{{ g.groupName }}</td>
               <td class="mono">{{ g.gid }}</td>
               <td>
@@ -629,7 +638,7 @@ async function handleDeleteGroup(name: string) {
               <td>
                 <div style="display: flex; gap: 6px">
                   <button class="btn btn-sm" @click="startEditGroup(g)">Edit Members</button>
-                  <button class="btn btn-danger btn-sm" @click="handleDeleteGroup(g.name)">
+                  <button class="btn btn-danger btn-sm" @click="handleDeleteGroup(g)">
                     Del
                   </button>
                 </div>

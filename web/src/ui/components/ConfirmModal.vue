@@ -12,6 +12,11 @@ import { activeModal, closeActiveModal } from '../modal';
 
 const confirmBtnRef = ref<HTMLButtonElement | null>(null);
 const promptInputRef = ref<HTMLInputElement | null>(null);
+const phraseInputRef = ref<HTMLInputElement | null>(null);
+
+const phraseMatches = computed(
+  () => !activeModal.value?.confirmPhrase || activeModal.value.confirmPhraseValue === activeModal.value.confirmPhrase
+);
 
 const iconPath = computed(() => {
   if (!activeModal.value) return mdiHelpCircle;
@@ -73,6 +78,7 @@ function handleCancel() {
 }
 
 function handleConfirm() {
+  if (!phraseMatches.value) return;
   if (activeModal.value?.prompt?.required && !activeModal.value.inputValue.trim()) {
     return;
   }
@@ -99,7 +105,9 @@ watch(
   (open) => {
     if (open) {
       nextTick(() => {
-        if (activeModal.value?.prompt) {
+        if (activeModal.value?.confirmPhrase) {
+          phraseInputRef.value?.focus();
+        } else if (activeModal.value?.prompt) {
           promptInputRef.value?.focus();
         } else {
           confirmBtnRef.value?.focus();
@@ -122,7 +130,6 @@ onUnmounted(() => {
   <div
     v-if="activeModal && activeModal.isOpen"
     class="modal-backdrop"
-    @click.self="handleCancel"
   >
     <div class="modal-card confirm-modal-card" role="dialog" aria-modal="true">
       <!-- Header -->
@@ -170,6 +177,25 @@ onUnmounted(() => {
           />
         </div>
 
+        <!-- Type-to-confirm safety gate -->
+        <div v-if="activeModal.confirmPhrase" class="confirm-prompt-group">
+          <label class="confirm-prompt-label" for="confirm-phrase-input">
+            Type <code class="mono confirm-phrase">{{ activeModal.confirmPhrase }}</code> to confirm
+          </label>
+          <input
+            id="confirm-phrase-input"
+            ref="phraseInputRef"
+            v-model="activeModal.confirmPhraseValue"
+            type="text"
+            class="input mono"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            :placeholder="activeModal.confirmPhrase"
+            @paste.prevent
+          />
+        </div>
+
         <!-- Optional Checkbox Option -->
         <div v-if="activeModal.checkbox" class="confirm-checkbox-row">
           <label class="checkbox-label-wrapper">
@@ -202,6 +228,7 @@ onUnmounted(() => {
           ref="confirmBtnRef"
           type="button"
           :class="confirmBtnClass"
+          :disabled="!phraseMatches"
           @click="handleConfirm"
         >
           {{ activeModal.confirmText }}
@@ -306,6 +333,13 @@ onUnmounted(() => {
   font-size: 12.5px;
   font-weight: 600;
   color: var(--text-secondary);
+}
+
+.confirm-phrase {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+  padding: 1px 6px;
+  border-radius: 4px;
 }
 
 .confirm-checkbox-row {

@@ -641,14 +641,7 @@ func (a *Adapter) GetDataset(ctx context.Context, poolID, datasetID string) (*do
 		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
 
-	targetPath := datasetID
-	if !strings.Contains(targetPath, "/") {
-		if cleanDS == "root" || cleanDS == "" {
-			targetPath = cleanPool
-		} else {
-			targetPath = fmt.Sprintf("%s/%s", cleanPool, cleanDS)
-		}
-	}
+	targetPath := a.resolveZfsPath(ctx, cleanPool, cleanDS, "filesystem")
 
 	cmd := exec.CommandContext(ctx, "zfs", "list", "-j", "-p", "-o",
 		"name,type,used,available,referenced,mountpoint,compression,readonly,atime,recordsize,sync,quota,reservation,dedup", targetPath)
@@ -740,7 +733,7 @@ func (a *Adapter) UpdateDataset(ctx context.Context, dataset domain.ZfsDataset, 
 	cleanPool := strings.TrimPrefix(dataset.PoolID, "zfsPools/")
 	targetPath := dataset.DatasetPath
 	if targetPath == "" {
-		targetPath = fmt.Sprintf("%s/%s", cleanPool, dataset.ID)
+		targetPath = a.resolveZfsPath(ctx, cleanPool, dataset.ID, "filesystem")
 	}
 
 	if !a.canUseHostZfs() {
@@ -809,10 +802,7 @@ func (a *Adapter) DeleteDataset(ctx context.Context, poolID, datasetID string, r
 		return fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
 
-	targetPath := datasetID
-	if !strings.Contains(targetPath, "/") {
-		targetPath = fmt.Sprintf("%s/%s", cleanPool, cleanDS)
-	}
+	targetPath := a.resolveZfsPath(ctx, cleanPool, cleanDS, "filesystem")
 
 	args := []string{"destroy"}
 	if recursive {
@@ -832,10 +822,7 @@ func (a *Adapter) SnapshotDataset(ctx context.Context, poolID, datasetID, snapNa
 		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
 
-	targetPath := datasetID
-	if !strings.Contains(targetPath, "/") {
-		targetPath = fmt.Sprintf("%s/%s", cleanPool, cleanDS)
-	}
+	targetPath := a.resolveZfsPath(ctx, cleanPool, cleanDS, "filesystem")
 
 	snapTarget := fmt.Sprintf("%s@%s", targetPath, snapName)
 	if out, err := exec.CommandContext(ctx, "zfs", "snapshot", snapTarget).CombinedOutput(); err != nil {
@@ -851,10 +838,7 @@ func (a *Adapter) RollbackDataset(ctx context.Context, poolID, datasetID, snapNa
 		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
 
-	targetPath := datasetID
-	if !strings.Contains(targetPath, "/") {
-		targetPath = fmt.Sprintf("%s/%s", cleanPool, cleanDS)
-	}
+	targetPath := a.resolveZfsPath(ctx, cleanPool, cleanDS, "filesystem")
 
 	snapTarget := fmt.Sprintf("%s@%s", targetPath, snapName)
 	if out, err := exec.CommandContext(ctx, "zfs", "rollback", "-r", snapTarget).CombinedOutput(); err != nil {
@@ -868,18 +852,7 @@ func (a *Adapter) RollbackDataset(ctx context.Context, poolID, datasetID, snapNa
 // =============================================================================
 
 func (a *Adapter) resolveVolumePath(cleanPool, cleanVol string) string {
-	if strings.Contains(cleanVol, "/") {
-		if strings.HasPrefix(cleanVol, cleanPool+"/") {
-			return cleanVol
-		}
-		return fmt.Sprintf("%s/%s", cleanPool, cleanVol)
-	}
-	// Try slash-separated if cleanVol has hyphens
-	slashCandidate := fmt.Sprintf("%s/%s", cleanPool, strings.ReplaceAll(cleanVol, "-", "/"))
-	if _, err := exec.Command("zfs", "list", "-t", "volume", slashCandidate).Output(); err == nil {
-		return slashCandidate
-	}
-	return fmt.Sprintf("%s/%s", cleanPool, cleanVol)
+	return a.resolveZfsPath(context.Background(), cleanPool, cleanVol, "volume")
 }
 
 func (a *Adapter) ListVolumes(ctx context.Context, poolID string) ([]domain.ZfsVolume, error) {

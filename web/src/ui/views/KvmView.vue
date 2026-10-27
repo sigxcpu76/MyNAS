@@ -3,6 +3,8 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { services } from '../../container';
 import {
   formatBytes,
+  formatRelativeTime,
+  formatAbsoluteTime,
   type NetworkInterfaceTelemetry,
   type StorageImage,
   type VirtualMachine,
@@ -13,9 +15,12 @@ import {
   type VirtualMachineSnapshot,
 } from '../../domain/models';
 import { askModal, confirmModal, nasState, notify, refreshIsos as storeRefreshIsos } from '../store';
+import { confirmDelete } from '../modal';
 import NoVncModal from '../components/NoVncModal.vue';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
+import SortableTh from '../components/SortableTh.vue';
+import { useTableSort } from '../composables/useTableSort';
 import { generateNanosecondId, generateVMDiskFilePath, generateVMDiskName, generateZvolDiskPath, toZfsSafeSlug } from '../../domain/id';
 import {
   mdiClose,
@@ -127,7 +132,7 @@ const editMemoryForm = reactive({
 
 const showEditPlatformModal = ref(false);
 const editPlatformForm = reactive({
-  machineType: 'q35',
+  machineType: 'i440fx',
   biosType: 'seabios',
   tpmVersion: 'none',
   secureBoot: false,
@@ -157,10 +162,10 @@ const wizardForm = reactive({
   startupDelaySeconds: 0,
 
   // Step 2: System
-  machineType: 'q35',
-  biosType: 'ovmf',
-  tpmVersion: 'v2.0',
-  secureBoot: true,
+  machineType: 'i440fx',
+  biosType: 'seabios',
+  tpmVersion: 'none',
+  secureBoot: false,
   bootIso: '',
 
   // Step 3: Disks
@@ -205,8 +210,38 @@ const filteredVms = computed(() => {
       vm.name.toLowerCase().includes(q) ||
       (vm.description || '').toLowerCase().includes(q) ||
       (vm.guestOsName || '').toLowerCase().includes(q) ||
-      (vm.guestIpAddresses || []).some((ip) => ip.includes(q))
+      visibleGuestIps(vm).some((ip) => ip.includes(q))
   );
+});
+
+/** IPv6 link-local addresses (fe80::/10) are noise on IPv4 LANs, so hide them. */
+function isIpv6LinkLocal(ip: string): boolean {
+  return /^fe[89ab][0-9a-f]:/i.test(ip.trim());
+}
+
+function visibleGuestIps(vm: { guestIpAddresses?: string[] }): string[] {
+  return (vm.guestIpAddresses || []).filter((ip) => !isIpv6LinkLocal(ip));
+}
+
+const vmSort = useTableSort(filteredVms, {
+  name: (vm) => vm.vmName,
+  vcpus: (vm) => vm.vcpus,
+  memory: (vm) => vm.memoryMib,
+  ip: (vm) => visibleGuestIps(vm)[0],
+});
+
+const isoSort = useTableSort(() => nasState.isos, {
+  name: (iso) => iso.name,
+  size: (iso) => iso.sizeBytes,
+  modTime: (iso) => (iso.modTime ? new Date(iso.modTime) : null),
+});
+
+const snapshotSort = useTableSort(snapshotsList, {
+  id: (s) => s.snapshotId,
+  vmState: (s) => s.vmState || 'STOPPED',
+  includeRam: (s) => !!s.includeRam,
+  created: (s) => (s.createTime ? new Date(s.createTime) : null),
+  description: (s) => s.description,
 });
 
 const runningCount = computed(() => nasState.vms.filter((v) => v.state === 'RUNNING').length);
@@ -256,6 +291,55 @@ const defaultBridge = computed<string>(() => {
   return 'br0';
 });
 
+const socketOptions = [1, 2, 3, 4];
+
+const hostLogicalCores = computed<number>(() => {
+  const n = nasState.systemTelemetry?.cpu?.logicalCores;
+  return n && n > 0 ? Math.min(n, 128) : 16;
+});
+
+function coreOptionsFor(current: number): number[] {
+  const opts = Array.from({ length: hostLogicalCores.value }, (_, i) => i + 1);
+  if (current && !opts.includes(current)) opts.push(current);
+  return opts.sort((a, b) => a - b);
+}
+
+interface BridgeOption {
+  name: string;
+  label: string;
+}
+
+const hostBridgeInterfaces = computed<BridgeOption[]>(() => {
+  const net = nasState.systemTelemetry?.network;
+  if (!net || !Array.isArray(net)) return [];
+  return net
+    .filter(
+      (n: NetworkInterfaceTelemetry) =>
+        !n.name.startsWith('lo') &&
+        !n.name.startsWith('docker') &&
+        !n.name.startsWith('br-') &&
+        !n.name.startsWith('veth') &&
+        !n.name.startsWith('vnet') &&
+        !n.name.startsWith('tap') &&
+        !n.name.startsWith('lxc')
+    )
+    .map((n: NetworkInterfaceTelemetry) => {
+      const ip = n.ipAddresses?.find((a) => !a.includes(':')) || n.ipAddresses?.[0];
+      const parts = [n.isUp ? 'up' : 'down'];
+      if (ip) parts.push(ip);
+      if (n.isDefault) parts.push('default route');
+      return { name: n.name, label: `${n.name} (${parts.join(', ')})` };
+    });
+});
+
+function bridgeOptionsFor(current: string): BridgeOption[] {
+  const opts = [...hostBridgeInterfaces.value];
+  if (current && !opts.some((o) => o.name === current)) {
+    opts.unshift({ name: current, label: `${current} (not detected on host)` });
+  }
+  return opts;
+}
+
 function onVmNameInput() {
   wizardForm.vmId = toZfsSafeSlug(wizardForm.vmName);
   wizardForm.diskPath = suggestedDiskPath.value;
@@ -268,10 +352,10 @@ function openCreateWizard() {
   wizardForm.description = '';
   wizardForm.autostart = true;
   wizardForm.startupDelaySeconds = 0;
-  wizardForm.machineType = 'q35';
-  wizardForm.biosType = 'ovmf';
-  wizardForm.tpmVersion = 'v2.0';
-  wizardForm.secureBoot = true;
+  wizardForm.machineType = 'i440fx';
+  wizardForm.biosType = 'seabios';
+  wizardForm.tpmVersion = 'none';
+  wizardForm.secureBoot = false;
   wizardForm.bootIso = '';
   wizardForm.diskBus = 'scsi';
   wizardForm.diskPath = suggestedDiskPath.value;
@@ -472,14 +556,13 @@ async function handleRollbackSnapshot(snap: VirtualMachineSnapshot) {
 
 async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
   if (!inspectingVm.value) return;
-  const confirmed = await confirmModal({
-    title: 'Delete VM Snapshot',
-    tone: 'danger',
-    message: `Are you sure you want to delete snapshot "${snap.snapshotId}"?`,
-    details: 'This snapshot differential will be removed from the virtual machine storage volume.',
+  const res = await confirmDelete({
+    kind: 'Snapshot',
+    name: snap.snapshotId,
+    details: 'This snapshot will be permanently removed from the virtual machine.',
     confirmText: 'Delete Snapshot',
   });
-  if (!confirmed) return;
+  if (!res.confirmed) return;
 
   try {
     await services.kvm.deleteSnapshot(snap.name);
@@ -593,14 +676,13 @@ async function handleUploadIso(e: Event) {
 }
 
 async function handleDeleteIso(iso: StorageImage) {
-  const confirmed = await confirmModal({
-    title: 'Delete ISO Image',
-    tone: 'danger',
-    message: `Are you sure you want to delete ISO "${iso.name}"?`,
+  const res = await confirmDelete({
+    kind: 'ISO',
+    name: iso.name,
     details: `This will permanently remove ${iso.path} (${iso.sizeFormatted}) from the main pool.`,
     confirmText: 'Delete ISO',
   });
-  if (!confirmed) return;
+  if (!res.confirmed) return;
 
   try {
     await services.kvm.deleteIso(iso.name);
@@ -741,14 +823,14 @@ async function handleUpdateMemory() {
 
 function openEditPlatformModal() {
   if (!inspectingVm.value) return;
-  let mach = inspectingVm.value.machineType || 'q35';
+  let mach = inspectingVm.value.machineType || 'i440fx';
   if (mach === 'pc' || mach.startsWith('pc-i440fx')) {
     mach = 'i440fx';
   } else if (mach.startsWith('pc-q35')) {
     mach = 'q35';
   }
   editPlatformForm.machineType = mach;
-  editPlatformForm.biosType = inspectingVm.value.biosType || 'ovmf';
+  editPlatformForm.biosType = inspectingVm.value.biosType || 'seabios';
   editPlatformForm.tpmVersion = inspectingVm.value.tpmVersion || 'none';
   editPlatformForm.secureBoot = Boolean(inspectingVm.value.secureBoot);
   showEditPlatformModal.value = true;
@@ -829,14 +911,13 @@ async function handleSaveCloudInit() {
 
 // Delete VM
 async function handleDeleteVm(vm: VirtualMachine) {
-  const confirmed = await confirmModal({
-    title: 'Delete Virtual Machine',
-    tone: 'danger',
-    message: `Are you sure you want to delete virtual machine "${vm.vmName}"?`,
-    details: 'This will undefine the QEMU/KVM domain and remove all associated XML configurations, disks mappings, and NVRAM state.',
+  const res = await confirmDelete({
+    kind: 'Virtual Machine',
+    name: vm.vmName,
+    details: 'The domain definition, disk mappings and NVRAM state will be removed.',
     confirmText: 'Delete VM',
   });
-  if (!confirmed) return;
+  if (!res.confirmed) return;
 
   try {
     await services.kvm.deleteVirtualMachine(vm.name);
@@ -909,7 +990,7 @@ async function handleWizardSubmit() {
       },
     });
 
-    notify('success', `Successfully deployed Proxmox-grade VM ${created.vmName}`);
+    notify('success', `Created VM ${created.vmName}`);
     if (wizardForm.bootIso) {
       try {
         await services.kvm.attachMedia(created.name, wizardForm.bootIso);
@@ -929,7 +1010,7 @@ async function handleWizardSubmit() {
 <template>
   <div style="display: flex; flex-direction: column; gap: 20px">
     <!-- Top Summary Banner -->
-    <div class="grid-4">
+    <div class="grid-3">
       <div class="card">
         <div class="card-header" style="margin-bottom: 6px">
           <span class="card-subtitle">Virtual Machines</span>
@@ -937,9 +1018,6 @@ async function handleWizardSubmit() {
         </div>
         <div style="font-size: 24px; font-weight: 700; color: var(--text-primary)">
           {{ nasState.vms.length }}
-          <span style="font-size: 13px; color: var(--text-secondary); font-weight: normal; margin-left: 6px">
-            Proxmox KVM Domains
-          </span>
         </div>
       </div>
 
@@ -950,9 +1028,6 @@ async function handleWizardSubmit() {
         </div>
         <div style="font-size: 24px; font-weight: 700; color: var(--text-primary)">
           {{ totalVcpus }}
-          <span style="font-size: 13px; color: var(--text-secondary); font-weight: normal; margin-left: 6px">
-            Assigned Cores
-          </span>
         </div>
       </div>
 
@@ -963,23 +1038,7 @@ async function handleWizardSubmit() {
         </div>
         <div style="font-size: 24px; font-weight: 700; color: var(--text-primary)">
           {{ formatBytes(totalMemoryMib * 1024 * 1024) }}
-          <span style="font-size: 13px; color: var(--text-secondary); font-weight: normal; margin-left: 6px">
-            Memory
-          </span>
         </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header" style="margin-bottom: 6px">
-          <span class="card-subtitle">Hypervisor Engine</span>
-          <span class="badge badge-neutral mono">QEMU / Libvirt</span>
-        </div>
-        <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-top: 4px">
-          ZFS ZVols + noVNC + QGA
-        </div>
-        <p class="card-subtitle" style="margin-top: 4px">
-          Proxmox VE Parity Architecture
-        </p>
       </div>
     </div>
 
@@ -987,12 +1046,7 @@ async function handleWizardSubmit() {
     <div class="card">
       <div class="card-header">
         <div>
-          <h2 class="card-title" style="font-size: 17px">
-            KVM Virtual Machines (`virtualMachines/{virtual_machine}`)
-          </h2>
-          <p class="card-subtitle">
-            Enterprise QEMU/KVM virtual machines with UEFI OVMF, TPM 2.0, multi-disk ZVol topologies, Cloud-Init, and live snapshots.
-          </p>
+          <h2 class="card-title" style="font-size: 17px">Virtual Machines</h2>
         </div>
 
         <div style="display: flex; gap: 10px; align-items: center">
@@ -1021,13 +1075,10 @@ async function handleWizardSubmit() {
         <table class="data-table">
           <thead>
             <tr>
-              <th>Status</th>
-              <th>Name & ID</th>
-              <th>Processors</th>
-              <th>Memory</th>
-              <th>Disks</th>
-              <th>IP Addresses (QGA)</th>
-              <th>Firmware / System</th>
+              <SortableTh :sort="vmSort" sort-key="name">Name</SortableTh>
+              <SortableTh :sort="vmSort" sort-key="vcpus">vCPUs</SortableTh>
+              <SortableTh :sort="vmSort" sort-key="memory">Memory</SortableTh>
+              <SortableTh :sort="vmSort" sort-key="ip">IP Addresses</SortableTh>
               <th style="text-align: right">Actions</th>
             </tr>
           </thead>
@@ -1035,18 +1086,10 @@ async function handleWizardSubmit() {
             <!-- Moving Skeleton Placeholders when Loading -->
             <template v-if="nasState.loading && nasState.vms.length === 0">
               <tr v-for="r in 4" :key="r">
-                <td><SkeletonBox width="70px" height="20px" rounded="10px" /></td>
-                <td>
-                  <div style="display: flex; flex-direction: column; gap: 4px">
-                    <SkeletonBox width="140px" height="15px" />
-                    <SkeletonBox width="100px" height="11px" />
-                  </div>
-                </td>
+                <td><SkeletonBox width="140px" height="15px" /></td>
+                <td><SkeletonBox width="30px" height="14px" /></td>
                 <td><SkeletonBox width="60px" height="14px" /></td>
-                <td><SkeletonBox width="75px" height="14px" /></td>
-                <td><SkeletonBox width="90px" height="14px" /></td>
                 <td><SkeletonBox width="110px" height="14px" /></td>
-                <td><SkeletonBox width="85px" height="14px" /></td>
                 <td style="text-align: right">
                   <div style="display: inline-flex; gap: 6px; justify-content: flex-end">
                     <SkeletonBox width="26px" height="26px" rounded="4px" />
@@ -1058,7 +1101,7 @@ async function handleWizardSubmit() {
             </template>
 
             <tr v-else-if="filteredVms.length === 0">
-              <td colspan="8" style="text-align: center; color: var(--text-secondary); padding: 36px">
+              <td colspan="5" style="text-align: center; color: var(--text-secondary); padding: 36px">
                 <div v-if="searchQuery">
                   No virtual machines match filter "<strong>{{ searchQuery }}</strong>".
                 </div>
@@ -1068,90 +1111,54 @@ async function handleWizardSubmit() {
               </td>
             </tr>
 
-            <tr v-for="vm in filteredVms" :key="vm.name">
-              <!-- State -->
-              <td>
-                <span
-                  class="badge mono"
-                  :class="vm.state === 'RUNNING' ? 'badge-success' : (vm.state === 'PAUSED' ? 'badge-warning' : 'badge-neutral')"
-                  style="display: inline-flex; align-items: center; gap: 5px"
-                >
-                  <span
-                    v-if="vm.state === 'RUNNING'"
-                    style="width: 7px; height: 7px; border-radius: 50%; background: var(--success); display: inline-block"
-                  ></span>
-                  {{ vm.state }}
-                </span>
-              </td>
-
-              <!-- Name & ID -->
+            <tr
+              v-for="vm in vmSort.sorted.value"
+              :key="vm.name"
+              class="vm-row"
+              :class="`vm-row-${(vm.state || 'unknown').toLowerCase()}`"
+              :title="vm.state"
+            >
+              <!-- Name (row tint conveys power state) -->
               <td>
                 <div class="font-semibold" style="color: var(--text-primary); cursor: pointer" @click="openInspector(vm)">
                   {{ vm.vmName }}
-                </div>
-                <div class="mono text-muted" style="font-size: 11px">
-                  {{ vm.name.replace('virtualMachines/', '') }}
                   <span v-if="vm.isTemplate" class="badge badge-warning" style="font-size: 9px; margin-left: 4px">TEMPLATE</span>
                 </div>
-              </td>
-
-              <!-- CPU -->
-              <td class="mono" style="font-size: 12px">
-                {{ vm.vcpus }} vCPU
-                <span v-if="vm.sockets && vm.cores" class="text-muted" style="font-size: 11px">
-                  ({{ vm.sockets }}s / {{ vm.cores }}c)
-                </span>
-                <div class="text-muted" style="font-size: 10px">{{ vm.cpuType || 'host' }}</div>
-              </td>
-
-              <!-- Memory -->
-              <td class="mono" style="font-size: 12px">
-                {{ formatBytes(vm.memoryMib * 1024 * 1024) }}
-                <div v-if="vm.balloonMinMib && vm.balloonMinMib !== vm.memoryMib" class="text-muted" style="font-size: 10px">
-                  Min: {{ formatBytes(vm.balloonMinMib * 1024 * 1024) }}
+                <div
+                  v-if="vm.name.replace('virtualMachines/', '') !== vm.vmName"
+                  class="mono text-muted"
+                  style="font-size: 11px"
+                >
+                  {{ vm.name.replace('virtualMachines/', '') }}
                 </div>
               </td>
 
-              <!-- Disks -->
-              <td class="mono" style="font-size: 11px">
-                <span v-if="vm.disks && vm.disks.length > 0">
-                  {{ vm.disks.length }} drive(s)
-                  <div class="text-muted" style="font-size: 10px">
-                    {{ vm.disks[0].id }} ({{ formatBytes(vm.disks[0].sizeBytes) }})
-                  </div>
-                </span>
-                <span v-else-if="vm.diskPath">
-                  {{ vm.diskPath.split('/').pop() }}
-                </span>
-                <span v-else class="text-muted">-</span>
+              <!-- vCPUs (total threads) -->
+              <td class="mono" style="font-size: 12px">{{ vm.vcpus }}</td>
+
+              <!-- Memory -->
+              <td class="mono" style="font-size: 12px; white-space: nowrap">
+                {{ formatBytes(vm.memoryMib * 1024 * 1024) }}
               </td>
 
               <!-- IP Addresses -->
               <td>
-                <div v-if="vm.guestIpAddresses && vm.guestIpAddresses.length > 0" style="display: flex; flex-direction: column; gap: 2px">
+                <div v-if="visibleGuestIps(vm).length > 0" style="display: flex; flex-direction: column; gap: 2px">
                   <span
-                    v-for="ip in vm.guestIpAddresses.slice(0, 2)"
+                    v-for="ip in visibleGuestIps(vm).slice(0, 2)"
                     :key="ip"
                     class="badge mono badge-neutral"
                     style="font-size: 10px; width: fit-content"
                   >
                     {{ ip }}
                   </span>
-                  <span v-if="vm.guestIpAddresses.length > 2" class="text-muted" style="font-size: 10px">
-                    +{{ vm.guestIpAddresses.length - 2 }} more
+                  <span v-if="visibleGuestIps(vm).length > 2" class="text-muted" style="font-size: 10px">
+                    +{{ visibleGuestIps(vm).length - 2 }} more
                   </span>
                 </div>
                 <span v-else class="text-muted" style="font-size: 11px">
-                  {{ vm.state === 'RUNNING' ? 'Querying QGA...' : 'Offline' }}
+                  {{ vm.state !== 'RUNNING' ? 'Offline' : (vm.guestIpAddresses?.length ? '—' : 'Querying...') }}
                 </span>
-              </td>
-
-              <!-- Firmware -->
-              <td class="mono" style="font-size: 11px">
-                <div>{{ (vm.biosType || 'seabios').toUpperCase() }} ({{ vm.machineType || 'q35' }})</div>
-                <div v-if="vm.tpmVersion === 'v2.0'" style="color: var(--accent-primary); font-size: 10px">
-                  vTPM 2.0 active
-                </div>
               </td>
 
               <!-- Actions -->
@@ -1209,10 +1216,10 @@ async function handleWizardSubmit() {
                   <button
                     class="btn btn-xs btn-primary"
                     :disabled="vm.state !== 'RUNNING'"
-                    title="Open noVNC Console"
+                    title="Open Console"
                     @click="handleOpenConsole(vm)"
                   >
-                    <MdiIcon :path="mdiConsole" size="13" style="margin-right: 3px" /> Console
+                    <MdiIcon :path="mdiConsole" size="13" />
                   </button>
 
                   <!-- Clone -->
@@ -1255,14 +1262,7 @@ async function handleWizardSubmit() {
     <div class="card">
       <div class="card-header">
         <div>
-          <h2 class="card-title" style="font-size: 17px; display: flex; align-items: center; gap: 8px">
-            <MdiIcon :path="mdiDisc" size="20" style="color: var(--accent-primary)" />
-            ISOs Repository
-          </h2>
-          <p class="card-subtitle">
-            Bootable installer ISO and CD/DVD images stored on main pool dataset
-            <code class="mono">/nas/{{ mainPool }}/isos</code>.
-          </p>
+          <h2 class="card-title" style="font-size: 17px">ISOs</h2>
         </div>
 
         <div style="display: flex; gap: 10px; align-items: center">
@@ -1320,17 +1320,16 @@ async function handleWizardSubmit() {
         <table class="data-table">
           <thead>
             <tr>
-              <th>ISO Image Name</th>
-              <th>File Size</th>
-              <th>Absolute Path</th>
-              <th>Last Modified</th>
+              <SortableTh :sort="isoSort" sort-key="name">ISO Image Name</SortableTh>
+              <SortableTh :sort="isoSort" sort-key="size">File Size</SortableTh>
+              <SortableTh :sort="isoSort" sort-key="modTime">Last Modified</SortableTh>
               <th style="text-align: right">Actions</th>
             </tr>
           </thead>
           <tbody>
             <!-- Active Upload Row -->
             <tr v-if="isUploadingIso && isoUploadProgress">
-              <td colspan="5" style="padding: 14px 16px; background: rgba(59, 130, 246, 0.04)">
+              <td colspan="4" style="padding: 14px 16px; background: rgba(59, 130, 246, 0.04)">
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 12px">
                   <span class="mono" style="font-weight: 600">{{ isoUploadProgress.filename }} (Uploading)</span>
                   <span class="mono">{{ formatBytes(isoUploadProgress.loaded) }} / {{ formatBytes(isoUploadProgress.total) }} ({{ isoUploadProgress.percent }}%)</span>
@@ -1346,31 +1345,31 @@ async function handleWizardSubmit() {
               <tr v-for="r in 2" :key="r">
                 <td><SkeletonBox width="160px" height="15px" /></td>
                 <td><SkeletonBox width="70px" height="15px" /></td>
-                <td><SkeletonBox width="260px" height="15px" /></td>
                 <td><SkeletonBox width="120px" height="15px" /></td>
                 <td style="text-align: right"><SkeletonBox width="60px" height="24px" rounded="4px" /></td>
               </tr>
             </template>
 
             <tr v-else-if="nasState.isos.length === 0">
-              <td colspan="5" style="text-align: center; color: var(--text-secondary); padding: 36px">
+              <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 36px">
                 No ISO images found in repository. Click <strong>"Upload ISO"</strong> to upload an installer image (.iso, .img).
               </td>
             </tr>
 
-            <tr v-for="iso in nasState.isos" :key="iso.name">
+            <tr v-for="iso in isoSort.sorted.value" :key="iso.name">
               <td style="font-weight: 600">
                 <div style="display: flex; align-items: center; gap: 8px">
                   <MdiIcon :path="mdiDisc" size="16" style="color: var(--accent-primary)" />
-                  <span class="mono">{{ iso.name }}</span>
+                  <span class="mono" :title="iso.path">{{ iso.name }}</span>
                 </div>
               </td>
               <td class="mono">{{ iso.sizeFormatted }}</td>
-              <td class="mono" style="font-size: 11px; color: var(--text-secondary)">
-                {{ iso.path }}
-              </td>
-              <td class="mono" style="font-size: 11px; color: var(--text-muted)">
-                {{ iso.modTime ? new Date(iso.modTime).toLocaleString() : '—' }}
+              <td
+                class="mono"
+                style="font-size: 11px; color: var(--text-muted); white-space: nowrap"
+                :title="formatAbsoluteTime(iso.modTime)"
+              >
+                {{ formatRelativeTime(iso.modTime) }}
               </td>
               <td style="text-align: right">
                 <div style="display: inline-flex; gap: 6px">
@@ -1399,7 +1398,7 @@ async function handleWizardSubmit() {
     <!-- ======================================================================= -->
     <!-- PROXMOX-STYLE VM INSPECTOR MODAL -->
     <!-- ======================================================================= -->
-    <div v-if="inspectingVm" class="modal-backdrop" @click.self="inspectingVm = null">
+    <div v-if="inspectingVm" class="modal-backdrop">
       <div class="modal-card" style="max-width: 960px; width: 95vw; max-height: 90vh; display: flex; flex-direction: column">
         <!-- Modal Header -->
         <div style="padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center">
@@ -1419,7 +1418,7 @@ async function handleWizardSubmit() {
                 </span>
               </div>
               <div class="mono text-muted" style="font-size: 11px">
-                {{ inspectingVm.name }} (UUID: {{ inspectingVm.uuid || 'N/A' }})
+                {{ inspectingVm.name.replace('virtualMachines/', '') }} (UUID: {{ inspectingVm.uuid || 'N/A' }})
               </div>
             </div>
           </div>
@@ -1503,7 +1502,7 @@ async function handleWizardSubmit() {
             <!-- Telemetry Gauges -->
             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px">
               <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px">
-                <div class="card-subtitle">CPU Usage (QEMU/QGA)</div>
+                <div class="card-subtitle">CPU Usage</div>
                 <div style="font-size: 22px; font-weight: 700; color: var(--text-primary); margin-top: 4px">
                   {{ inspectingVm.guestCpuPercent ? inspectingVm.guestCpuPercent.toFixed(1) + '%' : '-' }}
                 </div>
@@ -1539,11 +1538,11 @@ async function handleWizardSubmit() {
             <!-- Guest Network IP Addresses -->
             <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 16px">
               <div style="font-weight: 600; font-size: 13px; margin-bottom: 10px; color: var(--text-primary)">
-                Guest Network IP Addresses (Reported by QGA)
+                IP Addresses
               </div>
-              <div v-if="inspectingVm.guestIpAddresses && inspectingVm.guestIpAddresses.length > 0" style="display: flex; flex-wrap: wrap; gap: 8px">
+              <div v-if="visibleGuestIps(inspectingVm).length > 0" style="display: flex; flex-wrap: wrap; gap: 8px">
                 <code
-                  v-for="ip in inspectingVm.guestIpAddresses"
+                  v-for="ip in visibleGuestIps(inspectingVm)"
                   :key="ip"
                   class="mono"
                   style="font-size: 12px; background: var(--bg-surface); padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border-subtle)"
@@ -1702,13 +1701,6 @@ async function handleWizardSubmit() {
           <!-- TAB 3: CLOUD-INIT -->
           <!-- ========================================== -->
           <div v-else-if="inspectorTab === 'cloudinit'" style="display: flex; flex-direction: column; gap: 14px">
-            <div style="font-weight: 600; font-size: 14px">
-              Cloud-Init Guest Provisioning (`NoCloud` Automation)
-            </div>
-            <p class="card-subtitle">
-              Automate user provisioning, SSH public keys, and static/DHCP IP network configuration inside Cloud-Init enabled images.
-            </p>
-
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px">
               <div class="form-group">
                 <label>Default Admin User</label>
@@ -1762,7 +1754,7 @@ async function handleWizardSubmit() {
           <div v-else-if="inspectorTab === 'snapshots'">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px">
               <div style="font-weight: 600; font-size: 14px">
-                Virtual Machine Snapshots
+                Snapshots
               </div>
               <button class="btn btn-sm btn-primary" @click="openTakeSnapshotModal">
                 <MdiIcon :path="mdiPlus" size="14" style="margin-right: 4px" /> Take Snapshot
@@ -1773,16 +1765,16 @@ async function handleWizardSubmit() {
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>Snapshot ID</th>
-                    <th>VM State</th>
-                    <th>RAM Included</th>
-                    <th>Created</th>
-                    <th>Description</th>
+                    <SortableTh :sort="snapshotSort" sort-key="id">Snapshot ID</SortableTh>
+                    <SortableTh :sort="snapshotSort" sort-key="vmState">VM State</SortableTh>
+                    <SortableTh :sort="snapshotSort" sort-key="includeRam">RAM Included</SortableTh>
+                    <SortableTh :sort="snapshotSort" sort-key="created">Created</SortableTh>
+                    <SortableTh :sort="snapshotSort" sort-key="description">Description</SortableTh>
                     <th style="text-align: right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="s in snapshotsList" :key="s.snapshotId">
+                  <tr v-for="s in snapshotSort.sorted.value" :key="s.snapshotId">
                     <td class="mono font-semibold" style="color: var(--accent-primary)">
                       {{ s.snapshotId }}
                     </td>
@@ -1823,7 +1815,7 @@ async function handleWizardSubmit() {
               </table>
             </div>
             <div v-else style="padding: 24px; text-align: center; color: var(--text-secondary); background: var(--bg-base); border-radius: 6px">
-              No snapshots created yet for this virtual machine.
+              No snapshots yet.
             </div>
           </div>
         </div>
@@ -1833,10 +1825,10 @@ async function handleWizardSubmit() {
     <!-- ======================================================================= -->
     <!-- TAKE SNAPSHOT MODAL -->
     <!-- ======================================================================= -->
-    <div v-if="showTakeSnapshotModal" class="modal-backdrop" @click.self="showTakeSnapshotModal = false">
+    <div v-if="showTakeSnapshotModal" class="modal-backdrop">
       <div class="modal-card" style="max-width: 480px">
         <div class="modal-header">
-          <h3 class="modal-title">Take Virtual Machine Snapshot</h3>
+          <h3 class="modal-title">Take Snapshot</h3>
           <button class="btn btn-sm" @click="showTakeSnapshotModal = false">
             <MdiIcon :path="mdiClose" size="16" />
           </button>
@@ -1851,7 +1843,7 @@ async function handleWizardSubmit() {
             <input v-model="snapshotForm.description" class="input" placeholder="Before major upgrade" />
           </div>
           <label style="display: flex; align-items: center; gap: 8px; font-size: 13px">
-            <input v-model="snapshotForm.includeRam" type="checkbox" /> Include live RAM memory state (Live snapshot)
+            <input v-model="snapshotForm.includeRam" type="checkbox" /> Include RAM state
           </label>
           <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px">
             <button type="button" class="btn" @click="showTakeSnapshotModal = false">Cancel</button>
@@ -1864,19 +1856,19 @@ async function handleWizardSubmit() {
     <!-- ======================================================================= -->
     <!-- INSERT MEDIA MODAL -->
     <!-- ======================================================================= -->
-    <div v-if="showMediaModal" class="modal-backdrop" @click.self="showMediaModal = false">
+    <div v-if="showMediaModal" class="modal-backdrop">
       <div class="modal-card" style="max-width: 480px">
         <div class="modal-header">
-          <h3 class="modal-title">Insert CD/DVD Media (ISO)</h3>
+          <h3 class="modal-title">Insert Media</h3>
           <button class="btn btn-sm" @click="showMediaModal = false">
             <MdiIcon :path="mdiClose" size="16" />
           </button>
         </div>
         <form @submit.prevent="handleAttachMedia" style="padding: 16px; display: flex; flex-direction: column; gap: 14px">
           <div v-if="nasState.isos.length > 0" class="form-group">
-            <label>Select from ISOs Repository</label>
+            <label>ISO</label>
             <select v-model="mediaForm.isoPath" class="select mono">
-              <option value="">-- Choose an ISO from repository --</option>
+              <option value="">-- Choose an ISO --</option>
               <option v-for="iso in nasState.isos" :key="iso.path" :value="iso.path">
                 {{ iso.name }} ({{ iso.sizeFormatted }})
               </option>
@@ -1886,7 +1878,7 @@ async function handleWizardSubmit() {
             <label>ISO Image Path</label>
             <input v-model="mediaForm.isoPath" class="input mono" placeholder="/tank/isos/debian-12.iso" required />
             <small style="color: var(--text-muted); font-size: 11px">
-              Select an ISO from repository above or enter custom path on host/pool.
+              Or enter a custom path on the host.
             </small>
           </div>
           <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px">
@@ -1900,10 +1892,10 @@ async function handleWizardSubmit() {
     <!-- ======================================================================= -->
     <!-- ADD HARD DISK MODAL -->
     <!-- ======================================================================= -->
-    <div v-if="showAddDiskModal" class="modal-backdrop" @click.self="showAddDiskModal = false">
+    <div v-if="showAddDiskModal" class="modal-backdrop">
       <div class="modal-card" style="max-width: 500px">
         <div class="modal-header">
-          <h3 class="modal-title">Add Virtual Hard Disk</h3>
+          <h3 class="modal-title">Add Hard Disk</h3>
           <button class="btn btn-sm" @click="showAddDiskModal = false">
             <MdiIcon :path="mdiClose" size="16" />
           </button>
@@ -1955,7 +1947,7 @@ async function handleWizardSubmit() {
     <!-- ======================================================================= -->
     <!-- ADD NETWORK DEVICE MODAL -->
     <!-- ======================================================================= -->
-    <div v-if="showAddNicModal" class="modal-backdrop" @click.self="showAddNicModal = false">
+    <div v-if="showAddNicModal" class="modal-backdrop">
       <div class="modal-card" style="max-width: 480px">
         <div class="modal-header">
           <h3 class="modal-title">Add Network Device</h3>
@@ -1974,8 +1966,10 @@ async function handleWizardSubmit() {
           </div>
           <div class="form-group">
             <label>Bridge / LAN Interface</label>
-            <input v-model="nicForm.bridge" class="input mono" :placeholder="defaultBridge || 'ens3'" required />
-            <span class="helper">Bridge (e.g. vmbr0) or host physical interface (e.g. ens3) for direct LAN bridging</span>
+            <select v-model="nicForm.bridge" class="select mono" required>
+              <option v-for="b in bridgeOptionsFor(nicForm.bridge)" :key="b.name" :value="b.name">{{ b.label }}</option>
+            </select>
+            <span class="helper">Host bridge (e.g. vmbr0) or physical interface (e.g. ens3) for direct LAN bridging</span>
           </div>
           <div class="form-group">
             <label>VLAN Tag (0 = Untagged)</label>
@@ -1992,7 +1986,7 @@ async function handleWizardSubmit() {
     <!-- ======================================================================= -->
     <!-- EDIT PROCESSORS MODAL -->
     <!-- ======================================================================= -->
-    <div v-if="showEditCpuModal" class="modal-backdrop" @click.self="showEditCpuModal = false">
+    <div v-if="showEditCpuModal" class="modal-backdrop">
       <div class="modal-card" style="max-width: 480px">
         <div class="modal-header">
           <h3 class="modal-title">Edit Processors ({{ inspectingVm?.vmName }})</h3>
@@ -2004,11 +1998,15 @@ async function handleWizardSubmit() {
           <div class="form-grid">
             <div class="form-group">
               <label>Sockets</label>
-              <input v-model.number="editCpuForm.sockets" type="number" min="1" max="16" class="input mono" required />
+              <select v-model.number="editCpuForm.sockets" class="select mono">
+                <option v-for="n in socketOptions" :key="n" :value="n">{{ n }}</option>
+              </select>
             </div>
             <div class="form-group">
               <label>Cores (per socket)</label>
-              <input v-model.number="editCpuForm.cores" type="number" min="1" max="128" class="input mono" required />
+              <select v-model.number="editCpuForm.cores" class="select mono">
+                <option v-for="n in coreOptionsFor(editCpuForm.cores)" :key="n" :value="n">{{ n }}</option>
+              </select>
             </div>
           </div>
           <div class="form-group">
@@ -2043,7 +2041,7 @@ async function handleWizardSubmit() {
     <!-- ======================================================================= -->
     <!-- EDIT MEMORY MODAL -->
     <!-- ======================================================================= -->
-    <div v-if="showEditMemoryModal" class="modal-backdrop" @click.self="showEditMemoryModal = false">
+    <div v-if="showEditMemoryModal" class="modal-backdrop">
       <div class="modal-card" style="max-width: 480px">
         <div class="modal-header">
           <h3 class="modal-title">Edit Memory ({{ inspectingVm?.vmName }})</h3>
@@ -2060,7 +2058,6 @@ async function handleWizardSubmit() {
           <div class="form-group">
             <label>Minimum Memory / Ballooning (MiB)</label>
             <input v-model.number="editMemoryForm.balloonMinMib" type="number" min="256" step="256" class="input mono" required />
-            <span class="helper">Dynamically freed memory with virtio-balloon</span>
           </div>
           <div class="form-group">
             <label>Hugepages</label>
@@ -2084,7 +2081,7 @@ async function handleWizardSubmit() {
     <!-- ======================================================================= -->
     <!-- EDIT PLATFORM / MACHINE & BIOS MODAL -->
     <!-- ======================================================================= -->
-    <div v-if="showEditPlatformModal" class="modal-backdrop" @click.self="showEditPlatformModal = false">
+    <div v-if="showEditPlatformModal" class="modal-backdrop">
       <div class="modal-card" style="max-width: 500px">
         <div class="modal-header">
           <h3 class="modal-title">Edit Machine & BIOS ({{ inspectingVm?.vmName }})</h3>
@@ -2111,7 +2108,7 @@ async function handleWizardSubmit() {
             <label>vTPM (Trusted Platform Module)</label>
             <select v-model="editPlatformForm.tpmVersion" class="select mono">
               <option value="none">None (Disabled)</option>
-              <option value="v2.0">v2.0 (swtpm Software TPM - Required for Windows 11)</option>
+              <option value="v2.0">v2.0 (Required for Windows 11)</option>
             </select>
           </div>
           <label style="display: flex; align-items: center; gap: 8px; font-size: 13px" :style="{ opacity: editPlatformForm.biosType === 'ovmf' ? 1 : 0.5 }">
@@ -2132,7 +2129,7 @@ async function handleWizardSubmit() {
     <!-- ======================================================================= -->
     <!-- EDIT DISPLAY MODAL -->
     <!-- ======================================================================= -->
-    <div v-if="showEditDisplayModal" class="modal-backdrop" @click.self="showEditDisplayModal = false">
+    <div v-if="showEditDisplayModal" class="modal-backdrop">
       <div class="modal-card" style="max-width: 480px">
         <div class="modal-header">
           <h3 class="modal-title">Edit Display Adapter ({{ inspectingVm?.vmName }})</h3>
@@ -2165,10 +2162,10 @@ async function handleWizardSubmit() {
     <!-- ======================================================================= -->
     <!-- CLONE VM MODAL -->
     <!-- ======================================================================= -->
-    <div v-if="cloningVm" class="modal-backdrop" @click.self="cloningVm = null">
+    <div v-if="cloningVm" class="modal-backdrop">
       <div class="modal-card" style="max-width: 500px">
         <div class="modal-header">
-          <h3 class="modal-title">Clone Virtual Machine: {{ cloningVm.vmName }}</h3>
+          <h3 class="modal-title">Clone {{ cloningVm.vmName }}</h3>
           <button class="btn btn-sm" @click="cloningVm = null">
             <MdiIcon :path="mdiClose" size="16" />
           </button>
@@ -2183,7 +2180,7 @@ async function handleWizardSubmit() {
             <input v-model="cloneForm.newName" class="input" />
           </div>
           <div class="form-group">
-            <label>Target ZFS Storage Pool</label>
+            <label>Target Pool</label>
             <select v-model="cloneForm.targetPool" class="select mono">
               <option v-for="p in availablePools" :key="p" :value="p">{{ p }}</option>
             </select>
@@ -2194,7 +2191,7 @@ async function handleWizardSubmit() {
           </label>
           <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px">
             <button type="button" class="btn" @click="cloningVm = null">Cancel</button>
-            <button type="submit" class="btn btn-primary">Execute Clone</button>
+            <button type="submit" class="btn btn-primary">Clone</button>
           </div>
         </form>
       </div>
@@ -2203,17 +2200,17 @@ async function handleWizardSubmit() {
     <!-- ======================================================================= -->
     <!-- PROXMOX-STYLE MULTI-STEP CREATION WIZARD -->
     <!-- ======================================================================= -->
-    <div v-if="showCreateWizard" class="modal-backdrop" @click.self="showCreateWizard = false">
-      <div class="modal-card" style="max-width: 780px; width: 95vw; display: flex; flex-direction: column">
+    <div v-if="showCreateWizard" class="modal-backdrop">
+      <div class="modal-card" style="max-width: 780px; width: 95vw; height: min(760px, 92vh); display: flex; flex-direction: column">
         <!-- Wizard Header -->
-        <div class="modal-header">
+        <div class="modal-header" style="flex-shrink: 0">
           <div>
-            <h3 class="modal-title">Create Virtual Machine — Proxmox VE KVM Wizard</h3>
+            <h3 class="modal-title">Create Virtual Machine</h3>
             <div class="text-muted" style="font-size: 12px; margin-top: 2px">
               Step {{ wizardStep }} of 7:
               <span v-if="wizardStep === 1">General Settings</span>
-              <span v-else-if="wizardStep === 2">System & Firmware (UEFI / TPM)</span>
-              <span v-else-if="wizardStep === 3">Storage Disks (ZFS ZVol)</span>
+              <span v-else-if="wizardStep === 2">System & Firmware</span>
+              <span v-else-if="wizardStep === 3">Disks</span>
               <span v-else-if="wizardStep === 4">CPU & Topology</span>
               <span v-else-if="wizardStep === 5">Memory & Ballooning</span>
               <span v-else-if="wizardStep === 6">Network Interfaces</span>
@@ -2226,7 +2223,7 @@ async function handleWizardSubmit() {
         </div>
 
         <!-- Wizard Step Indicators -->
-        <div style="display: flex; border-bottom: 1px solid var(--border-subtle); background: var(--bg-base)">
+        <div style="flex-shrink: 0; display: flex; border-bottom: 1px solid var(--border-subtle); background: var(--bg-base)">
           <div
             v-for="s in [1, 2, 3, 4, 5, 6, 7]"
             :key="s"
@@ -2242,9 +2239,9 @@ async function handleWizardSubmit() {
         </div>
 
         <!-- Wizard Step Body -->
-        <div style="padding: 20px; overflow-y: auto; max-height: 60vh">
+        <div style="flex: 1; min-height: 0; padding: 20px; overflow-y: auto">
           <!-- Step 1: General -->
-          <div v-if="wizardStep === 1" class="form-grid">
+          <div v-if="wizardStep === 1" class="form-grid" style="grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 16px">
             <div class="form-group">
               <label>VM Name</label>
               <input
@@ -2254,17 +2251,16 @@ async function handleWizardSubmit() {
                 @input="onVmNameInput"
                 required
               />
-              <small style="color: var(--text-muted); font-size: 11px">Human readable name</small>
             </div>
             <div class="form-group">
-              <label>VM Domain ID (`virtual_machine_id`)</label>
+              <label>VM Domain ID</label>
               <input
                 v-model="wizardForm.vmId"
                 class="input mono"
                 placeholder="e.g. debian-server"
                 required
               />
-              <small style="color: var(--text-muted); font-size: 11px">ZFS-safe slug computed from VM name</small>
+              <small style="color: var(--text-muted); font-size: 11px">Derived from VM name</small>
             </div>
             <div class="form-group">
               <label>Operating System</label>
@@ -2280,8 +2276,8 @@ async function handleWizardSubmit() {
               <label>Description</label>
               <input v-model="wizardForm.description" class="input" placeholder="Application node" />
             </div>
-            <div class="form-group" style="grid-column: span 2">
-              <label style="display: flex; align-items: center; gap: 8px; font-size: 13px">
+            <div class="form-group" style="grid-column: 1 / -1; padding-top: 4px; border-top: 1px solid var(--border-subtle)">
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 8px 0 0; cursor: pointer">
                 <input v-model="wizardForm.autostart" type="checkbox" /> Autostart domain when host boots
               </label>
             </div>
@@ -2306,7 +2302,7 @@ async function handleWizardSubmit() {
             <div class="form-group">
               <label>vTPM 2.0 Security</label>
               <select v-model="wizardForm.tpmVersion" class="select mono">
-                <option value="v2.0">TPM 2.0 (Enabled via swtpm - Win 11)</option>
+                <option value="v2.0">TPM 2.0 (Required for Windows 11)</option>
                 <option value="none">Disabled</option>
               </select>
             </div>
@@ -2325,9 +2321,6 @@ async function handleWizardSubmit() {
                   {{ iso.name }} ({{ iso.sizeFormatted }})
                 </option>
               </select>
-              <small style="color: var(--text-muted); font-size: 11px">
-                Select bootable ISO from repository (<code class="mono">/nas/{{ mainPool }}/isos</code>).
-              </small>
             </div>
           </div>
 
@@ -2347,7 +2340,7 @@ async function handleWizardSubmit() {
               <input v-model.number="wizardForm.diskSizeGib" type="number" min="1" class="input mono" required />
             </div>
             <div class="form-group" style="grid-column: span 2">
-              <label>Backing Storage Path (Raw image, QCOW2 or ZFS ZVol on Main Pool)</label>
+              <label>Storage Path (Raw image, QCOW2 or ZVol)</label>
               <input
                 v-model="wizardForm.diskPath"
                 list="zvol-list-wiz"
@@ -2357,15 +2350,12 @@ async function handleWizardSubmit() {
               <datalist id="zvol-list-wiz">
                 <option v-for="zpath in availableZvols" :key="zpath" :value="zpath" />
               </datalist>
-              <small style="color: var(--text-muted); font-size: 11px">Rooted to main pool: <code class="mono">{{ suggestedDiskPath }}</code></small>
             </div>
-            <div class="form-group">
-              <label style="display: flex; align-items: center; gap: 8px; font-size: 13px">
+            <div style="grid-column: 1 / -1; display: flex; align-items: center; gap: 24px">
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 0; cursor: pointer">
                 <input v-model="wizardForm.diskDiscard" type="checkbox" /> Discard / TRIM
               </label>
-            </div>
-            <div class="form-group">
-              <label style="display: flex; align-items: center; gap: 8px; font-size: 13px">
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 0; cursor: pointer">
                 <input v-model="wizardForm.diskIothread" type="checkbox" /> Dedicated IOThread
               </label>
             </div>
@@ -2375,11 +2365,15 @@ async function handleWizardSubmit() {
           <div v-if="wizardStep === 4" class="form-grid">
             <div class="form-group">
               <label>Sockets</label>
-              <input v-model.number="wizardForm.sockets" type="number" min="1" class="input mono" required />
+              <select v-model.number="wizardForm.sockets" class="select mono">
+                <option v-for="n in socketOptions" :key="n" :value="n">{{ n }}</option>
+              </select>
             </div>
             <div class="form-group">
               <label>Cores</label>
-              <input v-model.number="wizardForm.cores" type="number" min="1" class="input mono" required />
+              <select v-model.number="wizardForm.cores" class="select mono">
+                <option v-for="n in coreOptionsFor(wizardForm.cores)" :key="n" :value="n">{{ n }}</option>
+              </select>
             </div>
             <div class="form-group">
               <label>CPU Type / Model</label>
@@ -2423,8 +2417,10 @@ async function handleWizardSubmit() {
             </div>
             <div class="form-group">
               <label>Bridge / LAN Interface</label>
-              <input v-model="wizardForm.netBridge" class="input mono" :placeholder="defaultBridge || 'ens3'" required />
-              <span class="helper">Bridge (e.g. vmbr0) or host physical interface (e.g. ens3) to bridge directly to physical LAN</span>
+              <select v-model="wizardForm.netBridge" class="select mono" required>
+                <option v-for="b in bridgeOptionsFor(wizardForm.netBridge)" :key="b.name" :value="b.name">{{ b.label }}</option>
+              </select>
+              <span class="helper">Host bridge (e.g. vmbr0) or physical interface (e.g. ens3) to bridge directly to physical LAN</span>
             </div>
             <div class="form-group">
               <label>VLAN Tag (0 = Untagged)</label>
@@ -2451,7 +2447,7 @@ async function handleWizardSubmit() {
 
             <!-- Confirmation Summary Card -->
             <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px; font-size: 12px">
-              <div style="font-weight: 700; margin-bottom: 8px">Summary Preview</div>
+              <div style="font-weight: 700; margin-bottom: 8px">Summary</div>
               <div><strong>VM Domain:</strong> <span class="mono">{{ wizardForm.vmId }}</span></div>
               <div><strong>Topology:</strong> <span class="mono">{{ wizardForm.sockets * wizardForm.cores }} vCPUs ({{ wizardForm.sockets }}s/{{ wizardForm.cores }}c) [{{ wizardForm.cpuType }}]</span></div>
               <div><strong>Memory:</strong> <span class="mono">{{ formatBytes(wizardForm.memoryMib * 1024 * 1024) }} (Balloon: {{ formatBytes(wizardForm.balloonMinMib * 1024 * 1024) }})</span></div>
@@ -2463,7 +2459,7 @@ async function handleWizardSubmit() {
         </div>
 
         <!-- Wizard Navigation Footer -->
-        <div style="padding: 14px 20px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center">
+        <div style="flex-shrink: 0; padding: 14px 20px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center">
           <button
             type="button"
             class="btn"
@@ -2488,7 +2484,7 @@ async function handleWizardSubmit() {
               class="btn btn-primary"
               @click="handleWizardSubmit"
             >
-              Deploy Virtual Machine
+              Create VM
             </button>
           </div>
         </div>
@@ -2507,6 +2503,38 @@ async function handleWizardSubmit() {
 </template>
 
 <style scoped>
+/* VM power state is conveyed by a faded row tint instead of a Status column */
+.vm-row td:first-child {
+  box-shadow: inset 3px 0 0 var(--vm-state-color, transparent);
+}
+
+.vm-row {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--vm-state-color, transparent) 16%, transparent) 0%,
+    color-mix(in srgb, var(--vm-state-color, transparent) 5%, transparent) 45%,
+    transparent 100%
+  );
+}
+
+.vm-row-running {
+  --vm-state-color: var(--success, #22c55e);
+}
+
+.vm-row-stopped,
+.vm-row-shutoff,
+.vm-row-crashed {
+  --vm-state-color: var(--danger, #ef4444);
+}
+
+.vm-row-paused {
+  --vm-state-color: var(--warning, #f59e0b);
+}
+
+.vm-row td:last-child {
+  white-space: nowrap;
+}
+
 .search-input-wrap {
   position: relative;
   display: flex;

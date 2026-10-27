@@ -202,6 +202,9 @@ function toggleFullscreen() {
 
 function handleFullscreenChange() {
   isFullscreen.value = !!document.fullscreenElement;
+  setTimeout(() => {
+    adapter?.triggerResize();
+  }, 50);
 }
 
 function handleDocumentClick(e: MouseEvent) {
@@ -606,6 +609,9 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   width: 100%;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
   gap: 10px;
 }
 
@@ -622,6 +628,7 @@ onBeforeUnmount(() => {
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .header-left {
@@ -792,23 +799,45 @@ onBeforeUnmount(() => {
   background: #000;
   border: 1px solid var(--border-strong, #334155);
   border-radius: 8px;
-  overflow: auto;
+  overflow: hidden;
   display: flex;
   justify-content: center;
   align-items: center;
   position: relative;
-  min-height: 520px;
-  max-height: 80vh;
+  flex: 1;
+  min-height: 280px;
+  width: 100%;
+  height: 100%;
+}
+
+.vnc-wrapper.scale-fit-mode {
+  overflow: hidden;
+}
+
+.vnc-wrapper.scale-manual-mode {
+  overflow: auto;
 }
 
 .vnc-wrapper.is-standalone {
   flex: 1;
   min-height: 0;
   max-height: none;
-  height: calc(100vh - 120px);
+  height: 100%;
+}
+
+.vnc-wrapper:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  border: none;
+  border-radius: 0;
 }
 
 .vnc-screen-container {
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -822,16 +851,15 @@ onBeforeUnmount(() => {
 }
 
 .scale-fit-mode .vnc-screen-container :deep(canvas) {
-  max-width: 100%;
-  max-height: 100%;
-  width: auto !important;
-  height: auto !important;
-  object-fit: contain;
+  display: block;
 }
 
 .scale-manual-mode .vnc-screen-container {
-  display: inline-block;
-  margin: auto;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .vnc-disconnected-overlay {
@@ -882,6 +910,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border-color, #334155);
   border-radius: 8px;
   padding: 8px 12px;
+  flex-shrink: 0;
 }
 
 .linux-shortcuts-bar {

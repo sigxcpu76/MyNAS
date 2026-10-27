@@ -187,7 +187,7 @@ watch(
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
+  <div class="modal-backdrop">
     <div class="modal-card modal-card-xlarge wizard-card">
       <!-- Modal Header -->
       <div class="wizard-header">
@@ -219,9 +219,6 @@ watch(
                 Portal Port: {{ activeWebPort }}
               </span>
             </div>
-            <p style="font-size: 12.5px; color: var(--text-secondary); margin: 3px 0 0 0">
-              TrueNAS SCALE App Setup Wizard · Auto-configured for OpenZFS datasets and NaN Docker Compose.
-            </p>
           </div>
         </div>
 
@@ -230,7 +227,7 @@ watch(
             class="btn btn-sm"
             :class="{ 'btn-primary': showLivePreview }"
             style="font-size: 12px; display: inline-flex; align-items: center; gap: 6px"
-            title="Toggle Live Docker Compose Preview Pane"
+            title="Toggle YAML preview"
             @click="showLivePreview = !showLivePreview"
           >
             <MdiIcon :path="mdiCodeBraces" size="16" />
@@ -286,8 +283,11 @@ watch(
               <div style="font-size: 13.5px; font-weight: 600; color: var(--text-primary)">
                 {{ activeTab }}
               </div>
-              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 1px">
-                {{ groups.find((g) => g.name === activeTab)?.description || 'Configure parameters for this component' }}
+              <div
+                v-if="groups.find((g) => g.name === activeTab)?.description"
+                style="font-size: 12px; color: var(--text-secondary); margin-top: 1px"
+              >
+                {{ groups.find((g) => g.name === activeTab)?.description }}
               </div>
             </div>
             <div style="font-size: 11.5px; color: var(--text-secondary)">
@@ -364,7 +364,7 @@ watch(
                   </div>
                   <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px">
                     <MdiIcon :path="mdiHarddisk" size="13" style="color: var(--accent-primary)" />
-                    <span>ZFS Dataset target path on NaN host. Mounts internally into: <code>{{ q.mountPath || '/data' }}</code></span>
+                    <span>Mounted in container at: <code>{{ q.mountPath || '/data' }}</code></span>
                   </div>
                 </div>
 
@@ -440,7 +440,7 @@ watch(
             <div v-if="activeGroupQuestions.length === 0" class="empty-group-box">
               <MdiIcon :path="mdiTune" size="24" style="color: var(--text-secondary); margin-bottom: 6px" />
               <p style="font-size: 13px; color: var(--text-secondary); margin: 0">
-                No specific parameters in this category. Default values will be used.
+                No parameters. Defaults will be used.
               </p>
             </div>
           </div>
@@ -452,7 +452,7 @@ watch(
             <div style="display: flex; align-items: center; gap: 6px">
               <MdiIcon :path="mdiCodeBraces" size="16" style="color: var(--accent-primary)" />
               <span style="font-size: 12.5px; font-weight: 600; color: var(--text-primary)">
-                Live Docker Compose Descriptor
+                Compose YAML
               </span>
             </div>
             <button
@@ -472,13 +472,6 @@ watch(
               height="100%"
               min-height="300px"
             />
-          </div>
-
-          <div class="preview-footer-note">
-            <MdiIcon :path="mdiInformationOutline" size="14" style="color: var(--accent-primary); flex-shrink: 0" />
-            <span>
-              Includes <code>x-portals</code> for NaN Web Portal integration and ZFS bind mounts.
-            </span>
           </div>
         </div>
       </div>
@@ -746,23 +739,6 @@ watch(
   flex: 1;
   min-height: 0;
   overflow: hidden;
-}
-
-.preview-footer-note {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  background: var(--bg-surface);
-  border-top: 1px solid var(--border-subtle);
-  font-size: 11.5px;
-  color: var(--text-secondary);
-  flex-shrink: 0;
-}
-
-.preview-footer-note code {
-  color: var(--accent-primary);
-  font-size: 11px;
 }
 
 .wizard-footer {

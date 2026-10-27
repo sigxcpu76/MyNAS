@@ -26,6 +26,11 @@ export interface ModalOptions {
   checkbox?: ModalCheckboxOption;
   prompt?: ModalPromptOption;
   alertOnly?: boolean;
+  /**
+   * Type-to-confirm safety gate for destructive actions: the confirm button
+   * stays disabled until the user types this exact text (usually the entity id/name).
+   */
+  confirmPhrase?: string;
 }
 
 export interface ModalResult {
@@ -39,6 +44,7 @@ export interface ActiveModalState extends ModalOptions {
   isOpen: boolean;
   checkboxValue: boolean;
   inputValue: string;
+  confirmPhraseValue: string;
   resolve: (res: ModalResult) => void;
 }
 
@@ -60,6 +66,7 @@ export function askModal(options: ModalOptions | string): Promise<ModalResult> {
       cancelText: opts.cancelText || 'Cancel',
       checkboxValue: opts.checkbox?.checked ?? false,
       inputValue: opts.prompt?.defaultValue ?? '',
+      confirmPhraseValue: '',
       resolve,
     };
   });
@@ -68,6 +75,28 @@ export function askModal(options: ModalOptions | string): Promise<ModalResult> {
 export async function confirmModal(options: ModalOptions | string): Promise<boolean> {
   const res = await askModal(options);
   return res.confirmed;
+}
+
+/**
+ * Standard destructive-action confirmation that requires typing the entity name.
+ * Returns the full ModalResult so callers can read optional checkbox state.
+ */
+export function confirmDelete(options: {
+  kind: string;
+  name: string;
+  details?: string;
+  confirmText?: string;
+  checkbox?: ModalCheckboxOption;
+}): Promise<ModalResult> {
+  return askModal({
+    title: `Delete ${options.kind}`,
+    message: `This will permanently delete ${options.kind.toLowerCase()} "${options.name}".`,
+    details: options.details,
+    tone: 'danger',
+    confirmText: options.confirmText || 'Delete',
+    confirmPhrase: options.name,
+    checkbox: options.checkbox,
+  });
 }
 
 export async function alertModal(message: string, title = 'Notice'): Promise<void> {

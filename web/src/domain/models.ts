@@ -748,6 +748,39 @@ export function gibToBytes(gib: number): number {
   return Math.round(gib * 1024 * 1024 * 1024);
 }
 
+const relativeTimeFormat = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+const RELATIVE_UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+  ['year', 365 * 24 * 3600],
+  ['month', 30 * 24 * 3600],
+  ['week', 7 * 24 * 3600],
+  ['day', 24 * 3600],
+  ['hour', 3600],
+  ['minute', 60],
+  ['second', 1],
+];
+
+/** Human relative time such as "3 days ago" / "in 2 hours". Returns '—' for empty/invalid input. */
+export function formatRelativeTime(value: string | number | Date | null | undefined, now: number = Date.now()): string {
+  if (value === null || value === undefined || value === '') return '—';
+  const ts = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  if (!Number.isFinite(ts)) return '—';
+  const diffSec = Math.round((ts - now) / 1000);
+  if (Math.abs(diffSec) < 45) return 'just now';
+  for (const [unit, secs] of RELATIVE_UNITS) {
+    if (Math.abs(diffSec) >= secs || unit === 'second') {
+      return relativeTimeFormat.format(Math.round(diffSec / secs), unit);
+    }
+  }
+  return '—';
+}
+
+/** Absolute local date & time, suitable for tooltips. */
+export function formatAbsoluteTime(value: string | number | Date | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '';
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isFinite(d.getTime()) ? d.toLocaleString() : '';
+}
+
 export function bytesToGib(bytes: number, decimals = 1): number {
   if (!bytes || bytes <= 0) return 0;
   return parseFloat((bytes / (1024 * 1024 * 1024)).toFixed(decimals));

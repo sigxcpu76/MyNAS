@@ -69,7 +69,7 @@ onMounted(() => {
     <div v-if="loading" class="standalone-state-box">
       <span class="spinner" style="width: 28px; height: 28px; border-width: 3px"></span>
       <p style="margin-top: 14px; font-size: 14px; color: var(--text-secondary)">
-        Connecting to Live QEMU VNC Console for <strong>{{ vmName || 'Virtual Machine' }}</strong>...
+        Connecting to console for <strong>{{ vmName || 'Virtual Machine' }}</strong>...
       </p>
     </div>
 

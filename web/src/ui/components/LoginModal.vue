@@ -33,8 +33,7 @@ async function handleLogin() {
       <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 18px">
         <NanLogo :size="42" :show-text="false" />
         <div>
-          <h2 style="font-size: 18px; font-weight: 700">Linux System Login</h2>
-          <p class="card-subtitle">Authenticating against Linux PAM & `/etc/passwd` (`/v1/auth:login`)</p>
+          <h2 style="font-size: 18px; font-weight: 700">Sign In</h2>
         </div>
       </div>
 
@@ -49,13 +48,12 @@ async function handleLogin() {
           color: var(--text-secondary);
         "
       >
-        Sign in with your <strong>underlying Linux account</strong> (e.g. <code class="mono">sigxcpu</code> or <code class="mono">root</code>).
-        Administrative rights are mapped directly from Linux groups (<code class="mono">wheel</code> / <code class="mono">sudo</code>).
+        Sign in with your Linux system account.
       </div>
 
       <form @submit.prevent="handleLogin" style="display: flex; flex-direction: column; gap: 14px">
         <div class="form-group">
-          <label>Linux System Username</label>
+          <label>Username</label>
           <input
             v-model="username"
             type="text"
@@ -67,7 +65,7 @@ async function handleLogin() {
         </div>
 
         <div class="form-group">
-          <label>Linux Password</label>
+          <label>Password</label>
           <input
             v-model="password"
             type="password"
@@ -93,7 +91,7 @@ async function handleLogin() {
         </div>
 
         <button type="submit" class="btn btn-primary" :disabled="submitting" style="width: 100%; padding: 10px">
-          {{ submitting ? 'Verifying Linux Credentials...' : 'Sign In with Linux Account' }}
+          {{ submitting ? 'Signing In...' : 'Sign In' }}
         </button>
       </form>
     </div>

@@ -41,7 +41,10 @@ import DockerTerminalModal, { type TerminalContainerOption } from '../components
 import CatalogQuestionWizard from '../components/CatalogQuestionWizard.vue';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
-import { askModal, nasState, notify } from '../store';
+import SortableTh from '../components/SortableTh.vue';
+import { useTableSort } from '../composables/useTableSort';
+import { nasState, notify } from '../store';
+import { confirmDelete } from '../modal';
 
 // =============================================================================
 // Filters & Search
@@ -84,6 +87,15 @@ const filteredApps = computed(() => {
     );
     return matchesId || matchesTitle || matchesService || matchesPort || matchesContainer;
   });
+});
+
+const appSort = useTableSort(filteredApps, {
+  name: (a) => a.title || a.appId,
+  webui: (a) =>
+    getPrimaryWebUiUrl(a) ? (a.portals && a.portals.length > 0 ? a.portals[0].name || 'Open UI' : 'Open UI') : null,
+  cpu: (a) => a.totalCpuPercent,
+  memory: (a) => a.totalMemoryMib,
+  network: (a) => (a.state === 'RUNNING' ? (a.totalNetRxRate || 0) + (a.totalNetTxRate || 0) : null),
 });
 
 // =============================================================================
@@ -273,7 +285,7 @@ async function loadCatalog() {
 async function syncCatalog() {
   isSyncingCatalog.value = true;
   try {
-    notify('info', 'Synchronizing TrueNAS SCALE Application Catalog from upstream...');
+    notify('info', 'Syncing app catalog...');
     const res = await services.catalog.syncCatalog();
     catalogLastSyncTime.value = res.lastSyncTime;
     notify(
@@ -325,7 +337,7 @@ async function importFromCatalog(app: CatalogApp) {
       installEditorKey.value++;
       isCatalogModalOpen.value = false;
       isInstallModalOpen.value = true;
-      notify('success', `Imported "${detailed.title}" from TrueNAS Catalog into Compose Editor`);
+      notify('success', `Imported "${detailed.title}" from catalog`);
     }
   } catch (err: any) {
     notify('error', err?.message || `Failed to load template for ${app.title}`);
@@ -521,6 +533,19 @@ const selectedService = ref<string>('');
 const logsContent = ref('');
 const isLoadingLogs = ref(false);
 
+const containerSort = useTableSort(() => inspectedApp.value?.containers ?? [], {
+  name: (c) => c.name,
+  service: (c) => c.serviceName,
+  image: (c) => c.image,
+  state: (c) => c.state,
+  cpu: (c) => c.cpuPercent,
+  memory: (c) => c.memoryMib,
+  ports: (c) => {
+    const p = formatContainerPorts(c.ports);
+    return p === '—' ? null : p;
+  },
+});
+
 function openInspectModal(app: DockerApp, defaultTab: 'containers' | 'logs' | 'compose' = 'containers') {
   inspectedApp.value = app;
   inspectActiveTab.value = defaultTab;
@@ -649,11 +674,10 @@ async function restartApp(app: DockerApp) {
 }
 
 async function deleteApp(app: DockerApp) {
-  const res = await askModal({
-    title: 'Delete Docker Application',
-    tone: 'danger',
-    message: `Are you sure you want to delete App "${app.title || app.appId}"?`,
-    details: 'This will stop and remove all associated containers and compose project configurations.',
+  const res = await confirmDelete({
+    kind: 'App',
+    name: app.appId,
+    details: 'All containers and the compose project of this app will be stopped and removed.',
     confirmText: 'Delete App',
     checkbox: {
       label: 'Purge persistent data volumes on disk (`docker compose down -v`)',
@@ -816,9 +840,6 @@ onUnmounted(() => {
         <h2 style="font-size: 24px; font-weight: 700; color: var(--text-primary)">
           Apps
         </h2>
-        <p style="color: var(--text-secondary); font-size: 13.5px; margin-top: 3px">
-          Manage containerized applications and services.
-        </p>
       </div>
 
       <div style="display: flex; gap: 10px; align-items: center">
@@ -831,7 +852,7 @@ onUnmounted(() => {
           class="btn btn-sm"
           style="display: flex; align-items: center; gap: 6px"
           :class="(nasState.dockerConfig?.datasetSelected ?? nasState.dockerConfig?.poolSelected) ? '' : 'btn-warning'"
-          title="Configure Docker owned ZFS storage dataset for images and volumes"
+          title="Configure storage dataset"
           @click="openDatasetModal"
         >
           <MdiIcon :path="mdiFolderOutline" size="16" style="color: var(--accent-primary)" />
@@ -840,7 +861,7 @@ onUnmounted(() => {
 
         <button class="btn btn-sm" style="display: flex; align-items: center; gap: 6px" @click="openCatalogModal">
           <MdiIcon :path="mdiStorefrontOutline" size="16" style="color: var(--accent-primary)" />
-          TrueNAS Catalog
+          Catalog
         </button>
 
         <button class="btn btn-primary" @click="openInstallModal">
@@ -872,7 +893,7 @@ onUnmounted(() => {
             Docker Storage Dataset Not Configured
           </div>
           <div style="font-size: 12.5px; color: var(--text-secondary); margin-top: 2px">
-            Select or create a ZFS dataset (e.g. {{ nasState.dockerConfig.dataset || 'tank/apps' }}) to store container images (/nas/{{ nasState.dockerConfig.dataset || 'tank/apps' }}/docker) and persistent app volumes (/nas/{{ nasState.dockerConfig.dataset || 'tank/apps' }}/appdata).
+            Select or create a dataset to store container images and app volumes.
           </div>
         </div>
       </div>
@@ -913,9 +934,6 @@ onUnmounted(() => {
         </div>
         <div style="font-size: 26px; font-weight: 700; color: var(--accent-primary); margin-top: 4px">
           {{ totalMemoryUsageMib }} MiB
-        </div>
-        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px">
-          Aggregated across stacks
         </div>
       </div>
     </div>
@@ -1029,12 +1047,9 @@ onUnmounted(() => {
       <div style="margin-bottom: 12px; color: var(--text-muted)">
         <MdiIcon :path="mdiLayers" size="44" />
       </div>
-      <h3 style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px">
+      <h3 style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin-bottom: 18px">
         No Applications Found
       </h3>
-      <p style="color: var(--text-secondary); font-size: 13.5px; max-width: 480px; margin: 0 auto 18px auto">
-        Deploy your first application stack or select a template from the TrueNAS catalog.
-      </p>
       <div style="display: flex; gap: 10px; justify-content: center">
         <button class="btn btn-primary" @click="openInstallModal">
           <MdiIcon :path="mdiPlus" size="16" style="margin-right: 4px" />
@@ -1042,7 +1057,7 @@ onUnmounted(() => {
         </button>
         <button class="btn" @click="openCatalogModal">
           <MdiIcon :path="mdiStorefrontOutline" size="16" style="margin-right: 4px; color: var(--accent-primary)" />
-          Browse TrueNAS Catalog
+          Browse Catalog
         </button>
       </div>
     </div>
@@ -1051,24 +1066,24 @@ onUnmounted(() => {
     <div v-else class="card" style="padding: 0; overflow-x: auto">
       <table class="data-table" style="width: 100%; border-collapse: collapse">
         <thead>
-          <tr style="border-bottom: 1px solid var(--border-subtle); text-align: left; font-size: 11.5px; color: var(--text-secondary); text-transform: uppercase">
-            <th style="padding: 10px 14px; width: 280px; min-width: 220px; max-width: 340px">Application</th>
-            <th style="padding: 10px 14px; width: 130px; min-width: 130px">Web UI</th>
-            <th style="padding: 10px 14px; width: 85px; min-width: 85px; max-width: 85px">CPU</th>
-            <th style="padding: 10px 14px; width: 105px; min-width: 105px; max-width: 105px">Memory</th>
-            <th style="padding: 10px 14px; width: 210px; min-width: 210px; max-width: 210px">Network (1s)</th>
-            <th style="padding: 10px 14px; min-width: 240px; text-align: right">Actions</th>
+          <tr style="border-bottom: 1px solid var(--border-subtle); text-align: left; font-size: 11px; color: var(--text-secondary); text-transform: uppercase">
+            <SortableTh :sort="appSort" sort-key="name" style="padding: 8px 10px; width: 280px; min-width: 220px; max-width: 340px">Application</SortableTh>
+            <SortableTh :sort="appSort" sort-key="webui" style="padding: 8px 10px; width: 130px; min-width: 130px">Web UI</SortableTh>
+            <SortableTh :sort="appSort" sort-key="cpu" style="padding: 8px 10px; width: 85px; min-width: 85px; max-width: 85px">CPU</SortableTh>
+            <SortableTh :sort="appSort" sort-key="memory" style="padding: 8px 10px; width: 105px; min-width: 105px; max-width: 105px">Memory</SortableTh>
+            <SortableTh :sort="appSort" sort-key="network" style="padding: 8px 10px; width: 210px; min-width: 210px; max-width: 210px">Network (1s)</SortableTh>
+            <th style="padding: 8px 10px; min-width: 240px; text-align: right">Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr
-            v-for="app in filteredApps"
+            v-for="app in appSort.sorted.value"
             :key="app.name"
             style="border-bottom: 1px solid var(--border-subtle)"
             :title="`Application: ${app.title || app.appId}\nServices: ${app.services.join(', ') || 'none'}\nStatus: ${app.statusText || app.state}`"
           >
             <!-- Application (Status Indicator Icon + Title + AppId with Services Tooltip) -->
-            <td style="padding: 10px 14px; width: 280px; min-width: 220px; max-width: 340px">
+            <td style="padding: 8px 10px; width: 280px; min-width: 220px; max-width: 340px">
               <div style="display: flex; align-items: center; gap: 10px">
                 <!-- Status indicator dot replacing the old Docker logo -->
                 <div
@@ -1094,7 +1109,7 @@ onUnmounted(() => {
                 </div>
 
                 <div>
-                  <div style="font-weight: 600; font-size: 13.5px; color: var(--text-primary)">
+                  <div style="font-weight: 600; font-size: 12px; color: var(--text-primary)">
                     {{ app.title || app.appId }}
                   </div>
                   <div
@@ -1302,17 +1317,14 @@ onUnmounted(() => {
     <!-- ===================================================================== -->
     <!-- MODAL 1: Launch App Modal                                             -->
     <!-- ===================================================================== -->
-    <div v-if="isInstallModalOpen" class="modal-backdrop" @click.self="isInstallModalOpen = false">
+    <div v-if="isInstallModalOpen" class="modal-backdrop">
       <div class="modal-card modal-card-xlarge">
         <!-- Header -->
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; flex-shrink: 0">
           <div>
             <h3 style="font-size: 18px; font-weight: 700; color: var(--text-primary)">
-              Launch Docker Application
+              Launch App
             </h3>
-            <p style="font-size: 12.5px; color: var(--text-secondary); margin-top: 2px">
-              Configure services, containers, ports, environment, volumes, and networks.
-            </p>
           </div>
           <button class="btn btn-sm" style="padding: 2px 6px" @click="isInstallModalOpen = false">
             <MdiIcon :path="mdiClose" size="18" />
@@ -1323,7 +1335,7 @@ onUnmounted(() => {
         <div style="background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; flex-shrink: 0">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px">
             <span style="font-size: 11.5px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase">
-              Quick-Pick Pre-Configured Stack or Start Blank:
+              Templates
             </span>
             <button
               class="btn btn-sm"
@@ -1331,7 +1343,7 @@ onUnmounted(() => {
               @click="isInstallModalOpen = false; openCatalogModal()"
             >
               <MdiIcon :path="mdiStorefrontOutline" size="14" />
-              <span>Browse TrueNAS Catalog (470+ Apps)...</span>
+              <span>Browse Catalog...</span>
             </button>
           </div>
           <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px">
@@ -1353,7 +1365,7 @@ onUnmounted(() => {
               @click="selectCatalogTemplate(null)"
             >
               <MdiIcon :path="mdiPlus" size="16" />
-              <span>Custom Blank Stack</span>
+              <span>Blank</span>
             </button>
           </div>
         </div>
@@ -1377,7 +1389,7 @@ onUnmounted(() => {
     <!-- ===================================================================== -->
     <!-- MODAL 2: Edit App Modal                                               -->
     <!-- ===================================================================== -->
-    <div v-if="isEditModalOpen && editingApp" class="modal-backdrop" @click.self="isEditModalOpen = false">
+    <div v-if="isEditModalOpen && editingApp" class="modal-backdrop">
       <div class="modal-card modal-card-xlarge">
         <!-- Header -->
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; flex-shrink: 0">
@@ -1385,9 +1397,6 @@ onUnmounted(() => {
             <h3 style="font-size: 18px; font-weight: 700; color: var(--text-primary)">
               Edit App: {{ editingApp.title || editingApp.appId }}
             </h3>
-            <p style="font-size: 12.5px; color: var(--text-secondary); margin-top: 2px">
-              Modify application configuration and services.
-            </p>
           </div>
           <button class="btn btn-sm" style="padding: 2px 6px" @click="isEditModalOpen = false">
             <MdiIcon :path="mdiClose" size="18" />
@@ -1412,7 +1421,7 @@ onUnmounted(() => {
     <!-- ===================================================================== -->
     <!-- MODAL 3: App Inspector (Containers, Logs, YAML)                        -->
     <!-- ===================================================================== -->
-    <div v-if="isInspectModalOpen && inspectedApp" class="modal-backdrop" @click.self="isInspectModalOpen = false">
+    <div v-if="isInspectModalOpen && inspectedApp" class="modal-backdrop">
       <div class="modal-card modal-card-large">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-shrink: 0">
           <div>
@@ -1420,7 +1429,7 @@ onUnmounted(() => {
               {{ inspectedApp.title || inspectedApp.appId }}
             </h3>
             <p class="mono" style="font-size: 12px; color: var(--text-secondary); margin-top: 2px">
-              {{ inspectedApp.name }} · {{ inspectedApp.composeFilePath }}
+              {{ inspectedApp.composeFilePath }}
             </p>
           </div>
           <button class="btn btn-sm" style="padding: 2px 6px" @click="isInspectModalOpen = false">
@@ -1436,7 +1445,7 @@ onUnmounted(() => {
             @click="inspectActiveTab = 'containers'"
           >
             <MdiIcon :path="mdiLayers" size="14" style="margin-right: 4px" />
-            Child Containers ({{ inspectedApp.containers.length }})
+            Containers ({{ inspectedApp.containers.length }})
           </button>
           <button
             class="btn btn-sm"
@@ -1444,7 +1453,7 @@ onUnmounted(() => {
             @click="openInspectModal(inspectedApp, 'logs')"
           >
             <MdiIcon :path="mdiFileDocumentOutline" size="14" style="margin-right: 4px" />
-            Live Logs
+            Logs
           </button>
           <button
             class="btn btn-sm"
@@ -1461,18 +1470,18 @@ onUnmounted(() => {
           <table class="table" style="width: 100%">
             <thead>
               <tr style="text-align: left; font-size: 11.5px; color: var(--text-secondary)">
-                <th style="padding: 8px">CONTAINER</th>
-                <th style="padding: 8px">SERVICE</th>
-                <th style="padding: 8px">IMAGE</th>
-                <th style="padding: 8px">STATE</th>
-                <th style="padding: 8px; width: 85px; min-width: 85px; max-width: 85px">CPU</th>
-                <th style="padding: 8px; width: 105px; min-width: 105px; max-width: 105px">RAM</th>
-                <th style="padding: 8px">PORTS</th>
+                <SortableTh :sort="containerSort" sort-key="name" style="padding: 8px">CONTAINER</SortableTh>
+                <SortableTh :sort="containerSort" sort-key="service" style="padding: 8px">SERVICE</SortableTh>
+                <SortableTh :sort="containerSort" sort-key="image" style="padding: 8px">IMAGE</SortableTh>
+                <SortableTh :sort="containerSort" sort-key="state" style="padding: 8px">STATE</SortableTh>
+                <SortableTh :sort="containerSort" sort-key="cpu" style="padding: 8px; width: 85px; min-width: 85px; max-width: 85px">CPU</SortableTh>
+                <SortableTh :sort="containerSort" sort-key="memory" style="padding: 8px; width: 105px; min-width: 105px; max-width: 105px">RAM</SortableTh>
+                <SortableTh :sort="containerSort" sort-key="ports" style="padding: 8px">PORTS</SortableTh>
                 <th style="padding: 8px; width: 70px; text-align: right">ACTIONS</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="c in inspectedApp.containers" :key="c.containerId" style="border-bottom: 1px solid var(--border-subtle); font-size: 12.5px">
+              <tr v-for="c in containerSort.sorted.value" :key="c.containerId" style="border-bottom: 1px solid var(--border-subtle); font-size: 12.5px">
                 <td style="padding: 8px" class="mono font-semibold">{{ c.name }}</td>
                 <td style="padding: 8px"><span class="badge badge-info">{{ c.serviceName }}</span></td>
                 <td class="mono" style="padding: 8px; font-size: 11px">{{ c.image }}</td>
@@ -1571,7 +1580,7 @@ onUnmounted(() => {
     <!-- ===================================================================== -->
     <!-- MODAL: TrueNAS Application Catalog Modal                              -->
     <!-- ===================================================================== -->
-    <div v-if="isCatalogModalOpen" class="modal-backdrop" @click.self="isCatalogModalOpen = false">
+    <div v-if="isCatalogModalOpen" class="modal-backdrop">
       <div class="modal-card modal-card-xlarge">
         <!-- Header -->
         <div
@@ -1603,17 +1612,14 @@ onUnmounted(() => {
             <div>
               <div style="display: flex; align-items: center; gap: 8px">
                 <h3 style="font-size: 19px; font-weight: 700; color: var(--text-primary); margin: 0">
-                  TrueNAS SCALE App Catalog
+                  App Catalog
                 </h3>
                 <span class="badge badge-info" style="font-size: 11px">
                   {{ catalogApps.length }} Apps
                 </span>
               </div>
-              <p style="font-size: 12.5px; color: var(--text-secondary); margin: 3px 0 0 0">
-                Official and community Docker Compose applications ready to deploy.
-                <span v-if="catalogLastSyncTime" style="margin-left: 6px; opacity: 0.8">
-                  · Last synced: {{ formatSyncTime(catalogLastSyncTime) }}
-                </span>
+              <p v-if="catalogLastSyncTime" style="font-size: 12.5px; color: var(--text-secondary); margin: 3px 0 0 0">
+                Last synced: {{ formatSyncTime(catalogLastSyncTime) }}
               </p>
             </div>
           </div>
@@ -1622,7 +1628,7 @@ onUnmounted(() => {
             <button
               class="btn btn-sm"
               :disabled="isSyncingCatalog"
-              title="Sync latest application definitions directly from TrueNAS upstream repository"
+              title="Sync latest app definitions"
               @click="syncCatalog"
             >
               <MdiIcon
@@ -1971,14 +1977,14 @@ onUnmounted(() => {
     <!-- ===================================================================== -->
     <!-- MODAL: Docker Storage Dataset Configuration                           -->
     <!-- ===================================================================== -->
-    <div v-if="isDatasetModalOpen" class="modal-backdrop" @click.self="isDatasetModalOpen = false">
+    <div v-if="isDatasetModalOpen" class="modal-backdrop">
       <div class="modal-card" style="max-width: 540px">
         <!-- Header -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-subtle)">
           <div style="display: flex; align-items: center; gap: 10px">
             <MdiIcon :path="mdiFolderOutline" size="22" style="color: var(--accent-primary)" />
             <h3 style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin: 0">
-              Docker Storage Dataset
+              Storage Dataset
             </h3>
           </div>
           <button class="btn btn-sm" style="padding: 2px 6px" @click="isDatasetModalOpen = false">
@@ -1987,13 +1993,13 @@ onUnmounted(() => {
         </div>
 
         <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5">
-          Select or specify the ZFS dataset owned by Docker on the main pool (<span class="mono" style="color: var(--accent-primary)">{{ nasState.systemConfig?.mainPool || 'tank' }}</span>). Apps root is restricted to the main storage pool. Docker will store container images and persistent application volumes inside this dataset without taking over the entire pool.
+          Dataset on the main pool (<span class="mono" style="color: var(--accent-primary)">{{ nasState.systemConfig?.mainPool || 'tank' }}</span>) where container images and app volumes are stored.
         </p>
 
         <!-- Dataset Selector Form -->
         <div class="form-group" style="margin-bottom: 16px">
           <label style="display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase">
-            Available Datasets on Main Pool ({{ nasState.systemConfig?.mainPool || 'tank' }})
+            Dataset
           </label>
           <select v-model="selectedDatasetToSave" class="form-input" style="width: 100%; margin-bottom: 10px">
             <option v-for="d in availableDatasetNames" :key="d" :value="d">
@@ -2002,7 +2008,7 @@ onUnmounted(() => {
           </select>
 
           <label style="display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase">
-            Or Custom Dataset Path ({{ nasState.systemConfig?.mainPool || 'tank' }}/dataset)
+            Or Custom Path ({{ nasState.systemConfig?.mainPool || 'tank' }}/dataset)
           </label>
           <input
             v-model="selectedDatasetToSave"
@@ -2016,7 +2022,7 @@ onUnmounted(() => {
         <!-- Path Preview Card -->
         <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px; margin-bottom: 20px">
           <div style="font-size: 11.5px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 8px">
-            Derived Paths on Host:
+            Paths
           </div>
           <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12.5px" class="mono">
             <div>
@@ -2050,7 +2056,7 @@ onUnmounted(() => {
             @click="handleSaveDataset"
           >
             <MdiIcon :path="mdiCheck" size="16" />
-            <span>{{ isSavingDataset ? 'Saving...' : 'Save Configuration' }}</span>
+            <span>{{ isSavingDataset ? 'Saving...' : 'Save' }}</span>
           </button>
         </div>
       </div>

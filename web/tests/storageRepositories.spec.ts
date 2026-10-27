@@ -232,7 +232,7 @@ describe('Storage Repositories: ISOs and LXC Templates', () => {
         },
       });
 
-      expect(wrapper.text()).toContain('ISOs Repository');
+      expect(wrapper.text()).toContain('ISOs');
       expect(wrapper.text()).toContain('debian-12.iso');
       expect(wrapper.text()).toContain('ubuntu-24.04.iso');
       expect(wrapper.text()).toContain('624.0 MiB');
@@ -246,7 +246,7 @@ describe('Storage Repositories: ISOs and LXC Templates', () => {
 
       const wrapper = mount(LxcView);
 
-      expect(wrapper.text()).toContain('LXC Templates Repository');
+      expect(wrapper.text()).toContain('Templates');
       expect(wrapper.text()).toContain('debian-12.tar.xz');
       expect(wrapper.text()).toContain('alpine-3.20.tar.gz');
       expect(wrapper.text()).toContain('100.0 MiB');

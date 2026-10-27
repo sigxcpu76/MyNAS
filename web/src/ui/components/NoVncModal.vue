@@ -29,7 +29,7 @@ function handleDetach() {
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
+  <div class="modal-backdrop">
     <div class="modal-card vnc-modal-card">
       <VncConsole
         :vm-name="session.vmName"
@@ -46,10 +46,13 @@ function handleDetach() {
 
 <style scoped>
 .vnc-modal-card {
-  max-width: 1200px;
   width: 95vw;
+  max-width: 1440px;
+  height: 90vh;
   max-height: 94vh;
   display: flex;
   flex-direction: column;
+  padding: 16px;
+  overflow: hidden;
 }
 </style>

@@ -19,7 +19,10 @@ import {
 } from '../../domain/models';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
-import { confirmModal, nasState, notify, refreshAllData, refreshZfsSubresources } from '../store';
+import SortableTh from '../components/SortableTh.vue';
+import { useTableSort } from '../composables/useTableSort';
+import { confirmDelete } from '../modal';
+import { nasState, notify, refreshAllData, refreshZfsSubresources } from '../store';
 
 const selectedPool = ref<string>('all');
 const searchQuery = ref('');
@@ -74,6 +77,22 @@ const filteredVolumes = computed(() => {
     const fn = v.volumePath || v.name;
     return fn.toLowerCase().includes(q) || v.devicePath.toLowerCase().includes(q) || v.poolName.toLowerCase().includes(q);
   });
+});
+
+/** Converts a ZFS block size string such as "16k" / "1M" into bytes for sorting. */
+function blockSizeBytes(s: string | undefined): number | null {
+  const m = /^(\d+(?:\.\d+)?)\s*([kmg]?)/i.exec((s || '16k').trim());
+  if (!m) return null;
+  const mult = { '': 1, k: 1024, m: 1024 ** 2, g: 1024 ** 3 }[m[2].toLowerCase() as '' | 'k' | 'm' | 'g'];
+  return parseFloat(m[1]) * mult;
+}
+
+const volumeSort = useTableSort(filteredVolumes, {
+  name: (v) => v.volumePath || v.name.replace(/^zfsPools\/[^/]+\/volumes\//, ''),
+  pool: (v) => v.poolName,
+  capacity: (v) => v.sizeBytes,
+  blockSize: (v) => blockSizeBytes(v.volblocksize),
+  provisioning: (v) => (v.thinProvisioned ? 'Thin' : 'Thick'),
 });
 
 function openCreateModal() {
@@ -149,16 +168,16 @@ async function handleSaveEditVolume() {
   }
 }
 
-async function handleDeleteVolume(name: string) {
-  const shortName = name.replace(/^zfsPools\/[^/]+\/volumes\//, '');
-  const confirmed = await confirmModal({
-    title: 'Delete ZVol Block Device',
-    tone: 'danger',
-    message: `Are you sure you want to delete volume "${shortName}"?`,
-    details: 'ALL DATA ON THIS BLOCK DEVICE WILL BE PERMANENTLY DESTROYED.',
+async function handleDeleteVolume(vol: ZfsVolume) {
+  const name = vol.name;
+  const shortName = vol.volumePath || name.replace(/^zfsPools\/[^/]+\/volumes\//, '');
+  const res = await confirmDelete({
+    kind: 'Volume',
+    name: shortName,
+    details: 'All data on this volume will be destroyed.',
     confirmText: 'Delete Volume',
   });
-  if (!confirmed) return;
+  if (!res.confirmed) return;
 
   try {
     await services.zfs.deleteVolume(name);
@@ -184,15 +203,11 @@ onMounted(async () => {
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px">
         <div>
           <div style="display: flex; align-items: center; gap: 10px">
-            <MdiIcon :path="mdiHarddisk" size="24" style="color: var(--purple-text)" />
-            <h2 class="card-title" style="font-size: 19px; margin: 0">ZFS Block Volumes (ZVols)</h2>
+            <h2 class="card-title" style="font-size: 19px; margin: 0">Volumes</h2>
             <span class="badge badge-purple" style="font-size: 12px">
               {{ allVolumes.length }} {{ allVolumes.length === 1 ? 'Volume' : 'Volumes' }}
             </span>
           </div>
-          <p class="card-subtitle" style="margin-top: 4px; font-size: 13px">
-            Emulated raw block devices exported to <code class="mono">/dev/zvol/...</code> for KVM virtual disks, databases, and raw block storage.
-          </p>
         </div>
 
         <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
@@ -237,14 +252,13 @@ onMounted(async () => {
         <table class="data-table">
           <thead>
             <tr>
-              <th style="min-width: 180px">Volume Name</th>
-              <th style="min-width: 100px">Pool</th>
-              <th style="min-width: 200px">Device Path</th>
-              <th style="min-width: 140px">Capacity & Usage</th>
-              <th style="min-width: 100px">Block Size</th>
-              <th style="min-width: 100px">Provisioning</th>
-              <th style="min-width: 180px">Properties</th>
-              <th style="min-width: 120px; text-align: right">Actions</th>
+              <SortableTh :sort="volumeSort" sort-key="name" style="min-width: 180px">Volume Name</SortableTh>
+              <SortableTh :sort="volumeSort" sort-key="pool">Pool</SortableTh>
+              <SortableTh :sort="volumeSort" sort-key="capacity">Capacity & Usage</SortableTh>
+              <SortableTh :sort="volumeSort" sort-key="blockSize">Block Size</SortableTh>
+              <SortableTh :sort="volumeSort" sort-key="provisioning">Provisioning</SortableTh>
+              <th>Properties</th>
+              <th style="text-align: right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -258,7 +272,6 @@ onMounted(async () => {
                   </div>
                 </td>
                 <td><SkeletonBox width="60px" height="20px" rounded="10px" /></td>
-                <td><SkeletonBox width="140px" height="14px" /></td>
                 <td><SkeletonBox width="90px" height="14px" /></td>
                 <td><SkeletonBox width="60px" height="14px" /></td>
                 <td><SkeletonBox width="70px" height="20px" rounded="10px" /></td>
@@ -273,23 +286,23 @@ onMounted(async () => {
             </template>
 
             <tr v-else-if="filteredVolumes.length === 0">
-              <td colspan="8" style="text-align: center; color: var(--text-secondary); padding: 36px">
+              <td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 36px">
                 <div v-if="searchQuery">
                   No volumes match filter "<strong>{{ searchQuery }}</strong>".
                 </div>
                 <div v-else>
-                  No ZFS volumes found. Click <strong>"New Volume"</strong> above to create one.
+                  No volumes.
                 </div>
               </td>
             </tr>
 
-            <tr v-for="v in filteredVolumes" :key="v.name">
+            <tr v-for="v in volumeSort.sorted.value" :key="v.name">
               <!-- Volume Name -->
               <td>
                 <div style="display: flex; align-items: center; gap: 8px">
                   <MdiIcon :path="mdiHarddisk" size="18" style="color: var(--purple-text); flex-shrink: 0" />
                   <div>
-                    <div class="mono font-semibold" style="font-size: 13.5px; color: var(--text-primary)">
+                    <div class="mono font-semibold" style="font-size: 12px; color: var(--text-primary)">
                       {{ v.volumePath || v.name.replace(/^zfsPools\/[^/]+\/volumes\//, '') }}
                     </div>
                   </div>
@@ -303,17 +316,10 @@ onMounted(async () => {
                 </span>
               </td>
 
-              <!-- Device Path -->
-              <td>
-                <span class="mono" style="font-size: 12px; color: var(--purple-text)" :title="v.devicePath">
-                  {{ v.devicePath || '-' }}
-                </span>
-              </td>
-
               <!-- Capacity & Used -->
               <td>
                 <div>
-                  <div class="mono" style="font-weight: 700; font-size: 13px">
+                  <div class="mono" style="font-weight: 700; font-size: 12px">
                     {{ formatBytes(v.sizeBytes) }}
                   </div>
                   <div style="font-size: 11px; color: var(--text-secondary); margin-top: 1px">
@@ -336,7 +342,7 @@ onMounted(async () => {
                   :class="v.thinProvisioned ? 'badge-success' : 'badge-neutral'"
                   style="font-size: 10.5px"
                 >
-                  {{ v.thinProvisioned ? 'Thin (Sparse)' : 'Thick (Reserved)' }}
+                  {{ v.thinProvisioned ? 'Thin' : 'Thick' }}
                 </span>
               </td>
 
@@ -374,7 +380,7 @@ onMounted(async () => {
                   <button
                     class="btn btn-danger btn-sm btn-icon"
                     title="Delete Volume"
-                    @click="handleDeleteVolume(v.name)"
+                    @click="handleDeleteVolume(v)"
                   >
                     <MdiIcon :path="mdiDelete" size="13" />
                   </button>
@@ -387,12 +393,11 @@ onMounted(async () => {
     </div>
 
     <!-- Create Volume Modal -->
-    <div v-if="showCreateVolume" class="modal-overlay" @click.self="showCreateVolume = false">
+    <div v-if="showCreateVolume" class="modal-overlay">
       <div class="modal-container" style="max-width: 580px; width: 100%">
         <div class="modal-header">
           <div style="display: flex; align-items: center; gap: 10px">
-            <MdiIcon :path="mdiHarddisk" size="20" style="color: var(--purple-text)" />
-            <h3 class="card-title" style="margin: 0">Create New ZFS Volume (ZVol)</h3>
+            <h3 class="card-title" style="margin: 0">Create Volume</h3>
           </div>
           <button class="btn btn-sm btn-icon" @click="showCreateVolume = false">
             <MdiIcon :path="mdiClose" size="16" />
@@ -475,7 +480,7 @@ onMounted(async () => {
     </div>
 
     <!-- Edit Volume Modal -->
-    <div v-if="editingVolume" class="modal-overlay" @click.self="editingVolume = null">
+    <div v-if="editingVolume" class="modal-overlay">
       <div class="modal-container" style="max-width: 540px; width: 100%">
         <div class="modal-header">
           <div style="display: flex; align-items: center; gap: 10px">
@@ -491,11 +496,14 @@ onMounted(async () => {
 
         <form @submit.prevent="handleSaveEditVolume">
           <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px">
+            <div v-if="editingVolume.devicePath" style="font-size: 12px; color: var(--text-secondary)">
+              Device Path: <span class="mono" style="color: var(--text-primary)">{{ editingVolume.devicePath }}</span>
+            </div>
             <div class="form-group">
               <label>Provisioned Size (GiB)</label>
               <input v-model.number="editVolumeForm.volsizeGib" type="number" min="1" class="input mono" required />
               <span class="card-subtitle" style="font-size: 11px">
-                Current: {{ formatBytes(editingVolume.sizeBytes) }} (Resizing expands or shrinks the raw block device).
+                Current: {{ formatBytes(editingVolume.sizeBytes) }}
               </span>
             </div>
 

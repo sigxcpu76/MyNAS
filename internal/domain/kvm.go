@@ -148,7 +148,7 @@ func (vm *VirtualMachine) Validate() error {
 		return fmt.Errorf("%w: memory_mib must be >= 128", ErrInvalidArgument)
 	}
 	if vm.MachineType == "" {
-		vm.MachineType = "q35"
+		vm.MachineType = "i440fx"
 	}
 	if vm.BiosType == "" {
 		vm.BiosType = "seabios"

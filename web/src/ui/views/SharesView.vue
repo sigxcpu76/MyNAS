@@ -3,7 +3,28 @@ import { computed, reactive, ref } from 'vue';
 import { services } from '../../container';
 import type { CifsShare, WebdavShare } from '../../domain/models';
 import SkeletonBox from '../components/SkeletonBox.vue';
-import { confirmModal, getModuleAvailability, nasState, notify } from '../store';
+import SortableTh from '../components/SortableTh.vue';
+import { useTableSort } from '../composables/useTableSort';
+import { getModuleAvailability, nasState, notify } from '../store';
+import { confirmDelete } from '../modal';
+
+const cifsSort = useTableSort(
+  () => nasState.cifsShares,
+  {
+    share: (s: CifsShare) => s.shareName,
+    acl: (s: CifsShare) => (s.validUsers || []).join(', '),
+    mode: (s: CifsShare) => s.readOnly,
+  }
+);
+
+const webdavSort = useTableSort(
+  () => nasState.webdavShares,
+  {
+    endpoint: (w: WebdavShare) => w.urlPrefix,
+    identity: (w: WebdavShare) => (w.allowedUsers || []).join(', '),
+    access: (w: WebdavShare) => w.readOnly,
+  }
+);
 
 const cifsModuleStatus = computed(() => getModuleAvailability('cifs'));
 
@@ -37,7 +58,7 @@ const showCreateWebdav = ref(false);
 const webdavForm = reactive({
   shareId: '',
   path: '/nas/tank/documents',
-  description: 'HTTP/2 WebDAV Document Endpoint',
+  description: 'Documents',
   allowedUsersText: 'admin, nasuser',
   allowedGroupsText: 'nasusers',
   readOnly: false,
@@ -139,16 +160,16 @@ async function handleSaveCifsEdit() {
   }
 }
 
-async function handleDeleteCifs(name: string) {
-  const shortName = name.replace(/^cifsShares\//, '');
-  const confirmed = await confirmModal({
-    title: 'Delete CIFS / Samba Share',
-    tone: 'danger',
-    message: `Are you sure you want to delete CIFS share "${shortName}"?`,
-    details: 'The SMB network export will be detached and removed from smb.conf. Underlying files in the filesystem will remain intact.',
+async function handleDeleteCifs(share: CifsShare) {
+  const name = share.name;
+  const shortName = share.shareName || name.replace(/^cifsShares\//, '');
+  const res = await confirmDelete({
+    kind: 'SMB Share',
+    name: shortName,
+    details: 'The SMB export will be removed; files on disk remain intact.',
     confirmText: 'Delete Share',
   });
-  if (!confirmed) return;
+  if (!res.confirmed) return;
 
   try {
     await services.shares.deleteCifsShare(name);
@@ -229,16 +250,16 @@ async function handleSaveWebdavEdit() {
   }
 }
 
-async function handleDeleteWebdav(name: string) {
+async function handleDeleteWebdav(share: WebdavShare) {
+  const name = share.name;
   const shortName = name.replace(/^webdavShares\//, '');
-  const confirmed = await confirmModal({
-    title: 'Delete WebDAV Share',
-    tone: 'danger',
-    message: `Are you sure you want to delete WebDAV share "${shortName}"?`,
-    details: 'The WebDAV HTTP endpoint will be detached and removed.',
+  const res = await confirmDelete({
+    kind: 'WebDAV Share',
+    name: share.urlPrefix || shortName,
+    details: 'The WebDAV endpoint will be removed; files on disk remain intact.',
     confirmText: 'Delete Share',
   });
-  if (!confirmed) return;
+  if (!res.confirmed) return;
 
   try {
     await services.shares.deleteWebdavShare(name);
@@ -256,10 +277,7 @@ async function handleDeleteWebdav(name: string) {
     <div class="card">
       <div class="card-header">
         <div>
-          <h3 class="card-title">Samba / CIFS Shares (`cifsShares/{cifs_share}`)</h3>
-          <p class="card-subtitle">
-            SMB2/SMB3 exports backed by `/etc/samba/smb.conf` & `smbcontrol smbd reload-config`
-          </p>
+          <h3 class="card-title">SMB Shares</h3>
         </div>
         <button
           class="btn btn-primary btn-sm"
@@ -298,11 +316,11 @@ async function handleDeleteWebdav(name: string) {
       >
         <div class="form-grid">
           <div class="form-group">
-            <label>Share Name (`cifs_share_id`)</label>
+            <label>Share Name</label>
             <input v-model="cifsForm.shareId" class="input mono" placeholder="media" required />
           </div>
           <div class="form-group">
-            <label>Filesystem Path (`path`)</label>
+            <label>Path</label>
             <input v-model="cifsForm.path" class="input mono" placeholder="/nas/tank/media" required />
           </div>
           <div class="form-group">
@@ -310,7 +328,7 @@ async function handleDeleteWebdav(name: string) {
             <input v-model="cifsForm.validUsersText" class="input mono" placeholder="admin, nasuser" />
           </div>
           <div class="form-group">
-            <label>Valid Groups (`@group`)</label>
+            <label>Valid Groups (comma-separated)</label>
             <input v-model="cifsForm.validGroupsText" class="input mono" placeholder="nasusers" />
           </div>
           <div class="form-group">
@@ -350,7 +368,7 @@ async function handleDeleteWebdav(name: string) {
         "
       >
         <div style="font-weight: 600; margin-bottom: 8px">
-          PATCH {{ editingCifs.name }} (`updateMask`)
+          Edit {{ editingCifs.shareName }}
         </div>
         <div class="form-grid">
           <div class="form-group">
@@ -377,7 +395,7 @@ async function handleDeleteWebdav(name: string) {
           </div>
           <div style="display: flex; gap: 6px">
             <button class="btn btn-sm" @click="editingCifs = null">Cancel</button>
-            <button class="btn btn-primary btn-sm" @click="handleSaveCifsEdit">Save PATCH</button>
+            <button class="btn btn-primary btn-sm" @click="handleSaveCifsEdit">Save</button>
           </div>
         </div>
       </div>
@@ -386,9 +404,9 @@ async function handleDeleteWebdav(name: string) {
         <table class="data-table">
           <thead>
             <tr>
-              <th>SMB Share / Path</th>
-              <th>Access ACLs</th>
-              <th>Mode / Masks</th>
+              <SortableTh :sort="cifsSort" sort-key="share">SMB Share</SortableTh>
+              <SortableTh :sort="cifsSort" sort-key="acl">Access ACLs</SortableTh>
+              <SortableTh :sort="cifsSort" sort-key="mode">Mode / Masks</SortableTh>
               <th>Actions</th>
             </tr>
           </thead>
@@ -425,16 +443,13 @@ async function handleDeleteWebdav(name: string) {
 
             <tr v-else-if="nasState.cifsShares.length === 0">
               <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 32px">
-                No Samba / CIFS shares configured. Click <strong>"New CIFS Share"</strong> to add one.
+                No SMB shares.
               </td>
             </tr>
 
-            <tr v-for="s in nasState.cifsShares" :key="s.name">
+            <tr v-for="s in cifsSort.sorted.value" :key="s.name">
               <td>
                 <div class="mono" style="font-weight: 600">//nas/{{ s.shareName }}</div>
-                <div class="mono" style="font-size: 11px; color: var(--accent-primary)">
-                  {{ s.path }}
-                </div>
                 <div style="font-size: 11px; color: var(--text-secondary)">{{ s.comment }}</div>
               </td>
               <td class="mono" style="font-size: 11.5px">
@@ -455,7 +470,7 @@ async function handleDeleteWebdav(name: string) {
               <td>
                 <div style="display: flex; gap: 6px">
                   <button class="btn btn-sm" @click="startEditCifs(s)">Edit</button>
-                  <button class="btn btn-danger btn-sm" @click="handleDeleteCifs(s.name)">
+                  <button class="btn btn-danger btn-sm" @click="handleDeleteCifs(s)">
                     Del
                   </button>
                 </div>
@@ -470,10 +485,7 @@ async function handleDeleteWebdav(name: string) {
     <div class="card">
       <div class="card-header">
         <div>
-          <h3 class="card-title">WebDAV HTTP Shares (`webdavShares/{webdav_share}`)</h3>
-          <p class="card-subtitle">
-            Built-in RFC 4918 WebDAV handler mounted directly at `/dav/{share_name}/`
-          </p>
+          <h3 class="card-title">WebDAV Shares</h3>
         </div>
         <button class="btn btn-primary btn-sm" @click="showCreateWebdav = !showCreateWebdav">
           {{ showCreateWebdav ? 'Cancel' : '+ Add WebDAV Share' }}
@@ -493,11 +505,11 @@ async function handleDeleteWebdav(name: string) {
       >
         <div class="form-grid">
           <div class="form-group">
-            <label>Share ID (`webdav_share_id`)</label>
+            <label>Share ID</label>
             <input v-model="webdavForm.shareId" class="input mono" placeholder="documents" required />
           </div>
           <div class="form-group">
-            <label>Filesystem Path (`path`)</label>
+            <label>Path</label>
             <input v-model="webdavForm.path" class="input mono" placeholder="/nas/tank/documents" required />
           </div>
           <div class="form-group">
@@ -511,7 +523,7 @@ async function handleDeleteWebdav(name: string) {
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px">
           <label style="font-size: 12px; display: flex; align-items: center; gap: 5px">
-            <input v-model="webdavForm.readOnly" type="checkbox" /> Read-Only WebDAV Mount
+            <input v-model="webdavForm.readOnly" type="checkbox" /> Read-Only
           </label>
           <button type="submit" class="btn btn-primary btn-sm">Publish WebDAV Share</button>
         </div>
@@ -529,7 +541,7 @@ async function handleDeleteWebdav(name: string) {
         "
       >
         <div style="font-weight: 600; margin-bottom: 8px">
-          PATCH {{ editingWebdav.name }} (`updateMask`)
+          Edit {{ editingWebdav.urlPrefix }}
         </div>
         <div class="form-grid">
           <div class="form-group">
@@ -551,7 +563,7 @@ async function handleDeleteWebdav(name: string) {
           </label>
           <div style="display: flex; gap: 6px">
             <button class="btn btn-sm" @click="editingWebdav = null">Cancel</button>
-            <button class="btn btn-primary btn-sm" @click="handleSaveWebdavEdit">Save PATCH</button>
+            <button class="btn btn-primary btn-sm" @click="handleSaveWebdavEdit">Save</button>
           </div>
         </div>
       </div>
@@ -560,9 +572,9 @@ async function handleDeleteWebdav(name: string) {
         <table class="data-table">
           <thead>
             <tr>
-              <th>Endpoint URL / Path</th>
-              <th>Allowed Identity</th>
-              <th>Access</th>
+              <SortableTh :sort="webdavSort" sort-key="endpoint">Endpoint URL</SortableTh>
+              <SortableTh :sort="webdavSort" sort-key="identity">Allowed Identity</SortableTh>
+              <SortableTh :sort="webdavSort" sort-key="access">Access</SortableTh>
               <th>Actions</th>
             </tr>
           </thead>
@@ -594,16 +606,13 @@ async function handleDeleteWebdav(name: string) {
 
             <tr v-else-if="nasState.webdavShares.length === 0">
               <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 32px">
-                No WebDAV HTTP shares configured. Click <strong>"New WebDAV Share"</strong> to add one.
+                No WebDAV shares.
               </td>
             </tr>
 
-            <tr v-for="w in nasState.webdavShares" :key="w.name">
+            <tr v-for="w in webdavSort.sorted.value" :key="w.name">
               <td>
                 <div class="mono" style="font-weight: 600; color: var(--success-text)">{{ w.urlPrefix }}</div>
-                <div class="mono" style="font-size: 11px; color: var(--accent-primary)">
-                  {{ w.path }}
-                </div>
                 <div style="font-size: 11px; color: var(--text-secondary)">{{ w.description }}</div>
               </td>
               <td class="mono" style="font-size: 11.5px">
@@ -618,7 +627,7 @@ async function handleDeleteWebdav(name: string) {
               <td>
                 <div style="display: flex; gap: 6px">
                   <button class="btn btn-sm" @click="startEditWebdav(w)">Edit</button>
-                  <button class="btn btn-danger btn-sm" @click="handleDeleteWebdav(w.name)">
+                  <button class="btn btn-danger btn-sm" @click="handleDeleteWebdav(w)">
                     Del
                   </button>
                 </div>
@@ -626,23 +635,6 @@ async function handleDeleteWebdav(name: string) {
             </tr>
           </tbody>
         </table>
-      </div>
-
-      <!-- Client Mount Cheat-Sheet -->
-      <div
-        style="
-          margin-top: 14px;
-          padding: 10px 12px;
-          background: var(--bg-base);
-          border: 1px solid var(--border-subtle);
-          border-radius: 6px;
-          font-size: 11.5px;
-          color: var(--text-secondary);
-        "
-      >
-        <strong>Client Mount Commands:</strong><br />
-        <code class="mono">mount -t cifs //nas-host/media /mnt/media -o username=admin</code><br />
-        <code class="mono">mount -t davfs http://nas-host:8080/dav/documents /mnt/docs</code>
       </div>
     </div>
   </div>

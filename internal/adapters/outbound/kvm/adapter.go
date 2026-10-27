@@ -1807,11 +1807,11 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 
 func normalizeMachineTypeForLibvirt(mach string) string {
 	mach = strings.TrimSpace(strings.ToLower(mach))
-	if mach == "" || mach == "q35" || strings.HasPrefix(mach, "pc-q35") {
-		return "q35"
-	}
-	if mach == "i440fx" || mach == "pc-i440fx" || mach == "pc" {
+	if mach == "" || mach == "i440fx" || mach == "pc-i440fx" || mach == "pc" {
 		return "pc"
+	}
+	if mach == "q35" || strings.HasPrefix(mach, "pc-q35") {
+		return "q35"
 	}
 	return mach
 }

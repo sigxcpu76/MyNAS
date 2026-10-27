@@ -15,6 +15,8 @@ import {
 import { services } from '../../container';
 import type { Prerequisite, PrerequisiteSummary } from '../../domain/models';
 import MdiIcon from './MdiIcon.vue';
+import SortableTh from './SortableTh.vue';
+import { useTableSort } from '../composables/useTableSort';
 import { nasState, notify } from '../store';
 
 const emit = defineEmits<{
@@ -38,6 +40,17 @@ const installedList = computed(() => {
   if (categoryFilter.value === 'ALL') return items;
   return items.filter((p) => p.category === categoryFilter.value);
 });
+
+// Single sort state shared by both tabs (the table header is common)
+const prereqSort = useTableSort(
+  () => (activeTab.value === 'missing' ? missingList.value : installedList.value),
+  {
+    name: (p: Prerequisite) => p.displayName,
+    category: (p: Prerequisite) => p.category,
+    kind: (p: Prerequisite) => p.kind,
+    status: (p: Prerequisite) => p.status,
+  }
+);
 
 const installedCount = computed(() => {
   return summary.value?.installedCount ?? nasState.prerequisites.filter((p) => p.status === 'INSTALLED').length;
@@ -129,7 +142,7 @@ function generateFallbackScript(): string {
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
+  <div class="modal-backdrop">
     <div class="modal-card modal-card-xlarge">
       <!-- Modal Header -->
       <div class="modal-header" style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 14px; margin-bottom: 16px">
@@ -145,7 +158,7 @@ function generateFallbackScript(): string {
           </div>
           <div>
             <div style="display: flex; align-items: center; gap: 8px">
-              <h3 class="modal-title" style="margin: 0; font-size: 18px">System Prerequisites & Host Compliance</h3>
+              <h3 class="modal-title" style="margin: 0; font-size: 18px">Prerequisites</h3>
               <span
                 class="badge"
                 :class="statusLevel === 'green' ? 'badge-success' : statusLevel === 'amber' ? 'badge-warning' : 'badge-danger'"
@@ -153,9 +166,6 @@ function generateFallbackScript(): string {
                 {{ statusLevel === 'green' ? 'Compliant' : statusLevel === 'amber' ? `${missingCount} Missing` : 'Critical Missing' }}
               </span>
             </div>
-            <p class="modal-subtitle" style="margin: 3px 0 0 0">
-              Underlying Linux packages, virtualization hypervisors, and storage daemons required for NAS operations
-            </p>
           </div>
         </div>
 
@@ -177,7 +187,7 @@ function generateFallbackScript(): string {
                 {{ linuxFlavor?.prettyName || 'Linux Host Platform' }}
               </strong>
               <div style="font-size: 12px; opacity: 0.85; margin-top: 2px">
-                {{ installedCount }} of {{ installedCount + missingCount }} prerequisites verified and operational.
+                {{ installedCount }} of {{ installedCount + missingCount }} prerequisites installed.
               </div>
             </div>
           </div>
@@ -214,8 +224,7 @@ function generateFallbackScript(): string {
           </div>
 
           <p style="font-size: 12.5px; color: var(--text-secondary); margin: 0 0 10px 0">
-            Open an SSH session or root terminal on this host and execute the package installation command below.
-            Once complete, click <strong>Re-check Prerequisites</strong> to verify.
+            Run this command as root on the host, then click <strong>Re-check Prerequisites</strong>.
           </p>
 
           <div class="code-terminal mono">
@@ -227,10 +236,7 @@ function generateFallbackScript(): string {
           <div style="display: flex; align-items: center; gap: 10px">
             <MdiIcon :path="mdiCheckCircle" size="22" style="color: var(--success-text); flex-shrink: 0" />
             <div>
-              <strong style="color: var(--success-text)">All Host Prerequisites Are Installed</strong>
-              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px">
-                Storage, virtualization, containers, and network sharing utilities are ready.
-              </div>
+              <strong style="color: var(--success-text)">All prerequisites are installed</strong>
             </div>
           </div>
         </div>
@@ -266,7 +272,7 @@ function generateFallbackScript(): string {
               <option value="VIRTUALIZATION">Virtualization (KVM)</option>
               <option value="CONTAINERS">Containers (Docker/LXC)</option>
               <option value="SHARING">File Sharing (CIFS/WebDAV)</option>
-              <option value="SECURITY">Security & PAM</option>
+              <option value="SECURITY">Security</option>
             </select>
           </div>
         </div>
@@ -276,10 +282,10 @@ function generateFallbackScript(): string {
           <table class="data-table">
             <thead>
               <tr>
-                <th style="width: 25%">Component</th>
-                <th style="width: 14%">Category</th>
-                <th style="width: 12%">Kind</th>
-                <th style="width: 14%">Status</th>
+                <SortableTh :sort="prereqSort" sort-key="name" style="width: 25%">Component</SortableTh>
+                <SortableTh :sort="prereqSort" sort-key="category" style="width: 14%">Category</SortableTh>
+                <SortableTh :sort="prereqSort" sort-key="kind" style="width: 12%">Kind</SortableTh>
+                <SortableTh :sort="prereqSort" sort-key="status" style="width: 14%">Status</SortableTh>
                 <th style="width: 35%">Installation Hint / Fix Command</th>
               </tr>
             </thead>
@@ -290,7 +296,7 @@ function generateFallbackScript(): string {
                     No missing prerequisites in this category.
                   </td>
                 </tr>
-                <tr v-for="item in missingList" :key="item.name">
+                <tr v-for="item in prereqSort.sorted.value" :key="item.name">
                   <td>
                     <div style="font-weight: 600">{{ item.displayName }}</div>
                     <div class="mono" style="font-size: 11px; color: var(--text-secondary)">
@@ -328,7 +334,7 @@ function generateFallbackScript(): string {
                     No installed prerequisites in this category.
                   </td>
                 </tr>
-                <tr v-for="item in installedList" :key="item.name">
+                <tr v-for="item in prereqSort.sorted.value" :key="item.name">
                   <td>
                     <div style="font-weight: 600">{{ item.displayName }}</div>
                     <div class="mono" style="font-size: 11px; color: var(--text-secondary)">
@@ -357,10 +363,7 @@ function generateFallbackScript(): string {
       </div>
 
       <!-- Modal Footer -->
-      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-subtle); padding-top: 14px; margin-top: 14px">
-        <span style="font-size: 12px; color: var(--text-secondary)">
-          Verified by NaN Host Checker Engine
-        </span>
+      <div class="modal-footer" style="display: flex; justify-content: flex-end; align-items: center; border-top: 1px solid var(--border-subtle); padding-top: 14px; margin-top: 14px">
         <div style="display: flex; gap: 8px">
           <button class="btn btn-secondary" @click="emit('close')">
             Close

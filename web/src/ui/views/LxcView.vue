@@ -3,17 +3,47 @@ import { onMounted, reactive, ref } from 'vue';
 import {
   mdiArchiveOutline,
   mdiContentCopy,
-  mdiDatabaseCheck,
   mdiRefresh,
   mdiTrashCan,
   mdiUpload,
 } from '@mdi/js';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
+import SortableTh from '../components/SortableTh.vue';
+import { useTableSort } from '../composables/useTableSort';
 import { services } from '../../container';
-import { confirmModal, nasState, notify, refreshLxcTemplates as storeRefreshTemplates } from '../store';
+import { nasState, notify, refreshLxcTemplates as storeRefreshTemplates } from '../store';
+import { confirmDelete } from '../modal';
 import { generateNanosecondId, toZfsSafeSlug } from '../../domain/id';
-import { formatBytes, type StorageImage } from '../../domain/models';
+import { formatBytes, type LxcContainer, type StorageImage } from '../../domain/models';
+
+/** Converts a dotted IPv4 address into a sortable integer (null when absent/invalid). */
+function ipv4ToNumber(ip: string | undefined): number | null {
+  const parts = (ip || '').trim().split('/')[0].split('.');
+  if (parts.length !== 4) return null;
+  let n = 0;
+  for (const part of parts) {
+    const octet = Number(part);
+    if (!Number.isInteger(octet) || octet < 0 || octet > 255) return null;
+    n = n * 256 + octet;
+  }
+  return n;
+}
+
+const lxcSort = useTableSort(() => nasState.lxcContainers, {
+  name: (lx) => lx.containerName,
+  state: (lx) => lx.state,
+  distro: (lx) => `${lx.distribution} / ${lx.release} (${lx.architecture})`,
+  ipv4: (lx) => ipv4ToNumber(lx.ipv4Address),
+  // Primary key: CPU cores, secondary: memory limit (MiB)
+  resources: (lx) => lx.cpuCores * 1e9 + lx.memoryLimitMib,
+});
+
+const templateSort = useTableSort(() => nasState.lxcTemplates, {
+  name: (t) => t.name,
+  size: (t) => t.sizeBytes,
+  modified: (t) => (t.modTime ? new Date(t.modTime) : null),
+});
 
 const showCreate = ref(false);
 const form = reactive({
@@ -116,14 +146,13 @@ async function handleUploadTemplate(e: Event) {
 }
 
 async function handleDeleteTemplate(tmpl: StorageImage) {
-  const confirmed = await confirmModal({
-    title: 'Delete LXC Template',
-    tone: 'danger',
-    message: `Are you sure you want to delete template archive "${tmpl.name}"?`,
+  const res = await confirmDelete({
+    kind: 'Template',
+    name: tmpl.name,
     details: `This will permanently remove ${tmpl.path} (${tmpl.sizeFormatted}) from the main pool.`,
     confirmText: 'Delete Template',
   });
-  if (!confirmed) return;
+  if (!res.confirmed) return;
 
   try {
     await services.lxc.deleteTemplate(tmpl.name);
@@ -185,16 +214,23 @@ async function handleAction(name: string, verb: 'start' | 'stop' | 'freeze') {
   }
 }
 
-async function handleDelete(name: string) {
+/** Tooltip for the name cell: storage paths are kept out of the table itself. */
+function lxcPathsTitle(lx: LxcContainer): string {
+  const lines = [`Rootfs: ${lx.rootfsPath}`];
+  if (lx.templateArchive) lines.push(`Template: ${lx.templateArchive}`);
+  return lines.join('\n');
+}
+
+async function handleDelete(lx: LxcContainer) {
+  const name = lx.name;
   const shortName = name.replace(/^lxcContainers\//, '');
-  const confirmed = await confirmModal({
-    title: 'Delete LXC Container',
-    tone: 'danger',
-    message: `Are you sure you want to permanently delete container "${shortName}"?`,
-    details: 'The container will be stopped, and its rootfs and container configuration will be deleted.',
+  const res = await confirmDelete({
+    kind: 'Container',
+    name: lx.containerName || shortName,
+    details: 'The container will be stopped and its rootfs and configuration deleted.',
     confirmText: 'Delete Container',
   });
-  if (!confirmed) return;
+  if (!res.confirmed) return;
 
   try {
     await services.lxc.deleteContainer(name, true);
@@ -210,17 +246,11 @@ async function handleDelete(name: string) {
   <div class="card">
     <div class="card-header">
       <div>
-        <h2 class="card-title" style="font-size: 17px">
-          LXC Linux System Containers (`lxcContainers/{lxc_container}`)
-        </h2>
-        <p class="card-subtitle">
-          Lightweight unprivileged OS containers backed by ZFS rootfs datasets (`lxc-create`,
-          `lxc-start`, `lxc-stop`, `lxc-freeze`).
-        </p>
+        <h2 class="card-title" style="font-size: 17px">LXC Containers</h2>
       </div>
 
       <button class="btn btn-primary" @click="toggleCreate">
-        {{ showCreate ? 'Cancel' : '+ Create LXC Container' }}
+        {{ showCreate ? 'Cancel' : '+ Create Container' }}
       </button>
     </div>
 
@@ -244,17 +274,16 @@ async function handleDelete(name: string) {
             placeholder="e.g. Debian Web Server"
             @input="onContainerNameInput"
           />
-          <small style="color: var(--text-muted); font-size: 11px">Human readable name</small>
         </div>
         <div class="form-group">
-          <label>Container ID (`lxc_container_id`)</label>
+          <label>Container ID</label>
           <input
             v-model="form.containerId"
             class="input mono"
             placeholder="e.g. debian-web-server"
             required
           />
-          <small style="color: var(--text-muted); font-size: 11px">ZFS-safe slug computed from entity name</small>
+          <small style="color: var(--text-muted); font-size: 11px">Derived from container name</small>
         </div>
         <div class="form-group">
           <label>Distribution</label>
@@ -277,7 +306,7 @@ async function handleDelete(name: string) {
           </select>
         </div>
         <div class="form-group">
-          <label>CPU Cores (`lxc.cgroup2.cpuset.cpus`)</label>
+          <label>CPU Cores</label>
           <input v-model.number="form.cpuCores" type="number" min="1" max="32" class="input mono" />
         </div>
         <div class="form-group">
@@ -292,7 +321,7 @@ async function handleDelete(name: string) {
               :value="form.templateArchive"
               @change="(e) => form.templateArchive = (e.target as HTMLSelectElement).value"
             >
-              <option value="">-- Select from Templates Repository --</option>
+              <option value="">-- Select a template --</option>
               <option v-for="tmpl in nasState.lxcTemplates" :key="tmpl.path" :value="tmpl.path">
                 {{ tmpl.name }} ({{ tmpl.sizeFormatted }})
               </option>
@@ -303,34 +332,19 @@ async function handleDelete(name: string) {
             class="input mono"
             placeholder="/nas/tank/lxc-templates/debian-12.tar.xz or custom archive path"
           />
-          <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px">
-            Select a template from main pool repository (<code class="mono">/nas/{{ nasState.systemConfig?.mainPool || 'tank' }}/lxc-templates</code>) or specify custom archive path.
-          </div>
-        </div>
-      </div>
-
-      <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; padding: 8px 12px; margin-top: 12px; font-size: 12px; display: flex; align-items: center; justify-content: space-between">
-        <div>
-          <span style="color: var(--text-secondary)">Rootfs Storage:</span>
-          <span class="badge badge-main-pool" style="margin-left: 6px; display: inline-flex; align-items: center; gap: 4px">
-            <MdiIcon :path="mdiDatabaseCheck" size="13" /> MAIN POOL ({{ nasState.systemConfig?.mainPool || 'tank' }})
-          </span>
-          <span class="mono" style="margin-left: 8px; color: var(--text-muted)">
-            /nas/{{ nasState.systemConfig?.mainPool || 'tank' }}/containers/{{ form.containerId || '&lt;id&gt;' }}/rootfs
-          </span>
         </div>
       </div>
 
       <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px">
         <div style="display: flex; gap: 16px; font-size: 12.5px">
           <label style="display: flex; align-items: center; gap: 6px">
-            <input v-model="form.unprivileged" type="checkbox" /> Unprivileged UID Mapping
+            <input v-model="form.unprivileged" type="checkbox" /> Unprivileged
           </label>
           <label style="display: flex; align-items: center; gap: 6px">
-            <input v-model="form.autostart" type="checkbox" /> Autostart (`lxc.start.auto = 1`)
+            <input v-model="form.autostart" type="checkbox" /> Autostart
           </label>
         </div>
-        <button type="submit" class="btn btn-primary">Provision LXC Container</button>
+        <button type="submit" class="btn btn-primary">Create Container</button>
       </div>
     </form>
 
@@ -338,12 +352,11 @@ async function handleDelete(name: string) {
       <table class="data-table">
         <thead>
           <tr>
-            <th>LXC Container</th>
-            <th>State</th>
-            <th>Distro / Release / Arch</th>
-            <th>IPv4 Address</th>
-            <th>Rootfs Path</th>
-            <th>Resources</th>
+            <SortableTh :sort="lxcSort" sort-key="name">Name</SortableTh>
+            <SortableTh :sort="lxcSort" sort-key="state">State</SortableTh>
+            <SortableTh :sort="lxcSort" sort-key="distro">Distro / Release / Arch</SortableTh>
+            <SortableTh :sort="lxcSort" sort-key="ipv4">IPv4 Address</SortableTh>
+            <SortableTh :sort="lxcSort" sort-key="resources">Resources</SortableTh>
             <th>Actions</th>
           </tr>
         </thead>
@@ -360,7 +373,6 @@ async function handleDelete(name: string) {
               <td><SkeletonBox width="65px" height="20px" rounded="10px" /></td>
               <td><SkeletonBox width="100px" height="14px" /></td>
               <td><SkeletonBox width="95px" height="14px" /></td>
-              <td><SkeletonBox width="140px" height="14px" /></td>
               <td><SkeletonBox width="110px" height="14px" /></td>
               <td>
                 <div style="display: inline-flex; gap: 6px">
@@ -372,15 +384,15 @@ async function handleDelete(name: string) {
           </template>
 
           <tr v-else-if="nasState.lxcContainers.length === 0">
-            <td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 36px">
-              No LXC system containers found. Click <strong>"Create Container"</strong> above to provision one.
+            <td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 36px">
+              No containers yet.
             </td>
           </tr>
 
-          <tr v-for="lx in nasState.lxcContainers" :key="lx.name">
-            <td>
+          <tr v-for="lx in lxcSort.sorted.value" :key="lx.name">
+            <td :title="lxcPathsTitle(lx)">
               <div style="font-weight: 600">{{ lx.containerName }}</div>
-              <div class="mono" style="font-size: 11px; color: var(--text-muted)">{{ lx.name }}</div>
+              <div class="mono" style="font-size: 11px; color: var(--text-muted)">{{ lx.name.replace('lxcContainers/', '') }}</div>
             </td>
             <td>
               <span
@@ -406,12 +418,6 @@ async function handleDelete(name: string) {
               {{ lx.ipv4Address || '—' }}
             </td>
             <td class="mono" style="font-size: 12px">
-              <div style="color: var(--accent-primary)">{{ lx.rootfsPath }}</div>
-              <div v-if="lx.templateArchive" style="font-size: 11px; color: var(--text-muted); margin-top: 2px; display: inline-flex; align-items: center; gap: 4px">
-                <MdiIcon :path="mdiArchiveOutline" size="13" /> {{ lx.templateArchive }}
-              </div>
-            </td>
-            <td class="mono" style="font-size: 12px">
               {{ lx.cpuCores }} Cores · {{ lx.memoryLimitMib }} MiB
             </td>
             <td>
@@ -421,24 +427,24 @@ async function handleDelete(name: string) {
                   class="btn btn-success btn-sm"
                   @click="handleAction(lx.name, 'start')"
                 >
-                  `:start`
+                  Start
                 </button>
                 <button
                   v-if="lx.state === 'RUNNING'"
                   class="btn btn-sm"
                   @click="handleAction(lx.name, 'freeze')"
                 >
-                  `:freeze`
+                  Freeze
                 </button>
                 <button
                   v-if="lx.state !== 'STOPPED'"
                   class="btn btn-sm"
                   @click="handleAction(lx.name, 'stop')"
                 >
-                  `:stop`
+                  Stop
                 </button>
-                <button class="btn btn-danger btn-sm" @click="handleDelete(lx.name)">
-                  Del
+                <button class="btn btn-danger btn-sm" @click="handleDelete(lx)">
+                  Delete
                 </button>
               </div>
             </td>
@@ -452,14 +458,7 @@ async function handleDelete(name: string) {
   <div class="card" style="margin-top: 20px">
     <div class="card-header">
       <div>
-        <h2 class="card-title" style="font-size: 17px; display: flex; align-items: center; gap: 8px">
-          <MdiIcon :path="mdiArchiveOutline" size="20" style="color: var(--accent-primary)" />
-          LXC Templates Repository
-        </h2>
-        <p class="card-subtitle">
-          OS rootfs template archives stored on main pool dataset
-          <code class="mono">/nas/{{ nasState.systemConfig?.mainPool || 'tank' }}/lxc-templates</code>.
-        </p>
+        <h2 class="card-title" style="font-size: 17px">Templates</h2>
       </div>
 
       <div style="display: flex; gap: 10px; align-items: center">
@@ -517,17 +516,16 @@ async function handleDelete(name: string) {
       <table class="data-table">
         <thead>
           <tr>
-            <th>Template Archive Name</th>
-            <th>File Size</th>
-            <th>Absolute Path</th>
-            <th>Last Modified</th>
+            <SortableTh :sort="templateSort" sort-key="name">Template Archive Name</SortableTh>
+            <SortableTh :sort="templateSort" sort-key="size">File Size</SortableTh>
+            <SortableTh :sort="templateSort" sort-key="modified">Last Modified</SortableTh>
             <th style="text-align: right">Actions</th>
           </tr>
         </thead>
         <tbody>
           <!-- Active Upload Row -->
           <tr v-if="isUploadingTemplate && templateUploadProgress">
-            <td colspan="5" style="padding: 14px 16px; background: rgba(59, 130, 246, 0.04)">
+            <td colspan="4" style="padding: 14px 16px; background: rgba(59, 130, 246, 0.04)">
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 12px">
                 <span class="mono" style="font-weight: 600">{{ templateUploadProgress.filename }} (Uploading)</span>
                 <span class="mono">{{ formatBytes(templateUploadProgress.loaded) }} / {{ formatBytes(templateUploadProgress.total) }} ({{ templateUploadProgress.percent }}%)</span>
@@ -543,29 +541,25 @@ async function handleDelete(name: string) {
             <tr v-for="r in 2" :key="r">
               <td><SkeletonBox width="160px" height="15px" /></td>
               <td><SkeletonBox width="70px" height="15px" /></td>
-              <td><SkeletonBox width="260px" height="15px" /></td>
               <td><SkeletonBox width="120px" height="15px" /></td>
               <td style="text-align: right"><SkeletonBox width="60px" height="24px" rounded="4px" /></td>
             </tr>
           </template>
 
           <tr v-else-if="nasState.lxcTemplates.length === 0">
-            <td colspan="5" style="text-align: center; color: var(--text-secondary); padding: 36px">
-              No template archives found in repository. Click <strong>"Upload Template"</strong> to upload a rootfs archive (.tar.gz, .tar.xz, .tar.zst).
+            <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 36px">
+              No templates yet. Upload a .tar.gz, .tar.xz or .tar.zst archive.
             </td>
           </tr>
 
-          <tr v-for="tmpl in nasState.lxcTemplates" :key="tmpl.name">
+          <tr v-for="tmpl in templateSort.sorted.value" :key="tmpl.name">
             <td style="font-weight: 600">
               <div style="display: flex; align-items: center; gap: 8px">
                 <MdiIcon :path="mdiArchiveOutline" size="16" style="color: var(--accent-primary)" />
-                <span class="mono">{{ tmpl.name }}</span>
+                <span class="mono" :title="tmpl.path">{{ tmpl.name }}</span>
               </div>
             </td>
             <td class="mono">{{ tmpl.sizeFormatted }}</td>
-            <td class="mono" style="font-size: 11px; color: var(--text-secondary)">
-              {{ tmpl.path }}
-            </td>
             <td class="mono" style="font-size: 11px; color: var(--text-muted)">
               {{ tmpl.modTime ? new Date(tmpl.modTime).toLocaleString() : '—' }}
             </td>

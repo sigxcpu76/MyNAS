@@ -32,6 +32,7 @@ export class RfbConsoleAdapter {
   private readonly onStatusChange?: ConsoleStatusCallback;
   private scaleMode: ScaleMode = 'fit';
   private crisp: boolean = false;
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor(options: RfbConsoleOptions) {
     this.target = options.target;
@@ -117,16 +118,38 @@ export class RfbConsoleAdapter {
       if (typeof window !== 'undefined') {
         window.addEventListener('resize', this.handleWindowResize);
       }
+      if (typeof ResizeObserver !== 'undefined' && this.target) {
+        this.resizeObserver = new ResizeObserver(() => {
+          this.handleTargetResize();
+        });
+        this.resizeObserver.observe(this.target);
+      }
     } catch (err: any) {
       this.onStatusChange?.('ERROR', err?.message || 'Failed to initialize noVNC client');
     }
   }
 
-  private handleWindowResize = (): void => {
-    if (this.scaleMode !== 'fit') {
+  private handleTargetResize = (): void => {
+    if (!this.rfb) return;
+    if (this.scaleMode === 'fit') {
+      const rfbAny = this.rfb as any;
+      if (typeof rfbAny._handleResize === 'function') {
+        rfbAny._handleResize();
+      } else if (typeof rfbAny._updateScale === 'function') {
+        rfbAny._updateScale();
+      }
+    } else {
       this.applyScaleMode();
     }
   };
+
+  private handleWindowResize = (): void => {
+    this.handleTargetResize();
+  };
+
+  triggerResize(): void {
+    this.handleTargetResize();
+  }
 
   setScaleMode(mode: ScaleMode): void {
     this.scaleMode = mode;
@@ -156,6 +179,10 @@ export class RfbConsoleAdapter {
     if (this.scaleMode === 'fit') {
       this.rfb.scaleViewport = true;
       this.rfb.clipViewport = false;
+      const rfbAny = this.rfb as any;
+      if (typeof rfbAny._updateScale === 'function') {
+        rfbAny._updateScale();
+      }
     } else {
       this.rfb.scaleViewport = false;
       this.rfb.clipViewport = false;
@@ -174,6 +201,10 @@ export class RfbConsoleAdapter {
   disconnect(): void {
     if (typeof window !== 'undefined') {
       window.removeEventListener('resize', this.handleWindowResize);
+    }
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
     }
     if (this.rfb) {
       try {

@@ -14,7 +14,6 @@ import {
   mdiDelete,
   mdiDragVariant,
   mdiFlash,
-  mdiFolderOutline,
   mdiFormatListBulleted,
   mdiHarddisk,
   mdiHelpCircleOutline,
@@ -42,7 +41,10 @@ import {
   isDotDataset,
 } from '../../domain/models';
 import MdiIcon from '../components/MdiIcon.vue';
+import SortableTh from '../components/SortableTh.vue';
+import { sortHierarchy, useTableSort } from '../composables/useTableSort';
 import ZfsPoolGauge from '../components/ZfsPoolGauge.vue';
+import { askModal, confirmDelete } from '../modal';
 import { confirmModal, nasState, notify, refreshAllData, refreshZfsSubresources } from '../store';
 
 // ---------------------------------------------------------------------------
@@ -466,14 +468,13 @@ async function handleScrubPool(poolName: string) {
 
 async function handleDeletePool(poolName: string) {
   const shortName = poolName.replace(/^zfsPools\//, '');
-  const confirmed = await confirmModal({
-    title: 'Destroy ZFS Storage Pool',
-    tone: 'danger',
-    message: `Are you sure you want to permanently destroy pool "${shortName}"?`,
-    details: 'ALL DATA, datasets, and block volumes in this pool will be permanently lost.',
+  const res = await confirmDelete({
+    kind: 'Pool',
+    name: shortName,
+    details: 'All data, datasets and volumes in this pool will be destroyed.',
     confirmText: 'Destroy Pool',
   });
-  if (!confirmed) return;
+  if (!res.confirmed) return;
 
   try {
     await services.zfs.deletePool(poolName, true);
@@ -591,14 +592,15 @@ async function handleAddVdev() {
 
 async function handleRemoveVdev(devicePath: string) {
   if (!configuringPool.value) return;
-  const confirmed = await confirmModal({
+  const res = await askModal({
     title: 'Remove VDEV Device',
     tone: 'danger',
     message: `Are you sure you want to remove device "${devicePath}" from pool?`,
     details: 'Removing a device or cache/log vdev requires ZFS device evacuation. Ensure sufficient redundancy.',
     confirmText: 'Remove Device',
+    confirmPhrase: devicePath,
   });
-  if (!confirmed) return;
+  if (!res.confirmed) return;
 
   try {
     const updated = await services.zfs.removeVdev(configuringPool.value.name, devicePath);
@@ -842,6 +844,36 @@ const visibleHierarchyNodes = computed<ZfsHierarchyNode[]>(() => {
   return result;
 });
 
+// Column sorting for the hierarchy table (siblings are sorted in tree mode)
+const hierarchySort = useTableSort(visibleHierarchyNodes, {
+  name: (n) => n.name,
+  usage: (n) => n.usedBytes,
+  snapshots: (n) => (n.type === 'dataset' ? n.snapshotsCount || 0 : null),
+});
+
+// Child node id -> parent node id, derived from the assembled tree
+const hierarchyParentIds = computed(() => {
+  const map = new Map<string, string>();
+  for (const n of allHierarchyNodes.value) {
+    for (const c of n.children) map.set(c.id, n.id);
+  }
+  return map;
+});
+
+const sortedHierarchyNodes = computed<ZfsHierarchyNode[]>(() => {
+  if (!hierarchySort.key.value) return visibleHierarchyNodes.value;
+  // Flat list / search modes: plain sort
+  if (viewMode.value === 'list' || searchQuery.value.trim()) return hierarchySort.sorted.value;
+  // Tree mode: sort siblings while keeping children under their parent
+  // (collapsed descendants are already excluded from visibleHierarchyNodes)
+  return sortHierarchy(
+    visibleHierarchyNodes.value,
+    (n) => n.id,
+    (n) => hierarchyParentIds.value.get(n.id),
+    hierarchySort.compare
+  );
+});
+
 // ---------------------------------------------------------------------------
 // 5. Creation & Mutation Forms (Dataset & ZVol)
 // ---------------------------------------------------------------------------
@@ -1059,16 +1091,16 @@ async function handleTakeSnapshot() {
   }
 }
 
-async function handleDeleteDataset(datasetName: string) {
-  const shortName = datasetName.replace(/^zfsPools\/[^/]+\/datasets\//, '');
-  const confirmed = await confirmModal({
-    title: 'Delete ZFS Dataset',
-    tone: 'danger',
-    message: `Are you sure you want to delete dataset "${shortName}"?`,
-    details: 'ALL DATA, child datasets, and snapshots under this dataset will be PERMANENTLY DESTROYED.',
+async function handleDeleteDataset(ds: ZfsDataset) {
+  const datasetName = ds.name;
+  const shortName = ds.datasetPath || datasetName.replace(/^zfsPools\/[^/]+\/datasets\//, '');
+  const res = await confirmDelete({
+    kind: 'Dataset',
+    name: shortName,
+    details: 'All data, child datasets and snapshots under it will be destroyed.',
     confirmText: 'Delete Dataset',
   });
-  if (!confirmed) return;
+  if (!res.confirmed) return;
 
   try {
     await services.zfs.deleteDataset(datasetName, true);
@@ -1081,16 +1113,16 @@ async function handleDeleteDataset(datasetName: string) {
   }
 }
 
-async function handleDeleteVolume(volName: string) {
-  const shortName = volName.replace(/^zfsPools\/[^/]+\/volumes\//, '');
-  const confirmed = await confirmModal({
-    title: 'Delete ZVol Block Volume',
-    tone: 'danger',
-    message: `Are you sure you want to delete ZVol "${shortName}"?`,
-    details: 'All block device data and volume snapshots will be permanently lost.',
+async function handleDeleteVolume(vol: ZfsVolume) {
+  const volName = vol.name;
+  const shortName = vol.volumePath || volName.replace(/^zfsPools\/[^/]+\/volumes\//, '');
+  const res = await confirmDelete({
+    kind: 'Volume',
+    name: shortName,
+    details: 'All data and snapshots of this volume will be destroyed.',
     confirmText: 'Delete Volume',
   });
-  if (!confirmed) return;
+  if (!res.confirmed) return;
 
   try {
     await services.zfs.deleteVolume(volName);
@@ -1113,14 +1145,10 @@ async function handleDeleteVolume(volName: string) {
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px">
         <div>
           <div style="display: flex; align-items: center; gap: 10px">
-            <MdiIcon :path="mdiHarddisk" size="24" style="color: var(--accent-primary)" />
             <h2 class="card-title" style="font-size: 19px; margin: 0">
-              Storage Pools
+              Pools
             </h2>
           </div>
-          <p class="card-subtitle" style="margin-top: 4px; font-size: 13px">
-            ZFS storage pools, redundancy layouts, capacity allocation, fragmentation, and storage tiers.
-          </p>
         </div>
 
         <button class="btn btn-primary" @click="showCreatePool ? (showCreatePool = false) : openCreatePool()">
@@ -1144,13 +1172,9 @@ async function handleDeleteVolume(volName: string) {
         <!-- Header -->
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px">
           <div>
-            <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px">
-              <MdiIcon :path="mdiLayersOutline" size="20" style="color: var(--accent-primary)" />
-              ZFS Storage Pool Builder & Infrastructure Designer
+            <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: var(--text-primary)">
+              Create Pool
             </h3>
-            <p style="margin: 4px 0 0; font-size: 12.5px; color: var(--text-secondary)">
-              Drag unassigned physical drives directly into target VDEVs. Configure Data, Cache (L2ARC), Log (SLOG), and Spare tiers with enterprise redundancy.
-            </p>
           </div>
           <button class="btn btn-icon btn-sm" @click="showCreatePool = false">
             <MdiIcon :path="mdiClose" size="16" />
@@ -1160,7 +1184,7 @@ async function handleDeleteVolume(volName: string) {
         <!-- Top Settings Grid -->
         <div class="form-grid" style="margin-bottom: 18px">
           <div class="form-group">
-            <label>Pool Name (`zfs_pool_id`)</label>
+            <label>Pool Name</label>
             <input v-model="poolForm.poolId" class="input mono" placeholder="tank" required />
           </div>
           <div class="form-group">
@@ -1217,7 +1241,7 @@ async function handleDeleteVolume(volName: string) {
                 v-if="filteredUnassignedDisks.length === 0"
                 style="text-align: center; padding: 24px 10px; color: var(--text-muted); font-size: 12px"
               >
-                No unassigned drives match criteria. All host drives are currently attached to imported ZFS pools.
+                No unassigned drives.
               </div>
 
               <div
@@ -1286,8 +1310,7 @@ async function handleDeleteVolume(volName: string) {
           <div class="vdev-canvas-panel" style="display: flex; flex-direction: column; gap: 14px">
             <div style="display: flex; justify-content: space-between; align-items: center">
               <div style="font-weight: 700; font-size: 13.5px; color: var(--text-primary); display: flex; align-items: center; gap: 6px">
-                <MdiIcon :path="mdiTreeOutline" size="16" style="color: var(--accent-primary)" />
-                <span>Configured VDEV Topology</span>
+                <span>VDEVs</span>
               </div>
 
               <!-- Add VDEV Buttons -->
@@ -1496,7 +1519,7 @@ async function handleDeleteVolume(volName: string) {
 
             <div>
               <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600">
-                Infrastructure Tiers
+                Drive Tiers
               </div>
               <div style="font-size: 12px; color: var(--text-primary)">
                 {{ poolCapacitySummary.dataDrivesCount }} Data
@@ -1539,10 +1562,6 @@ async function handleDeleteVolume(volName: string) {
               </div>
               <div>
                 <div class="pool-name mono">{{ pool.poolName || pool.name.replace(/^zfsPools\//, '') }}</div>
-                <div class="pool-mountpoint mono">
-                  <MdiIcon :path="mdiFolderOutline" size="13" style="margin-right: 3px; opacity: 0.7" />
-                  {{ pool.mountpoint || (`/nas/${pool.poolName || pool.name.replace(/^zfsPools\//, '')}`) }}
-                </div>
               </div>
             </div>
 
@@ -1690,7 +1709,7 @@ async function handleDeleteVolume(volName: string) {
     <!-- ===================================================================== -->
     <!-- Pool Configuration & VDEV Management Modal                            -->
     <!-- ===================================================================== -->
-    <div v-if="configuringPool" class="modal-overlay" @click.self="closePoolConfig">
+    <div v-if="configuringPool" class="modal-overlay">
       <div class="modal-container" style="max-width: 720px; width: 95%">
         <!-- Modal Header -->
         <div class="modal-header">
@@ -1702,9 +1721,6 @@ async function handleDeleteVolume(volName: string) {
               <h3 style="margin: 0; font-size: 17px; font-weight: 700">
                 Configure Pool: <span class="mono" style="color: var(--accent-primary)">{{ configuringPool.poolName || configuringPool.name.replace(/^zfsPools\//, '') }}</span>
               </h3>
-              <p style="margin: 2px 0 0; font-size: 12px; color: var(--text-secondary)">
-                Tune synchronous write mode, SSD auto TRIM, compression, and manage VDEV storage tiers.
-              </p>
             </div>
           </div>
           <button class="btn btn-icon btn-sm" @click="closePoolConfig">
@@ -1720,7 +1736,7 @@ async function handleDeleteVolume(volName: string) {
             @click="configTab = 'settings'"
           >
             <MdiIcon :path="mdiTune" size="15" style="margin-right: 6px" />
-            Pool Properties
+            Properties
           </button>
           <button
             class="tab-btn"
@@ -1728,7 +1744,7 @@ async function handleDeleteVolume(volName: string) {
             @click="configTab = 'vdevs'"
           >
             <MdiIcon :path="mdiLayersOutline" size="15" style="margin-right: 6px" />
-            VDEVs & Storage Tiers
+            VDEVs
           </button>
         </div>
 
@@ -1738,7 +1754,7 @@ async function handleDeleteVolume(volName: string) {
             <!-- Sync Mode -->
             <div class="config-section">
               <label class="config-label">
-                <span>Sync Mode (ZFS Intent Log semantics)</span>
+                <span>Sync Mode</span>
                 <span class="badge badge-neutral mono">{{ poolSettingsForm.sync }}</span>
               </label>
               <select v-model="poolSettingsForm.sync" class="select mono" style="width: 100%">
@@ -1754,22 +1770,19 @@ async function handleDeleteVolume(volName: string) {
             <!-- Auto TRIM -->
             <div class="config-section">
               <label class="config-label">
-                <span>Auto TRIM (SSD / NVMe Space Reclamation)</span>
+                <span>Auto TRIM (SSD)</span>
                 <span class="badge badge-neutral mono">{{ poolSettingsForm.autotrim }}</span>
               </label>
               <select v-model="poolSettingsForm.autotrim" class="select mono" style="width: 100%">
                 <option value="on">on - Automatically TRIM/UNMAP freed blocks continuously</option>
                 <option value="off">off - Do not automatically issue TRIM commands</option>
               </select>
-              <div class="config-hint">
-                Enables automatic background trimming of unallocated space on SSD/NVMe devices to sustain write performance and flash longevity.
-              </div>
             </div>
 
             <!-- Compression -->
             <div class="config-section">
               <label class="config-label">
-                <span>Default Pool Compression</span>
+                <span>Default Compression</span>
                 <span class="badge badge-info mono">{{ poolSettingsForm.compression }}</span>
               </label>
               <select v-model="poolSettingsForm.compression" class="select mono" style="width: 100%">
@@ -1779,7 +1792,7 @@ async function handleDeleteVolume(volName: string) {
                 <option value="off">off (No compression)</option>
               </select>
               <div class="config-hint">
-                Default transparent inline compression applied to new datasets created under this storage pool.
+                Applied to new datasets in this pool.
               </div>
             </div>
 
@@ -1798,8 +1811,7 @@ async function handleDeleteVolume(volName: string) {
           <!-- Active VDEVs & Storage Tiers List -->
           <div style="margin-bottom: 22px">
             <div style="font-weight: 700; font-size: 13.5px; margin-bottom: 8px; color: var(--text-primary); display: flex; align-items: center; gap: 6px">
-              <MdiIcon :path="mdiLayersOutline" size="16" style="color: var(--accent-primary)" />
-              Active Storage Tiers in Pool
+              VDEVs
             </div>
 
             <!-- VDEV Tree / List -->
@@ -1894,8 +1906,7 @@ async function handleDeleteVolume(volName: string) {
           <!-- Add VDEV / Storage Tier Form -->
           <div class="add-vdev-box">
             <div style="font-weight: 700; font-size: 13.5px; margin-bottom: 12px; color: var(--text-primary); display: flex; align-items: center; gap: 6px">
-              <MdiIcon :path="mdiPlus" size="16" style="color: var(--accent-primary)" />
-              Add Storage Tier to Pool
+              Add VDEV
             </div>
 
             <div class="form-grid">
@@ -1986,14 +1997,10 @@ async function handleDeleteVolume(volName: string) {
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border-subtle)">
         <div>
           <div style="display: flex; align-items: center; gap: 10px">
-            <MdiIcon :path="mdiDatabase" size="22" style="color: var(--accent-primary)" />
             <h3 class="card-title" style="font-size: 17px; margin: 0">
-              Filesystems & Block Volumes in <span class="mono" style="color: var(--accent-primary)">{{ activePool.poolName || activePool.name.replace(/^zfsPools\//, '') }}</span>
+              Datasets & Volumes in <span class="mono" style="color: var(--accent-primary)">{{ activePool.poolName || activePool.name.replace(/^zfsPools\//, '') }}</span>
             </h3>
           </div>
-          <p class="card-subtitle" style="margin-top: 3px; font-size: 12.5px">
-            Hierarchical view of ZFS datasets, nested filesystems, and raw ZVol block devices.
-          </p>
         </div>
 
         <!-- Controls: Search, View Mode, Create Buttons -->
@@ -2061,7 +2068,7 @@ async function handleDeleteVolume(volName: string) {
         <div style="font-weight: 700; font-size: 13.5px; margin-bottom: 10px; color: var(--text-primary); display: flex; align-items: center; justify-content: space-between">
           <div style="display: flex; align-items: center; gap: 6px">
             <MdiIcon :path="mdiDatabase" size="16" style="color: var(--accent-primary)" />
-            <span>Create Filesystem Dataset</span>
+            <span>Create Dataset</span>
             <span v-if="datasetParentPrefix" class="badge badge-info mono" style="font-size: 11px">
               Parent: {{ datasetParentPrefix }}
             </span>
@@ -2146,7 +2153,7 @@ async function handleDeleteVolume(volName: string) {
         <div style="font-weight: 700; font-size: 13.5px; margin-bottom: 10px; color: var(--text-primary); display: flex; align-items: center; justify-content: space-between">
           <div style="display: flex; align-items: center; gap: 6px">
             <MdiIcon :path="mdiHarddisk" size="16" style="color: #a855f7" />
-            <span>Create Block Volume (ZVol)</span>
+            <span>Create Volume</span>
           </div>
           <button type="button" class="btn btn-icon btn-sm" @click="showCreateVolume = false">
             <MdiIcon :path="mdiClose" size="15" />
@@ -2217,8 +2224,9 @@ async function handleDeleteVolume(volName: string) {
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px">
           <div style="font-weight: 700; font-size: 14px; color: var(--text-primary); display: flex; align-items: center; gap: 8px">
             <MdiIcon :path="mdiTune" size="18" style="color: var(--accent-primary)" />
-            <span>Editing Dataset Properties:</span>
+            <span>Edit Dataset:</span>
             <span class="mono" style="color: var(--accent-primary)">{{ editingDataset.datasetPath }}</span>
+            <span v-if="editingDataset.mountpoint" class="mono" style="font-size: 11px; color: var(--text-secondary)">({{ editingDataset.mountpoint }})</span>
           </div>
           <button class="btn btn-icon btn-sm" @click="editingDataset = null">
             <MdiIcon :path="mdiClose" size="16" />
@@ -2290,7 +2298,7 @@ async function handleDeleteVolume(volName: string) {
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px">
           <div style="font-weight: 700; font-size: 14px; color: var(--text-primary); display: flex; align-items: center; gap: 8px">
             <MdiIcon :path="mdiTune" size="18" style="color: #a855f7" />
-            <span>Editing Block Volume (ZVol):</span>
+            <span>Edit Volume:</span>
             <span class="mono" style="color: #c084fc">{{ editingVolume.volumePath }}</span>
             <span class="mono" style="font-size: 11px; color: var(--text-secondary)">({{ editingVolume.devicePath }})</span>
           </div>
@@ -2367,28 +2375,27 @@ async function handleDeleteVolume(volName: string) {
         <table class="data-table hierarchy-table">
           <thead>
             <tr>
-              <th style="min-width: 240px">Name & Hierarchy</th>
-              <th style="min-width: 180px">Mount / Device Path</th>
-              <th style="min-width: 140px">Space Usage</th>
+              <SortableTh :sort="hierarchySort" sort-key="name" style="min-width: 240px">Name</SortableTh>
+              <SortableTh :sort="hierarchySort" sort-key="usage" style="min-width: 140px">Space Usage</SortableTh>
               <th style="min-width: 200px">Properties</th>
-              <th style="min-width: 100px">Snapshots</th>
+              <SortableTh :sort="hierarchySort" sort-key="snapshots" style="min-width: 100px">Snapshots</SortableTh>
               <th style="min-width: 140px; text-align: right">Actions</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="visibleHierarchyNodes.length === 0">
-              <td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 32px">
+              <td colspan="5" style="text-align: center; color: var(--text-secondary); padding: 32px">
                 <div v-if="searchQuery">
                   No datasets or volumes match filter "<strong>{{ searchQuery }}</strong>".
                 </div>
                 <div v-else>
-                  No child datasets or block volumes in pool "{{ activePool.poolName || activePool.name.replace(/^zfsPools\//, '') }}". Create one above.
+                  No datasets or volumes.
                 </div>
               </td>
             </tr>
 
             <tr
-              v-for="node in visibleHierarchyNodes"
+              v-for="node in sortedHierarchyNodes"
               :key="node.id"
               class="tree-row"
               :class="{ 'is-zvol-row': node.type === 'volume' }"
@@ -2431,16 +2438,6 @@ async function handleDeleteVolume(volName: string) {
                     </span>
                   </div>
                 </div>
-              </td>
-
-              <!-- Mountpoint or Device Path -->
-              <td class="mount-cell">
-                <span v-if="node.type === 'dataset'" class="mono" style="font-size: 12px; color: var(--text-secondary)" :title="node.mountpoint || '-'">
-                  {{ node.mountpoint || '-' }}
-                </span>
-                <span v-else class="mono" style="font-size: 11.5px; color: #c084fc" :title="node.devicePath || '-'">
-                  {{ node.devicePath || '-' }}
-                </span>
               </td>
 
               <!-- Space Usage & Quotas -->
@@ -2543,7 +2540,7 @@ async function handleDeleteVolume(volName: string) {
                     <button
                       class="btn btn-danger btn-sm btn-icon"
                       title="Delete Dataset"
-                      @click="handleDeleteDataset(node.rawDataset.name)"
+                      @click="handleDeleteDataset(node.rawDataset)"
                     >
                       <MdiIcon :path="mdiDelete" size="13" />
                     </button>
@@ -2561,7 +2558,7 @@ async function handleDeleteVolume(volName: string) {
                     <button
                       class="btn btn-danger btn-sm btn-icon"
                       title="Delete Volume"
-                      @click="handleDeleteVolume(node.rawVolume.name)"
+                      @click="handleDeleteVolume(node.rawVolume)"
                     >
                       <MdiIcon :path="mdiDelete" size="13" />
                     </button>
@@ -3105,13 +3102,6 @@ async function handleDeleteVolume(volName: string) {
 .hierarchy-table {
   min-width: 760px;
   width: 100%;
-}
-
-.mount-cell {
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* Pool Builder & Drag-and-Drop Infrastructure */

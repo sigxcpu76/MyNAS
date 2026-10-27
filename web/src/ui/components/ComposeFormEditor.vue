@@ -1551,11 +1551,8 @@ function copyYaml() {
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px">
         <div>
           <label class="form-label" style="margin-bottom: 0; font-size: 13.5px">
-            Raw Docker Compose YAML Specification
+            Compose YAML
           </label>
-          <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px">
-            Powered by CodeMirror 6 with syntax highlighting, inline validation, and context-aware completion.
-          </div>
         </div>
         <div style="display: flex; align-items: center; gap: 8px">
           <span class="badge badge-info" style="font-size: 11px">Auto-Complete: Ctrl+Space</span>
@@ -1597,7 +1594,7 @@ function copyYaml() {
     </div>
 
     <!-- Bulk .env Paste Modal -->
-    <div v-if="showBulkEnv" class="modal-backdrop" @click.self="showBulkEnv = false">
+    <div v-if="showBulkEnv" class="modal-backdrop">
       <div class="modal-card" style="max-width: 600px">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px">
           <h4 style="font-size: 16px; font-weight: 700; color: var(--text-primary)">

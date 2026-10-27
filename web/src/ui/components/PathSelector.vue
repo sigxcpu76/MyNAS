@@ -168,7 +168,6 @@ function selectFolderEntry(entry: DirectoryEntry) {
       v-if="isBrowserOpen"
       class="modal-backdrop"
       style="z-index: 150"
-      @click.self="isBrowserOpen = false"
     >
       <div class="modal-card" style="max-width: 680px; width: 95vw; max-height: 80vh; display: flex; flex-direction: column">
         <!-- Header -->
