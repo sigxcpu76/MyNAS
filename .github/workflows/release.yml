@@ -4,12 +4,18 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  release-binaries:
     name: Build & Release Binaries
     runs-on: ubuntu-latest
     strategy:
@@ -46,18 +52,81 @@ jobs:
           CGO_ENABLED: 0
         run: |
           mkdir -p dist
-          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          TAG_NAME="${{ inputs.tag || github.ref_name }}"
           OUTPUT_NAME="nasctl-${TAG_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}"
           go build -v -ldflags="-s -w -X main.version=${TAG_NAME}" -o "dist/${OUTPUT_NAME}" ./cmd/nasctl
           chmod +x "dist/${OUTPUT_NAME}"
           tar -czf "dist/${OUTPUT_NAME}.tar.gz" -C dist "${OUTPUT_NAME}"
+          cd dist && sha256sum "${OUTPUT_NAME}.tar.gz" > "${OUTPUT_NAME}.tar.gz.sha256"
 
       - name: Publish Release Assets
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: |
             dist/*.tar.gz
+            dist/*.sha256
             dist/nasctl-*
           draft: false
           prerelease: false
           generate_release_notes: true
+
+  release-iso:
+    name: Build & Release Appliance ISO
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Free Disk Space on Runner
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache || true
+          df -h
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install Frontend Dependencies & Build Bundle
+        run: |
+          npm ci --prefix web
+          npm run build --prefix web
+
+      - name: Compile Standalone nasctl Binary
+        run: |
+          TAG_NAME="${{ inputs.tag || github.ref_name }}"
+          mkdir -p bin
+          go build -v -ldflags="-s -w -X main.version=${TAG_NAME}" -o bin/nasctl ./cmd/nasctl
+
+      - name: Build Appliance ISO via Docker Builder
+        run: |
+          make -C iso iso COMP=lz4
+
+      - name: Prepare ISO Release Assets
+        run: |
+          TAG_NAME="${{ inputs.tag || github.ref_name }}"
+          mkdir -p release-iso
+          ISO_NAME="mynas-appliance-${TAG_NAME}-amd64.iso"
+          cp iso/output/mynas-appliance-amd64.iso "release-iso/${ISO_NAME}"
+          cd release-iso
+          sha256sum "${ISO_NAME}" > "${ISO_NAME}.sha256"
+
+      - name: Publish ISO Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          files: |
+            release-iso/*.iso
+            release-iso/*.sha256
+          draft: false
+          prerelease: false
