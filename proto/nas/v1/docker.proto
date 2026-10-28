@@ -143,6 +143,7 @@ message DockerApp {
   int64 total_net_rx_rate = 19 [(google.api.field_behavior) = OUTPUT_ONLY];
   int64 total_net_tx_rate = 20 [(google.api.field_behavior) = OUTPUT_ONLY];
   repeated DockerAppPortal portals = 21 [(google.api.field_behavior) = OUTPUT_ONLY];
+  bool auto_start = 22 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message DockerAppPortal {

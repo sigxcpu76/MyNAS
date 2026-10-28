@@ -49,6 +49,7 @@ type DockerApp struct {
 	Title           string               `json:"title"` // Display title e.g. "Nextcloud Stack"
 	State           string               `json:"state"` // RUNNING, STOPPED, PARTIALLY_RUNNING, ERROR
 	StatusText      string               `json:"statusText"`
+	AutoStart       bool                 `json:"autoStart"`
 	ComposeYAML     string               `json:"composeYaml"`
 	ComposeFilePath string               `json:"composeFilePath"`
 	Services        []string             `json:"services"`

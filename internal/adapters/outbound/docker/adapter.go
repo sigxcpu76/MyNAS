@@ -1651,6 +1651,7 @@ type composeDescriptor struct {
 		Ports         []any  `yaml:"ports"`
 		Volumes       []any  `yaml:"volumes"`
 		Labels        any    `yaml:"labels"`
+		Restart       string `yaml:"restart"`
 	} `yaml:"services"`
 }
 
@@ -1769,10 +1770,10 @@ func parsePortMapping(p string) (hostPort, containerPort string) {
 	return "", ""
 }
 
-func parseComposeYAML(content string) (services []string, ports []string, volumes []string, managementPort string, rawPortals []rawPortalEntry, err error) {
+func parseComposeYAML(content string) (services []string, ports []string, volumes []string, managementPort string, rawPortals []rawPortalEntry, autoStart bool, err error) {
 	var c composeDescriptor
 	if err := yaml.Unmarshal([]byte(content), &c); err != nil {
-		return nil, nil, nil, "", nil, err
+		return nil, nil, nil, "", nil, false, err
 	}
 	var mgmtPort string
 	if c.ManagementPort != nil {
@@ -1786,6 +1787,10 @@ func parseComposeYAML(content string) (services []string, ports []string, volume
 	volSet := make(map[string]bool)
 	for svcName, svc := range c.Services {
 		services = append(services, svcName)
+		r := strings.ToLower(strings.TrimSpace(svc.Restart))
+		if r == "always" || r == "unless-stopped" {
+			autoStart = true
+		}
 		if mgmtPort == "" && svc.Labels != nil {
 			switch lv := svc.Labels.(type) {
 			case []any:
@@ -1824,7 +1829,7 @@ func parseComposeYAML(content string) (services []string, ports []string, volume
 	sort.Strings(services)
 	sort.Strings(ports)
 	sort.Strings(volumes)
-	return services, ports, volumes, mgmtPort, rawPortals, nil
+	return services, ports, volumes, mgmtPort, rawPortals, autoStart, nil
 }
 
 func deriveWebUIURL(ports []string, preferredContainerPort string) string {
@@ -1858,7 +1863,7 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 		composeYAML = prettifyComposeYAML(string(data))
 	}
 
-	services, parsedPorts, parsedVols, mgmtPort, rawPortals, _ := parseComposeYAML(composeYAML)
+	services, parsedPorts, parsedVols, mgmtPort, rawPortals, autoStart, _ := parseComposeYAML(composeYAML)
 
 	var appContainers []domain.DockerAppContainer
 	var totalCPU float64
@@ -2116,6 +2121,7 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 		Title:           title,
 		State:           state,
 		StatusText:      statusText,
+		AutoStart:       autoStart,
 		ComposeYAML:     composeYAML,
 		ComposeFilePath: composePath,
 		Services:        services,

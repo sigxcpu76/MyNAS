@@ -1491,6 +1491,7 @@ func dockerAppToProto(a *domain.DockerApp) *nasv1.DockerApp {
 		TotalNetTxBytes: a.TotalNetTxBytes,
 		TotalNetRxRate:  a.TotalNetRxRate,
 		TotalNetTxRate:  a.TotalNetTxRate,
+		AutoStart:       a.AutoStart,
 	}
 }
 

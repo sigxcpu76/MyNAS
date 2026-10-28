@@ -305,13 +305,20 @@ func (a *Adapter) DiscoverPools(ctx context.Context) ([]domain.DiscoveredPool, e
 }
 
 func parseUnimportedPools(out string) []string {
+	if strings.Contains(strings.ToLower(out), "no pools available to import") || !strings.Contains(out, "pool:") {
+		return nil
+	}
+
 	var pools []string
 	rawPools := strings.Split("\n"+out, "\n  pool: ")
 	if len(rawPools) <= 1 {
 		rawPools = strings.Split("\n"+out, "\npool: ")
 	}
 
-	for _, sec := range rawPools {
+	for i, sec := range rawPools {
+		if i == 0 {
+			continue
+		}
 		sec = strings.TrimSpace(sec)
 		if sec == "" {
 			continue
@@ -320,7 +327,7 @@ func parseUnimportedPools(out string) []string {
 		firstLine := strings.TrimSpace(lines[0])
 		firstLine = strings.TrimPrefix(firstLine, "pool:")
 		poolName := strings.TrimSpace(firstLine)
-		if poolName == "" {
+		if poolName == "" || strings.ContainsAny(poolName, " \t\r\n") {
 			continue
 		}
 

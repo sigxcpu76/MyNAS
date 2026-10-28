@@ -585,6 +585,7 @@ export function mapDockerApp(raw: any): DockerApp {
     title: raw?.title ?? '',
     state: raw?.state ?? 'STOPPED',
     statusText: raw?.statusText ?? raw?.status_text ?? '',
+    autoStart: Boolean(raw?.autoStart ?? raw?.auto_start ?? false),
     composeYaml: raw?.composeYaml ?? raw?.compose_yaml ?? '',
     composeFilePath: raw?.composeFilePath ?? raw?.compose_file_path ?? '',
     services: raw?.services ?? [],

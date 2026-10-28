@@ -107,3 +107,21 @@ config:
 		t.Errorf("expected exactly 2 pools, got %d: %v", len(pools), pools)
 	}
 }
+
+func TestParseUnimportedPoolsNoPoolsAvailable(t *testing.T) {
+	outputs := []string{
+		"no pools available to import\n",
+		"no pools available to import",
+		"NO POOLS AVAILABLE TO IMPORT",
+		"",
+		"   \n",
+		"random text without pool prefix",
+	}
+
+	for _, out := range outputs {
+		pools := parseUnimportedPools(out)
+		if len(pools) != 0 {
+			t.Errorf("expected 0 pools for output %q, got: %v", out, pools)
+		}
+	}
+}

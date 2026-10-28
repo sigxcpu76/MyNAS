@@ -491,6 +491,7 @@ export interface DockerApp {
   title: string;
   state: DockerAppState | string;
   statusText: string;
+  autoStart?: boolean;
   composeYaml: string;
   composeFilePath: string;
   services: string[];
@@ -900,6 +901,7 @@ export function isDotDataset(dataset: ZfsDataset | string | null | undefined): b
 }
 
 import {
+  mdiBrain,
   mdiCloud,
   mdiFilmstrip,
   mdiHomeAutomation,
@@ -1035,6 +1037,31 @@ export const APP_CATALOG_TEMPLATES: AppCatalogTemplate[] = [
     volumes:
       - /mnt/tank/appdata/plex:/config
       - /mnt/tank/media:/media:ro
+`,
+  },
+  {
+    id: 'ollama',
+    name: 'Ollama AI',
+    category: 'AI & Machine Learning',
+    description: 'Run large language models (Llama 3, DeepSeek, Mistral) locally with native NVIDIA GPU acceleration.',
+    icon: mdiBrain,
+    defaultPort: 11434,
+    composeYaml: `services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - /mnt/tank/appdata/ollama:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 `,
   },
   {

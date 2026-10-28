@@ -27,6 +27,7 @@ import {
   mdiAlert,
   mdiAlertCircle,
   mdiCheckCircle,
+  mdiChip,
   mdiClose,
   mdiContentCopy,
   mdiContentSave,
@@ -115,6 +116,25 @@ function isCustomCpuLimit(val?: string): boolean {
   if (!val) return false;
   return !CPU_LIMIT_SELECT_OPTIONS.some((o) => o.value === val) && val !== '1';
 }
+
+function onAutoStartToggle() {
+  const targetRestart = form.autoStart ? 'unless-stopped' : 'no';
+  for (const s of form.services) {
+    s.restart = targetRestart;
+  }
+}
+
+// Host GPU telemetry detection
+const hostGpus = computed<string[]>(() => {
+  return nasState.systemTelemetry?.host?.gpus || [];
+});
+
+const hasNvidiaGpuOnHost = computed(() => {
+  return hostGpus.value.some((g) => {
+    const l = g.toLowerCase();
+    return l.includes('nvidia') || l.includes('geforce') || l.includes('quadro') || l.includes('rtx') || l.includes('tesla');
+  });
+});
 
 // Ensure active service has memoryLimit and cpuLimit initialized
 watch(
@@ -598,6 +618,15 @@ function copyYaml() {
               placeholder="e.g. Nextcloud Private Cloud"
               style="padding: 6px 10px; font-size: 13px"
             />
+          </div>
+          <div style="display: flex; align-items: flex-end; padding-bottom: 6px">
+            <label
+              style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; user-select: none"
+              title="When enabled, containers in this app start automatically upon system boot or Docker daemon launch"
+            >
+              <input v-model="form.autoStart" type="checkbox" @change="onAutoStartToggle" />
+              <span>Autostart on boot</span>
+            </label>
           </div>
         </div>
 
@@ -1356,6 +1385,66 @@ function copyYaml() {
               <p style="font-size: 11.5px; color: var(--text-secondary); margin: 4px 0 0 24px">
                 Grants extended container privileges (useful for Docker-in-Docker, direct hardware access, or network tunnel adapters).
               </p>
+            </div>
+
+            <!-- NVIDIA GPU Acceleration Card -->
+            <div style="margin-bottom: 16px; padding: 14px; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border-color); border-radius: 8px">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13.5px; font-weight: 600">
+                  <input v-model="activeService.gpuEnabled" type="checkbox" />
+                  <MdiIcon :path="mdiChip" size="18" style="color: #76b900" />
+                  <span>NVIDIA GPU Acceleration (CUDA / Video Transcoding)</span>
+                </label>
+                <span
+                  v-if="hasNvidiaGpuOnHost"
+                  class="badge badge-success"
+                  style="font-size: 11px; padding: 2px 8px; display: flex; align-items: center; gap: 4px; background: rgba(118, 185, 0, 0.2); color: #76b900; border: 1px solid rgba(118, 185, 0, 0.4)"
+                >
+                  <MdiIcon :path="mdiCheckCircle" size="12" />
+                  Host GPU Ready
+                </span>
+                <span
+                  v-else
+                  class="badge"
+                  style="font-size: 11px; padding: 2px 8px; opacity: 0.6"
+                >
+                  No NVIDIA GPU Detected
+                </span>
+              </div>
+
+              <div v-if="hasNvidiaGpuOnHost" style="font-size: 12px; color: var(--text-secondary); margin-bottom: 10px">
+                Detected on Host: <strong style="color: var(--text-primary)">{{ hostGpus.join(', ') }}</strong>
+              </div>
+              <div v-else style="font-size: 11.5px; color: var(--text-secondary); margin-bottom: 6px">
+                Requires the NVIDIA Linux driver and nvidia-container-toolkit installed on the host.
+              </div>
+
+              <div v-if="activeService.gpuEnabled" style="padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.08)">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 8px">
+                  <div>
+                    <label class="form-label" style="font-size: 11.5px">GPU Count / Allocation</label>
+                    <select v-model="activeService.gpuCount" class="form-input mono" style="font-size: 12px">
+                      <option value="all">All Available GPUs (count: all)</option>
+                      <option value="1">1 GPU (count: 1)</option>
+                      <option value="2">2 GPUs (count: 2)</option>
+                      <option value="custom">Specific Device ID(s)</option>
+                    </select>
+                  </div>
+                  <div v-if="activeService.gpuCount === 'custom'">
+                    <label class="form-label" style="font-size: 11.5px">Device IDs (e.g. 0 or 0, 1)</label>
+                    <input
+                      v-model="activeService.gpuDeviceIds"
+                      type="text"
+                      class="form-input mono"
+                      placeholder="0"
+                      style="font-size: 12px"
+                    />
+                  </div>
+                </div>
+                <p style="font-size: 11px; color: var(--text-secondary); margin: 0">
+                  Configures <code>deploy.resources.reservations.devices</code> with driver <code>nvidia</code> and capability <code>gpu</code>.
+                </p>
+              </div>
             </div>
 
             <!-- Hardware Devices -->

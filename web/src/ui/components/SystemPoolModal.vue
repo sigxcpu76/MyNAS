@@ -29,11 +29,15 @@ const mainPool = computed(() => nasState.systemConfig?.mainPool || '');
 const allPools = computed(() => {
   const map = new Map<string, DiscoveredPool>();
   for (const p of discoveredPools.value) {
-    map.set(p.poolName, p);
+    const cleanName = (p.poolName || '').trim();
+    if (!cleanName || cleanName.toLowerCase().includes('no pools available') || cleanName.includes(' ')) {
+      continue;
+    }
+    map.set(cleanName, { ...p, poolName: cleanName });
   }
   for (const p of nasState.pools) {
-    const name = p.poolName || p.name.replace(/^zfsPools\//, '');
-    if (name && !map.has(name)) {
+    const name = (p.poolName || p.name.replace(/^zfsPools\//, '')).trim();
+    if (name && !map.has(name) && !name.toLowerCase().includes('no pools available') && !name.includes(' ')) {
       map.set(name, {
         poolName: name,
         hasNasSystem: false,

@@ -774,6 +774,7 @@ type DockerApp struct {
 	TotalNetRxRate  int64                  `protobuf:"varint,19,opt,name=total_net_rx_rate,json=totalNetRxRate,proto3" json:"total_net_rx_rate,omitempty"`
 	TotalNetTxRate  int64                  `protobuf:"varint,20,opt,name=total_net_tx_rate,json=totalNetTxRate,proto3" json:"total_net_tx_rate,omitempty"`
 	Portals         []*DockerAppPortal     `protobuf:"bytes,21,rep,name=portals,proto3" json:"portals,omitempty"`
+	AutoStart       bool                   `protobuf:"varint,22,opt,name=auto_start,json=autoStart,proto3" json:"auto_start,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -953,6 +954,13 @@ func (x *DockerApp) GetPortals() []*DockerAppPortal {
 		return x.Portals
 	}
 	return nil
+}
+
+func (x *DockerApp) GetAutoStart() bool {
+	if x != nil {
+		return x.AutoStart
+	}
+	return false
 }
 
 type DockerAppPortal struct {
@@ -2691,7 +2699,7 @@ const file_nas_v1_docker_proto_rawDesc = "" +
 	"\x1enas.sigxcpu.io/DockerContainerR\x04name\"\\\n" +
 	"\x1dRestartDockerContainerRequest\x12;\n" +
 	"\x04name\x18\x01 \x01(\tB'\xe2A\x01\x02\xfaA \n" +
-	"\x1enas.sigxcpu.io/DockerContainerR\x04name\"\xbf\a\n" +
+	"\x1enas.sigxcpu.io/DockerContainerR\x04name\"\xe4\a\n" +
 	"\tDockerApp\x12\x18\n" +
 	"\x04name\x18\x01 \x01(\tB\x04\xe2A\x01\bR\x04name\x12\x1b\n" +
 	"\x06app_id\x18\x02 \x01(\tB\x04\xe2A\x01\x03R\x05appId\x12\x14\n" +
@@ -2720,7 +2728,9 @@ const file_nas_v1_docker_proto_rawDesc = "" +
 	"\x12total_net_tx_bytes\x18\x12 \x01(\x03B\x04\xe2A\x01\x03R\x0ftotalNetTxBytes\x12/\n" +
 	"\x11total_net_rx_rate\x18\x13 \x01(\x03B\x04\xe2A\x01\x03R\x0etotalNetRxRate\x12/\n" +
 	"\x11total_net_tx_rate\x18\x14 \x01(\x03B\x04\xe2A\x01\x03R\x0etotalNetTxRate\x127\n" +
-	"\aportals\x18\x15 \x03(\v2\x17.nas.v1.DockerAppPortalB\x04\xe2A\x01\x03R\aportals:M\xeaAJ\n" +
+	"\aportals\x18\x15 \x03(\v2\x17.nas.v1.DockerAppPortalB\x04\xe2A\x01\x03R\aportals\x12#\n" +
+	"\n" +
+	"auto_start\x18\x16 \x01(\bB\x04\xe2A\x01\x03R\tautoStart:M\xeaAJ\n" +
 	"\x18nas.sigxcpu.io/DockerApp\x12\x17dockerApps/{docker_app}*\n" +
 	"dockerApps2\tdockerApp\"{\n" +
 	"\x0fDockerAppPortal\x12\x12\n" +

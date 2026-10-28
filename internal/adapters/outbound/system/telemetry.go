@@ -354,10 +354,25 @@ func (c *TelemetryCollector) collectHost(ctx context.Context) domain.HostHardwar
 func scanGPUs(ctx context.Context) []string {
 	var gpus []string
 
-	// Try lspci first
 	tctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
+	// 1. Try nvidia-smi for precise NVIDIA GPU and VRAM info if available
+	ncmd := exec.CommandContext(tctx, "nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader")
+	if nout, err := ncmd.Output(); err == nil {
+		scanner := bufio.NewScanner(strings.NewReader(string(nout)))
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line != "" {
+				gpus = append(gpus, line)
+			}
+		}
+		if len(gpus) > 0 {
+			return gpus
+		}
+	}
+
+	// 2. Fall back to lspci scanning
 	cmd := exec.CommandContext(tctx, "lspci")
 	if out, err := cmd.Output(); err == nil {
 		scanner := bufio.NewScanner(strings.NewReader(string(out)))

@@ -36,6 +36,7 @@ import {
   type DockerApp,
   isDotDataset,
 } from '../../domain/models';
+import { composeYamlToForm, formToComposeYaml } from '../../domain/composeModel';
 import ComposeFormEditor from '../components/ComposeFormEditor.vue';
 import CodeMirrorEditor from '../components/CodeMirrorEditor.vue';
 import DockerTerminalModal, { type TerminalContainerOption } from '../components/DockerTerminalModal.vue';
@@ -93,6 +94,7 @@ const filteredApps = computed(() => {
 
 const appSort = useTableSort(filteredApps, {
   name: (a) => a.title || a.appId,
+  autostart: (a) => (a.autoStart ? 1 : 0),
   webui: (a) =>
     getPrimaryWebUiUrl(a) ? (a.portals && a.portals.length > 0 ? a.portals[0].name || 'Open UI' : 'Open UI') : null,
   cpu: (a) => a.totalCpuPercent,
@@ -551,6 +553,28 @@ const containerSort = useTableSort(() => inspectedApp.value?.containers ?? [], {
     return p === '—' ? null : p;
   },
 });
+
+const isTogglingAutostart = ref(false);
+async function toggleAppAutostart(app: DockerApp) {
+  if (isTogglingAutostart.value) return;
+  isTogglingAutostart.value = true;
+  try {
+    const form = composeYamlToForm(app.composeYaml, app.appId, app.title);
+    form.autoStart = !app.autoStart;
+    const newYaml = formToComposeYaml(form);
+    await services.apps.updateApp(app.name, newYaml, app.title);
+    notify('success', `Autostart ${form.autoStart ? 'enabled' : 'disabled'} for ${app.title || app.appId}`);
+    await refreshApps();
+    if (inspectedApp.value && inspectedApp.value.name === app.name) {
+      inspectedApp.value.autoStart = form.autoStart;
+      inspectedApp.value.composeYaml = newYaml;
+    }
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to update autostart setting');
+  } finally {
+    isTogglingAutostart.value = false;
+  }
+}
 
 function openInspectModal(app: DockerApp, defaultTab: 'containers' | 'logs' | 'compose' = 'containers') {
   inspectedApp.value = app;
@@ -1030,6 +1054,7 @@ onUnmounted(() => {
           <tr style="border-bottom: 1px solid var(--border-subtle); text-align: left; font-size: 11.5px; color: var(--text-secondary); text-transform: uppercase">
             <th style="padding: 10px 14px; width: 280px">Application</th>
             <th style="padding: 10px 14px; width: 130px">Web UI</th>
+            <th style="padding: 10px 14px; width: 100px">Autostart</th>
             <th style="padding: 10px 14px; width: 85px">CPU</th>
             <th style="padding: 10px 14px; width: 105px">Memory</th>
             <th style="padding: 10px 14px; width: 210px">Network (1s)</th>
@@ -1048,6 +1073,7 @@ onUnmounted(() => {
               </div>
             </td>
             <td style="padding: 10px 14px"><SkeletonBox width="75px" height="20px" rounded="10px" /></td>
+            <td style="padding: 10px 14px"><SkeletonBox width="60px" height="20px" rounded="10px" /></td>
             <td style="padding: 10px 14px"><SkeletonBox width="45px" height="14px" /></td>
             <td style="padding: 10px 14px"><SkeletonBox width="60px" height="14px" /></td>
             <td style="padding: 10px 14px"><SkeletonBox width="110px" height="14px" /></td>
@@ -1094,6 +1120,7 @@ onUnmounted(() => {
           <tr style="border-bottom: 1px solid var(--border-subtle); text-align: left; font-size: 11px; color: var(--text-secondary); text-transform: uppercase">
             <SortableTh :sort="appSort" sort-key="name" style="padding: 8px 10px; width: 280px; min-width: 220px; max-width: 340px">Application</SortableTh>
             <SortableTh :sort="appSort" sort-key="webui" style="padding: 8px 10px; width: 130px; min-width: 130px">Web UI</SortableTh>
+            <SortableTh :sort="appSort" sort-key="autostart" style="padding: 8px 10px; width: 100px; min-width: 100px; max-width: 110px">Autostart</SortableTh>
             <SortableTh :sort="appSort" sort-key="cpu" style="padding: 8px 10px; width: 85px; min-width: 85px; max-width: 85px">CPU</SortableTh>
             <SortableTh :sort="appSort" sort-key="memory" style="padding: 8px 10px; width: 105px; min-width: 105px; max-width: 105px">Memory</SortableTh>
             <SortableTh :sort="appSort" sort-key="network" style="padding: 8px 10px; width: 210px; min-width: 210px; max-width: 210px">Network (1s)</SortableTh>
@@ -1274,6 +1301,25 @@ onUnmounted(() => {
                   </button>
                 </template>
               </div>
+            </td>
+
+            <!-- Autostart -->
+            <td style="padding: 10px 14px; width: 100px; min-width: 100px; max-width: 110px; white-space: nowrap">
+              <button
+                type="button"
+                class="badge"
+                :class="app.autoStart ? 'badge-success' : 'badge-neutral'"
+                style="cursor: pointer; border: 1px solid var(--border-subtle); display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px; transition: all 0.15s ease"
+                :title="`Click to ${app.autoStart ? 'disable' : 'enable'} autostart on host boot`"
+                :disabled="isTogglingAutostart"
+                @click.stop="toggleAppAutostart(app)"
+              >
+                <span
+                  style="display: inline-block; width: 6px; height: 6px; border-radius: 50%"
+                  :style="{ background: app.autoStart ? 'var(--success)' : 'var(--text-muted)' }"
+                ></span>
+                {{ app.autoStart ? 'On Boot' : 'Manual' }}
+              </button>
             </td>
 
             <!-- CPU -->
@@ -1502,10 +1548,27 @@ onUnmounted(() => {
       <div class="modal-card modal-card-large">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-shrink: 0">
           <div>
-            <h3 style="font-size: 18px; font-weight: 700; color: var(--text-primary)">
-              {{ inspectedApp.title || inspectedApp.appId }}
-            </h3>
-            <p class="mono" style="font-size: 12px; color: var(--text-secondary); margin-top: 2px">
+            <div style="display: flex; align-items: center; gap: 8px">
+              <h3 style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin: 0">
+                {{ inspectedApp.title || inspectedApp.appId }}
+              </h3>
+              <button
+                type="button"
+                class="badge"
+                :class="inspectedApp.autoStart ? 'badge-success' : 'badge-neutral'"
+                style="cursor: pointer; border: 1px solid var(--border-subtle); display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px; transition: all 0.15s ease"
+                :title="`Click to ${inspectedApp.autoStart ? 'disable' : 'enable'} autostart on host boot`"
+                :disabled="isTogglingAutostart"
+                @click="toggleAppAutostart(inspectedApp)"
+              >
+                <span
+                  style="display: inline-block; width: 6px; height: 6px; border-radius: 50%"
+                  :style="{ background: inspectedApp.autoStart ? 'var(--success)' : 'var(--text-muted)' }"
+                ></span>
+                {{ inspectedApp.autoStart ? 'Autostart: On Boot' : 'Autostart: Manual' }}
+              </button>
+            </div>
+            <p class="mono" style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; margin-bottom: 0">
               {{ inspectedApp.composeFilePath }}
             </p>
           </div>

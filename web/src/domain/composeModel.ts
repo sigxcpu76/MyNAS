@@ -40,6 +40,9 @@ export interface ComposeServiceModel {
   cpuLimit: string; // e.g. "0.5", "1.0", "2.0"
   privileged: boolean;
   devices: string[];
+  gpuEnabled: boolean;
+  gpuCount: string; // 'all' | '1' | '2' | 'custom'
+  gpuDeviceIds: string; // e.g. "0" or "0,1"
 }
 
 export interface ComposeTopLevelNetwork {
@@ -66,6 +69,7 @@ export interface ComposePortalModel {
 export interface ComposeAppFormModel {
   appId: string;
   title: string;
+  autoStart: boolean;
   services: ComposeServiceModel[];
   networks: ComposeTopLevelNetwork[];
   volumes: ComposeTopLevelVolume[];
@@ -141,6 +145,9 @@ export function createDefaultService(name = 'app', image = ''): ComposeServiceMo
     cpuLimit: DEFAULT_COMPOSE_CPU_LIMIT,
     privileged: false,
     devices: [],
+    gpuEnabled: false,
+    gpuCount: 'all',
+    gpuDeviceIds: '',
   };
 }
 
@@ -148,6 +155,7 @@ export function createDefaultAppForm(appId = '', title = ''): ComposeAppFormMode
   return {
     appId,
     title,
+    autoStart: true,
     services: [createDefaultService('app')],
     networks: [],
     volumes: [],
@@ -222,6 +230,7 @@ export function composeYamlToForm(
   const model: ComposeAppFormModel = {
     appId: fallbackAppId,
     title: fallbackTitle,
+    autoStart: true,
     services: [],
     networks: [],
     volumes: [],
@@ -275,6 +284,29 @@ export function composeYamlToForm(
       }
     }
 
+    // Parse GPU reservations
+    let gpuEnabled = false;
+    let gpuCount = 'all';
+    let gpuDeviceIds = '';
+
+    const resDevices = svc.deploy?.resources?.reservations?.devices;
+    if (Array.isArray(resDevices)) {
+      for (const dev of resDevices) {
+        if (dev && (dev.driver === 'nvidia' || (Array.isArray(dev.capabilities) && dev.capabilities.includes('gpu')))) {
+          gpuEnabled = true;
+          if (Array.isArray(dev.device_ids) && dev.device_ids.length > 0) {
+            gpuDeviceIds = dev.device_ids.map(String).join(', ');
+            gpuCount = 'custom';
+          } else if (dev.count !== undefined && dev.count !== null) {
+            gpuCount = String(dev.count).toLowerCase();
+          }
+          break;
+        }
+      }
+    } else if (svc.runtime === 'nvidia') {
+      gpuEnabled = true;
+    }
+
     const serviceModel: ComposeServiceModel = {
       id: generateUid(),
       name: svcName,
@@ -304,6 +336,9 @@ export function composeYamlToForm(
         : '',
       privileged: Boolean(svc.privileged ?? false),
       devices: Array.isArray(svc.devices) ? svc.devices.map(String) : [],
+      gpuEnabled,
+      gpuCount,
+      gpuDeviceIds,
     };
 
     // Parse Ports
@@ -525,6 +560,13 @@ export function composeYamlToForm(
     }
   }
 
+  // 5. Determine autoStart status across services
+  const hasRestart = model.services.some(
+    (s) => s.restart === 'always' || s.restart === 'unless-stopped'
+  );
+  const allNoRestart = model.services.length > 0 && model.services.every((s) => s.restart === 'no');
+  model.autoStart = hasRestart || !allNoRestart;
+
   return model;
 }
 
@@ -577,8 +619,12 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
       svcObj.image = svc.image.trim();
     }
 
-    if (svc.restart && svc.restart !== 'no') {
+    if (form.autoStart === false) {
+      svcObj.restart = 'no';
+    } else if (svc.restart && svc.restart !== 'no') {
       svcObj.restart = svc.restart;
+    } else {
+      svcObj.restart = 'unless-stopped';
     }
 
     if (svc.command.trim()) {
@@ -668,6 +714,39 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
     const activeDevices = (svc.devices || []).filter((d) => d.trim());
     if (activeDevices.length > 0) {
       svcObj.devices = activeDevices;
+    }
+
+    // NVIDIA GPU Passthrough (deploy.resources.reservations.devices)
+    if (svc.gpuEnabled) {
+      if (!svcObj.deploy) {
+        svcObj.deploy = {};
+      }
+      if (!svcObj.deploy.resources) {
+        svcObj.deploy.resources = {};
+      }
+      if (!svcObj.deploy.resources.reservations) {
+        svcObj.deploy.resources.reservations = {};
+      }
+      const gpuReservation: any = {
+        driver: 'nvidia',
+        capabilities: ['gpu'],
+      };
+      if (svc.gpuCount === 'custom' && svc.gpuDeviceIds && svc.gpuDeviceIds.trim()) {
+        gpuReservation.device_ids = svc.gpuDeviceIds
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+      } else {
+        const countVal = svc.gpuCount ? svc.gpuCount.trim().toLowerCase() : 'all';
+        if (countVal === 'all') {
+          gpuReservation.count = 'all';
+        } else if (!isNaN(Number(countVal))) {
+          gpuReservation.count = Number(countVal);
+        } else {
+          gpuReservation.count = 'all';
+        }
+      }
+      svcObj.deploy.resources.reservations.devices = [gpuReservation];
     }
 
     rootObj.services[svcKey] = svcObj;
