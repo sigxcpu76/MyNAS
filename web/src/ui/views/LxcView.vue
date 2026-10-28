@@ -103,10 +103,11 @@ const lxcTemplatesDir = computed(() => `/mnt/${mainPool.value}/lxc-templates`);
  * Computes a unique, collision-free, ZFS-safe template archive filename for catalog items.
  * If upstream has generic names like "rootfs.tar.xz", names it after the template (e.g. debian-bookworm-amd64-rootfs.tar.xz).
  */
-function computeSafeTemplateFilename(item: LxcCatalogItem): string {
-  if (!item.downloadUrl) return '';
+function computeSafeTemplateFilename(item: LxcCatalogItem, overrideUrl?: string): string {
+  const url = overrideUrl || item.downloadUrl;
+  if (!url) return '';
 
-  const cleanUrl = item.downloadUrl.split('?')[0].split('#')[0];
+  const cleanUrl = url.split('?')[0].split('#')[0];
   let ext = '.tar.xz';
   const matchExt = cleanUrl.match(/\.(tar\.(?:xz|gz|zst|bz2)|tgz|txz|tar)$/i);
   if (matchExt) {
@@ -313,6 +314,7 @@ const form = reactive({
   gpuEnabled: false,
   description: '',
   templateArchive: '',
+  templateDownloadUrl: '',
   mountPoints: [] as LxcMountPoint[],
 });
 
@@ -357,6 +359,7 @@ function toggleCreate() {
     form.gpuEnabled = false;
     form.description = '';
     form.templateArchive = '';
+    form.templateDownloadUrl = '';
     form.mountPoints = [];
     showCreate.value = true;
   }
@@ -377,6 +380,31 @@ function openDeployModal(item: LxcCatalogItem) {
   form.gpuEnabled = Boolean(item.gpuRecommended);
   form.description = item.description || '';
   form.templateArchive = '';
+  form.templateDownloadUrl = '';
+
+  // If the catalog item does not have a direct downloadUrl (e.g. community-scripts app recipes),
+  // resolve the base OS template image from the linuxcontainers catalog items
+  let effectiveDownloadUrl = item.downloadUrl || '';
+  if (!effectiveDownloadUrl) {
+    const distroName = (item.baseDistribution || 'debian').toLowerCase();
+    const releaseName = (item.baseRelease || '').toLowerCase();
+    const baseMatch = catalogItems.value.find((c) => {
+      if (c.source !== 'linuxcontainers') return false;
+      const cDistro = (c.baseDistribution || '').toLowerCase();
+      if (cDistro !== distroName) return false;
+      const cRel = (c.baseRelease || '').toLowerCase();
+      if (releaseName && (cRel === releaseName || (releaseName === '12' && cRel === 'bookworm') || (releaseName === '13' && cRel === 'trixie'))) {
+        return true;
+      }
+      return false;
+    }) || catalogItems.value.find((c) => c.source === 'linuxcontainers' && (c.baseDistribution || '').toLowerCase() === distroName);
+
+    if (baseMatch && baseMatch.downloadUrl) {
+      effectiveDownloadUrl = baseMatch.downloadUrl;
+    }
+  }
+
+  form.templateDownloadUrl = effectiveDownloadUrl;
 
   // Look up matching template if already downloaded
   if (nasState.lxcTemplates.length > 0) {
@@ -390,9 +418,9 @@ function openDeployModal(item: LxcCatalogItem) {
     }
   }
 
-  // Pre-fill archive filename in lxc-templates directory if downloadUrl is provided
-  if (!form.templateArchive && item.downloadUrl) {
-    const safeFname = computeSafeTemplateFilename(item);
+  // Pre-fill archive filename in lxc-templates directory if downloadUrl is provided or resolved
+  if (!form.templateArchive && effectiveDownloadUrl) {
+    const safeFname = computeSafeTemplateFilename(item, effectiveDownloadUrl);
     form.templateArchive = `${lxcTemplatesDir.value}/${safeFname}`;
   }
 
@@ -428,7 +456,7 @@ async function handleCreate() {
       mountPoints: validMounts,
       installRecipe: deployingCatalogItem.value?.installRecipe || undefined,
       installScriptUrl: deployingCatalogItem.value?.installScriptUrl || undefined,
-      templateDownloadUrl: deployingCatalogItem.value?.downloadUrl || undefined,
+      templateDownloadUrl: form.templateDownloadUrl.trim() || deployingCatalogItem.value?.downloadUrl || undefined,
     });
 
     // Start container automatically upon deployment
@@ -442,6 +470,7 @@ async function handleCreate() {
     form.containerName = '';
     form.containerId = '';
     form.templateArchive = '';
+    form.templateDownloadUrl = '';
     form.mountPoints = [];
     showCreate.value = false;
     deployingCatalogItem.value = null;

@@ -183,6 +183,10 @@ func (a *Adapter) discoverContainerLocked(id string) *domain.LxcContainer {
 	lines := strings.Split(string(data), "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "# aegis.description =") {
+			c.Description = strings.TrimSpace(strings.TrimPrefix(line, "# aegis.description ="))
+			continue
+		}
 		if strings.HasPrefix(line, "#") || !strings.Contains(line, "=") {
 			continue
 		}
@@ -228,6 +232,15 @@ func (a *Adapter) discoverContainerLocked(id string) *domain.LxcContainer {
 					c.Release = strings.Trim(strings.TrimPrefix(osLine, "VERSION_ID="), `"`)
 				}
 			}
+		}
+	}
+
+	// Try reading description from description file if present
+	if descBytes, err := os.ReadFile(fmt.Sprintf("/var/lib/lxc/%s/description", id)); err == nil {
+		c.Description = strings.TrimSpace(string(descBytes))
+	} else if c.RootfsPath != "" {
+		if descBytes, err := os.ReadFile(filepath.Join(filepath.Dir(c.RootfsPath), "description")); err == nil {
+			c.Description = strings.TrimSpace(string(descBytes))
 		}
 	}
 
@@ -579,6 +592,9 @@ func (a *Adapter) writeLxcConfig(c domain.LxcContainer) {
 	var sb strings.Builder
 	sb.WriteString("# AegisNAS LXC Container Configuration\n")
 	sb.WriteString(fmt.Sprintf("lxc.uts.name = %s\n", utsName))
+	if c.Description != "" {
+		sb.WriteString(fmt.Sprintf("# aegis.description = %s\n", strings.ReplaceAll(c.Description, "\n", " ")))
+	}
 	if c.Architecture != "" {
 		sb.WriteString(fmt.Sprintf("lxc.arch = %s\n", c.Architecture))
 	}
@@ -661,6 +677,20 @@ func (a *Adapter) writeLxcConfig(c domain.LxcContainer) {
 	if err := os.MkdirAll(hostLxcDir, 0755); err == nil {
 		_ = os.WriteFile(filepath.Join(hostLxcDir, "config"), configData, 0644)
 	}
+
+	// Persist description metadata
+	descHostPath := fmt.Sprintf("/var/lib/lxc/%s/description", c.ID)
+	if c.Description != "" {
+		_ = os.WriteFile(descHostPath, []byte(c.Description), 0644)
+		if c.RootfsPath != "" {
+			_ = os.WriteFile(filepath.Join(filepath.Dir(c.RootfsPath), "description"), []byte(c.Description), 0644)
+		}
+	} else {
+		_ = os.Remove(descHostPath)
+		if c.RootfsPath != "" {
+			_ = os.Remove(filepath.Join(filepath.Dir(c.RootfsPath), "description"))
+		}
+	}
 }
 
 func (a *Adapter) runInstallerInContainer(id, scriptURL, recipe, rootfsPath string) {
@@ -693,6 +723,18 @@ func (a *Adapter) runInstallerInContainer(id, scriptURL, recipe, rootfsPath stri
 	_ = os.WriteFile(scriptFile, []byte("#!/bin/bash\nset -e\n"+installerScript+"\n"), 0755)
 
 	if _, err := exec.LookPath("lxc-attach"); err == nil {
+		fmt.Fprintf(logFile, "[%s] Awaiting container init ready state...\n", time.Now().Format(time.RFC3339))
+		time.Sleep(2 * time.Second)
+		for i := 0; i < 15; i++ {
+			checkCmd := exec.Command("lxc-info", "-n", id, "-s")
+			out, _ := checkCmd.Output()
+			if strings.Contains(string(out), "RUNNING") {
+				time.Sleep(1 * time.Second)
+				break
+			}
+			time.Sleep(1 * time.Second)
+		}
+
 		fmt.Fprintf(logFile, "[%s] Running installation recipe inside container...\n", time.Now().Format(time.RFC3339))
 		cmd := exec.Command("lxc-attach", "-n", id, "--", "/bin/bash", "/tmp/installer.sh")
 		cmd.Stdout = logFile
@@ -705,6 +747,36 @@ func (a *Adapter) runInstallerInContainer(id, scriptURL, recipe, rootfsPath stri
 	} else {
 		fmt.Fprintf(logFile, "[%s] Recipe commands:\n%s\n", time.Now().Format(time.RFC3339), installerScript)
 		fmt.Fprintf(logFile, "[%s] Installation completed in environment.\n", time.Now().Format(time.RFC3339))
+	}
+}
+
+func resolveDefaultLinuxContainersURL(distro, release string) string {
+	d := strings.ToLower(distro)
+	r := strings.ToLower(release)
+	switch d {
+	case "debian":
+		if r == "13" || r == "trixie" {
+			return "https://images.linuxcontainers.org/images/debian/trixie/amd64/default/20261028_05:24/rootfs.tar.xz"
+		}
+		return "https://images.linuxcontainers.org/images/debian/bookworm/amd64/default/20261028_05:24/rootfs.tar.xz"
+	case "ubuntu":
+		if r == "jammy" || r == "22.04" {
+			return "https://images.linuxcontainers.org/images/ubuntu/jammy/amd64/default/20261018_07:42/rootfs.tar.xz"
+		}
+		if r == "resolute" || r == "26.04" {
+			return "https://images.linuxcontainers.org/images/ubuntu/resolute/amd64/default/20261018_07:42/rootfs.tar.xz"
+		}
+		return "https://images.linuxcontainers.org/images/ubuntu/noble/amd64/default/20261018_07:42/rootfs.tar.xz"
+	case "alpine":
+		return "https://images.linuxcontainers.org/images/alpine/3.21/amd64/default/20261016_13:00/rootfs.tar.xz"
+	case "almalinux":
+		return "https://images.linuxcontainers.org/images/almalinux/10/amd64/default/20261027_23:08/rootfs.tar.xz"
+	case "rockylinux":
+		return "https://images.linuxcontainers.org/images/rockylinux/10/amd64/default/20261027_23:08/rootfs.tar.xz"
+	case "fedora":
+		return "https://images.linuxcontainers.org/images/fedora/41/amd64/default/20261027_20:34/rootfs.tar.xz"
+	default:
+		return "https://images.linuxcontainers.org/images/debian/bookworm/amd64/default/20261028_05:24/rootfs.tar.xz"
 	}
 }
 
@@ -793,6 +865,10 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 			sourceURL = c.TemplateArchive
 		}
 
+		if sourceURL == "" {
+			sourceURL = resolveDefaultLinuxContainersURL(c.Distribution, c.Release)
+		}
+
 		if sourceURL != "" {
 			downloadTarget := c.TemplateArchive
 			if downloadTarget == "" || strings.HasPrefix(downloadTarget, "http://") || strings.HasPrefix(downloadTarget, "https://") {
@@ -832,9 +908,20 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 	c.State = "RUNNING"
 	c.IPv4Address = ""
 
-	// Attempt real lxc-start if binary exists
+	// Attempt real lxc-start if binary exists and rootfs has an init binary
 	if _, err := exec.LookPath("lxc-start"); err == nil {
-		_ = exec.CommandContext(ctx, "lxc-start", "-n", c.ID, "-d").Run()
+		hasInit := false
+		for _, initCandidate := range []string{"sbin/init", "bin/init", "usr/lib/systemd/systemd", "bin/sh", "bin/bash"} {
+			if _, err := os.Stat(filepath.Join(c.RootfsPath, initCandidate)); err == nil {
+				hasInit = true
+				break
+			}
+		}
+		if hasInit {
+			_ = exec.CommandContext(ctx, "lxc-start", "-n", c.ID, "-d").Run()
+		} else {
+			slog.Warn("[lxc] rootfs has no init binary, skipped initial lxc-start", "container_id", c.ID, "rootfs", c.RootfsPath)
+		}
 	}
 
 	// Trigger installer recipe if present
@@ -1007,6 +1094,21 @@ func (a *Adapter) StartContainer(ctx context.Context, id string) (*domain.LxcCon
 	}
 
 	if hasHostConfig {
+		// Verify container rootfs has an init or shell binary before spawning
+		if c.RootfsPath != "" {
+			hasInit := false
+			for _, initCandidate := range []string{"sbin/init", "bin/init", "usr/lib/systemd/systemd", "bin/sh", "bin/bash"} {
+				if _, err := os.Stat(filepath.Join(c.RootfsPath, initCandidate)); err == nil {
+					hasInit = true
+					break
+				}
+			}
+			if !hasInit {
+				slog.Error("[lxc] cannot start container: rootfs has no init binary", "container_id", id, "rootfs", c.RootfsPath)
+				return nil, fmt.Errorf("%w: rootfs for container %q at %s has no init binary (/sbin/init) - template rootfs was not unpacked or download failed", domain.ErrFailedPrecondition, id, c.RootfsPath)
+			}
+		}
+
 		if _, err := exec.LookPath("lxc-start"); err == nil {
 			logPath := fmt.Sprintf("/var/log/lxc/%s.log", id)
 			_ = os.MkdirAll("/var/log/lxc", 0755)
