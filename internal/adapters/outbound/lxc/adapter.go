@@ -66,59 +66,239 @@ func NewAdapter() *Adapter {
 	}
 }
 
-func (a *Adapter) updateLiveStatus(c *domain.LxcContainer) {
-	if _, err := exec.LookPath("lxc-info"); err != nil {
-		return
+type lxcStatus struct {
+	state string
+	ipv4  string
+}
+
+// fetchLiveStatuses leverages lxc-ls to fetch the state and IP of all containers in a single fast call.
+func (a *Adapter) fetchLiveStatuses(ctx context.Context) map[string]lxcStatus {
+	statuses := make(map[string]lxcStatus)
+	if _, err := exec.LookPath("lxc-ls"); err != nil {
+		return statuses
 	}
-	out, err := exec.Command("lxc-info", "-n", c.ID, "-s", "-H").Output()
-	if err == nil {
-		state := strings.TrimSpace(string(out))
-		if state != "" {
-			c.State = state
+
+	execCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(execCtx, "lxc-ls", "-f", "-F", "NAME,STATE,IPV4")
+	out, err := cmd.Output()
+	if err != nil {
+		return statuses
+	}
+
+	lines := strings.Split(string(out), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "NAME") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) >= 2 {
+			name := fields[0]
+			state := fields[1]
+			ip := ""
+			if len(fields) >= 3 && fields[2] != "-" {
+				ip = fields[2]
+				if commaIdx := strings.Index(ip, ","); commaIdx != -1 {
+					ip = ip[:commaIdx]
+				}
+			}
+			statuses[name] = lxcStatus{
+				state: state,
+				ipv4:  ip,
+			}
 		}
 	}
-	if c.State == "RUNNING" {
-		ipOut, err := exec.Command("lxc-info", "-n", c.ID, "-i", "-H").Output()
-		if err == nil {
-			lines := strings.Split(strings.TrimSpace(string(ipOut)), "\n")
-			for _, line := range lines {
-				ip := strings.TrimSpace(line)
-				if ip != "" && !strings.Contains(ip, ":") && !strings.HasPrefix(ip, "127.") {
-					c.IPv4Address = ip
-					return
+	return statuses
+}
+
+// fetchSingleContainerStatus checks a specific container state and IP via lxc-ls filter.
+func (a *Adapter) fetchSingleContainerStatus(ctx context.Context, id string) *lxcStatus {
+	if _, err := exec.LookPath("lxc-ls"); err != nil {
+		return nil
+	}
+	execCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(execCtx, "lxc-ls", "-f", "-F", "NAME,STATE,IPV4", "--filter", "^"+id+"$")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	lines := strings.Split(string(out), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "NAME") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && fields[0] == id {
+			ip := ""
+			if len(fields) >= 3 && fields[2] != "-" {
+				ip = fields[2]
+				if commaIdx := strings.Index(ip, ","); commaIdx != -1 {
+					ip = ip[:commaIdx]
+				}
+			}
+			return &lxcStatus{
+				state: fields[1],
+				ipv4:  ip,
+			}
+		}
+	}
+	return nil
+}
+
+// discoverContainerLocked parses a container configuration from /var/lib/lxc/<id>/config.
+func (a *Adapter) discoverContainerLocked(id string) *domain.LxcContainer {
+	configPath := fmt.Sprintf("/var/lib/lxc/%s/config", id)
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil
+	}
+
+	c := &domain.LxcContainer{
+		ID:             id,
+		ContainerName:  id,
+		State:          "STOPPED",
+		Architecture:   "amd64",
+		Distribution:   "linux",
+		Release:        "generic",
+		NetworkBridge:  "br0",
+		MemoryLimitMiB: 512,
+		CPUCores:       1,
+	}
+
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "#") || !strings.Contains(line, "=") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		k := strings.TrimSpace(parts[0])
+		v := strings.TrimSpace(parts[1])
+
+		switch k {
+		case "lxc.uts.name":
+			c.ContainerName = v
+		case "lxc.arch":
+			c.Architecture = v
+		case "lxc.rootfs.path":
+			c.RootfsPath = strings.TrimPrefix(v, "dir:")
+		case "lxc.net.0.link":
+			c.NetworkBridge = v
+		case "lxc.start.auto":
+			c.Autostart = (v == "1")
+		case "lxc.cgroup2.memory.max":
+			v = strings.TrimSuffix(v, "M")
+			var mem int64
+			if _, err := fmt.Sscanf(v, "%d", &mem); err == nil {
+				c.MemoryLimitMiB = mem
+			}
+		case "lxc.cgroup2.cpu.weight":
+			var weight int32
+			if _, err := fmt.Sscanf(v, "%d", &weight); err == nil && weight > 0 {
+				c.CPUCores = weight / 100
+				if c.CPUCores < 1 {
+					c.CPUCores = 1
 				}
 			}
 		}
-		// If running but no IP leased yet by DHCP router
-		if strings.HasPrefix(c.IPv4Address, "10.10.20.") {
-			c.IPv4Address = ""
-		}
-	} else {
-		c.IPv4Address = ""
 	}
+
+	// Try reading OS release from rootfs if present
+	if c.RootfsPath != "" {
+		if osReleaseBytes, err := os.ReadFile(filepath.Join(c.RootfsPath, "etc/os-release")); err == nil {
+			for _, osLine := range strings.Split(string(osReleaseBytes), "\n") {
+				if strings.HasPrefix(osLine, "ID=") {
+					c.Distribution = strings.Trim(strings.TrimPrefix(osLine, "ID="), `"`)
+				} else if strings.HasPrefix(osLine, "VERSION_ID=") {
+					c.Release = strings.Trim(strings.TrimPrefix(osLine, "VERSION_ID="), `"`)
+				}
+			}
+		}
+	}
+
+	return c
 }
 
 func (a *Adapter) ListContainers(ctx context.Context) ([]domain.LxcContainer, error) {
+	// 1. Fetch live container statuses in one fast lxc-ls execution outside the lock
+	liveStatuses := a.fetchLiveStatuses(ctx)
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
+	// 2. Update all in-memory containers with their live status
+	for name, st := range liveStatuses {
+		if _, exists := a.containers[name]; !exists {
+			if disc := a.discoverContainerLocked(name); disc != nil {
+				a.containers[name] = *disc
+			}
+		}
+		if c, exists := a.containers[name]; exists {
+			c.State = st.state
+			c.IPv4Address = st.ipv4
+			a.containers[name] = c
+		}
+	}
+
+	// 3. Auto-discover any containers residing in /var/lib/lxc
+	if entries, err := os.ReadDir("/var/lib/lxc"); err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				name := e.Name()
+				if _, exists := a.containers[name]; !exists {
+					if disc := a.discoverContainerLocked(name); disc != nil {
+						if st, ok := liveStatuses[name]; ok {
+							disc.State = st.state
+							disc.IPv4Address = st.ipv4
+						}
+						a.containers[name] = *disc
+					}
+				}
+			}
+		}
+	}
+
 	out := make([]domain.LxcContainer, 0, len(a.containers))
-	for id, c := range a.containers {
-		a.updateLiveStatus(&c)
-		a.containers[id] = c
+	for _, c := range a.containers {
 		out = append(out, c)
 	}
 	return out, nil
 }
 
 func (a *Adapter) GetContainer(ctx context.Context, id string) (*domain.LxcContainer, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	a.mu.RLock()
 	c, ok := a.containers[id]
+	a.mu.RUnlock()
+
+	if !ok {
+		a.mu.Lock()
+		disc := a.discoverContainerLocked(id)
+		if disc != nil {
+			a.containers[id] = *disc
+			c = *disc
+			ok = true
+		}
+		a.mu.Unlock()
+	}
+
 	if !ok {
 		return nil, fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, id)
 	}
-	a.updateLiveStatus(&c)
-	a.containers[id] = c
+
+	if st := a.fetchSingleContainerStatus(ctx, id); st != nil {
+		a.mu.Lock()
+		c.State = st.state
+		c.IPv4Address = st.ipv4
+		a.containers[id] = c
+		a.mu.Unlock()
+	}
+
 	cp := c
 	return &cp, nil
 }
@@ -515,7 +695,6 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 	// Attempt real lxc-start if binary exists
 	if _, err := exec.LookPath("lxc-start"); err == nil {
 		_ = exec.CommandContext(ctx, "lxc-start", "-n", c.ID, "-d").Run()
-		a.updateLiveStatus(&c)
 	}
 
 	// Trigger installer recipe if present
@@ -586,20 +765,27 @@ func (a *Adapter) UpdateContainer(ctx context.Context, c domain.LxcContainer, fi
 	}
 
 	a.writeLxcConfig(current)
-	a.updateLiveStatus(&current)
 	a.containers[c.ID] = current
 	cp := current
 	return &cp, nil
 }
 
 func (a *Adapter) DeleteContainer(ctx context.Context, id string, force bool) error {
+	if st := a.fetchSingleContainerStatus(ctx, id); st != nil {
+		a.mu.Lock()
+		if c, ok := a.containers[id]; ok {
+			c.State = st.state
+			a.containers[id] = c
+		}
+		a.mu.Unlock()
+	}
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	c, ok := a.containers[id]
 	if !ok {
 		return fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, id)
 	}
-	a.updateLiveStatus(&c)
 	if c.State == "RUNNING" && !force {
 		return fmt.Errorf("%w: lxc container %q is running; stop it or set force=true", domain.ErrFailedPrecondition, id)
 	}
@@ -627,7 +813,6 @@ func (a *Adapter) StartContainer(ctx context.Context, id string) (*domain.LxcCon
 		_ = exec.CommandContext(ctx, "lxc-start", "-n", id, "-d").Run()
 	}
 	c.State = "RUNNING"
-	a.updateLiveStatus(&c)
 	a.containers[id] = c
 	cp := c
 	return &cp, nil
@@ -661,7 +846,6 @@ func (a *Adapter) RestartContainer(ctx context.Context, id string) (*domain.LxcC
 		_ = exec.CommandContext(ctx, "lxc-stop", "-r", "-n", id).Run()
 	}
 	c.State = "RUNNING"
-	a.updateLiveStatus(&c)
 	a.containers[id] = c
 	cp := c
 	return &cp, nil
@@ -743,13 +927,9 @@ func (a *Adapter) GetContainerLogs(ctx context.Context, id string, tail int) (st
 }
 
 func (a *Adapter) ExecAttach(ctx context.Context, id string, cmd []string) (net.Conn, string, error) {
-	a.mu.Lock()
+	a.mu.RLock()
 	c, ok := a.containers[id]
-	if ok {
-		a.updateLiveStatus(&c)
-		a.containers[id] = c
-	}
-	a.mu.Unlock()
+	a.mu.RUnlock()
 	if !ok {
 		return nil, "", fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, id)
 	}

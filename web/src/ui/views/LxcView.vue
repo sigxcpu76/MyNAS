@@ -660,7 +660,7 @@ let pollTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function runContainerLoop() {
   if (!isViewActive) return;
-  if (!document.hidden && activeMainTab.value === 'containers' && !isPolling) {
+  if (!document.hidden && activeMainTab.value === 'containers' && !isPolling && !isRefreshingContainers.value) {
     isPolling = true;
     try {
       nasState.lxcContainers = await services.lxc.listContainers();
