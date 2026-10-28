@@ -27,6 +27,12 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Install System Build Dependencies (PAM & Crypt)
+        if: matrix.goarch == 'amd64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpam0g-dev libcrypt-dev
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -49,7 +55,7 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
+          CGO_ENABLED: ${{ matrix.goarch == 'amd64' && '1' || '0' }}
         run: |
           mkdir -p dist
           TAG_NAME="${{ inputs.tag || github.ref_name }}"
@@ -84,6 +90,11 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache || true
           df -h
 
+      - name: Install System Build Dependencies (PAM & Crypt)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpam0g-dev libcrypt-dev
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -103,6 +114,8 @@ jobs:
           npm run build --prefix web
 
       - name: Compile Standalone nasctl Binary
+        env:
+          CGO_ENABLED: 1
         run: |
           TAG_NAME="${{ inputs.tag || github.ref_name }}"
           mkdir -p bin
