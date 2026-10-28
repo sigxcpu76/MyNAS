@@ -35,18 +35,20 @@ import (
 )
 
 type StartOptions struct {
-	HTTPPort  int
-	GRPCPort  int
-	StateDir  string
-	JWTSecret string
+	HTTPPort   int
+	GRPCPort   int
+	WebdavPort int
+	StateDir   string
+	JWTSecret  string
 }
 
 func newStartCmd(rootOpts *RootOptions) *cobra.Command {
 	opts := &StartOptions{
-		HTTPPort:  8080,
-		GRPCPort:  9090,
-		StateDir:  "/tmp/nas-state",
-		JWTSecret: "nas-production-secret-2026",
+		HTTPPort:   8080,
+		GRPCPort:   9090,
+		WebdavPort: 8081,
+		StateDir:   "/tmp/nas-state",
+		JWTSecret:  "nas-production-secret-2026",
 	}
 
 	cmd := &cobra.Command{
@@ -59,6 +61,7 @@ func newStartCmd(rootOpts *RootOptions) *cobra.Command {
 
 	cmd.Flags().IntVar(&opts.HTTPPort, "http-port", opts.HTTPPort, "HTTP/WebUI/gRPC-Gateway/WebDAV/noVNC listen port")
 	cmd.Flags().IntVar(&opts.GRPCPort, "grpc-port", opts.GRPCPort, "Native gRPC API server listen port")
+	cmd.Flags().IntVar(&opts.WebdavPort, "webdav-port", opts.WebdavPort, "Dedicated WebDAV server listen port (default 8081, 0 to disable dedicated port)")
 	cmd.Flags().StringVar(&opts.StateDir, "state-dir", opts.StateDir, "Directory for NAS share & config state")
 	cmd.Flags().StringVar(&opts.JWTSecret, "jwt-secret", opts.JWTSecret, "HMAC secret for JWT issuance")
 
@@ -102,6 +105,9 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	}
 	if opts.GRPCPort != 9090 || cfg.Server.GRPCPort == 0 {
 		cfg.Server.GRPCPort = opts.GRPCPort
+	}
+	if opts.WebdavPort != 8081 || cfg.Server.WebdavPort == 0 {
+		cfg.Server.WebdavPort = opts.WebdavPort
 	}
 	if opts.StateDir != "/tmp/nas-state" && opts.StateDir != "" {
 		cfg.Server.StateDir = opts.StateDir
@@ -215,8 +221,9 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	step("lxc adapter initialized")
 	cifsAdapter := share.NewCifsAdapter(sharesDir)
 	step("cifs adapter initialized (samba config load)")
-	webdavAdapter := share.NewWebdavAdapter()
+	webdavAdapter := share.NewWebdavAdapter(sharesDir)
 	identityAdapter := identity.NewAdapter()
+	webdavAdapter.SetAuthenticator(identityAdapter.Authenticate)
 	step("webdav and identity adapters initialized")
 	catalogCacheDir := filepath.Join(stateDir, "catalog")
 	catalogAdapter := catalog.NewAdapter(catalogCacheDir)
@@ -316,12 +323,29 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
+	var webdavServer *http.Server
+	if cfg.Server.WebdavPort > 0 {
+		webdavAddr := fmt.Sprintf(":%d", cfg.Server.WebdavPort)
+		webdavServer = &http.Server{
+			Addr:              webdavAddr,
+			Handler:           webdavAdapter,
+			ReadHeaderTimeout: 10 * time.Second,
+		}
+		go func() {
+			logger.Info("WebDAV dedicated server listening", "webdav_port", cfg.Server.WebdavPort, "addr", webdavAddr)
+			if err := webdavServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				logger.Warn("WebDAV dedicated server stopped", "error", err)
+			}
+		}()
+	}
+
 	errCh := make(chan error, 1)
 	go func() {
 		logger.Info("nasctl server started",
 			"startup_total", time.Since(startupBegin).Round(time.Millisecond).String(),
 			"http_port", cfg.Server.HTTPPort,
 			"grpc_port", cfg.Server.GRPCPort,
+			"webdav_port", cfg.Server.WebdavPort,
 			"tty_mode", logging.IsTTY(rootOpts.ErrOut),
 		)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -347,6 +371,9 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	// 2. Shut down HTTP listener with bounded 2-second timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer shutdownCancel()
+	if webdavServer != nil {
+		_ = webdavServer.Shutdown(shutdownCtx)
+	}
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		_ = httpServer.Close()
 	}

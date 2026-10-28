@@ -150,8 +150,11 @@ NaN adopts the TrueNAS SCALE Electric Eel philosophy where containers are organi
 ### 6. Network File Sharing (CIFS & WebDAV)
 
 - **Samba / CIFS Sharing**: Manage SMB shares, valid users and groups, guest access, and file creation masks.
-- **Embedded WebDAV Server**: Single-binary built-in Go WebDAV engine accessible at `/dav/...` with zero external dependencies.
-- **Interactive Path Selectors**: Browse server file hierarchies directly from modal folder pickers instead of typing raw disk paths.
+- **Dedicated Port WebDAV Server**: Single-binary built-in Go WebDAV engine isolated on a dedicated port (default `8081`, flag `--webdav-port 8081`) separate from the administrative web UI (`8080`) for network and firewall security isolation.
+- **Built-in Auto-Index Directory Browser**: Accessing any WebDAV share or folder in a web browser renders a clean, responsive auto-index HTML page with breadcrumbs, instant file filtering, size formatting, and direct downloads.
+- **Granular Access Control**: Toggle shares between **Read-Write (Full Access)** and **Read-Only** with HTTP Basic Authentication verified directly against Linux PAM and `/etc/shadow`.
+- **1-Click Mount & Client Guide**: Wide table view with port-adjusted mount URLs, 1-click clipboard copy, and interactive connection guides for Windows (Map Network Drive / `net use`), macOS Finder (`Cmd+K`), Linux (`davfs2`), and Nextcloud external storage.
+- **Interactive Path Selectors**: Browse server file hierarchies directly from modal folder pickers instead of typing raw disk paths with automatic share slug derivation.
 
 ### 7. Linux PAM Identity & Access Governance
 

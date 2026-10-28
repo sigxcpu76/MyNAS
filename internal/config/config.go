@@ -18,10 +18,11 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	HTTPPort  int    `mapstructure:"http_port" json:"http_port" yaml:"http_port"`
-	GRPCPort  int    `mapstructure:"grpc_port" json:"grpc_port" yaml:"grpc_port"`
-	StateDir  string `mapstructure:"state_dir" json:"state_dir" yaml:"state_dir"`
-	JWTSecret string `mapstructure:"jwt_secret" json:"jwt_secret" yaml:"jwt_secret"`
+	HTTPPort   int    `mapstructure:"http_port" json:"http_port" yaml:"http_port"`
+	GRPCPort   int    `mapstructure:"grpc_port" json:"grpc_port" yaml:"grpc_port"`
+	WebdavPort int    `mapstructure:"webdav_port" json:"webdav_port" yaml:"webdav_port"`
+	StateDir   string `mapstructure:"state_dir" json:"state_dir" yaml:"state_dir"`
+	JWTSecret  string `mapstructure:"jwt_secret" json:"jwt_secret" yaml:"jwt_secret"`
 }
 
 type SystemConfig struct {
@@ -53,10 +54,11 @@ func DefaultConfig() *Config {
 
 	return &Config{
 		Server: ServerConfig{
-			HTTPPort:  8080,
-			GRPCPort:  9090,
-			StateDir:  stateDir,
-			JWTSecret: "nas-production-secret-2026",
+			HTTPPort:   8080,
+			GRPCPort:   9090,
+			WebdavPort: 8081,
+			StateDir:   stateDir,
+			JWTSecret:  "nas-production-secret-2026",
 		},
 		System: SystemConfig{
 			MainPool:      "",
@@ -92,6 +94,7 @@ func Load(explicitPath string) (*Config, string, error) {
 	def := DefaultConfig()
 	v.SetDefault("server.http_port", def.Server.HTTPPort)
 	v.SetDefault("server.grpc_port", def.Server.GRPCPort)
+	v.SetDefault("server.webdav_port", def.Server.WebdavPort)
 	v.SetDefault("server.state_dir", def.Server.StateDir)
 	v.SetDefault("server.jwt_secret", def.Server.JWTSecret)
 	v.SetDefault("system.main_pool", def.System.MainPool)

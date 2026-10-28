@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
+  mdiCheck,
   mdiClose,
   mdiCog,
+  mdiContentCopy,
   mdiDelete,
   mdiFolderNetwork,
+  mdiHelpCircleOutline,
+  mdiInformationOutline,
+  mdiLanConnect,
+  mdiLock,
+  mdiLockOpenVariantOutline,
+  mdiOpenInNew,
   mdiPencil,
   mdiPlus,
   mdiWeb,
@@ -124,15 +132,74 @@ const editCifsForm = reactive({
 });
 
 const showCreateWebdav = ref(false);
+const lastDerivedWebdavSlug = ref('');
+const copiedWebdavUrl = ref<string | null>(null);
+const connectingWebdav = ref<WebdavShare | null>(null);
+const connectActiveTab = ref<'windows' | 'macos' | 'linux' | 'browser'>('windows');
+
 const webdavForm = reactive({
   shareId: '',
-  path: '/mnt/tank/documents',
-  description: 'Documents',
-  allowedUsersText: 'admin, nasuser',
-  allowedGroupsText: 'nasusers',
+  path: '',
+  description: '',
+  allowedUsersText: '',
+  allowedGroupsText: '',
   readOnly: false,
   enabled: true,
 });
+
+watch(
+  () => webdavForm.path,
+  (newPath) => {
+    if (!newPath) return;
+    const trimmed = newPath.replace(/\/+$/, '');
+    const segments = trimmed.split('/').filter(Boolean);
+    if (segments.length > 0) {
+      const slug = segments[segments.length - 1];
+      if (!webdavForm.shareId || webdavForm.shareId === lastDerivedWebdavSlug.value) {
+        webdavForm.shareId = slug;
+        lastDerivedWebdavSlug.value = slug;
+      }
+    }
+  }
+);
+
+function getWebdavShortName(share: WebdavShare): string {
+  return (
+    share.name.replace(/^webdavShares\//, '') ||
+    (share.urlPrefix ? share.urlPrefix.replace(/^\/dav\//, '') : '')
+  );
+}
+
+const currentHostname = computed(() =>
+  typeof window !== 'undefined' ? window.location.hostname || 'localhost' : 'localhost'
+);
+
+function getWebdavMountUrl(share: WebdavShare): string {
+  const host = currentHostname.value;
+  const shortName = getWebdavShortName(share);
+  return `http://${host}:8081/dav/${shortName}/`;
+}
+
+async function copyWebdavMountUrl(share: WebdavShare) {
+  const url = getWebdavMountUrl(share);
+  try {
+    await navigator.clipboard.writeText(url);
+    copiedWebdavUrl.value = share.name;
+    setTimeout(() => {
+      if (copiedWebdavUrl.value === share.name) {
+        copiedWebdavUrl.value = null;
+      }
+    }, 2000);
+    notify('info', 'WebDAV mount URL copied to clipboard');
+  } catch {
+    notify('error', 'Failed to copy mount URL');
+  }
+}
+
+function openConnectModal(share: WebdavShare) {
+  connectingWebdav.value = share;
+  connectActiveTab.value = 'windows';
+}
 
 const editingWebdav = ref<WebdavShare | null>(null);
 const editWebdavForm = reactive({
@@ -984,7 +1051,7 @@ async function handleDeleteWebdav(share: WebdavShare) {
               v-model="webdavForm.allowedUsersText"
               type="user"
               :multiple="true"
-              placeholder="Select allowed users..."
+              placeholder="Select allowed users (leave empty for all users)..."
             />
           </div>
           <div class="form-group">
@@ -996,11 +1063,42 @@ async function handleDeleteWebdav(share: WebdavShare) {
               placeholder="Select allowed groups..."
             />
           </div>
+
+          <div class="form-group" style="grid-column: 1 / -1">
+            <label style="font-weight: 600; margin-bottom: 6px; display: block">Access Type</label>
+            <div class="access-type-selector">
+              <button
+                type="button"
+                class="access-type-card"
+                :class="{ selected: !webdavForm.readOnly }"
+                @click="webdavForm.readOnly = false"
+              >
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <MdiIcon :path="mdiLockOpenVariantOutline" size="18" style="color: #22c55e" />
+                  <span style="font-weight: 600; font-size: 13px">Read-Write (Full Access)</span>
+                </div>
+                <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 4px">
+                  Allowed users can read, upload, edit, rename, and delete files.
+                </div>
+              </button>
+              <button
+                type="button"
+                class="access-type-card"
+                :class="{ selected: webdavForm.readOnly }"
+                @click="webdavForm.readOnly = true"
+              >
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <MdiIcon :path="mdiLock" size="18" style="color: #eab308" />
+                  <span style="font-weight: 600; font-size: 13px">Read-Only</span>
+                </div>
+                <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 4px">
+                  Safe browsing and downloads. Blocks uploads, modifications, and deletes.
+                </div>
+              </button>
+            </div>
+          </div>
         </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px">
-          <label style="font-size: 12px; display: flex; align-items: center; gap: 5px">
-            <input v-model="webdavForm.readOnly" type="checkbox" /> Read-Only
-          </label>
+        <div style="display: flex; justify-content: flex-end; align-items: center; margin-top: 14px">
           <button type="submit" class="btn btn-primary btn-sm">Publish WebDAV Share</button>
         </div>
       </form>
@@ -1048,15 +1146,44 @@ async function handleDeleteWebdav(share: WebdavShare) {
             <label>Description</label>
             <input v-model="editWebdavForm.description" class="input" />
           </div>
-        </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px">
-          <label style="font-size: 12px; display: flex; align-items: center; gap: 5px">
-            <input v-model="editWebdavForm.readOnly" type="checkbox" /> Read-Only
-          </label>
-          <div style="display: flex; gap: 6px">
-            <button class="btn btn-sm" @click="editingWebdav = null">Cancel</button>
-            <button class="btn btn-primary btn-sm" @click="handleSaveWebdavEdit">Save</button>
+
+          <div class="form-group" style="grid-column: 1 / -1">
+            <label style="font-weight: 600; margin-bottom: 6px; display: block">Access Type</label>
+            <div class="access-type-selector">
+              <button
+                type="button"
+                class="access-type-card"
+                :class="{ selected: !editWebdavForm.readOnly }"
+                @click="editWebdavForm.readOnly = false"
+              >
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <MdiIcon :path="mdiLockOpenVariantOutline" size="18" style="color: #22c55e" />
+                  <span style="font-weight: 600; font-size: 13px">Read-Write (Full Access)</span>
+                </div>
+                <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 4px">
+                  Allowed users can read, upload, edit, rename, and delete files.
+                </div>
+              </button>
+              <button
+                type="button"
+                class="access-type-card"
+                :class="{ selected: editWebdavForm.readOnly }"
+                @click="editWebdavForm.readOnly = true"
+              >
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <MdiIcon :path="mdiLock" size="18" style="color: #eab308" />
+                  <span style="font-weight: 600; font-size: 13px">Read-Only</span>
+                </div>
+                <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 4px">
+                  Safe browsing and downloads. Blocks uploads, modifications, and deletes.
+                </div>
+              </button>
+            </div>
           </div>
+        </div>
+        <div style="display: flex; justify-content: flex-end; align-items: center; margin-top: 14px; gap: 8px">
+          <button class="btn btn-sm" @click="editingWebdav = null">Cancel</button>
+          <button class="btn btn-primary btn-sm" @click="handleSaveWebdavEdit">Save</button>
         </div>
       </div>
 
@@ -1113,8 +1240,52 @@ async function handleDeleteWebdav(share: WebdavShare) {
 
             <tr v-for="w in webdavSort.sorted.value" :key="w.name">
               <td>
-                <div class="mono" style="font-weight: 600; font-size: 13.5px; color: var(--accent-primary)">
-                  {{ w.urlPrefix }}
+                <div class="endpoint-cell-box">
+                  <div style="display: flex; align-items: center; gap: 8px">
+                    <span class="mono" style="font-weight: 600; font-size: 13.5px; color: var(--accent-primary)">
+                      /dav/{{ getWebdavShortName(w) }}
+                    </span>
+                    <button
+                      class="btn btn-sm btn-icon"
+                      title="Client Connect Guide"
+                      aria-label="Client Connect Guide"
+                      style="padding: 2px 6px; height: 22px"
+                      @click="openConnectModal(w)"
+                    >
+                      <MdiIcon :path="mdiLanConnect" size="13" />
+                    </button>
+                  </div>
+                  <div class="endpoint-url-row">
+                    <a
+                      :href="getWebdavMountUrl(w)"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="endpoint-url-text"
+                      title="Open WebDAV Auto-Index"
+                    >
+                      {{ getWebdavMountUrl(w) }}
+                    </a>
+                    <button
+                      class="btn btn-sm btn-icon"
+                      :title="copiedWebdavUrl === w.name ? 'Copied!' : 'Copy Mount URL'"
+                      aria-label="Copy Mount URL"
+                      style="padding: 1px 5px; height: 20px"
+                      @click="copyWebdavMountUrl(w)"
+                    >
+                      <MdiIcon :path="copiedWebdavUrl === w.name ? mdiCheck : mdiContentCopy" size="12" />
+                    </button>
+                    <a
+                      :href="getWebdavMountUrl(w)"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="btn btn-sm btn-icon"
+                      title="Open in Browser (Auto-Index)"
+                      aria-label="Open in Browser"
+                      style="padding: 1px 5px; height: 20px; color: var(--text-secondary)"
+                    >
+                      <MdiIcon :path="mdiOpenInNew" size="12" />
+                    </a>
+                  </div>
                 </div>
               </td>
               <td>
@@ -1126,7 +1297,7 @@ async function handleDeleteWebdav(share: WebdavShare) {
               <td class="mono" style="font-size: 11.5px">
                 <div>
                   <span style="color: var(--text-secondary)">Users:</span>
-                  <strong>{{ (w.allowedUsers || []).join(', ') || 'authenticated' }}</strong>
+                  <strong>{{ (w.allowedUsers || []).join(', ') || 'All Authenticated' }}</strong>
                 </div>
                 <div>
                   <span style="color: var(--text-secondary)">Groups:</span>
@@ -1135,7 +1306,7 @@ async function handleDeleteWebdav(share: WebdavShare) {
               </td>
               <td>
                 <span class="badge" :class="w.readOnly ? 'badge-warning' : 'badge-success'">
-                  {{ w.readOnly ? 'RO' : 'RW' }}
+                  {{ w.readOnly ? 'Read-Only' : 'Read-Write' }}
                 </span>
               </td>
               <td>
@@ -1145,6 +1316,14 @@ async function handleDeleteWebdav(share: WebdavShare) {
               </td>
               <td style="text-align: right">
                 <div style="display: inline-flex; gap: 6px; justify-content: flex-end">
+                  <button
+                    class="btn btn-sm btn-icon"
+                    title="Client Connect Guide"
+                    aria-label="Client Connect Guide"
+                    @click="openConnectModal(w)"
+                  >
+                    <MdiIcon :path="mdiLanConnect" size="14" />
+                  </button>
                   <button
                     class="btn btn-sm btn-icon"
                     title="Edit WebDAV Share"
@@ -1166,6 +1345,148 @@ async function handleDeleteWebdav(share: WebdavShare) {
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- WebDAV Client Connect Guide Modal -->
+  <div v-if="connectingWebdav" class="modal-backdrop" @click.self="connectingWebdav = null">
+    <div class="modal" style="max-width: 680px">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <MdiIcon :path="mdiLanConnect" size="20" style="color: var(--accent-primary)" />
+          <h3 class="modal-title">Connect to WebDAV Share: {{ getWebdavShortName(connectingWebdav) }}</h3>
+        </div>
+        <button class="modal-close" @click="connectingWebdav = null">×</button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px">
+        <!-- Mount URL Banner -->
+        <div style="background: var(--bg-base); border: 1px solid var(--border-strong); border-radius: 8px; padding: 12px">
+          <div style="font-size: 11px; text-transform: uppercase; color: var(--text-secondary); font-weight: 600; margin-bottom: 4px">
+            Dedicated WebDAV Port 8081 Mount URL
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+            <span class="mono" style="font-size: 13px; color: var(--accent-primary); word-break: break-all; font-weight: 600">
+              {{ getWebdavMountUrl(connectingWebdav) }}
+            </span>
+            <div style="display: flex; gap: 6px; flex-shrink: 0">
+              <button class="btn btn-sm" @click="copyWebdavMountUrl(connectingWebdav)">
+                <MdiIcon :path="copiedWebdavUrl === connectingWebdav.name ? mdiCheck : mdiContentCopy" size="14" style="margin-right: 4px" />
+                {{ copiedWebdavUrl === connectingWebdav.name ? 'Copied' : 'Copy' }}
+              </button>
+              <a :href="getWebdavMountUrl(connectingWebdav)" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-primary">
+                <MdiIcon :path="mdiOpenInNew" size="14" style="margin-right: 4px" />
+                Browse Auto-Index
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <!-- OS Guide Tabs -->
+        <div style="display: flex; border-bottom: 1px solid var(--border-subtle); gap: 8px">
+          <button
+            class="connect-tab-btn"
+            :class="{ active: connectActiveTab === 'windows' }"
+            @click="connectActiveTab = 'windows'"
+          >
+            Windows
+          </button>
+          <button
+            class="connect-tab-btn"
+            :class="{ active: connectActiveTab === 'macos' }"
+            @click="connectActiveTab = 'macos'"
+          >
+            macOS
+          </button>
+          <button
+            class="connect-tab-btn"
+            :class="{ active: connectActiveTab === 'linux' }"
+            @click="connectActiveTab = 'linux'"
+          >
+            Linux
+          </button>
+          <button
+            class="connect-tab-btn"
+            :class="{ active: connectActiveTab === 'browser' }"
+            @click="connectActiveTab = 'browser'"
+          >
+            Nextcloud & Mobile
+          </button>
+        </div>
+
+        <!-- Windows Tab -->
+        <div v-if="connectActiveTab === 'windows'" style="display: flex; flex-direction: column; gap: 12px">
+          <div>
+            <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px">Method 1: Map Network Drive (File Explorer)</div>
+            <ol style="padding-left: 20px; font-size: 12.5px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 4px">
+              <li>Open File Explorer and right-click <strong>This PC</strong> &rarr; select <strong>Map network drive...</strong></li>
+              <li>Choose a drive letter (e.g. <code>Z:</code>).</li>
+              <li>In the Folder field, paste: <code class="mono">{{ getWebdavMountUrl(connectingWebdav) }}</code></li>
+              <li>Check <strong>Connect using different credentials</strong> and click <strong>Finish</strong>.</li>
+              <li>Enter your Linux system username and password when prompted.</li>
+            </ol>
+          </div>
+          <div>
+            <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px">Method 2: Command Prompt / PowerShell</div>
+            <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px; font-family: monospace; font-size: 12px; color: var(--accent-primary)">
+              net use Z: {{ getWebdavMountUrl(connectingWebdav) }} /user:&lt;username&gt;
+            </div>
+          </div>
+        </div>
+
+        <!-- macOS Tab -->
+        <div v-if="connectActiveTab === 'macos'" style="display: flex; flex-direction: column; gap: 12px">
+          <div>
+            <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px">Connect via Finder</div>
+            <ol style="padding-left: 20px; font-size: 12.5px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 4px">
+              <li>In Finder, click menu <strong>Go</strong> &rarr; <strong>Connect to Server...</strong> (or press <kbd>⌘</kbd> + <kbd>K</kbd>).</li>
+              <li>In the Server Address field, paste: <code class="mono">{{ getWebdavMountUrl(connectingWebdav) }}</code></li>
+              <li>Click <strong>Connect</strong>.</li>
+              <li>Select <strong>Registered User</strong> and enter your Linux credentials.</li>
+            </ol>
+          </div>
+        </div>
+
+        <!-- Linux Tab -->
+        <div v-if="connectActiveTab === 'linux'" style="display: flex; flex-direction: column; gap: 12px">
+          <div>
+            <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px">Method 1: Mount with davfs2</div>
+            <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px; font-family: monospace; font-size: 12px; color: var(--accent-primary)">
+              sudo mkdir -p /mnt/webdav<br>
+              sudo mount -t davfs {{ getWebdavMountUrl(connectingWebdav) }} /mnt/webdav
+            </div>
+          </div>
+          <div>
+            <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px">Method 2: GNOME Files / Nautilus</div>
+            <ol style="padding-left: 20px; font-size: 12.5px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 4px">
+              <li>Open Files (Nautilus) and click <strong>Other Locations</strong>.</li>
+              <li>In Connect to Server, enter: <code class="mono">dav://{{ currentHostname }}:8081/dav/{{ getWebdavShortName(connectingWebdav) }}/</code></li>
+              <li>Click <strong>Connect</strong> and enter credentials.</li>
+            </ol>
+          </div>
+        </div>
+
+        <!-- Nextcloud & Mobile Tab -->
+        <div v-if="connectActiveTab === 'browser'" style="display: flex; flex-direction: column; gap: 12px">
+          <div>
+            <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px">Auto-Index Web File Browser</div>
+            <p style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 8px">
+              Opening the WebDAV URL in any browser serves an interactive auto-index directory view with instant file filtering, size display, and direct download links.
+            </p>
+          </div>
+          <div>
+            <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px">Nextcloud External Storage</div>
+            <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px; font-size: 12px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 4px">
+              <div><strong>Storage type:</strong> WebDAV</div>
+              <div><strong>Host:</strong> {{ currentHostname }} (Port: 8081)</div>
+              <div><strong>URL / Remote subfolder:</strong> /dav/{{ getWebdavShortName(connectingWebdav) }}/</div>
+              <div><strong>Authentication:</strong> Log-in credentials, save in session</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: flex-end; padding: 12px 20px">
+        <button class="btn btn-sm" @click="connectingWebdav = null">Close</button>
       </div>
     </div>
   </div>
@@ -1298,5 +1619,82 @@ async function handleDeleteWebdav(share: WebdavShare) {
 
 .shares-wide-card {
   width: 100%;
+}
+
+.access-type-selector {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.access-type-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.access-type-card:hover {
+  border-color: var(--accent-primary);
+  background: var(--bg-tertiary);
+}
+
+.access-type-card.selected {
+  border-color: var(--accent-primary);
+  background: rgba(56, 189, 248, 0.08);
+  box-shadow: 0 0 0 1px var(--accent-primary);
+}
+
+.endpoint-cell-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.endpoint-url-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 2px 6px;
+  max-width: fit-content;
+}
+
+.endpoint-url-text {
+  font-family: var(--font-mono, monospace);
+  font-size: 11.5px;
+  color: var(--accent-primary);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.endpoint-url-text:hover {
+  text-decoration: underline;
+}
+
+.connect-tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.connect-tab-btn.active {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
+  font-weight: 600;
 }
 </style>
