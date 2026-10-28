@@ -20,6 +20,7 @@ import (
 	"github.com/sigxcpu/nas/internal/adapters/outbound/identity"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/kvm"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/lxc"
+	"github.com/sigxcpu/nas/internal/adapters/outbound/lxc_catalog"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/prereq"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/share"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/system"
@@ -274,6 +275,11 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	// 3. Inbound Adapters (Driving Ports: gRPC + gRPC-Gateway + noVNC WS + WebDAV + Embedded Vue UI + SSE Events)
 	nasGRPC := grpcadapter.NewServer(systemSvc, prereqSvc, diskSvc, zfsSvc, kvmSvc, dockerSvc, dockerAppSvc, lxcSvc, shareSvc, identitySvc, catalogSvc)
 	nasGRPC.SetRegistryService(application.NewDockerRegistryService(dockerAdapter))
+
+	lxcCatalogCacheDir := filepath.Join(stateDir, "lxc-catalog")
+	lxcCatalogAdapter := lxc_catalog.NewAdapter(lxcCatalogCacheDir)
+	lxcCatalogSvc := application.NewLxcCatalogService(lxcCatalogAdapter)
+	nasGRPC.SetLxcCatalogService(lxcCatalogSvc)
 
 	rawGRPCServer := grpc.NewServer(
 		grpc.UnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {

@@ -45,17 +45,23 @@ type Server struct {
 	zfs       *application.ZfsService
 	kvm       *application.KvmService
 	docker    *application.DockerService
-	dockerApp *application.DockerAppService
-	lxc       *application.LxcService
-	share     *application.ShareService
-	identity  *application.IdentityService
-	catalog   *application.CatalogService
-	registry  *application.DockerRegistryService
+	dockerApp  *application.DockerAppService
+	lxc        *application.LxcService
+	lxcCatalog *application.LxcCatalogService
+	share      *application.ShareService
+	identity   *application.IdentityService
+	catalog    *application.CatalogService
+	registry   *application.DockerRegistryService
 }
 
 // SetRegistryService enables the container registry credential RPCs.
 func (s *Server) SetRegistryService(svc *application.DockerRegistryService) {
 	s.registry = svc
+}
+
+// SetLxcCatalogService enables the LXC application catalog RPCs.
+func (s *Server) SetLxcCatalogService(svc *application.LxcCatalogService) {
+	s.lxcCatalog = svc
 }
 
 func NewServer(
@@ -3188,5 +3194,94 @@ func domainCatalogAppToPB(a domain.CatalogApp) *nasv1.CatalogApp {
 		ContainerImage: a.ContainerImage,
 		QuestionGroups: qGroups,
 		Questions:      flatQs,
+	}
+}
+
+// =============================================================================
+// LXC Application Catalog RPCs
+// =============================================================================
+
+func (s *Server) ListLxcCatalogItems(ctx context.Context, req *nasv1.ListLxcCatalogItemsRequest) (*nasv1.ListLxcCatalogItemsResponse, error) {
+	if s.lxcCatalog == nil {
+		return &nasv1.ListLxcCatalogItemsResponse{}, nil
+	}
+	items, err := s.lxcCatalog.ListItems(ctx, req.GetSource(), req.GetCategory(), req.GetQuery())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list LXC catalog items: %v", err)
+	}
+
+	paged, _, total, err := PaginateSlice(items, req.GetPageSize(), req.GetPageToken())
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]*nasv1.LxcCatalogItem, 0, len(paged))
+	for _, it := range paged {
+		out = append(out, toProtoLxcCatalogItem(it))
+	}
+
+	syncT := s.lxcCatalog.LastSyncTime()
+	syncStr := ""
+	if !syncT.IsZero() {
+		syncStr = syncT.UTC().Format(time.RFC3339)
+	}
+
+	return &nasv1.ListLxcCatalogItemsResponse{
+		Items:        out,
+		TotalSize:    total,
+		LastSyncTime: syncStr,
+	}, nil
+}
+
+func (s *Server) GetLxcCatalogItem(ctx context.Context, req *nasv1.GetLxcCatalogItemRequest) (*nasv1.LxcCatalogItem, error) {
+	if s.lxcCatalog == nil {
+		return nil, status.Error(codes.NotFound, "LXC catalog service unavailable")
+	}
+	item, err := s.lxcCatalog.GetItem(ctx, req.GetId())
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "LXC catalog item not found: %v", err)
+	}
+	return toProtoLxcCatalogItem(*item), nil
+}
+
+func (s *Server) SyncLxcCatalog(ctx context.Context, req *nasv1.SyncLxcCatalogRequest) (*nasv1.SyncLxcCatalogResponse, error) {
+	if s.lxcCatalog == nil {
+		return nil, status.Error(codes.Unavailable, "LXC catalog service unavailable")
+	}
+	count, syncTime, err := s.lxcCatalog.SyncCatalog(ctx, req.GetForce())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "LXC catalog sync failed: %v", err)
+	}
+	return &nasv1.SyncLxcCatalogResponse{
+		Success:      true,
+		Message:      fmt.Sprintf("Successfully synced %d LXC applications, appliances, and templates", count),
+		TotalItems:   int32(count),
+		LastSyncTime: syncTime.UTC().Format(time.RFC3339),
+	}, nil
+}
+
+func toProtoLxcCatalogItem(it domain.LxcCatalogItem) *nasv1.LxcCatalogItem {
+	return &nasv1.LxcCatalogItem{
+		Id:                    it.ID,
+		Title:                 it.Title,
+		Description:           it.Description,
+		Source:                it.Source,
+		Category:              it.Category,
+		Categories:            it.Categories,
+		IconUrl:               it.IconURL,
+		Website:               it.Website,
+		DocumentationUrl:      it.DocumentationURL,
+		BaseDistribution:      it.BaseDistribution,
+		BaseRelease:           it.BaseRelease,
+		Architecture:          it.Architecture,
+		DefaultCpuCores:       it.DefaultCPUCores,
+		DefaultMemoryLimitMib: it.DefaultMemoryLimitMiB,
+		DefaultPort:           int32(it.DefaultPort),
+		DownloadUrl:           it.DownloadURL,
+		InstallScriptUrl:      it.InstallScriptURL,
+		InstallRecipe:         it.InstallRecipe,
+		PrivilegedRequired:    it.PrivilegedRequired,
+		RecommendedMounts:     it.RecommendedMounts,
+		GpuRecommended:        it.GpuRecommended,
 	}
 }

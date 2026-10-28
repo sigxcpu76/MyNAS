@@ -645,6 +645,30 @@ export interface LxcContainer {
   memoryUsedMib?: number;
 }
 
+export interface LxcCatalogItem {
+  id: string;
+  title: string;
+  description: string;
+  source: 'community-scripts' | 'turnkey' | 'linuxcontainers' | string;
+  category: string;
+  categories: string[];
+  iconUrl?: string;
+  website?: string;
+  documentationUrl?: string;
+  baseDistribution: string;
+  baseRelease: string;
+  architecture: string;
+  defaultCpuCores: number;
+  defaultMemoryLimitMib: number;
+  defaultPort?: number;
+  downloadUrl?: string;
+  installScriptUrl?: string;
+  installRecipe?: string;
+  privilegedRequired?: boolean;
+  recommendedMounts?: string[];
+  gpuRecommended?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // File Shares (`cifsShares/{cifs_share}` & `webdavShares/{webdav_share}`)
 // ---------------------------------------------------------------------------

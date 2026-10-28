@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -273,6 +274,59 @@ func (s *StorageRepoService) SaveLxcTemplate(ctx context.Context, filename strin
 		SizeFormatted: domain.FormatBytes(n),
 		ModTime:       modTime,
 	}, nil
+}
+
+// EnsureTemplateExists checks if a template file exists in the repository, and downloads it on-demand if missing.
+func (s *StorageRepoService) EnsureTemplateExists(ctx context.Context, downloadURL, filename string) (string, error) {
+	dir := s.GetLxcTemplatesDirectory()
+	_ = os.MkdirAll(dir, 0755)
+
+	cleanName := filepath.Base(filename)
+	if cleanName == "" || cleanName == "." {
+		cleanName = "template.tar.xz"
+	}
+	targetPath := filepath.Join(dir, cleanName)
+
+	if fi, err := os.Stat(targetPath); err == nil && fi.Size() > 0 {
+		return targetPath, nil
+	}
+
+	if downloadURL == "" {
+		return targetPath, nil
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create download request: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to download template from %s: %w", downloadURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("download from %s failed with status %d", downloadURL, resp.StatusCode)
+	}
+
+	tmpFile := targetPath + ".downloading"
+	f, err := os.OpenFile(tmpFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return "", fmt.Errorf("failed to create temporary template file: %w", err)
+	}
+
+	_, err = io.Copy(f, resp.Body)
+	_ = f.Close()
+	if err != nil {
+		_ = os.Remove(tmpFile)
+		return "", fmt.Errorf("failed to stream template data: %w", err)
+	}
+
+	if err := os.Rename(tmpFile, targetPath); err != nil {
+		return "", fmt.Errorf("failed to finalize template file: %w", err)
+	}
+
+	return targetPath, nil
 }
 
 // DeleteLxcTemplate removes an LXC template archive from the repository.

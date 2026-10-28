@@ -172,6 +172,13 @@ type CatalogPort interface {
 	SetAppdataPath(path string)
 }
 
+type LxcCatalogPort interface {
+	ListItems(ctx context.Context, source, category, query string) ([]domain.LxcCatalogItem, error)
+	GetItem(ctx context.Context, id string) (*domain.LxcCatalogItem, error)
+	SyncCatalog(ctx context.Context, force bool) (int, time.Time, error)
+	LastSyncTime() time.Time
+}
+
 type DockerConfigPort interface {
 	GetConfig(ctx context.Context) (*domain.DockerConfig, error)
 	UpdateConfig(ctx context.Context, cfg domain.DockerConfig) (*domain.DockerConfig, error)

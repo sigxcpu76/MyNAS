@@ -124,3 +124,61 @@ message GetLxcContainerLogsResponse {
   string logs = 1;
   int32 line_count = 2;
 }
+
+// =============================================================================
+// LXC Application & Template Catalog (Community-Scripts, TurnKey, LinuxContainers)
+// =============================================================================
+
+message LxcCatalogItem {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  string source = 4; // "community-scripts", "turnkey", "linuxcontainers"
+  string category = 5;
+  repeated string categories = 6;
+  string icon_url = 7;
+  string website = 8;
+  string documentation_url = 9;
+  string base_distribution = 10;
+  string base_release = 11;
+  string architecture = 12;
+  int32 default_cpu_cores = 13;
+  int64 default_memory_limit_mib = 14;
+  int32 default_port = 15;
+  string download_url = 16;
+  string install_script_url = 17;
+  string install_recipe = 18;
+  bool privileged_required = 19;
+  repeated string recommended_mounts = 20;
+  bool gpu_recommended = 21;
+}
+
+message ListLxcCatalogItemsRequest {
+  string source = 1; // "all", "community-scripts", "turnkey", "linuxcontainers"
+  string category = 2;
+  string query = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+}
+
+message ListLxcCatalogItemsResponse {
+  repeated LxcCatalogItem items = 1;
+  int32 total_size = 2;
+  string last_sync_time = 3;
+}
+
+message GetLxcCatalogItemRequest {
+  string id = 1;
+}
+
+message SyncLxcCatalogRequest {
+  bool force = 1;
+}
+
+message SyncLxcCatalogResponse {
+  bool success = 1;
+  string message = 2;
+  int32 total_items = 3;
+  string last_sync_time = 4;
+}
+

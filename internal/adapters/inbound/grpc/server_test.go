@@ -14,6 +14,7 @@ import (
 	"github.com/sigxcpu/nas/internal/adapters/outbound/identity"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/kvm"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/lxc"
+	"github.com/sigxcpu/nas/internal/adapters/outbound/lxc_catalog"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/prereq"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/share"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/system"
@@ -509,5 +510,66 @@ func TestServer_LxcParity(t *testing.T) {
 	}
 	if logsResp.GetLogs() == "" {
 		t.Fatalf("expected non-empty logs response")
+	}
+}
+
+func newTestServerWithLxcCatalog(t *testing.T) *grpcadapter.Server {
+	dockerAdapter := docker.NewAdapter()
+	zfsAdapter := newStubZfsServerPort(t.TempDir())
+	prereqChecker := prereq.NewSystemChecker()
+	prereqChecker.SetAllModulesInstalledForTest()
+	prereqChecker.SetMainPool("tank")
+	sysAdapter := system.NewAdapter(zfsAdapter, prereqChecker)
+	srv := grpcadapter.NewServer(
+		application.NewSystemService(sysAdapter),
+		application.NewPrerequisiteService(prereqChecker),
+		application.NewDiskService(disk.NewAdapter(zfsAdapter)),
+		application.NewZfsService(zfsAdapter),
+		application.NewKvmService(kvm.NewAdapter()),
+		application.NewDockerService(dockerAdapter),
+		application.NewDockerAppService(dockerAdapter),
+		application.NewLxcService(lxc.NewAdapter()),
+		application.NewShareService(share.NewCifsAdapter(t.TempDir()), share.NewWebdavAdapter()),
+		application.NewIdentityService(identity.NewAdapter(), "grpc-test-secret"),
+		application.NewCatalogService(catalog.NewAdapter(t.TempDir())),
+	)
+	lxcCatAdapter := lxc_catalog.NewAdapter(t.TempDir())
+	srv.SetLxcCatalogService(application.NewLxcCatalogService(lxcCatAdapter))
+	return srv
+}
+
+func TestServer_LxcCatalog(t *testing.T) {
+	ctx := context.Background()
+	srv := newTestServerWithLxcCatalog(t)
+
+	// 1. List catalog items
+	resp, err := srv.ListLxcCatalogItems(ctx, &nasv1.ListLxcCatalogItemsRequest{
+		Source: "all",
+	})
+	if err != nil {
+		t.Fatalf("ListLxcCatalogItems failed: %v", err)
+	}
+	if len(resp.GetItems()) == 0 {
+		t.Fatalf("expected catalog items, got 0")
+	}
+
+	// 2. Get specific catalog item
+	item, err := srv.GetLxcCatalogItem(ctx, &nasv1.GetLxcCatalogItemRequest{
+		Id: "community-pihole",
+	})
+	if err != nil {
+		t.Fatalf("GetLxcCatalogItem failed: %v", err)
+	}
+	if item.GetTitle() != "Pi-hole" || item.GetSource() != "community-scripts" {
+		t.Fatalf("unexpected item: %+v", item)
+	}
+
+	// 3. Sync catalog
+	syncResp, err := srv.SyncLxcCatalog(ctx, &nasv1.SyncLxcCatalogRequest{Force: true})
+	if err != nil {
+		t.Fatalf("SyncLxcCatalog failed: %v", err)
+	}
+	if !syncResp.GetSuccess() || syncResp.GetTotalItems() <= 0 {
+		t.Fatalf("unexpected sync response: %+v", syncResp)
 	}
 }

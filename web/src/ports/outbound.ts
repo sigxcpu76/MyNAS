@@ -17,6 +17,7 @@ import type {
   DockerNetworkInfo,
   Group,
   HostPortStatus,
+  LxcCatalogItem,
   LxcContainer,
   Prerequisite,
   PrerequisiteSummary,
@@ -165,6 +166,9 @@ export interface LxcPort {
   listTemplates(): Promise<StorageImage[]>;
   uploadTemplate(file: File, onProgress?: UploadProgressCallback): Promise<StorageImage>;
   deleteTemplate(filename: string): Promise<void>;
+  listCatalogItems(source?: string, category?: string, query?: string): Promise<{ items: LxcCatalogItem[]; totalSize: number; lastSyncTime: string }>;
+  getCatalogItem(id: string): Promise<LxcCatalogItem>;
+  syncCatalog(force?: boolean): Promise<{ success: boolean; message: string; totalItems: number; lastSyncTime: string }>;
 }
 
 export interface SharePort {

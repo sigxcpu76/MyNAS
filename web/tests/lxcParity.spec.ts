@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
-import { mapLxcContainer, HttpLxcAdapter } from '../src/adapters/http/httpAdapters';
+import { mapLxcContainer, mapLxcCatalogItem, HttpLxcAdapter } from '../src/adapters/http/httpAdapters';
 import type { AipClient } from '../src/adapters/http/aipClient';
+import type { LxcCatalogItem } from '../src/domain/models';
 import LxcView from '../src/ui/views/LxcView.vue';
 import { nasState } from '../src/ui/store';
 import { services } from '../src/container';
@@ -245,6 +246,210 @@ describe('LXC Feature Parity with VMs and Apps', () => {
       expect(wrapper.text()).toContain('Logs');
       expect(wrapper.text()).toContain('Plex and media services');
       expect(wrapper.text()).toContain('Enabled (/dev/dri, nvidia)');
+    });
+  });
+
+  describe('LXC Catalog Integration', () => {
+    const sampleCatalogItem: LxcCatalogItem = {
+      id: 'community-plex',
+      title: 'Plex Media Server',
+      description: 'Organize and stream your video and music libraries.',
+      category: 'Media',
+      categories: ['Media'],
+      source: 'community-scripts',
+      baseDistribution: 'debian',
+      baseRelease: 'bookworm',
+      architecture: 'amd64',
+      defaultCpuCores: 2,
+      defaultMemoryLimitMib: 2048,
+      defaultPort: 32400,
+      website: 'https://www.plex.tv',
+      installScriptUrl: 'https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/ct/plex.sh',
+      downloadUrl: 'http://images.linuxcontainers.org/images/debian/bookworm/amd64/default/rootfs.tar.xz',
+      privilegedRequired: false,
+      recommendedMounts: ['/media'],
+      gpuRecommended: true,
+      iconUrl: 'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/plex.png',
+    };
+
+    describe('mapLxcCatalogItem', () => {
+      it('maps snake_case catalog payload to camelCase domain model', () => {
+        const raw = {
+          id: 'turnkey-lamp',
+          title: 'TurnKey LAMP',
+          description: 'Linux, Apache, MySQL, PHP web stack appliance',
+          category: 'Web',
+          categories: ['Web', 'Database'],
+          source: 'turnkey',
+          base_distribution: 'debian',
+          base_release: 'bullseye',
+          architecture: 'amd64',
+          default_cpu_cores: 1,
+          default_memory_limit_mib: 1024,
+          default_port: 80,
+          website: 'https://www.turnkeylinux.org/lamp',
+          download_url: 'https://releases.turnkeylinux.org/debian/turnkey-lamp.tar.gz',
+          privileged_required: false,
+          gpu_recommended: false,
+          icon_url: 'https://www.turnkeylinux.org/files/lamp.png',
+        };
+
+        const item = mapLxcCatalogItem(raw);
+        expect(item.id).toBe('turnkey-lamp');
+        expect(item.title).toBe('TurnKey LAMP');
+        expect(item.source).toBe('turnkey');
+        expect(item.baseDistribution).toBe('debian');
+        expect(item.baseRelease).toBe('bullseye');
+        expect(item.architecture).toBe('amd64');
+        expect(item.defaultCpuCores).toBe(1);
+        expect(item.defaultMemoryLimitMib).toBe(1024);
+        expect(item.defaultPort).toBe(80);
+        expect(item.downloadUrl).toBe('https://releases.turnkeylinux.org/debian/turnkey-lamp.tar.gz');
+        expect(item.gpuRecommended).toBe(false);
+      });
+    });
+
+    describe('HttpLxcAdapter catalog operations', () => {
+      it('calls get with query parameters for listCatalogItems', async () => {
+        const mockClient = {
+          get: vi.fn().mockResolvedValue({
+            items: [
+              {
+                id: 'community-plex',
+                title: 'Plex Media Server',
+                source: 'community-scripts',
+                category: 'Media',
+              },
+            ],
+            total_size: 1,
+            last_sync_time: '2026-10-28T22:00:00Z',
+          }),
+        } as unknown as AipClient;
+
+        const adapter = new HttpLxcAdapter(mockClient);
+        const res = await adapter.listCatalogItems('community-scripts', 'Media', 'plex');
+        expect(mockClient.get).toHaveBeenCalledWith('lxcCatalog/items', {
+          source: 'community-scripts',
+          category: 'Media',
+          query: 'plex',
+        });
+        expect(res.items).toHaveLength(1);
+        expect(res.items[0].id).toBe('community-plex');
+        expect(res.totalSize).toBe(1);
+      });
+
+      it('calls get for getCatalogItem', async () => {
+        const mockClient = {
+          get: vi.fn().mockResolvedValue({
+            id: 'community-plex',
+            title: 'Plex Media Server',
+            source: 'community-scripts',
+          }),
+        } as unknown as AipClient;
+
+        const adapter = new HttpLxcAdapter(mockClient);
+        const item = await adapter.getCatalogItem('community-plex');
+        expect(mockClient.get).toHaveBeenCalledWith('lxcCatalog/items/community-plex');
+        expect(item.title).toBe('Plex Media Server');
+      });
+
+      it('calls customMethod for syncCatalog', async () => {
+        const mockClient = {
+          customMethod: vi.fn().mockResolvedValue({
+            success: true,
+            message: 'Catalog synchronized successfully',
+            totalItems: 92,
+            lastSyncTime: '2026-10-28T22:00:00Z',
+          }),
+        } as unknown as AipClient;
+
+        const adapter = new HttpLxcAdapter(mockClient);
+        const summary = await adapter.syncCatalog(true);
+        expect(mockClient.customMethod).toHaveBeenCalledWith('lxcCatalog', 'sync', { force: true });
+        expect(summary.totalItems).toBe(92);
+        expect(summary.message).toBe('Catalog synchronized successfully');
+      });
+    });
+
+    describe('LxcView App Catalog tab', () => {
+      it('switches to App Catalog tab, displays catalog items, and prefills deployment modal', async () => {
+        vi.spyOn(services.lxc, 'listContainers').mockResolvedValue([]);
+        vi.spyOn(services.lxc, 'listTemplates').mockResolvedValue([]);
+        vi.spyOn(services.lxc, 'listCatalogItems').mockResolvedValue({
+          items: [
+            sampleCatalogItem,
+            {
+              id: 'turnkey-nextcloud',
+              title: 'TurnKey Nextcloud',
+              description: 'Cloud storage and file sync',
+              category: 'Storage',
+              categories: ['Storage'],
+              source: 'turnkey',
+              baseDistribution: 'debian',
+              baseRelease: 'bookworm',
+              architecture: 'amd64',
+              defaultCpuCores: 2,
+              defaultMemoryLimitMib: 2048,
+              defaultPort: 443,
+              website: 'https://nextcloud.com',
+              downloadUrl: 'https://releases.turnkeylinux.org/debian/turnkey-nextcloud.tar.gz',
+              privilegedRequired: false,
+              recommendedMounts: [],
+              gpuRecommended: false,
+            },
+          ],
+          totalSize: 2,
+          lastSyncTime: '2026-10-28T22:00:00Z',
+        });
+
+        const wrapper = mount(LxcView);
+        await nextTick();
+
+        // Switch to App Catalog tab
+        const catalogTab = wrapper.findAll('button').find(b => b.text().includes('App Catalog'));
+        expect(catalogTab).toBeDefined();
+        await catalogTab!.trigger('click');
+        await nextTick();
+
+        // Verify catalog items rendered
+        expect(wrapper.text()).toContain('Plex Media Server');
+        expect(wrapper.text()).toContain('TurnKey Nextcloud');
+        expect(wrapper.text()).toContain('Community Apps');
+        expect(wrapper.text()).toContain('TurnKey Appliances');
+
+        // Test filter pill: click Community Apps
+        const communityPill = wrapper.findAll('button').find(b => b.text().includes('Community Apps'));
+        expect(communityPill).toBeDefined();
+        await communityPill!.trigger('click');
+        await nextTick();
+
+        // Filtered view should show Plex and not Nextcloud
+        expect(wrapper.text()).toContain('Plex Media Server');
+        expect(wrapper.text()).not.toContain('TurnKey Nextcloud');
+
+        // Click Deploy Container on Plex
+        const deployBtn = wrapper.find('button[title="Deploy Plex Media Server as LXC container"]');
+        expect(deployBtn.exists()).toBe(true);
+        await deployBtn.trigger('click');
+        await nextTick();
+
+        // Modal should open with Plex specs pre-filled
+        expect(wrapper.text()).toContain('Deploying Plex Media Server');
+        const nameInput = wrapper.find<HTMLInputElement>('input[placeholder="e.g. Debian Web Server"]');
+        expect(nameInput.element.value).toBe('Plex Media Server');
+
+        const numberInputs = wrapper.findAll<HTMLInputElement>('input[type="number"]');
+        const coresInput = numberInputs[0];
+        expect(coresInput.element.value).toBe('2');
+
+        const memInput = numberInputs[1];
+        expect(memInput.element.value).toBe('2048');
+
+        // GPU toggle should be checked for Plex
+        const checkboxes = wrapper.findAll<HTMLInputElement>('input[type="checkbox"]');
+        const gpuCheckbox = checkboxes.find(c => c.element.parentElement?.textContent?.includes('GPU Acceleration'));
+        expect(gpuCheckbox?.element.checked).toBe(true);
+      });
     });
   });
 });

@@ -24,6 +24,7 @@ import type {
   Group,
   HostPortStatus,
   LinuxFlavor,
+  LxcCatalogItem,
   LxcContainer,
   Prerequisite,
   PrerequisiteSummary,
@@ -640,6 +641,32 @@ export function mapLxcContainer(raw: any): LxcContainer {
     networkBridge: raw?.networkBridge ?? raw?.network_bridge ?? '',
     cpuPercent: Number(raw?.cpuPercent ?? raw?.cpu_percent ?? 0),
     memoryUsedMib: normalizeInt64(raw?.memoryUsedMib ?? raw?.memory_used_mib ?? 0),
+  };
+}
+
+export function mapLxcCatalogItem(raw: any): LxcCatalogItem {
+  return {
+    id: raw?.id ?? '',
+    title: raw?.title ?? '',
+    description: raw?.description ?? '',
+    source: raw?.source ?? 'community-scripts',
+    category: raw?.category ?? 'General',
+    categories: Array.isArray(raw?.categories) ? raw.categories : [],
+    iconUrl: raw?.iconUrl ?? raw?.icon_url ?? undefined,
+    website: raw?.website ?? undefined,
+    documentationUrl: raw?.documentationUrl ?? raw?.documentation_url ?? undefined,
+    baseDistribution: raw?.baseDistribution ?? raw?.base_distribution ?? 'debian',
+    baseRelease: raw?.baseRelease ?? raw?.base_release ?? 'bookworm',
+    architecture: raw?.architecture ?? 'amd64',
+    defaultCpuCores: Number(raw?.defaultCpuCores ?? raw?.default_cpu_cores ?? 1),
+    defaultMemoryLimitMib: normalizeInt64(raw?.defaultMemoryLimitMib ?? raw?.default_memory_limit_mib ?? 512),
+    defaultPort: raw?.defaultPort ?? raw?.default_port ? Number(raw?.defaultPort ?? raw?.default_port) : undefined,
+    downloadUrl: raw?.downloadUrl ?? raw?.download_url ?? undefined,
+    installScriptUrl: raw?.installScriptUrl ?? raw?.install_script_url ?? undefined,
+    installRecipe: raw?.installRecipe ?? raw?.install_recipe ?? undefined,
+    privilegedRequired: Boolean(raw?.privilegedRequired ?? raw?.privileged_required ?? false),
+    recommendedMounts: Array.isArray(raw?.recommendedMounts ?? raw?.recommended_mounts) ? (raw?.recommendedMounts ?? raw?.recommended_mounts) : [],
+    gpuRecommended: Boolean(raw?.gpuRecommended ?? raw?.gpu_recommended ?? false),
   };
 }
 
@@ -1719,6 +1746,36 @@ export class HttpLxcAdapter implements LxcPort {
 
   async deleteTemplate(filename: string): Promise<void> {
     await this.client.delete('storage/lxc-templates', { filename });
+  }
+
+  async listCatalogItems(source?: string, category?: string, query?: string): Promise<{ items: LxcCatalogItem[]; totalSize: number; lastSyncTime: string }> {
+    const params: Record<string, any> = {};
+    if (source && source !== 'all') params.source = source;
+    if (category && category !== 'all') params.category = category;
+    if (query) params.query = query;
+
+    const res = await this.client.get<any>('lxcCatalog/items', params);
+    const rawItems = res?.items ?? [];
+    return {
+      items: rawItems.map(mapLxcCatalogItem),
+      totalSize: Number(res?.totalSize ?? res?.total_size ?? rawItems.length),
+      lastSyncTime: res?.lastSyncTime ?? res?.last_sync_time ?? '',
+    };
+  }
+
+  async getCatalogItem(id: string): Promise<LxcCatalogItem> {
+    const raw = await this.client.get<any>(`lxcCatalog/items/${encodeURIComponent(id)}`);
+    return mapLxcCatalogItem(raw);
+  }
+
+  async syncCatalog(force = false): Promise<{ success: boolean; message: string; totalItems: number; lastSyncTime: string }> {
+    const res = await this.client.customMethod<any>('lxcCatalog', 'sync', { force });
+    return {
+      success: Boolean(res?.success ?? true),
+      message: res?.message ?? 'Sync completed',
+      totalItems: Number(res?.totalItems ?? res?.total_items ?? 0),
+      lastSyncTime: res?.lastSyncTime ?? res?.last_sync_time ?? '',
+    };
   }
 }
 

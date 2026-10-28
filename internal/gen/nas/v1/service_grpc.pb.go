@@ -111,6 +111,9 @@ const (
 	NasService_RestartLxcContainer_FullMethodName            = "/nas.v1.NasService/RestartLxcContainer"
 	NasService_FreezeLxcContainer_FullMethodName             = "/nas.v1.NasService/FreezeLxcContainer"
 	NasService_GetLxcContainerLogs_FullMethodName            = "/nas.v1.NasService/GetLxcContainerLogs"
+	NasService_ListLxcCatalogItems_FullMethodName            = "/nas.v1.NasService/ListLxcCatalogItems"
+	NasService_GetLxcCatalogItem_FullMethodName              = "/nas.v1.NasService/GetLxcCatalogItem"
+	NasService_SyncLxcCatalog_FullMethodName                 = "/nas.v1.NasService/SyncLxcCatalog"
 	NasService_ListCifsShares_FullMethodName                 = "/nas.v1.NasService/ListCifsShares"
 	NasService_GetCifsShare_FullMethodName                   = "/nas.v1.NasService/GetCifsShare"
 	NasService_CreateCifsShare_FullMethodName                = "/nas.v1.NasService/CreateCifsShare"
@@ -239,6 +242,9 @@ type NasServiceClient interface {
 	RestartLxcContainer(ctx context.Context, in *RestartLxcContainerRequest, opts ...grpc.CallOption) (*LxcContainer, error)
 	FreezeLxcContainer(ctx context.Context, in *FreezeLxcContainerRequest, opts ...grpc.CallOption) (*LxcContainer, error)
 	GetLxcContainerLogs(ctx context.Context, in *GetLxcContainerLogsRequest, opts ...grpc.CallOption) (*GetLxcContainerLogsResponse, error)
+	ListLxcCatalogItems(ctx context.Context, in *ListLxcCatalogItemsRequest, opts ...grpc.CallOption) (*ListLxcCatalogItemsResponse, error)
+	GetLxcCatalogItem(ctx context.Context, in *GetLxcCatalogItemRequest, opts ...grpc.CallOption) (*LxcCatalogItem, error)
+	SyncLxcCatalog(ctx context.Context, in *SyncLxcCatalogRequest, opts ...grpc.CallOption) (*SyncLxcCatalogResponse, error)
 	ListCifsShares(ctx context.Context, in *ListCifsSharesRequest, opts ...grpc.CallOption) (*ListCifsSharesResponse, error)
 	GetCifsShare(ctx context.Context, in *GetCifsShareRequest, opts ...grpc.CallOption) (*CifsShare, error)
 	CreateCifsShare(ctx context.Context, in *CreateCifsShareRequest, opts ...grpc.CallOption) (*CifsShare, error)
@@ -1184,6 +1190,36 @@ func (c *nasServiceClient) GetLxcContainerLogs(ctx context.Context, in *GetLxcCo
 	return out, nil
 }
 
+func (c *nasServiceClient) ListLxcCatalogItems(ctx context.Context, in *ListLxcCatalogItemsRequest, opts ...grpc.CallOption) (*ListLxcCatalogItemsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListLxcCatalogItemsResponse)
+	err := c.cc.Invoke(ctx, NasService_ListLxcCatalogItems_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) GetLxcCatalogItem(ctx context.Context, in *GetLxcCatalogItemRequest, opts ...grpc.CallOption) (*LxcCatalogItem, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LxcCatalogItem)
+	err := c.cc.Invoke(ctx, NasService_GetLxcCatalogItem_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) SyncLxcCatalog(ctx context.Context, in *SyncLxcCatalogRequest, opts ...grpc.CallOption) (*SyncLxcCatalogResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SyncLxcCatalogResponse)
+	err := c.cc.Invoke(ctx, NasService_SyncLxcCatalog_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nasServiceClient) ListCifsShares(ctx context.Context, in *ListCifsSharesRequest, opts ...grpc.CallOption) (*ListCifsSharesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListCifsSharesResponse)
@@ -1535,6 +1571,9 @@ type NasServiceServer interface {
 	RestartLxcContainer(context.Context, *RestartLxcContainerRequest) (*LxcContainer, error)
 	FreezeLxcContainer(context.Context, *FreezeLxcContainerRequest) (*LxcContainer, error)
 	GetLxcContainerLogs(context.Context, *GetLxcContainerLogsRequest) (*GetLxcContainerLogsResponse, error)
+	ListLxcCatalogItems(context.Context, *ListLxcCatalogItemsRequest) (*ListLxcCatalogItemsResponse, error)
+	GetLxcCatalogItem(context.Context, *GetLxcCatalogItemRequest) (*LxcCatalogItem, error)
+	SyncLxcCatalog(context.Context, *SyncLxcCatalogRequest) (*SyncLxcCatalogResponse, error)
 	ListCifsShares(context.Context, *ListCifsSharesRequest) (*ListCifsSharesResponse, error)
 	GetCifsShare(context.Context, *GetCifsShareRequest) (*CifsShare, error)
 	CreateCifsShare(context.Context, *CreateCifsShareRequest) (*CifsShare, error)
@@ -1842,6 +1881,15 @@ func (UnimplementedNasServiceServer) FreezeLxcContainer(context.Context, *Freeze
 }
 func (UnimplementedNasServiceServer) GetLxcContainerLogs(context.Context, *GetLxcContainerLogsRequest) (*GetLxcContainerLogsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetLxcContainerLogs not implemented")
+}
+func (UnimplementedNasServiceServer) ListLxcCatalogItems(context.Context, *ListLxcCatalogItemsRequest) (*ListLxcCatalogItemsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListLxcCatalogItems not implemented")
+}
+func (UnimplementedNasServiceServer) GetLxcCatalogItem(context.Context, *GetLxcCatalogItemRequest) (*LxcCatalogItem, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetLxcCatalogItem not implemented")
+}
+func (UnimplementedNasServiceServer) SyncLxcCatalog(context.Context, *SyncLxcCatalogRequest) (*SyncLxcCatalogResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SyncLxcCatalog not implemented")
 }
 func (UnimplementedNasServiceServer) ListCifsShares(context.Context, *ListCifsSharesRequest) (*ListCifsSharesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListCifsShares not implemented")
@@ -3577,6 +3625,60 @@ func _NasService_GetLxcContainerLogs_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NasService_ListLxcCatalogItems_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListLxcCatalogItemsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).ListLxcCatalogItems(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_ListLxcCatalogItems_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).ListLxcCatalogItems(ctx, req.(*ListLxcCatalogItemsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_GetLxcCatalogItem_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLxcCatalogItemRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).GetLxcCatalogItem(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_GetLxcCatalogItem_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).GetLxcCatalogItem(ctx, req.(*GetLxcCatalogItemRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_SyncLxcCatalog_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncLxcCatalogRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).SyncLxcCatalog(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_SyncLxcCatalog_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).SyncLxcCatalog(ctx, req.(*SyncLxcCatalogRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NasService_ListCifsShares_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListCifsSharesRequest)
 	if err := dec(in); err != nil {
@@ -4397,6 +4499,18 @@ var NasService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetLxcContainerLogs",
 			Handler:    _NasService_GetLxcContainerLogs_Handler,
+		},
+		{
+			MethodName: "ListLxcCatalogItems",
+			Handler:    _NasService_ListLxcCatalogItems_Handler,
+		},
+		{
+			MethodName: "GetLxcCatalogItem",
+			Handler:    _NasService_GetLxcCatalogItem_Handler,
+		},
+		{
+			MethodName: "SyncLxcCatalog",
+			Handler:    _NasService_SyncLxcCatalog_Handler,
 		},
 		{
 			MethodName: "ListCifsShares",

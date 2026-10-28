@@ -18,6 +18,7 @@ import {
   type Group,
   type HostPortStatus,
   isValidResourceId,
+  type LxcCatalogItem,
   type LxcContainer,
   type Prerequisite,
   type PrerequisiteSummary,
@@ -738,6 +739,18 @@ export class LxcService {
 
   async deleteTemplate(filename: string): Promise<void> {
     return this.lxcPort.deleteTemplate(filename);
+  }
+
+  async listCatalogItems(source?: string, category?: string, query?: string): Promise<{ items: LxcCatalogItem[]; totalSize: number; lastSyncTime: string }> {
+    return this.lxcPort.listCatalogItems(source, category, query);
+  }
+
+  async getCatalogItem(id: string): Promise<LxcCatalogItem> {
+    return this.lxcPort.getCatalogItem(id);
+  }
+
+  async syncCatalog(force?: boolean): Promise<{ success: boolean; message: string; totalItems: number; lastSyncTime: string }> {
+    return this.lxcPort.syncCatalog(force);
   }
 }
 

@@ -871,6 +871,502 @@ func (x *GetLxcContainerLogsResponse) GetLineCount() int32 {
 	return 0
 }
 
+type LxcCatalogItem struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	Id                    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Title                 string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Description           string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Source                string                 `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"` // "community-scripts", "turnkey", "linuxcontainers"
+	Category              string                 `protobuf:"bytes,5,opt,name=category,proto3" json:"category,omitempty"`
+	Categories            []string               `protobuf:"bytes,6,rep,name=categories,proto3" json:"categories,omitempty"`
+	IconUrl               string                 `protobuf:"bytes,7,opt,name=icon_url,json=iconUrl,proto3" json:"icon_url,omitempty"`
+	Website               string                 `protobuf:"bytes,8,opt,name=website,proto3" json:"website,omitempty"`
+	DocumentationUrl      string                 `protobuf:"bytes,9,opt,name=documentation_url,json=documentationUrl,proto3" json:"documentation_url,omitempty"`
+	BaseDistribution      string                 `protobuf:"bytes,10,opt,name=base_distribution,json=baseDistribution,proto3" json:"base_distribution,omitempty"`
+	BaseRelease           string                 `protobuf:"bytes,11,opt,name=base_release,json=baseRelease,proto3" json:"base_release,omitempty"`
+	Architecture          string                 `protobuf:"bytes,12,opt,name=architecture,proto3" json:"architecture,omitempty"`
+	DefaultCpuCores       int32                  `protobuf:"varint,13,opt,name=default_cpu_cores,json=defaultCpuCores,proto3" json:"default_cpu_cores,omitempty"`
+	DefaultMemoryLimitMib int64                  `protobuf:"varint,14,opt,name=default_memory_limit_mib,json=defaultMemoryLimitMib,proto3" json:"default_memory_limit_mib,omitempty"`
+	DefaultPort           int32                  `protobuf:"varint,15,opt,name=default_port,json=defaultPort,proto3" json:"default_port,omitempty"`
+	DownloadUrl           string                 `protobuf:"bytes,16,opt,name=download_url,json=downloadUrl,proto3" json:"download_url,omitempty"`
+	InstallScriptUrl      string                 `protobuf:"bytes,17,opt,name=install_script_url,json=installScriptUrl,proto3" json:"install_script_url,omitempty"`
+	InstallRecipe         string                 `protobuf:"bytes,18,opt,name=install_recipe,json=installRecipe,proto3" json:"install_recipe,omitempty"`
+	PrivilegedRequired    bool                   `protobuf:"varint,19,opt,name=privileged_required,json=privilegedRequired,proto3" json:"privileged_required,omitempty"`
+	RecommendedMounts     []string               `protobuf:"bytes,20,rep,name=recommended_mounts,json=recommendedMounts,proto3" json:"recommended_mounts,omitempty"`
+	GpuRecommended        bool                   `protobuf:"varint,21,opt,name=gpu_recommended,json=gpuRecommended,proto3" json:"gpu_recommended,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *LxcCatalogItem) Reset() {
+	*x = LxcCatalogItem{}
+	mi := &file_nas_v1_lxc_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LxcCatalogItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LxcCatalogItem) ProtoMessage() {}
+
+func (x *LxcCatalogItem) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_lxc_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LxcCatalogItem.ProtoReflect.Descriptor instead.
+func (*LxcCatalogItem) Descriptor() ([]byte, []int) {
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *LxcCatalogItem) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *LxcCatalogItem) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *LxcCatalogItem) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *LxcCatalogItem) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *LxcCatalogItem) GetCategory() string {
+	if x != nil {
+		return x.Category
+	}
+	return ""
+}
+
+func (x *LxcCatalogItem) GetCategories() []string {
+	if x != nil {
+		return x.Categories
+	}
+	return nil
+}
+
+func (x *LxcCatalogItem) GetIconUrl() string {
+	if x != nil {
+		return x.IconUrl
+	}
+	return ""
+}
+
+func (x *LxcCatalogItem) GetWebsite() string {
+	if x != nil {
+		return x.Website
+	}
+	return ""
+}
+
+func (x *LxcCatalogItem) GetDocumentationUrl() string {
+	if x != nil {
+		return x.DocumentationUrl
+	}
+	return ""
+}
+
+func (x *LxcCatalogItem) GetBaseDistribution() string {
+	if x != nil {
+		return x.BaseDistribution
+	}
+	return ""
+}
+
+func (x *LxcCatalogItem) GetBaseRelease() string {
+	if x != nil {
+		return x.BaseRelease
+	}
+	return ""
+}
+
+func (x *LxcCatalogItem) GetArchitecture() string {
+	if x != nil {
+		return x.Architecture
+	}
+	return ""
+}
+
+func (x *LxcCatalogItem) GetDefaultCpuCores() int32 {
+	if x != nil {
+		return x.DefaultCpuCores
+	}
+	return 0
+}
+
+func (x *LxcCatalogItem) GetDefaultMemoryLimitMib() int64 {
+	if x != nil {
+		return x.DefaultMemoryLimitMib
+	}
+	return 0
+}
+
+func (x *LxcCatalogItem) GetDefaultPort() int32 {
+	if x != nil {
+		return x.DefaultPort
+	}
+	return 0
+}
+
+func (x *LxcCatalogItem) GetDownloadUrl() string {
+	if x != nil {
+		return x.DownloadUrl
+	}
+	return ""
+}
+
+func (x *LxcCatalogItem) GetInstallScriptUrl() string {
+	if x != nil {
+		return x.InstallScriptUrl
+	}
+	return ""
+}
+
+func (x *LxcCatalogItem) GetInstallRecipe() string {
+	if x != nil {
+		return x.InstallRecipe
+	}
+	return ""
+}
+
+func (x *LxcCatalogItem) GetPrivilegedRequired() bool {
+	if x != nil {
+		return x.PrivilegedRequired
+	}
+	return false
+}
+
+func (x *LxcCatalogItem) GetRecommendedMounts() []string {
+	if x != nil {
+		return x.RecommendedMounts
+	}
+	return nil
+}
+
+func (x *LxcCatalogItem) GetGpuRecommended() bool {
+	if x != nil {
+		return x.GpuRecommended
+	}
+	return false
+}
+
+type ListLxcCatalogItemsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Source        string                 `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"` // "all", "community-scripts", "turnkey", "linuxcontainers"
+	Category      string                 `protobuf:"bytes,2,opt,name=category,proto3" json:"category,omitempty"`
+	Query         string                 `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
+	PageSize      int32                  `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string                 `protobuf:"bytes,5,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListLxcCatalogItemsRequest) Reset() {
+	*x = ListLxcCatalogItemsRequest{}
+	mi := &file_nas_v1_lxc_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListLxcCatalogItemsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListLxcCatalogItemsRequest) ProtoMessage() {}
+
+func (x *ListLxcCatalogItemsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_lxc_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListLxcCatalogItemsRequest.ProtoReflect.Descriptor instead.
+func (*ListLxcCatalogItemsRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ListLxcCatalogItemsRequest) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *ListLxcCatalogItemsRequest) GetCategory() string {
+	if x != nil {
+		return x.Category
+	}
+	return ""
+}
+
+func (x *ListLxcCatalogItemsRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+func (x *ListLxcCatalogItemsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListLxcCatalogItemsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type ListLxcCatalogItemsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*LxcCatalogItem      `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	TotalSize     int32                  `protobuf:"varint,2,opt,name=total_size,json=totalSize,proto3" json:"total_size,omitempty"`
+	LastSyncTime  string                 `protobuf:"bytes,3,opt,name=last_sync_time,json=lastSyncTime,proto3" json:"last_sync_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListLxcCatalogItemsResponse) Reset() {
+	*x = ListLxcCatalogItemsResponse{}
+	mi := &file_nas_v1_lxc_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListLxcCatalogItemsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListLxcCatalogItemsResponse) ProtoMessage() {}
+
+func (x *ListLxcCatalogItemsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_lxc_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListLxcCatalogItemsResponse.ProtoReflect.Descriptor instead.
+func (*ListLxcCatalogItemsResponse) Descriptor() ([]byte, []int) {
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ListLxcCatalogItemsResponse) GetItems() []*LxcCatalogItem {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *ListLxcCatalogItemsResponse) GetTotalSize() int32 {
+	if x != nil {
+		return x.TotalSize
+	}
+	return 0
+}
+
+func (x *ListLxcCatalogItemsResponse) GetLastSyncTime() string {
+	if x != nil {
+		return x.LastSyncTime
+	}
+	return ""
+}
+
+type GetLxcCatalogItemRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetLxcCatalogItemRequest) Reset() {
+	*x = GetLxcCatalogItemRequest{}
+	mi := &file_nas_v1_lxc_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetLxcCatalogItemRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetLxcCatalogItemRequest) ProtoMessage() {}
+
+func (x *GetLxcCatalogItemRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_lxc_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetLxcCatalogItemRequest.ProtoReflect.Descriptor instead.
+func (*GetLxcCatalogItemRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *GetLxcCatalogItemRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type SyncLxcCatalogRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Force         bool                   `protobuf:"varint,1,opt,name=force,proto3" json:"force,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncLxcCatalogRequest) Reset() {
+	*x = SyncLxcCatalogRequest{}
+	mi := &file_nas_v1_lxc_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncLxcCatalogRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncLxcCatalogRequest) ProtoMessage() {}
+
+func (x *SyncLxcCatalogRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_lxc_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncLxcCatalogRequest.ProtoReflect.Descriptor instead.
+func (*SyncLxcCatalogRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *SyncLxcCatalogRequest) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
+}
+
+type SyncLxcCatalogResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	TotalItems    int32                  `protobuf:"varint,3,opt,name=total_items,json=totalItems,proto3" json:"total_items,omitempty"`
+	LastSyncTime  string                 `protobuf:"bytes,4,opt,name=last_sync_time,json=lastSyncTime,proto3" json:"last_sync_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncLxcCatalogResponse) Reset() {
+	*x = SyncLxcCatalogResponse{}
+	mi := &file_nas_v1_lxc_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncLxcCatalogResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncLxcCatalogResponse) ProtoMessage() {}
+
+func (x *SyncLxcCatalogResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_lxc_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncLxcCatalogResponse.ProtoReflect.Descriptor instead.
+func (*SyncLxcCatalogResponse) Descriptor() ([]byte, []int) {
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *SyncLxcCatalogResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *SyncLxcCatalogResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *SyncLxcCatalogResponse) GetTotalItems() int32 {
+	if x != nil {
+		return x.TotalItems
+	}
+	return 0
+}
+
+func (x *SyncLxcCatalogResponse) GetLastSyncTime() string {
+	if x != nil {
+		return x.LastSyncTime
+	}
+	return ""
+}
+
 var File_nas_v1_lxc_proto protoreflect.FileDescriptor
 
 const file_nas_v1_lxc_proto_rawDesc = "" +
@@ -948,7 +1444,54 @@ const file_nas_v1_lxc_proto_rawDesc = "" +
 	"\x1bGetLxcContainerLogsResponse\x12\x12\n" +
 	"\x04logs\x18\x01 \x01(\tR\x04logs\x12\x1d\n" +
 	"\n" +
-	"line_count\x18\x02 \x01(\x05R\tlineCountB2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
+	"line_count\x18\x02 \x01(\x05R\tlineCount\"\x8b\x06\n" +
+	"\x0eLxcCatalogItem\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x16\n" +
+	"\x06source\x18\x04 \x01(\tR\x06source\x12\x1a\n" +
+	"\bcategory\x18\x05 \x01(\tR\bcategory\x12\x1e\n" +
+	"\n" +
+	"categories\x18\x06 \x03(\tR\n" +
+	"categories\x12\x19\n" +
+	"\bicon_url\x18\a \x01(\tR\aiconUrl\x12\x18\n" +
+	"\awebsite\x18\b \x01(\tR\awebsite\x12+\n" +
+	"\x11documentation_url\x18\t \x01(\tR\x10documentationUrl\x12+\n" +
+	"\x11base_distribution\x18\n" +
+	" \x01(\tR\x10baseDistribution\x12!\n" +
+	"\fbase_release\x18\v \x01(\tR\vbaseRelease\x12\"\n" +
+	"\farchitecture\x18\f \x01(\tR\farchitecture\x12*\n" +
+	"\x11default_cpu_cores\x18\r \x01(\x05R\x0fdefaultCpuCores\x127\n" +
+	"\x18default_memory_limit_mib\x18\x0e \x01(\x03R\x15defaultMemoryLimitMib\x12!\n" +
+	"\fdefault_port\x18\x0f \x01(\x05R\vdefaultPort\x12!\n" +
+	"\fdownload_url\x18\x10 \x01(\tR\vdownloadUrl\x12,\n" +
+	"\x12install_script_url\x18\x11 \x01(\tR\x10installScriptUrl\x12%\n" +
+	"\x0einstall_recipe\x18\x12 \x01(\tR\rinstallRecipe\x12/\n" +
+	"\x13privileged_required\x18\x13 \x01(\bR\x12privilegedRequired\x12-\n" +
+	"\x12recommended_mounts\x18\x14 \x03(\tR\x11recommendedMounts\x12'\n" +
+	"\x0fgpu_recommended\x18\x15 \x01(\bR\x0egpuRecommended\"\xa2\x01\n" +
+	"\x1aListLxcCatalogItemsRequest\x12\x16\n" +
+	"\x06source\x18\x01 \x01(\tR\x06source\x12\x1a\n" +
+	"\bcategory\x18\x02 \x01(\tR\bcategory\x12\x14\n" +
+	"\x05query\x18\x03 \x01(\tR\x05query\x12\x1b\n" +
+	"\tpage_size\x18\x04 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x05 \x01(\tR\tpageToken\"\x90\x01\n" +
+	"\x1bListLxcCatalogItemsResponse\x12,\n" +
+	"\x05items\x18\x01 \x03(\v2\x16.nas.v1.LxcCatalogItemR\x05items\x12\x1d\n" +
+	"\n" +
+	"total_size\x18\x02 \x01(\x05R\ttotalSize\x12$\n" +
+	"\x0elast_sync_time\x18\x03 \x01(\tR\flastSyncTime\"*\n" +
+	"\x18GetLxcCatalogItemRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"-\n" +
+	"\x15SyncLxcCatalogRequest\x12\x14\n" +
+	"\x05force\x18\x01 \x01(\bR\x05force\"\x93\x01\n" +
+	"\x16SyncLxcCatalogResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1f\n" +
+	"\vtotal_items\x18\x03 \x01(\x05R\n" +
+	"totalItems\x12$\n" +
+	"\x0elast_sync_time\x18\x04 \x01(\tR\flastSyncTimeB2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
 
 var (
 	file_nas_v1_lxc_proto_rawDescOnce sync.Once
@@ -962,7 +1505,7 @@ func file_nas_v1_lxc_proto_rawDescGZIP() []byte {
 	return file_nas_v1_lxc_proto_rawDescData
 }
 
-var file_nas_v1_lxc_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_nas_v1_lxc_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_nas_v1_lxc_proto_goTypes = []any{
 	(*LxcMountPoint)(nil),               // 0: nas.v1.LxcMountPoint
 	(*LxcContainer)(nil),                // 1: nas.v1.LxcContainer
@@ -978,19 +1521,26 @@ var file_nas_v1_lxc_proto_goTypes = []any{
 	(*UpdateLxcContainerRequest)(nil),   // 11: nas.v1.UpdateLxcContainerRequest
 	(*GetLxcContainerLogsRequest)(nil),  // 12: nas.v1.GetLxcContainerLogsRequest
 	(*GetLxcContainerLogsResponse)(nil), // 13: nas.v1.GetLxcContainerLogsResponse
-	(*fieldmaskpb.FieldMask)(nil),       // 14: google.protobuf.FieldMask
+	(*LxcCatalogItem)(nil),              // 14: nas.v1.LxcCatalogItem
+	(*ListLxcCatalogItemsRequest)(nil),  // 15: nas.v1.ListLxcCatalogItemsRequest
+	(*ListLxcCatalogItemsResponse)(nil), // 16: nas.v1.ListLxcCatalogItemsResponse
+	(*GetLxcCatalogItemRequest)(nil),    // 17: nas.v1.GetLxcCatalogItemRequest
+	(*SyncLxcCatalogRequest)(nil),       // 18: nas.v1.SyncLxcCatalogRequest
+	(*SyncLxcCatalogResponse)(nil),      // 19: nas.v1.SyncLxcCatalogResponse
+	(*fieldmaskpb.FieldMask)(nil),       // 20: google.protobuf.FieldMask
 }
 var file_nas_v1_lxc_proto_depIdxs = []int32{
 	0,  // 0: nas.v1.LxcContainer.mount_points:type_name -> nas.v1.LxcMountPoint
 	1,  // 1: nas.v1.ListLxcContainersResponse.lxc_containers:type_name -> nas.v1.LxcContainer
 	1,  // 2: nas.v1.CreateLxcContainerRequest.lxc_container:type_name -> nas.v1.LxcContainer
 	1,  // 3: nas.v1.UpdateLxcContainerRequest.lxc_container:type_name -> nas.v1.LxcContainer
-	14, // 4: nas.v1.UpdateLxcContainerRequest.update_mask:type_name -> google.protobuf.FieldMask
-	5,  // [5:5] is the sub-list for method output_type
-	5,  // [5:5] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	20, // 4: nas.v1.UpdateLxcContainerRequest.update_mask:type_name -> google.protobuf.FieldMask
+	14, // 5: nas.v1.ListLxcCatalogItemsResponse.items:type_name -> nas.v1.LxcCatalogItem
+	6,  // [6:6] is the sub-list for method output_type
+	6,  // [6:6] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_nas_v1_lxc_proto_init() }
@@ -1004,7 +1554,7 @@ func file_nas_v1_lxc_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nas_v1_lxc_proto_rawDesc), len(file_nas_v1_lxc_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

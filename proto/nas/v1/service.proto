@@ -724,6 +724,29 @@ service NasService {
   }
 
   // ---------------------------------------------------------------------------
+  // LXC Application & Template Catalog (Community-Scripts, TurnKey, LinuxContainers)
+  // ---------------------------------------------------------------------------
+
+  rpc ListLxcCatalogItems(ListLxcCatalogItemsRequest) returns (ListLxcCatalogItemsResponse) {
+    option (google.api.http) = {
+      get: "/v1/lxcCatalog/items"
+    };
+  }
+
+  rpc GetLxcCatalogItem(GetLxcCatalogItemRequest) returns (LxcCatalogItem) {
+    option (google.api.http) = {
+      get: "/v1/lxcCatalog/items/{id}"
+    };
+  }
+
+  rpc SyncLxcCatalog(SyncLxcCatalogRequest) returns (SyncLxcCatalogResponse) {
+    option (google.api.http) = {
+      post: "/v1/lxcCatalog:sync"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // CIFS (Samba) Shares
   // ---------------------------------------------------------------------------
 

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
+import { nextTick } from 'vue';
 import { AipClient } from '../src/adapters/http/aipClient';
 import { HttpKvmAdapter, HttpLxcAdapter } from '../src/adapters/http/httpAdapters';
 import { KvmService, LxcService } from '../src/application/services';
@@ -245,8 +246,15 @@ describe('Storage Repositories: ISOs and LXC Templates', () => {
       nasState.lxcTemplates = [...sampleTemplates];
 
       const wrapper = mount(LxcView);
+      await nextTick();
 
       expect(wrapper.text()).toContain('Templates');
+      // Switch to the Templates tab
+      const templatesTab = wrapper.findAll('button').find(b => b.text().includes('Templates'));
+      expect(templatesTab).toBeDefined();
+      await templatesTab!.trigger('click');
+      await nextTick();
+
       expect(wrapper.text()).toContain('debian-12.tar.xz');
       expect(wrapper.text()).toContain('alpine-3.20.tar.gz');
       expect(wrapper.text()).toContain('100.0 MiB');
