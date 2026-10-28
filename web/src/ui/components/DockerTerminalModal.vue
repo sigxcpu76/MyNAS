@@ -20,11 +20,14 @@ export interface TerminalContainerOption {
   state?: string;
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   appTitle: string;
   containers: TerminalContainerOption[];
   initialContainerId?: string;
-}>();
+  endpointType?: 'docker' | 'lxc';
+}>(), {
+  endpointType: 'docker',
+});
 
 const emit = defineEmits<{
   (e: 'close'): void;
@@ -52,7 +55,8 @@ const currentContainer = computed(() => {
 function getWebSocketUrl(containerId: string, shell: string): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.host;
-  return `${protocol}//${host}/ws/docker/terminal/${encodeURIComponent(containerId)}?shell=${encodeURIComponent(shell)}`;
+  const basePath = props.endpointType === 'lxc' ? '/ws/lxc/terminal/' : '/ws/docker/terminal/';
+  return `${protocol}//${host}${basePath}${encodeURIComponent(containerId)}?shell=${encodeURIComponent(shell)}`;
 }
 
 function sendResize() {

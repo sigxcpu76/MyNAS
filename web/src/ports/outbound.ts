@@ -155,10 +155,13 @@ export interface LxcPort {
   listContainers(): Promise<LxcContainer[]>;
   getContainer(name: string): Promise<LxcContainer>;
   createContainer(containerId: string, container: Partial<LxcContainer>): Promise<LxcContainer>;
+  updateContainer(name: string, container: Partial<LxcContainer>, updateMask?: string[]): Promise<LxcContainer>;
   deleteContainer(name: string, force?: boolean): Promise<void>;
   startContainer(name: string): Promise<LxcContainer>;
   stopContainer(name: string): Promise<LxcContainer>;
+  restartContainer(name: string): Promise<LxcContainer>;
   freezeContainer(name: string): Promise<LxcContainer>;
+  getContainerLogs(name: string, tail?: number): Promise<string>;
   listTemplates(): Promise<StorageImage[]>;
   uploadTemplate(file: File, onProgress?: UploadProgressCallback): Promise<StorageImage>;
   deleteTemplate(filename: string): Promise<void>;

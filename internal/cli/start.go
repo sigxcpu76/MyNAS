@@ -301,7 +301,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	}
 	step("storage repositories ensured (isos, lxc-templates datasets)")
 
-	gateway, err := httpadapter.NewGateway(ctx, nasGRPC, kvmSvc, dockerSvc, storageRepoSvc, webdavAdapter, uiFS, eventBus)
+	gateway, err := httpadapter.NewGateway(ctx, nasGRPC, kvmSvc, dockerSvc, lxcSvc, storageRepoSvc, webdavAdapter, uiFS, eventBus)
 	if err != nil {
 		return err
 	}

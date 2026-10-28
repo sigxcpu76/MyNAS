@@ -123,6 +123,7 @@ func TestAIPResourceNamesPaginationAndErrors(t *testing.T) {
 	zfsAdapter := newStubZfsServerPort(t.TempDir())
 	prereqChecker := prereq.NewSystemChecker()
 	prereqChecker.SetAllModulesInstalledForTest()
+	prereqChecker.SetMainPool("tank")
 	sysAdapter := system.NewAdapter(zfsAdapter, prereqChecker)
 	srv := grpcadapter.NewServer(
 		application.NewSystemService(sysAdapter),
@@ -415,5 +416,98 @@ func TestSystemConfigAndPoolSelection(t *testing.T) {
 	}
 	if telemResp.GetMemory().GetTotalBytes() <= 0 {
 		t.Errorf("expected memory total bytes > 0 in gRPC response")
+	}
+}
+
+func TestServer_LxcParity(t *testing.T) {
+	ctx := context.Background()
+	dockerAdapter := docker.NewAdapter()
+	zfsAdapter := newStubZfsServerPort(t.TempDir())
+	prereqChecker := prereq.NewSystemChecker()
+	prereqChecker.SetAllModulesInstalledForTest()
+	prereqChecker.SetMainPool("tank")
+	sysAdapter := system.NewAdapter(zfsAdapter, prereqChecker)
+	srv := grpcadapter.NewServer(
+		application.NewSystemService(sysAdapter),
+		application.NewPrerequisiteService(prereqChecker),
+		application.NewDiskService(disk.NewAdapter(zfsAdapter)),
+		application.NewZfsService(zfsAdapter),
+		application.NewKvmService(kvm.NewAdapter()),
+		application.NewDockerService(dockerAdapter),
+		application.NewDockerAppService(dockerAdapter),
+		application.NewLxcService(lxc.NewAdapter()),
+		application.NewShareService(share.NewCifsAdapter(t.TempDir()), share.NewWebdavAdapter()),
+		application.NewIdentityService(identity.NewAdapter(), "grpc-test-secret"),
+		application.NewCatalogService(catalog.NewAdapter(t.TempDir())),
+	)
+
+	// 1. Create LXC container
+	created, err := srv.CreateLxcContainer(ctx, &nasv1.CreateLxcContainerRequest{
+		LxcContainerId: "test-ct",
+		LxcContainer: &nasv1.LxcContainer{
+			ContainerName: "test-ct",
+			Distribution:  "debian",
+			Release:       "bookworm",
+			CpuCores:      2,
+			MemoryLimitMib: 1024,
+			MountPoints: []*nasv1.LxcMountPoint{
+				{
+					HostPath:      "/mnt/tank/media",
+					ContainerPath: "/media",
+					ReadOnly:      true,
+				},
+			},
+			GpuEnabled:    true,
+			Description:   "Test parity container",
+			NetworkBridge: "br0",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateLxcContainer failed: %v", err)
+	}
+	if created.GetName() != "lxcContainers/test-ct" || !created.GetGpuEnabled() || len(created.GetMountPoints()) != 1 {
+		t.Fatalf("CreateLxcContainer returned unexpected response: %+v", created)
+	}
+
+	// 2. Restart LXC container
+	restarted, err := srv.RestartLxcContainer(ctx, &nasv1.RestartLxcContainerRequest{
+		Name: "lxcContainers/test-ct",
+	})
+	if err != nil {
+		t.Fatalf("RestartLxcContainer failed: %v", err)
+	}
+	if restarted.GetState() != "RUNNING" {
+		t.Fatalf("expected state RUNNING after restart, got %s", restarted.GetState())
+	}
+
+	// 3. Update LXC container
+	updated, err := srv.UpdateLxcContainer(ctx, &nasv1.UpdateLxcContainerRequest{
+		LxcContainer: &nasv1.LxcContainer{
+			Name:           "lxcContainers/test-ct",
+			ContainerName:  "updated-ct",
+			Autostart:      true,
+			CpuCores:       4,
+			MemoryLimitMib: 2048,
+			GpuEnabled:     true,
+			Description:    "Updated description",
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdateLxcContainer failed: %v", err)
+	}
+	if !updated.GetAutostart() || updated.GetCpuCores() != 4 || updated.GetMemoryLimitMib() != 2048 {
+		t.Fatalf("UpdateLxcContainer returned unexpected response: %+v", updated)
+	}
+
+	// 4. Get LXC container logs
+	logsResp, err := srv.GetLxcContainerLogs(ctx, &nasv1.GetLxcContainerLogsRequest{
+		Name: "lxcContainers/test-ct",
+		Tail: 50,
+	})
+	if err != nil {
+		t.Fatalf("GetLxcContainerLogs failed: %v", err)
+	}
+	if logsResp.GetLogs() == "" {
+		t.Fatalf("expected non-empty logs response")
 	}
 }

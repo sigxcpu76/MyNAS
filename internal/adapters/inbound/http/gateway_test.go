@@ -265,7 +265,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	}
 	eventBus := application.NewEventBus()
 	storageRepoSvc := application.NewStorageRepoService(nil, t.TempDir())
-	gw, err := httpadapter.NewGateway(ctx, grpcSrv, kvmSvc, dockerSvc, storageRepoSvc, webdavAdapter, uiFS, eventBus)
+	gw, err := httpadapter.NewGateway(ctx, grpcSrv, kvmSvc, dockerSvc, lxcSvc, storageRepoSvc, webdavAdapter, uiFS, eventBus)
 	if err != nil {
 		t.Fatalf("failed to create gateway: %v", err)
 	}

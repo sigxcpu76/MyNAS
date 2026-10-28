@@ -1884,8 +1884,19 @@ func (s *Server) CreateLxcContainer(ctx context.Context, req *nasv1.CreateLxcCon
 	if id == "" {
 		id = domain.GenerateNanosecondID()
 	}
+	var mountPoints []domain.LxcMountPoint
+	for _, mp := range in.GetMountPoints() {
+		if mp != nil {
+			mountPoints = append(mountPoints, domain.LxcMountPoint{
+				HostPath:      mp.GetHostPath(),
+				ContainerPath: mp.GetContainerPath(),
+				ReadOnly:      mp.GetReadOnly(),
+			})
+		}
+	}
 	created, err := s.lxc.CreateContainer(ctx, domain.LxcContainer{
 		ID:              id,
+		ContainerName:   in.GetContainerName(),
 		Distribution:    in.GetDistribution(),
 		Release:         in.GetRelease(),
 		Architecture:    in.GetArchitecture(),
@@ -1895,11 +1906,56 @@ func (s *Server) CreateLxcContainer(ctx context.Context, req *nasv1.CreateLxcCon
 		MemoryLimitMiB:  in.GetMemoryLimitMib(),
 		CPUCores:        in.GetCpuCores(),
 		TemplateArchive: in.GetTemplateArchive(),
+		MountPoints:     mountPoints,
+		GpuEnabled:      in.GetGpuEnabled(),
+		Description:     in.GetDescription(),
+		NetworkBridge:   in.GetNetworkBridge(),
 	})
 	if err != nil {
 		return nil, ToGRPCError(err)
 	}
 	return toProtoLxc(*created), nil
+}
+
+func (s *Server) UpdateLxcContainer(ctx context.Context, req *nasv1.UpdateLxcContainerRequest) (*nasv1.LxcContainer, error) {
+	if err := s.prereq.RequireModule("lxc"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	in := req.GetLxcContainer()
+	if in == nil {
+		return nil, ToGRPCError(fmt.Errorf("%w: lxc_container is required", domain.ErrInvalidArgument))
+	}
+	id, err := ParseSingleResourceID(patternLxcContainer, in.GetName())
+	if err != nil {
+		return nil, err
+	}
+	fields := req.GetUpdateMask().GetPaths()
+	var mountPoints []domain.LxcMountPoint
+	for _, mp := range in.GetMountPoints() {
+		if mp != nil {
+			mountPoints = append(mountPoints, domain.LxcMountPoint{
+				HostPath:      mp.GetHostPath(),
+				ContainerPath: mp.GetContainerPath(),
+				ReadOnly:      mp.GetReadOnly(),
+			})
+		}
+	}
+	updated, err := s.lxc.UpdateContainer(ctx, domain.LxcContainer{
+		ID:              id,
+		ContainerName:   in.GetContainerName(),
+		Autostart:       in.GetAutostart(),
+		Unprivileged:    in.GetUnprivileged(),
+		MemoryLimitMiB:  in.GetMemoryLimitMib(),
+		CPUCores:        in.GetCpuCores(),
+		MountPoints:     mountPoints,
+		GpuEnabled:      in.GetGpuEnabled(),
+		Description:     in.GetDescription(),
+		NetworkBridge:   in.GetNetworkBridge(),
+	}, fields)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoLxc(*updated), nil
 }
 
 func (s *Server) DeleteLxcContainer(ctx context.Context, req *nasv1.DeleteLxcContainerRequest) (*emptypb.Empty, error) {
@@ -1946,6 +2002,21 @@ func (s *Server) StopLxcContainer(ctx context.Context, req *nasv1.StopLxcContain
 	return toProtoLxc(*c), nil
 }
 
+func (s *Server) RestartLxcContainer(ctx context.Context, req *nasv1.RestartLxcContainerRequest) (*nasv1.LxcContainer, error) {
+	if err := s.prereq.RequireModule("lxc"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	id, err := ParseSingleResourceID(patternLxcContainer, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	c, err := s.lxc.RestartContainer(ctx, id)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoLxc(*c), nil
+}
+
 func (s *Server) FreezeLxcContainer(ctx context.Context, req *nasv1.FreezeLxcContainerRequest) (*nasv1.LxcContainer, error) {
 	if err := s.prereq.RequireModule("lxc"); err != nil {
 		return nil, ToGRPCError(err)
@@ -1959,6 +2030,29 @@ func (s *Server) FreezeLxcContainer(ctx context.Context, req *nasv1.FreezeLxcCon
 		return nil, ToGRPCError(err)
 	}
 	return toProtoLxc(*c), nil
+}
+
+func (s *Server) GetLxcContainerLogs(ctx context.Context, req *nasv1.GetLxcContainerLogsRequest) (*nasv1.GetLxcContainerLogsResponse, error) {
+	if err := s.prereq.RequireModule("lxc"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	id, err := ParseSingleResourceID(patternLxcContainer, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	tail := int(req.GetTail())
+	if tail <= 0 {
+		tail = 100
+	}
+	logs, err := s.lxc.GetContainerLogs(ctx, id, tail)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	lineCount := int32(len(strings.Split(logs, "\n")))
+	return &nasv1.GetLxcContainerLogsResponse{
+		Logs:      strings.ToValidUTF8(logs, ""),
+		LineCount: lineCount,
+	}, nil
 }
 
 // =============================================================================
@@ -2839,20 +2933,34 @@ func toProtoDocker(c domain.DockerContainer) *nasv1.DockerContainer {
 }
 
 func toProtoLxc(c domain.LxcContainer) *nasv1.LxcContainer {
+	var mps []*nasv1.LxcMountPoint
+	for _, mp := range c.MountPoints {
+		mps = append(mps, &nasv1.LxcMountPoint{
+			HostPath:      mp.HostPath,
+			ContainerPath: mp.ContainerPath,
+			ReadOnly:      mp.ReadOnly,
+		})
+	}
 	return &nasv1.LxcContainer{
-		Name:           resourcename.Sprint(patternLxcContainer, c.ID),
-		ContainerName:  c.ContainerName,
-		State:          c.State,
-		Distribution:   c.Distribution,
-		Release:        c.Release,
-		Architecture:   c.Architecture,
-		Ipv4Address:    c.IPv4Address,
-		Autostart:      c.Autostart,
-		Unprivileged:   c.Unprivileged,
-		RootfsPath:     c.RootfsPath,
-		MemoryLimitMib: c.MemoryLimitMiB,
-		CpuCores:       c.CPUCores,
+		Name:            resourcename.Sprint(patternLxcContainer, c.ID),
+		ContainerName:   c.ContainerName,
+		State:           c.State,
+		Distribution:    c.Distribution,
+		Release:         c.Release,
+		Architecture:    c.Architecture,
+		Ipv4Address:     c.IPv4Address,
+		Autostart:       c.Autostart,
+		Unprivileged:    c.Unprivileged,
+		RootfsPath:      c.RootfsPath,
+		MemoryLimitMib:  c.MemoryLimitMiB,
+		CpuCores:        c.CPUCores,
 		TemplateArchive: c.TemplateArchive,
+		MountPoints:     mps,
+		GpuEnabled:      c.GpuEnabled,
+		Description:     c.Description,
+		NetworkBridge:   c.NetworkBridge,
+		CpuPercent:      c.CPUPercent,
+		MemoryUsedMib:   c.MemoryUsedMiB,
 	}
 }
 

@@ -119,10 +119,15 @@ type LxcRuntimePort interface {
 	ListContainers(ctx context.Context) ([]domain.LxcContainer, error)
 	GetContainer(ctx context.Context, id string) (*domain.LxcContainer, error)
 	CreateContainer(ctx context.Context, c domain.LxcContainer) (*domain.LxcContainer, error)
+	UpdateContainer(ctx context.Context, c domain.LxcContainer, fields []string) (*domain.LxcContainer, error)
 	DeleteContainer(ctx context.Context, id string, force bool) error
 	StartContainer(ctx context.Context, id string) (*domain.LxcContainer, error)
 	StopContainer(ctx context.Context, id string) (*domain.LxcContainer, error)
+	RestartContainer(ctx context.Context, id string) (*domain.LxcContainer, error)
 	FreezeContainer(ctx context.Context, id string) (*domain.LxcContainer, error)
+	GetContainerLogs(ctx context.Context, id string, tail int) (string, error)
+	ExecAttach(ctx context.Context, id string, cmd []string) (net.Conn, string, error)
+	ResizeExec(ctx context.Context, execID string, height, width uint) error
 }
 
 type CifsSharePort interface {

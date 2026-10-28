@@ -4,12 +4,19 @@ package nas.v1;
 
 import "google/api/field_behavior.proto";
 import "google/api/resource.proto";
+import "google/protobuf/field_mask.proto";
 
 option go_package = "github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1";
 
 // =============================================================================
 // LXC Container Resource
 // =============================================================================
+
+message LxcMountPoint {
+  string host_path = 1;
+  string container_path = 2;
+  bool read_only = 3;
+}
 
 message LxcContainer {
   option (google.api.resource) = {
@@ -32,6 +39,12 @@ message LxcContainer {
   int64 memory_limit_mib = 11;
   int32 cpu_cores = 12;
   string template_archive = 13; // Template archive (.tar.gz / .tar.xz) in this pool or another pool
+  repeated LxcMountPoint mount_points = 14;
+  bool gpu_enabled = 15;
+  string description = 16;
+  string network_bridge = 17;
+  double cpu_percent = 18 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 memory_used_mib = 19 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message ListLxcContainersRequest {
@@ -85,4 +98,29 @@ message FreezeLxcContainerRequest {
     (google.api.field_behavior) = REQUIRED,
     (google.api.resource_reference) = {type: "nas.sigxcpu.io/LxcContainer"}
   ];
+}
+
+message RestartLxcContainerRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/LxcContainer"}
+  ];
+}
+
+message UpdateLxcContainerRequest {
+  LxcContainer lxc_container = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message GetLxcContainerLogsRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/LxcContainer"}
+  ];
+  int32 tail = 2;
+}
+
+message GetLxcContainerLogsResponse {
+  string logs = 1;
+  int32 line_count = 2;
 }

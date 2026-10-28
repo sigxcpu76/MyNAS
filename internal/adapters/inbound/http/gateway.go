@@ -25,6 +25,7 @@ type Gateway struct {
 	grpcServer    nasv1.NasServiceServer
 	kvmService    *application.KvmService
 	dockerService *application.DockerService
+	lxcService    *application.LxcService
 	storageRepo   *application.StorageRepoService
 	webdavHandler http.Handler
 	uiFS          fs.FS
@@ -38,6 +39,7 @@ func NewGateway(
 	grpcServer nasv1.NasServiceServer,
 	kvmService *application.KvmService,
 	dockerService *application.DockerService,
+	lxcService *application.LxcService,
 	storageRepo *application.StorageRepoService,
 	webdavHandler http.Handler,
 	uiFS fs.FS,
@@ -63,6 +65,7 @@ func NewGateway(
 		grpcServer:    grpcServer,
 		kvmService:    kvmService,
 		dockerService: dockerService,
+		lxcService:    lxcService,
 		storageRepo:   storageRepo,
 		webdavHandler: webdavHandler,
 		uiFS:          uiFS,
@@ -85,7 +88,7 @@ func NewGateway(
 	// 3. Google AIP REST/JSON API via gRPC-Gateway
 	mux.Handle("/v1/", corsMiddleware(gwMux))
 
-	// 3. KVM noVNC WebSocket-to-RFB Proxy (/ws/novnc/{vmName}?token={token})
+	// 4. KVM noVNC WebSocket-to-RFB Proxy (/ws/novnc/{vmName}?token={token})
 	mux.Handle("/ws/novnc/", websocket.Server{
 		Handshake: func(cfg *websocket.Config, req *http.Request) error {
 			// Accept binary or base64 subprotocols requested by noVNC / RFB clients
@@ -97,7 +100,7 @@ func NewGateway(
 		Handler: g.handleNoVNCWebSocket,
 	})
 
-	// 4. Docker Container Interactive Terminal WebSocket (/ws/docker/terminal/{containerId}?shell=/bin/sh)
+	// 5. Docker Container Interactive Terminal WebSocket (/ws/docker/terminal/{containerId}?shell=/bin/sh)
 	mux.Handle("/ws/docker/terminal/", websocket.Server{
 		Handshake: func(cfg *websocket.Config, req *http.Request) error {
 			if len(cfg.Protocol) > 0 {
@@ -108,12 +111,23 @@ func NewGateway(
 		Handler: g.handleDockerTerminalWebSocket,
 	})
 
-	// 5. Embedded WebDAV File Sharing Server (/dav/{share_name}/...)
+	// 6. LXC Container Interactive Terminal WebSocket (/ws/lxc/terminal/{containerId}?shell=/bin/sh)
+	mux.Handle("/ws/lxc/terminal/", websocket.Server{
+		Handshake: func(cfg *websocket.Config, req *http.Request) error {
+			if len(cfg.Protocol) > 0 {
+				cfg.Protocol = cfg.Protocol[:1]
+			}
+			return nil
+		},
+		Handler: g.handleLxcTerminalWebSocket,
+	})
+
+	// 7. Embedded WebDAV File Sharing Server (/dav/{share_name}/...)
 	if webdavHandler != nil {
 		mux.Handle("/dav/", corsMiddleware(webdavHandler))
 	}
 
-	// 6. Embedded Vue.js Single-Page Application (SPA)
+	// 8. Embedded Vue.js Single-Page Application (SPA)
 	mux.HandleFunc("/", g.handleSPA)
 
 	return g, nil
@@ -409,6 +423,71 @@ func (g *Gateway) handleDockerTerminalWebSocket(ws *websocket.Conn) {
 				}
 				if err := json.Unmarshal(data, &resizeMsg); err == nil && resizeMsg.Cols > 0 && resizeMsg.Rows > 0 {
 					_ = g.dockerService.ResizeExec(req.Context(), execID, resizeMsg.Rows, resizeMsg.Cols)
+					continue
+				}
+			}
+			if _, err := conn.Write(data); err != nil {
+				break
+			}
+		}
+		done <- struct{}{}
+	}()
+
+	<-done
+}
+
+func (g *Gateway) handleLxcTerminalWebSocket(ws *websocket.Conn) {
+	defer ws.Close()
+	req := ws.Request()
+	containerID := strings.TrimPrefix(req.URL.Path, "/ws/lxc/terminal/")
+	containerID = strings.Trim(containerID, "/")
+	if containerID == "" {
+		return
+	}
+
+	shell := req.URL.Query().Get("shell")
+	if shell == "" {
+		shell = "/bin/sh"
+	}
+
+	ws.PayloadType = websocket.BinaryFrame
+
+	if g.lxcService == nil {
+		_, _ = ws.Write([]byte("LXC service unavailable\r\n"))
+		return
+	}
+
+	conn, execID, err := g.lxcService.ExecAttach(req.Context(), containerID, []string{shell})
+	if err != nil {
+		_, _ = ws.Write([]byte(fmt.Sprintf("Failed to attach to LXC container %s (%s): %v\r\n", containerID, shell, err)))
+		return
+	}
+	defer conn.Close()
+
+	done := make(chan struct{}, 2)
+
+	// Pipe container output (stdout/stderr) to WebSocket
+	go func() {
+		_, _ = io.Copy(ws, conn)
+		done <- struct{}{}
+	}()
+
+	// Pipe WebSocket client input to container stdin and handle terminal resize
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := ws.Read(buf)
+			if err != nil {
+				break
+			}
+			data := buf[:n]
+			if bytes.HasPrefix(data, []byte(`{"type":"resize"`)) {
+				var resizeMsg struct {
+					Cols uint `json:"cols"`
+					Rows uint `json:"rows"`
+				}
+				if err := json.Unmarshal(data, &resizeMsg); err == nil && resizeMsg.Cols > 0 && resizeMsg.Rows > 0 {
+					_ = g.lxcService.ResizeExec(req.Context(), execID, resizeMsg.Rows, resizeMsg.Cols)
 					continue
 				}
 			}

@@ -613,6 +613,7 @@ export function mapDockerApp(raw: any): DockerApp {
 }
 
 export function mapLxcContainer(raw: any): LxcContainer {
+  const mountPointsRaw = raw?.mountPoints ?? raw?.mount_points ?? [];
   return {
     name: raw?.name ?? '',
     containerName: raw?.containerName ?? raw?.container_name ?? '',
@@ -627,6 +628,18 @@ export function mapLxcContainer(raw: any): LxcContainer {
     memoryLimitMib: normalizeInt64(raw?.memoryLimitMib ?? raw?.memory_limit_mib),
     cpuCores: Number(raw?.cpuCores ?? raw?.cpu_cores ?? 1),
     templateArchive: raw?.templateArchive ?? raw?.template_archive ?? undefined,
+    mountPoints: Array.isArray(mountPointsRaw)
+      ? mountPointsRaw.map((mp: any) => ({
+          hostPath: mp?.hostPath ?? mp?.host_path ?? '',
+          containerPath: mp?.containerPath ?? mp?.container_path ?? '',
+          readOnly: Boolean(mp?.readOnly ?? mp?.read_only ?? false),
+        }))
+      : [],
+    gpuEnabled: Boolean(raw?.gpuEnabled ?? raw?.gpu_enabled ?? false),
+    description: raw?.description ?? '',
+    networkBridge: raw?.networkBridge ?? raw?.network_bridge ?? '',
+    cpuPercent: Number(raw?.cpuPercent ?? raw?.cpu_percent ?? 0),
+    memoryUsedMib: normalizeInt64(raw?.memoryUsedMib ?? raw?.memory_used_mib ?? 0),
   };
 }
 
@@ -1599,6 +1612,7 @@ export class HttpLxcAdapter implements LxcPort {
     container: Partial<LxcContainer>
   ): Promise<LxcContainer> {
     const payload = {
+      containerName: container.containerName,
       distribution: container.distribution,
       release: container.release,
       architecture: container.architecture,
@@ -1608,10 +1622,43 @@ export class HttpLxcAdapter implements LxcPort {
       memoryLimitMib: container.memoryLimitMib,
       cpuCores: container.cpuCores,
       templateArchive: container.templateArchive,
+      mountPoints: container.mountPoints?.map(mp => ({
+        hostPath: mp.hostPath,
+        containerPath: mp.containerPath,
+        readOnly: Boolean(mp.readOnly),
+      })),
+      gpuEnabled: Boolean(container.gpuEnabled),
+      description: container.description,
+      networkBridge: container.networkBridge,
     };
     const raw = await this.client.post<any>('lxcContainers', payload, {
       lxcContainerId: containerId,
     });
+    return mapLxcContainer(raw);
+  }
+
+  async updateContainer(
+    name: string,
+    container: Partial<LxcContainer>,
+    updateMask?: string[]
+  ): Promise<LxcContainer> {
+    const payload: any = {
+      name,
+      containerName: container.containerName,
+      autostart: container.autostart,
+      unprivileged: container.unprivileged,
+      memoryLimitMib: container.memoryLimitMib,
+      cpuCores: container.cpuCores,
+      mountPoints: container.mountPoints?.map(mp => ({
+        hostPath: mp.hostPath,
+        containerPath: mp.containerPath,
+        readOnly: Boolean(mp.readOnly),
+      })),
+      gpuEnabled: Boolean(container.gpuEnabled),
+      description: container.description,
+      networkBridge: container.networkBridge,
+    };
+    const raw = await this.client.patch<any>(name, { lxcContainer: payload }, updateMask ?? []);
     return mapLxcContainer(raw);
   }
 
@@ -1629,9 +1676,19 @@ export class HttpLxcAdapter implements LxcPort {
     return mapLxcContainer(raw);
   }
 
+  async restartContainer(name: string): Promise<LxcContainer> {
+    const raw = await this.client.customMethod<any>(name, 'restart', {});
+    return mapLxcContainer(raw);
+  }
+
   async freezeContainer(name: string): Promise<LxcContainer> {
     const raw = await this.client.customMethod<any>(name, 'freeze', {});
     return mapLxcContainer(raw);
+  }
+
+  async getContainerLogs(name: string, tail = 100): Promise<string> {
+    const res = await this.client.get<any>(`${name}:logs`, { tail });
+    return res?.logs ?? '';
   }
 
   async listTemplates(): Promise<StorageImage[]> {

@@ -104,10 +104,13 @@ const (
 	NasService_ListLxcContainers_FullMethodName              = "/nas.v1.NasService/ListLxcContainers"
 	NasService_GetLxcContainer_FullMethodName                = "/nas.v1.NasService/GetLxcContainer"
 	NasService_CreateLxcContainer_FullMethodName             = "/nas.v1.NasService/CreateLxcContainer"
+	NasService_UpdateLxcContainer_FullMethodName             = "/nas.v1.NasService/UpdateLxcContainer"
 	NasService_DeleteLxcContainer_FullMethodName             = "/nas.v1.NasService/DeleteLxcContainer"
 	NasService_StartLxcContainer_FullMethodName              = "/nas.v1.NasService/StartLxcContainer"
 	NasService_StopLxcContainer_FullMethodName               = "/nas.v1.NasService/StopLxcContainer"
+	NasService_RestartLxcContainer_FullMethodName            = "/nas.v1.NasService/RestartLxcContainer"
 	NasService_FreezeLxcContainer_FullMethodName             = "/nas.v1.NasService/FreezeLxcContainer"
+	NasService_GetLxcContainerLogs_FullMethodName            = "/nas.v1.NasService/GetLxcContainerLogs"
 	NasService_ListCifsShares_FullMethodName                 = "/nas.v1.NasService/ListCifsShares"
 	NasService_GetCifsShare_FullMethodName                   = "/nas.v1.NasService/GetCifsShare"
 	NasService_CreateCifsShare_FullMethodName                = "/nas.v1.NasService/CreateCifsShare"
@@ -229,10 +232,13 @@ type NasServiceClient interface {
 	ListLxcContainers(ctx context.Context, in *ListLxcContainersRequest, opts ...grpc.CallOption) (*ListLxcContainersResponse, error)
 	GetLxcContainer(ctx context.Context, in *GetLxcContainerRequest, opts ...grpc.CallOption) (*LxcContainer, error)
 	CreateLxcContainer(ctx context.Context, in *CreateLxcContainerRequest, opts ...grpc.CallOption) (*LxcContainer, error)
+	UpdateLxcContainer(ctx context.Context, in *UpdateLxcContainerRequest, opts ...grpc.CallOption) (*LxcContainer, error)
 	DeleteLxcContainer(ctx context.Context, in *DeleteLxcContainerRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	StartLxcContainer(ctx context.Context, in *StartLxcContainerRequest, opts ...grpc.CallOption) (*LxcContainer, error)
 	StopLxcContainer(ctx context.Context, in *StopLxcContainerRequest, opts ...grpc.CallOption) (*LxcContainer, error)
+	RestartLxcContainer(ctx context.Context, in *RestartLxcContainerRequest, opts ...grpc.CallOption) (*LxcContainer, error)
 	FreezeLxcContainer(ctx context.Context, in *FreezeLxcContainerRequest, opts ...grpc.CallOption) (*LxcContainer, error)
+	GetLxcContainerLogs(ctx context.Context, in *GetLxcContainerLogsRequest, opts ...grpc.CallOption) (*GetLxcContainerLogsResponse, error)
 	ListCifsShares(ctx context.Context, in *ListCifsSharesRequest, opts ...grpc.CallOption) (*ListCifsSharesResponse, error)
 	GetCifsShare(ctx context.Context, in *GetCifsShareRequest, opts ...grpc.CallOption) (*CifsShare, error)
 	CreateCifsShare(ctx context.Context, in *CreateCifsShareRequest, opts ...grpc.CallOption) (*CifsShare, error)
@@ -1108,6 +1114,16 @@ func (c *nasServiceClient) CreateLxcContainer(ctx context.Context, in *CreateLxc
 	return out, nil
 }
 
+func (c *nasServiceClient) UpdateLxcContainer(ctx context.Context, in *UpdateLxcContainerRequest, opts ...grpc.CallOption) (*LxcContainer, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LxcContainer)
+	err := c.cc.Invoke(ctx, NasService_UpdateLxcContainer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nasServiceClient) DeleteLxcContainer(ctx context.Context, in *DeleteLxcContainerRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
@@ -1138,10 +1154,30 @@ func (c *nasServiceClient) StopLxcContainer(ctx context.Context, in *StopLxcCont
 	return out, nil
 }
 
+func (c *nasServiceClient) RestartLxcContainer(ctx context.Context, in *RestartLxcContainerRequest, opts ...grpc.CallOption) (*LxcContainer, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LxcContainer)
+	err := c.cc.Invoke(ctx, NasService_RestartLxcContainer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nasServiceClient) FreezeLxcContainer(ctx context.Context, in *FreezeLxcContainerRequest, opts ...grpc.CallOption) (*LxcContainer, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(LxcContainer)
 	err := c.cc.Invoke(ctx, NasService_FreezeLxcContainer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) GetLxcContainerLogs(ctx context.Context, in *GetLxcContainerLogsRequest, opts ...grpc.CallOption) (*GetLxcContainerLogsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetLxcContainerLogsResponse)
+	err := c.cc.Invoke(ctx, NasService_GetLxcContainerLogs_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1492,10 +1528,13 @@ type NasServiceServer interface {
 	ListLxcContainers(context.Context, *ListLxcContainersRequest) (*ListLxcContainersResponse, error)
 	GetLxcContainer(context.Context, *GetLxcContainerRequest) (*LxcContainer, error)
 	CreateLxcContainer(context.Context, *CreateLxcContainerRequest) (*LxcContainer, error)
+	UpdateLxcContainer(context.Context, *UpdateLxcContainerRequest) (*LxcContainer, error)
 	DeleteLxcContainer(context.Context, *DeleteLxcContainerRequest) (*emptypb.Empty, error)
 	StartLxcContainer(context.Context, *StartLxcContainerRequest) (*LxcContainer, error)
 	StopLxcContainer(context.Context, *StopLxcContainerRequest) (*LxcContainer, error)
+	RestartLxcContainer(context.Context, *RestartLxcContainerRequest) (*LxcContainer, error)
 	FreezeLxcContainer(context.Context, *FreezeLxcContainerRequest) (*LxcContainer, error)
+	GetLxcContainerLogs(context.Context, *GetLxcContainerLogsRequest) (*GetLxcContainerLogsResponse, error)
 	ListCifsShares(context.Context, *ListCifsSharesRequest) (*ListCifsSharesResponse, error)
 	GetCifsShare(context.Context, *GetCifsShareRequest) (*CifsShare, error)
 	CreateCifsShare(context.Context, *CreateCifsShareRequest) (*CifsShare, error)
@@ -1783,6 +1822,9 @@ func (UnimplementedNasServiceServer) GetLxcContainer(context.Context, *GetLxcCon
 func (UnimplementedNasServiceServer) CreateLxcContainer(context.Context, *CreateLxcContainerRequest) (*LxcContainer, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateLxcContainer not implemented")
 }
+func (UnimplementedNasServiceServer) UpdateLxcContainer(context.Context, *UpdateLxcContainerRequest) (*LxcContainer, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateLxcContainer not implemented")
+}
 func (UnimplementedNasServiceServer) DeleteLxcContainer(context.Context, *DeleteLxcContainerRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteLxcContainer not implemented")
 }
@@ -1792,8 +1834,14 @@ func (UnimplementedNasServiceServer) StartLxcContainer(context.Context, *StartLx
 func (UnimplementedNasServiceServer) StopLxcContainer(context.Context, *StopLxcContainerRequest) (*LxcContainer, error) {
 	return nil, status.Error(codes.Unimplemented, "method StopLxcContainer not implemented")
 }
+func (UnimplementedNasServiceServer) RestartLxcContainer(context.Context, *RestartLxcContainerRequest) (*LxcContainer, error) {
+	return nil, status.Error(codes.Unimplemented, "method RestartLxcContainer not implemented")
+}
 func (UnimplementedNasServiceServer) FreezeLxcContainer(context.Context, *FreezeLxcContainerRequest) (*LxcContainer, error) {
 	return nil, status.Error(codes.Unimplemented, "method FreezeLxcContainer not implemented")
+}
+func (UnimplementedNasServiceServer) GetLxcContainerLogs(context.Context, *GetLxcContainerLogsRequest) (*GetLxcContainerLogsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetLxcContainerLogs not implemented")
 }
 func (UnimplementedNasServiceServer) ListCifsShares(context.Context, *ListCifsSharesRequest) (*ListCifsSharesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListCifsShares not implemented")
@@ -3403,6 +3451,24 @@ func _NasService_CreateLxcContainer_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NasService_UpdateLxcContainer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateLxcContainerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).UpdateLxcContainer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_UpdateLxcContainer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).UpdateLxcContainer(ctx, req.(*UpdateLxcContainerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NasService_DeleteLxcContainer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DeleteLxcContainerRequest)
 	if err := dec(in); err != nil {
@@ -3457,6 +3523,24 @@ func _NasService_StopLxcContainer_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NasService_RestartLxcContainer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RestartLxcContainerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).RestartLxcContainer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_RestartLxcContainer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).RestartLxcContainer(ctx, req.(*RestartLxcContainerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NasService_FreezeLxcContainer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(FreezeLxcContainerRequest)
 	if err := dec(in); err != nil {
@@ -3471,6 +3555,24 @@ func _NasService_FreezeLxcContainer_Handler(srv interface{}, ctx context.Context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NasServiceServer).FreezeLxcContainer(ctx, req.(*FreezeLxcContainerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_GetLxcContainerLogs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLxcContainerLogsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).GetLxcContainerLogs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_GetLxcContainerLogs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).GetLxcContainerLogs(ctx, req.(*GetLxcContainerLogsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -4269,6 +4371,10 @@ var NasService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NasService_CreateLxcContainer_Handler,
 		},
 		{
+			MethodName: "UpdateLxcContainer",
+			Handler:    _NasService_UpdateLxcContainer_Handler,
+		},
+		{
 			MethodName: "DeleteLxcContainer",
 			Handler:    _NasService_DeleteLxcContainer_Handler,
 		},
@@ -4281,8 +4387,16 @@ var NasService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NasService_StopLxcContainer_Handler,
 		},
 		{
+			MethodName: "RestartLxcContainer",
+			Handler:    _NasService_RestartLxcContainer_Handler,
+		},
+		{
 			MethodName: "FreezeLxcContainer",
 			Handler:    _NasService_FreezeLxcContainer_Handler,
+		},
+		{
+			MethodName: "GetLxcContainerLogs",
+			Handler:    _NasService_GetLxcContainerLogs_Handler,
 		},
 		{
 			MethodName: "ListCifsShares",

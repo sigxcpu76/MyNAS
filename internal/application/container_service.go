@@ -138,6 +138,53 @@ func (s *LxcService) CreateContainer(ctx context.Context, c domain.LxcContainer)
 	return s.runtime.CreateContainer(ctx, c)
 }
 
+func (s *LxcService) UpdateContainer(ctx context.Context, c domain.LxcContainer, fields []string) (*domain.LxcContainer, error) {
+	if err := domain.ValidateResourceID(c.ID, "lxc_container"); err != nil {
+		return nil, err
+	}
+	if c.Distribution == "" {
+		existing, err := s.runtime.GetContainer(ctx, c.ID)
+		if err != nil {
+			return nil, err
+		}
+		c.Distribution = existing.Distribution
+		c.Release = existing.Release
+		c.Architecture = existing.Architecture
+	}
+	if err := c.Validate(); err != nil {
+		return nil, err
+	}
+	return s.runtime.UpdateContainer(ctx, c, fields)
+}
+
+func (s *LxcService) RestartContainer(ctx context.Context, id string) (*domain.LxcContainer, error) {
+	if err := domain.ValidateResourceID(id, "lxc_container"); err != nil {
+		return nil, err
+	}
+	return s.runtime.RestartContainer(ctx, id)
+}
+
+func (s *LxcService) GetContainerLogs(ctx context.Context, id string, tail int) (string, error) {
+	if err := domain.ValidateResourceID(id, "lxc_container"); err != nil {
+		return "", err
+	}
+	if tail <= 0 {
+		tail = 100
+	}
+	return s.runtime.GetContainerLogs(ctx, id, tail)
+}
+
+func (s *LxcService) ExecAttach(ctx context.Context, id string, cmd []string) (net.Conn, string, error) {
+	if err := domain.ValidateResourceID(id, "lxc_container"); err != nil {
+		return nil, "", err
+	}
+	return s.runtime.ExecAttach(ctx, id, cmd)
+}
+
+func (s *LxcService) ResizeExec(ctx context.Context, execID string, height, width uint) error {
+	return s.runtime.ResizeExec(ctx, execID, height, width)
+}
+
 func (s *LxcService) DeleteContainer(ctx context.Context, id string, force bool) error {
 	if err := domain.ValidateResourceID(id, "lxc_container"); err != nil {
 		return err

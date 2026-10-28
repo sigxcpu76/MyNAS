@@ -617,6 +617,12 @@ export interface CatalogApp {
 
 export type LxcContainerState = 'RUNNING' | 'STOPPED' | 'FROZEN';
 
+export interface LxcMountPoint {
+  hostPath: string;
+  containerPath: string;
+  readOnly?: boolean;
+}
+
 export interface LxcContainer {
   name: string; // lxcContainers/{lxc_container}
   containerName: string;
@@ -631,6 +637,12 @@ export interface LxcContainer {
   memoryLimitMib: number;
   cpuCores: number;
   templateArchive?: string;
+  mountPoints?: LxcMountPoint[];
+  gpuEnabled?: boolean;
+  description?: string;
+  networkBridge?: string;
+  cpuPercent?: number;
+  memoryUsedMib?: number;
 }
 
 // ---------------------------------------------------------------------------

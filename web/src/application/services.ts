@@ -708,6 +708,26 @@ export class LxcService {
     return this.lxcPort.freezeContainer(ResourceNames.lxcContainer(idOrName));
   }
 
+  async restartContainer(idOrName: string): Promise<LxcContainer> {
+    return this.lxcPort.restartContainer(ResourceNames.lxcContainer(idOrName));
+  }
+
+  async updateContainer(
+    idOrName: string,
+    container: Partial<LxcContainer>,
+    updateMask?: string[]
+  ): Promise<LxcContainer> {
+    return this.lxcPort.updateContainer(
+      ResourceNames.lxcContainer(idOrName),
+      container,
+      updateMask
+    );
+  }
+
+  async getContainerLogs(idOrName: string, tail = 100): Promise<string> {
+    return this.lxcPort.getContainerLogs(ResourceNames.lxcContainer(idOrName), tail);
+  }
+
   async listTemplates(): Promise<StorageImage[]> {
     return this.lxcPort.listTemplates();
   }

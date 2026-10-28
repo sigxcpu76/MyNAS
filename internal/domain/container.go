@@ -49,20 +49,32 @@ type DockerNetwork struct {
 	IPAMSubnets []string `json:"ipamSubnets"`
 }
 
+type LxcMountPoint struct {
+	HostPath      string `json:"hostPath"`
+	ContainerPath string `json:"containerPath"`
+	ReadOnly      bool   `json:"readOnly"`
+}
+
 type LxcContainer struct {
-	ID             string
-	ContainerName  string
-	State          string // RUNNING, STOPPED, FROZEN
-	Distribution   string // debian, ubuntu, alpine, archlinux
-	Release        string // bookworm, noble, 3.20, current
-	Architecture   string // amd64, arm64
-	IPv4Address    string
-	Autostart      bool
-	Unprivileged   bool
-	RootfsPath     string
-	MemoryLimitMiB int64
-	CPUCores       int32
+	ID              string
+	ContainerName   string
+	State           string // RUNNING, STOPPED, FROZEN
+	Distribution    string // debian, ubuntu, alpine, archlinux
+	Release         string // bookworm, noble, 3.20, current
+	Architecture    string // amd64, arm64
+	IPv4Address     string
+	Autostart       bool
+	Unprivileged    bool
+	RootfsPath      string
+	MemoryLimitMiB  int64
+	CPUCores        int32
 	TemplateArchive string
+	MountPoints     []LxcMountPoint
+	GpuEnabled      bool
+	Description     string
+	NetworkBridge   string
+	CPUPercent      float64
+	MemoryUsedMiB   int64
 }
 
 func (c *LxcContainer) Validate() error {

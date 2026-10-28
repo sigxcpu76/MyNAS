@@ -114,3 +114,77 @@ func TestLxcAdapter_Lifecycle(t *testing.T) {
 		t.Fatalf("DeleteContainer with force failed: %v", err)
 	}
 }
+
+func TestLxcAdapter_ParityFeatures(t *testing.T) {
+	ctx := context.Background()
+	adapter := lxc.NewAdapter()
+
+	created, err := adapter.CreateContainer(ctx, domain.LxcContainer{
+		ID:           "ct-parity-1",
+		Distribution: "debian",
+		Release:      "bookworm",
+		RootfsPath:   "/mnt/tank/lxc/ct-parity-1/rootfs",
+		CPUCores:     2,
+		MemoryLimitMiB: 1024,
+	})
+	if err != nil {
+		t.Fatalf("CreateContainer failed: %v", err)
+	}
+
+	// 1. Restart
+	restarted, err := adapter.RestartContainer(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("RestartContainer failed: %v", err)
+	}
+	if restarted.State != "RUNNING" {
+		t.Fatalf("expected state RUNNING after restart, got %s", restarted.State)
+	}
+
+	// 2. Update
+	updated, err := adapter.UpdateContainer(ctx, domain.LxcContainer{
+		ID:             created.ID,
+		ContainerName:  "renamed-ct",
+		Autostart:      true,
+		Unprivileged:   true,
+		CPUCores:       4,
+		MemoryLimitMiB: 2048,
+		GpuEnabled:     true,
+		Description:    "Test LXC description",
+		NetworkBridge:  "br-lan",
+		MountPoints: []domain.LxcMountPoint{
+			{
+				HostPath:      "/tank/media",
+				ContainerPath: "/media",
+				ReadOnly:      true,
+			},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("UpdateContainer failed: %v", err)
+	}
+	if !updated.Autostart || !updated.GpuEnabled || updated.CPUCores != 4 || updated.MemoryLimitMiB != 2048 {
+		t.Fatalf("UpdateContainer values mismatch: %+v", updated)
+	}
+	if len(updated.MountPoints) != 1 || updated.MountPoints[0].ContainerPath != "/media" {
+		t.Fatalf("Mount points mismatch: %+v", updated.MountPoints)
+	}
+
+	// 3. Container Logs
+	logs, err := adapter.GetContainerLogs(ctx, created.ID, 50)
+	if err != nil {
+		t.Fatalf("GetContainerLogs failed: %v", err)
+	}
+	if logs == "" {
+		t.Fatalf("expected non-empty container logs")
+	}
+
+	// 4. ExecAttach
+	conn, execID, err := adapter.ExecAttach(ctx, created.ID, []string{"/bin/sh"})
+	if err != nil {
+		t.Fatalf("ExecAttach failed: %v", err)
+	}
+	if execID == "" || conn == nil {
+		t.Fatalf("ExecAttach returned nil conn or empty execID")
+	}
+	_ = conn.Close()
+}

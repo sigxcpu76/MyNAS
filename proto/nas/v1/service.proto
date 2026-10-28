@@ -674,6 +674,14 @@ service NasService {
     option (google.api.method_signature) = "lxc_container,lxc_container_id";
   }
 
+  rpc UpdateLxcContainer(UpdateLxcContainerRequest) returns (LxcContainer) {
+    option (google.api.http) = {
+      patch: "/v1/{lxc_container.name=lxcContainers/*}"
+      body: "lxc_container"
+    };
+    option (google.api.method_signature) = "lxc_container,update_mask";
+  }
+
   rpc DeleteLxcContainer(DeleteLxcContainerRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
       delete: "/v1/{name=lxcContainers/*}"
@@ -695,10 +703,23 @@ service NasService {
     };
   }
 
+  rpc RestartLxcContainer(RestartLxcContainerRequest) returns (LxcContainer) {
+    option (google.api.http) = {
+      post: "/v1/{name=lxcContainers/*}:restart"
+      body: "*"
+    };
+  }
+
   rpc FreezeLxcContainer(FreezeLxcContainerRequest) returns (LxcContainer) {
     option (google.api.http) = {
       post: "/v1/{name=lxcContainers/*}:freeze"
       body: "*"
+    };
+  }
+
+  rpc GetLxcContainerLogs(GetLxcContainerLogsRequest) returns (GetLxcContainerLogsResponse) {
+    option (google.api.http) = {
+      get: "/v1/{name=lxcContainers/*}:logs"
     };
   }
 

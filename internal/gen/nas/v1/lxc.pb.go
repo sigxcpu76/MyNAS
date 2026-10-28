@@ -10,6 +10,7 @@ import (
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -21,6 +22,66 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
+
+type LxcMountPoint struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	HostPath      string                 `protobuf:"bytes,1,opt,name=host_path,json=hostPath,proto3" json:"host_path,omitempty"`
+	ContainerPath string                 `protobuf:"bytes,2,opt,name=container_path,json=containerPath,proto3" json:"container_path,omitempty"`
+	ReadOnly      bool                   `protobuf:"varint,3,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LxcMountPoint) Reset() {
+	*x = LxcMountPoint{}
+	mi := &file_nas_v1_lxc_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LxcMountPoint) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LxcMountPoint) ProtoMessage() {}
+
+func (x *LxcMountPoint) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_lxc_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LxcMountPoint.ProtoReflect.Descriptor instead.
+func (*LxcMountPoint) Descriptor() ([]byte, []int) {
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *LxcMountPoint) GetHostPath() string {
+	if x != nil {
+		return x.HostPath
+	}
+	return ""
+}
+
+func (x *LxcMountPoint) GetContainerPath() string {
+	if x != nil {
+		return x.ContainerPath
+	}
+	return ""
+}
+
+func (x *LxcMountPoint) GetReadOnly() bool {
+	if x != nil {
+		return x.ReadOnly
+	}
+	return false
+}
 
 type LxcContainer struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
@@ -37,13 +98,19 @@ type LxcContainer struct {
 	MemoryLimitMib  int64                  `protobuf:"varint,11,opt,name=memory_limit_mib,json=memoryLimitMib,proto3" json:"memory_limit_mib,omitempty"`
 	CpuCores        int32                  `protobuf:"varint,12,opt,name=cpu_cores,json=cpuCores,proto3" json:"cpu_cores,omitempty"`
 	TemplateArchive string                 `protobuf:"bytes,13,opt,name=template_archive,json=templateArchive,proto3" json:"template_archive,omitempty"` // Template archive (.tar.gz / .tar.xz) in this pool or another pool
+	MountPoints     []*LxcMountPoint       `protobuf:"bytes,14,rep,name=mount_points,json=mountPoints,proto3" json:"mount_points,omitempty"`
+	GpuEnabled      bool                   `protobuf:"varint,15,opt,name=gpu_enabled,json=gpuEnabled,proto3" json:"gpu_enabled,omitempty"`
+	Description     string                 `protobuf:"bytes,16,opt,name=description,proto3" json:"description,omitempty"`
+	NetworkBridge   string                 `protobuf:"bytes,17,opt,name=network_bridge,json=networkBridge,proto3" json:"network_bridge,omitempty"`
+	CpuPercent      float64                `protobuf:"fixed64,18,opt,name=cpu_percent,json=cpuPercent,proto3" json:"cpu_percent,omitempty"`
+	MemoryUsedMib   int64                  `protobuf:"varint,19,opt,name=memory_used_mib,json=memoryUsedMib,proto3" json:"memory_used_mib,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *LxcContainer) Reset() {
 	*x = LxcContainer{}
-	mi := &file_nas_v1_lxc_proto_msgTypes[0]
+	mi := &file_nas_v1_lxc_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -55,7 +122,7 @@ func (x *LxcContainer) String() string {
 func (*LxcContainer) ProtoMessage() {}
 
 func (x *LxcContainer) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_lxc_proto_msgTypes[0]
+	mi := &file_nas_v1_lxc_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -68,7 +135,7 @@ func (x *LxcContainer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LxcContainer.ProtoReflect.Descriptor instead.
 func (*LxcContainer) Descriptor() ([]byte, []int) {
-	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{0}
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *LxcContainer) GetName() string {
@@ -162,6 +229,48 @@ func (x *LxcContainer) GetTemplateArchive() string {
 	return ""
 }
 
+func (x *LxcContainer) GetMountPoints() []*LxcMountPoint {
+	if x != nil {
+		return x.MountPoints
+	}
+	return nil
+}
+
+func (x *LxcContainer) GetGpuEnabled() bool {
+	if x != nil {
+		return x.GpuEnabled
+	}
+	return false
+}
+
+func (x *LxcContainer) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *LxcContainer) GetNetworkBridge() string {
+	if x != nil {
+		return x.NetworkBridge
+	}
+	return ""
+}
+
+func (x *LxcContainer) GetCpuPercent() float64 {
+	if x != nil {
+		return x.CpuPercent
+	}
+	return 0
+}
+
+func (x *LxcContainer) GetMemoryUsedMib() int64 {
+	if x != nil {
+		return x.MemoryUsedMib
+	}
+	return 0
+}
+
 type ListLxcContainersRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PageSize      int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
@@ -173,7 +282,7 @@ type ListLxcContainersRequest struct {
 
 func (x *ListLxcContainersRequest) Reset() {
 	*x = ListLxcContainersRequest{}
-	mi := &file_nas_v1_lxc_proto_msgTypes[1]
+	mi := &file_nas_v1_lxc_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -185,7 +294,7 @@ func (x *ListLxcContainersRequest) String() string {
 func (*ListLxcContainersRequest) ProtoMessage() {}
 
 func (x *ListLxcContainersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_lxc_proto_msgTypes[1]
+	mi := &file_nas_v1_lxc_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -198,7 +307,7 @@ func (x *ListLxcContainersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListLxcContainersRequest.ProtoReflect.Descriptor instead.
 func (*ListLxcContainersRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{1}
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ListLxcContainersRequest) GetPageSize() int32 {
@@ -233,7 +342,7 @@ type ListLxcContainersResponse struct {
 
 func (x *ListLxcContainersResponse) Reset() {
 	*x = ListLxcContainersResponse{}
-	mi := &file_nas_v1_lxc_proto_msgTypes[2]
+	mi := &file_nas_v1_lxc_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -245,7 +354,7 @@ func (x *ListLxcContainersResponse) String() string {
 func (*ListLxcContainersResponse) ProtoMessage() {}
 
 func (x *ListLxcContainersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_lxc_proto_msgTypes[2]
+	mi := &file_nas_v1_lxc_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -258,7 +367,7 @@ func (x *ListLxcContainersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListLxcContainersResponse.ProtoReflect.Descriptor instead.
 func (*ListLxcContainersResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{2}
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ListLxcContainersResponse) GetLxcContainers() []*LxcContainer {
@@ -291,7 +400,7 @@ type GetLxcContainerRequest struct {
 
 func (x *GetLxcContainerRequest) Reset() {
 	*x = GetLxcContainerRequest{}
-	mi := &file_nas_v1_lxc_proto_msgTypes[3]
+	mi := &file_nas_v1_lxc_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -303,7 +412,7 @@ func (x *GetLxcContainerRequest) String() string {
 func (*GetLxcContainerRequest) ProtoMessage() {}
 
 func (x *GetLxcContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_lxc_proto_msgTypes[3]
+	mi := &file_nas_v1_lxc_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -316,7 +425,7 @@ func (x *GetLxcContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLxcContainerRequest.ProtoReflect.Descriptor instead.
 func (*GetLxcContainerRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{3}
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetLxcContainerRequest) GetName() string {
@@ -336,7 +445,7 @@ type CreateLxcContainerRequest struct {
 
 func (x *CreateLxcContainerRequest) Reset() {
 	*x = CreateLxcContainerRequest{}
-	mi := &file_nas_v1_lxc_proto_msgTypes[4]
+	mi := &file_nas_v1_lxc_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -348,7 +457,7 @@ func (x *CreateLxcContainerRequest) String() string {
 func (*CreateLxcContainerRequest) ProtoMessage() {}
 
 func (x *CreateLxcContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_lxc_proto_msgTypes[4]
+	mi := &file_nas_v1_lxc_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -361,7 +470,7 @@ func (x *CreateLxcContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateLxcContainerRequest.ProtoReflect.Descriptor instead.
 func (*CreateLxcContainerRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{4}
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *CreateLxcContainerRequest) GetLxcContainerId() string {
@@ -388,7 +497,7 @@ type DeleteLxcContainerRequest struct {
 
 func (x *DeleteLxcContainerRequest) Reset() {
 	*x = DeleteLxcContainerRequest{}
-	mi := &file_nas_v1_lxc_proto_msgTypes[5]
+	mi := &file_nas_v1_lxc_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -400,7 +509,7 @@ func (x *DeleteLxcContainerRequest) String() string {
 func (*DeleteLxcContainerRequest) ProtoMessage() {}
 
 func (x *DeleteLxcContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_lxc_proto_msgTypes[5]
+	mi := &file_nas_v1_lxc_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -413,7 +522,7 @@ func (x *DeleteLxcContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteLxcContainerRequest.ProtoReflect.Descriptor instead.
 func (*DeleteLxcContainerRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{5}
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *DeleteLxcContainerRequest) GetName() string {
@@ -439,7 +548,7 @@ type StartLxcContainerRequest struct {
 
 func (x *StartLxcContainerRequest) Reset() {
 	*x = StartLxcContainerRequest{}
-	mi := &file_nas_v1_lxc_proto_msgTypes[6]
+	mi := &file_nas_v1_lxc_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -451,7 +560,7 @@ func (x *StartLxcContainerRequest) String() string {
 func (*StartLxcContainerRequest) ProtoMessage() {}
 
 func (x *StartLxcContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_lxc_proto_msgTypes[6]
+	mi := &file_nas_v1_lxc_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -464,7 +573,7 @@ func (x *StartLxcContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartLxcContainerRequest.ProtoReflect.Descriptor instead.
 func (*StartLxcContainerRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{6}
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *StartLxcContainerRequest) GetName() string {
@@ -483,7 +592,7 @@ type StopLxcContainerRequest struct {
 
 func (x *StopLxcContainerRequest) Reset() {
 	*x = StopLxcContainerRequest{}
-	mi := &file_nas_v1_lxc_proto_msgTypes[7]
+	mi := &file_nas_v1_lxc_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -495,7 +604,7 @@ func (x *StopLxcContainerRequest) String() string {
 func (*StopLxcContainerRequest) ProtoMessage() {}
 
 func (x *StopLxcContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_lxc_proto_msgTypes[7]
+	mi := &file_nas_v1_lxc_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -508,7 +617,7 @@ func (x *StopLxcContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopLxcContainerRequest.ProtoReflect.Descriptor instead.
 func (*StopLxcContainerRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{7}
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *StopLxcContainerRequest) GetName() string {
@@ -527,7 +636,7 @@ type FreezeLxcContainerRequest struct {
 
 func (x *FreezeLxcContainerRequest) Reset() {
 	*x = FreezeLxcContainerRequest{}
-	mi := &file_nas_v1_lxc_proto_msgTypes[8]
+	mi := &file_nas_v1_lxc_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -539,7 +648,7 @@ func (x *FreezeLxcContainerRequest) String() string {
 func (*FreezeLxcContainerRequest) ProtoMessage() {}
 
 func (x *FreezeLxcContainerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_lxc_proto_msgTypes[8]
+	mi := &file_nas_v1_lxc_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -552,7 +661,7 @@ func (x *FreezeLxcContainerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FreezeLxcContainerRequest.ProtoReflect.Descriptor instead.
 func (*FreezeLxcContainerRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{8}
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *FreezeLxcContainerRequest) GetName() string {
@@ -562,11 +671,215 @@ func (x *FreezeLxcContainerRequest) GetName() string {
 	return ""
 }
 
+type RestartLxcContainerRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RestartLxcContainerRequest) Reset() {
+	*x = RestartLxcContainerRequest{}
+	mi := &file_nas_v1_lxc_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RestartLxcContainerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestartLxcContainerRequest) ProtoMessage() {}
+
+func (x *RestartLxcContainerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_lxc_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestartLxcContainerRequest.ProtoReflect.Descriptor instead.
+func (*RestartLxcContainerRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *RestartLxcContainerRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type UpdateLxcContainerRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LxcContainer  *LxcContainer          `protobuf:"bytes,1,opt,name=lxc_container,json=lxcContainer,proto3" json:"lxc_container,omitempty"`
+	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateLxcContainerRequest) Reset() {
+	*x = UpdateLxcContainerRequest{}
+	mi := &file_nas_v1_lxc_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateLxcContainerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateLxcContainerRequest) ProtoMessage() {}
+
+func (x *UpdateLxcContainerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_lxc_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateLxcContainerRequest.ProtoReflect.Descriptor instead.
+func (*UpdateLxcContainerRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *UpdateLxcContainerRequest) GetLxcContainer() *LxcContainer {
+	if x != nil {
+		return x.LxcContainer
+	}
+	return nil
+}
+
+func (x *UpdateLxcContainerRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
+	if x != nil {
+		return x.UpdateMask
+	}
+	return nil
+}
+
+type GetLxcContainerLogsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Tail          int32                  `protobuf:"varint,2,opt,name=tail,proto3" json:"tail,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetLxcContainerLogsRequest) Reset() {
+	*x = GetLxcContainerLogsRequest{}
+	mi := &file_nas_v1_lxc_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetLxcContainerLogsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetLxcContainerLogsRequest) ProtoMessage() {}
+
+func (x *GetLxcContainerLogsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_lxc_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetLxcContainerLogsRequest.ProtoReflect.Descriptor instead.
+func (*GetLxcContainerLogsRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GetLxcContainerLogsRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *GetLxcContainerLogsRequest) GetTail() int32 {
+	if x != nil {
+		return x.Tail
+	}
+	return 0
+}
+
+type GetLxcContainerLogsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Logs          string                 `protobuf:"bytes,1,opt,name=logs,proto3" json:"logs,omitempty"`
+	LineCount     int32                  `protobuf:"varint,2,opt,name=line_count,json=lineCount,proto3" json:"line_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetLxcContainerLogsResponse) Reset() {
+	*x = GetLxcContainerLogsResponse{}
+	mi := &file_nas_v1_lxc_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetLxcContainerLogsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetLxcContainerLogsResponse) ProtoMessage() {}
+
+func (x *GetLxcContainerLogsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_lxc_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetLxcContainerLogsResponse.ProtoReflect.Descriptor instead.
+func (*GetLxcContainerLogsResponse) Descriptor() ([]byte, []int) {
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *GetLxcContainerLogsResponse) GetLogs() string {
+	if x != nil {
+		return x.Logs
+	}
+	return ""
+}
+
+func (x *GetLxcContainerLogsResponse) GetLineCount() int32 {
+	if x != nil {
+		return x.LineCount
+	}
+	return 0
+}
+
 var File_nas_v1_lxc_proto protoreflect.FileDescriptor
 
 const file_nas_v1_lxc_proto_rawDesc = "" +
 	"\n" +
-	"\x10nas/v1/lxc.proto\x12\x06nas.v1\x1a\x1fgoogle/api/field_behavior.proto\x1a\x19google/api/resource.proto\"\xaf\x04\n" +
+	"\x10nas/v1/lxc.proto\x12\x06nas.v1\x1a\x1fgoogle/api/field_behavior.proto\x1a\x19google/api/resource.proto\x1a google/protobuf/field_mask.proto\"p\n" +
+	"\rLxcMountPoint\x12\x1b\n" +
+	"\thost_path\x18\x01 \x01(\tR\bhostPath\x12%\n" +
+	"\x0econtainer_path\x18\x02 \x01(\tR\rcontainerPath\x12\x1b\n" +
+	"\tread_only\x18\x03 \x01(\bR\breadOnly\"\xa8\x06\n" +
 	"\fLxcContainer\x12\x18\n" +
 	"\x04name\x18\x01 \x01(\tB\x04\xe2A\x01\bR\x04name\x12+\n" +
 	"\x0econtainer_name\x18\x02 \x01(\tB\x04\xe2A\x01\x03R\rcontainerName\x12\x1a\n" +
@@ -582,7 +895,15 @@ const file_nas_v1_lxc_proto_rawDesc = "" +
 	"rootfsPath\x12(\n" +
 	"\x10memory_limit_mib\x18\v \x01(\x03R\x0ememoryLimitMib\x12\x1b\n" +
 	"\tcpu_cores\x18\f \x01(\x05R\bcpuCores\x12)\n" +
-	"\x10template_archive\x18\r \x01(\tR\x0ftemplateArchive:\\\xeaAY\n" +
+	"\x10template_archive\x18\r \x01(\tR\x0ftemplateArchive\x128\n" +
+	"\fmount_points\x18\x0e \x03(\v2\x15.nas.v1.LxcMountPointR\vmountPoints\x12\x1f\n" +
+	"\vgpu_enabled\x18\x0f \x01(\bR\n" +
+	"gpuEnabled\x12 \n" +
+	"\vdescription\x18\x10 \x01(\tR\vdescription\x12%\n" +
+	"\x0enetwork_bridge\x18\x11 \x01(\tR\rnetworkBridge\x12%\n" +
+	"\vcpu_percent\x18\x12 \x01(\x01B\x04\xe2A\x01\x03R\n" +
+	"cpuPercent\x12,\n" +
+	"\x0fmemory_used_mib\x18\x13 \x01(\x03B\x04\xe2A\x01\x03R\rmemoryUsedMib:\\\xeaAY\n" +
 	"\x1bnas.sigxcpu.io/LxcContainer\x12\x1dlxcContainers/{lxc_container}*\rlxcContainers2\flxcContainer\"n\n" +
 	"\x18ListLxcContainersRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
@@ -612,7 +933,22 @@ const file_nas_v1_lxc_proto_rawDesc = "" +
 	"\x1bnas.sigxcpu.io/LxcContainerR\x04name\"U\n" +
 	"\x19FreezeLxcContainerRequest\x128\n" +
 	"\x04name\x18\x01 \x01(\tB$\xe2A\x01\x02\xfaA\x1d\n" +
-	"\x1bnas.sigxcpu.io/LxcContainerR\x04nameB2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
+	"\x1bnas.sigxcpu.io/LxcContainerR\x04name\"V\n" +
+	"\x1aRestartLxcContainerRequest\x128\n" +
+	"\x04name\x18\x01 \x01(\tB$\xe2A\x01\x02\xfaA\x1d\n" +
+	"\x1bnas.sigxcpu.io/LxcContainerR\x04name\"\x99\x01\n" +
+	"\x19UpdateLxcContainerRequest\x12?\n" +
+	"\rlxc_container\x18\x01 \x01(\v2\x14.nas.v1.LxcContainerB\x04\xe2A\x01\x02R\flxcContainer\x12;\n" +
+	"\vupdate_mask\x18\x02 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
+	"updateMask\"j\n" +
+	"\x1aGetLxcContainerLogsRequest\x128\n" +
+	"\x04name\x18\x01 \x01(\tB$\xe2A\x01\x02\xfaA\x1d\n" +
+	"\x1bnas.sigxcpu.io/LxcContainerR\x04name\x12\x12\n" +
+	"\x04tail\x18\x02 \x01(\x05R\x04tail\"P\n" +
+	"\x1bGetLxcContainerLogsResponse\x12\x12\n" +
+	"\x04logs\x18\x01 \x01(\tR\x04logs\x12\x1d\n" +
+	"\n" +
+	"line_count\x18\x02 \x01(\x05R\tlineCountB2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
 
 var (
 	file_nas_v1_lxc_proto_rawDescOnce sync.Once
@@ -626,26 +962,35 @@ func file_nas_v1_lxc_proto_rawDescGZIP() []byte {
 	return file_nas_v1_lxc_proto_rawDescData
 }
 
-var file_nas_v1_lxc_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_nas_v1_lxc_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_nas_v1_lxc_proto_goTypes = []any{
-	(*LxcContainer)(nil),              // 0: nas.v1.LxcContainer
-	(*ListLxcContainersRequest)(nil),  // 1: nas.v1.ListLxcContainersRequest
-	(*ListLxcContainersResponse)(nil), // 2: nas.v1.ListLxcContainersResponse
-	(*GetLxcContainerRequest)(nil),    // 3: nas.v1.GetLxcContainerRequest
-	(*CreateLxcContainerRequest)(nil), // 4: nas.v1.CreateLxcContainerRequest
-	(*DeleteLxcContainerRequest)(nil), // 5: nas.v1.DeleteLxcContainerRequest
-	(*StartLxcContainerRequest)(nil),  // 6: nas.v1.StartLxcContainerRequest
-	(*StopLxcContainerRequest)(nil),   // 7: nas.v1.StopLxcContainerRequest
-	(*FreezeLxcContainerRequest)(nil), // 8: nas.v1.FreezeLxcContainerRequest
+	(*LxcMountPoint)(nil),               // 0: nas.v1.LxcMountPoint
+	(*LxcContainer)(nil),                // 1: nas.v1.LxcContainer
+	(*ListLxcContainersRequest)(nil),    // 2: nas.v1.ListLxcContainersRequest
+	(*ListLxcContainersResponse)(nil),   // 3: nas.v1.ListLxcContainersResponse
+	(*GetLxcContainerRequest)(nil),      // 4: nas.v1.GetLxcContainerRequest
+	(*CreateLxcContainerRequest)(nil),   // 5: nas.v1.CreateLxcContainerRequest
+	(*DeleteLxcContainerRequest)(nil),   // 6: nas.v1.DeleteLxcContainerRequest
+	(*StartLxcContainerRequest)(nil),    // 7: nas.v1.StartLxcContainerRequest
+	(*StopLxcContainerRequest)(nil),     // 8: nas.v1.StopLxcContainerRequest
+	(*FreezeLxcContainerRequest)(nil),   // 9: nas.v1.FreezeLxcContainerRequest
+	(*RestartLxcContainerRequest)(nil),  // 10: nas.v1.RestartLxcContainerRequest
+	(*UpdateLxcContainerRequest)(nil),   // 11: nas.v1.UpdateLxcContainerRequest
+	(*GetLxcContainerLogsRequest)(nil),  // 12: nas.v1.GetLxcContainerLogsRequest
+	(*GetLxcContainerLogsResponse)(nil), // 13: nas.v1.GetLxcContainerLogsResponse
+	(*fieldmaskpb.FieldMask)(nil),       // 14: google.protobuf.FieldMask
 }
 var file_nas_v1_lxc_proto_depIdxs = []int32{
-	0, // 0: nas.v1.ListLxcContainersResponse.lxc_containers:type_name -> nas.v1.LxcContainer
-	0, // 1: nas.v1.CreateLxcContainerRequest.lxc_container:type_name -> nas.v1.LxcContainer
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	0,  // 0: nas.v1.LxcContainer.mount_points:type_name -> nas.v1.LxcMountPoint
+	1,  // 1: nas.v1.ListLxcContainersResponse.lxc_containers:type_name -> nas.v1.LxcContainer
+	1,  // 2: nas.v1.CreateLxcContainerRequest.lxc_container:type_name -> nas.v1.LxcContainer
+	1,  // 3: nas.v1.UpdateLxcContainerRequest.lxc_container:type_name -> nas.v1.LxcContainer
+	14, // 4: nas.v1.UpdateLxcContainerRequest.update_mask:type_name -> google.protobuf.FieldMask
+	5,  // [5:5] is the sub-list for method output_type
+	5,  // [5:5] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_nas_v1_lxc_proto_init() }
@@ -659,7 +1004,7 @@ func file_nas_v1_lxc_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nas_v1_lxc_proto_rawDesc), len(file_nas_v1_lxc_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
