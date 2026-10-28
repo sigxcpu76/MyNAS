@@ -645,6 +645,7 @@ export interface LxcContainer {
   memoryUsedMib?: number;
   installRecipe?: string;
   installScriptUrl?: string;
+  templateDownloadUrl?: string;
 }
 
 export interface LxcCatalogItem {

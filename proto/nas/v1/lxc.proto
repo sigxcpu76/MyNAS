@@ -47,6 +47,7 @@ message LxcContainer {
   int64 memory_used_mib = 19 [(google.api.field_behavior) = OUTPUT_ONLY];
   string install_recipe = 20;
   string install_script_url = 21;
+  string template_download_url = 22;
 }
 
 message ListLxcContainersRequest {

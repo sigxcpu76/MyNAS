@@ -54,7 +54,6 @@ type Adapter struct {
 	mu         sync.RWMutex
 	mainPool   string
 	containers map[string]domain.LxcContainer
-	nextIP     int
 	execPTYs   map[string]*os.File
 	httpClient *http.Client
 }
@@ -62,29 +61,64 @@ type Adapter struct {
 func NewAdapter() *Adapter {
 	return &Adapter{
 		containers: make(map[string]domain.LxcContainer),
-		nextIP:     15,
 		execPTYs:   make(map[string]*os.File),
 		httpClient: &http.Client{Timeout: 30 * time.Minute},
 	}
 }
 
+func (a *Adapter) updateLiveStatus(c *domain.LxcContainer) {
+	if _, err := exec.LookPath("lxc-info"); err != nil {
+		return
+	}
+	out, err := exec.Command("lxc-info", "-n", c.ID, "-s", "-H").Output()
+	if err == nil {
+		state := strings.TrimSpace(string(out))
+		if state != "" {
+			c.State = state
+		}
+	}
+	if c.State == "RUNNING" {
+		ipOut, err := exec.Command("lxc-info", "-n", c.ID, "-i", "-H").Output()
+		if err == nil {
+			lines := strings.Split(strings.TrimSpace(string(ipOut)), "\n")
+			for _, line := range lines {
+				ip := strings.TrimSpace(line)
+				if ip != "" && !strings.Contains(ip, ":") && !strings.HasPrefix(ip, "127.") {
+					c.IPv4Address = ip
+					return
+				}
+			}
+		}
+		// If running but no IP leased yet by DHCP router
+		if strings.HasPrefix(c.IPv4Address, "10.10.20.") {
+			c.IPv4Address = ""
+		}
+	} else {
+		c.IPv4Address = ""
+	}
+}
+
 func (a *Adapter) ListContainers(ctx context.Context) ([]domain.LxcContainer, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	out := make([]domain.LxcContainer, 0, len(a.containers))
-	for _, c := range a.containers {
+	for id, c := range a.containers {
+		a.updateLiveStatus(&c)
+		a.containers[id] = c
 		out = append(out, c)
 	}
 	return out, nil
 }
 
 func (a *Adapter) GetContainer(ctx context.Context, id string) (*domain.LxcContainer, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	c, ok := a.containers[id]
 	if !ok {
 		return nil, fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, id)
 	}
+	a.updateLiveStatus(&c)
+	a.containers[id] = c
 	cp := c
 	return &cp, nil
 }
@@ -102,9 +136,9 @@ func generateRandomMAC() string {
 	return fmt.Sprintf("00:16:3e:%02x:%02x:%02x", buf[0], buf[1], buf[2])
 }
 
-func (a *Adapter) ensureTemplateArchive(ctx context.Context, tmplSource, mainPool, containerID, distro string) (string, error) {
-	if !strings.HasPrefix(tmplSource, "http://") && !strings.HasPrefix(tmplSource, "https://") {
-		return tmplSource, nil
+func (a *Adapter) ensureTemplateArchive(ctx context.Context, sourceURL, targetPath, mainPool, containerID, distro string) (string, error) {
+	if !strings.HasPrefix(sourceURL, "http://") && !strings.HasPrefix(sourceURL, "https://") {
+		return sourceURL, nil
 	}
 
 	cleanPool := strings.TrimPrefix(strings.TrimSpace(mainPool), "zfsPools/")
@@ -114,57 +148,61 @@ func (a *Adapter) ensureTemplateArchive(ctx context.Context, tmplSource, mainPoo
 	tmplDir := fmt.Sprintf("/mnt/%s/lxc-templates", cleanPool)
 	_ = os.MkdirAll(tmplDir, 0755)
 
-	parts := strings.Split(tmplSource, "/")
-	rawFilename := parts[len(parts)-1]
-	if idx := strings.Index(rawFilename, "?"); idx != -1 {
-		rawFilename = rawFilename[:idx]
-	}
-	if idx := strings.Index(rawFilename, "#"); idx != -1 {
-		rawFilename = rawFilename[:idx]
-	}
-
-	// Determine archive extension
-	ext := ".tar.xz"
-	switch {
-	case strings.HasSuffix(rawFilename, ".tar.gz"):
-		ext = ".tar.gz"
-	case strings.HasSuffix(rawFilename, ".tar.zst"):
-		ext = ".tar.zst"
-	case strings.HasSuffix(rawFilename, ".tgz"):
-		ext = ".tgz"
-	case strings.HasSuffix(rawFilename, ".tar"):
-		ext = ".tar"
-	}
-
-	baseNoExt := strings.TrimSuffix(rawFilename, ext)
-	genericNames := map[string]bool{
-		"rootfs": true, "system": true, "template": true, "image": true,
-		"archive": true, "download": true, "base": true, "default": true, "": true,
-	}
-
-	if genericNames[strings.ToLower(strings.TrimSpace(baseNoExt))] {
-		slug := domain.ToZfsSafeSlug(containerID)
-		if slug == "" {
-			slug = domain.ToZfsSafeSlug(distro)
+	destPath := targetPath
+	if destPath == "" {
+		parts := strings.Split(sourceURL, "/")
+		rawFilename := parts[len(parts)-1]
+		if idx := strings.Index(rawFilename, "?"); idx != -1 {
+			rawFilename = rawFilename[:idx]
 		}
-		if slug == "" {
-			slug = "lxc-template"
+		if idx := strings.Index(rawFilename, "#"); idx != -1 {
+			rawFilename = rawFilename[:idx]
 		}
-		rawFilename = fmt.Sprintf("%s-rootfs%s", slug, ext)
-	} else {
-		safeBase := domain.ToZfsSafeSlug(baseNoExt)
-		if safeBase != "" {
-			rawFilename = fmt.Sprintf("%s%s", safeBase, ext)
-		}
-	}
 
-	destPath := filepath.Join(tmplDir, rawFilename)
+		ext := ".tar.xz"
+		switch {
+		case strings.HasSuffix(rawFilename, ".tar.gz"):
+			ext = ".tar.gz"
+		case strings.HasSuffix(rawFilename, ".tar.zst"):
+			ext = ".tar.zst"
+		case strings.HasSuffix(rawFilename, ".tgz"):
+			ext = ".tgz"
+		case strings.HasSuffix(rawFilename, ".tar"):
+			ext = ".tar"
+		}
+
+		baseNoExt := strings.TrimSuffix(rawFilename, ext)
+		genericNames := map[string]bool{
+			"rootfs": true, "system": true, "template": true, "image": true,
+			"archive": true, "download": true, "base": true, "default": true, "": true,
+		}
+
+		if genericNames[strings.ToLower(strings.TrimSpace(baseNoExt))] {
+			slug := domain.ToZfsSafeSlug(containerID)
+			if slug == "" {
+				slug = domain.ToZfsSafeSlug(distro)
+			}
+			if slug == "" {
+				slug = "lxc-template"
+			}
+			rawFilename = fmt.Sprintf("%s-rootfs%s", slug, ext)
+		} else {
+			safeBase := domain.ToZfsSafeSlug(baseNoExt)
+			if safeBase != "" {
+				rawFilename = fmt.Sprintf("%s%s", safeBase, ext)
+			}
+		}
+
+		destPath = filepath.Join(tmplDir, rawFilename)
+	}
 
 	if fi, err := os.Stat(destPath); err == nil && fi.Size() > 0 {
 		return destPath, nil
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tmplSource, nil)
+	_ = os.MkdirAll(filepath.Dir(destPath), 0755)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
 		return "", err
 	}
@@ -194,6 +232,43 @@ func (a *Adapter) ensureTemplateArchive(ctx context.Context, tmplSource, mainPoo
 	return destPath, nil
 }
 
+func (a *Adapter) configureContainerDHCP(rootfsPath string) {
+	// 1. Systemd-networkd (AlmaLinux, CentOS, Fedora, Debian, Ubuntu, Arch)
+	networkdDir := filepath.Join(rootfsPath, "etc/systemd/network")
+	_ = os.MkdirAll(networkdDir, 0755)
+	eth0Net := "[Match]\nName=eth0 host0\n\n[Network]\nDHCP=yes\nLinkLocalAddressing=ipv6\n\n[DHCPv4]\nUseHostname=true\n"
+	_ = os.WriteFile(filepath.Join(networkdDir, "80-container-eth0.network"), []byte(eth0Net), 0644)
+
+	// 2. NetworkManager keyfile (AlmaLinux 9/10, RHEL 9/10, Fedora, CentOS 9)
+	nmDir := filepath.Join(rootfsPath, "etc/NetworkManager/system-connections")
+	_ = os.MkdirAll(nmDir, 0700)
+	nmConn := "[connection]\nid=eth0\nuuid=c0a80101-0000-0000-0000-000000000001\ntype=ethernet\ninterface-name=eth0\nautoconnect=true\n\n[ethernet]\n\n[ipv4]\nmethod=auto\n\n[ipv6]\nmethod=auto\n"
+	_ = os.WriteFile(filepath.Join(nmDir, "eth0.nmconnection"), []byte(nmConn), 0600)
+
+	// 3. Sysconfig / network-scripts (legacy RHEL/AlmaLinux 8)
+	sysconfigDir := filepath.Join(rootfsPath, "etc/sysconfig/network-scripts")
+	if _, err := os.Stat(sysconfigDir); err == nil {
+		ifcfg := "DEVICE=eth0\nBOOTPROTO=dhcp\nONBOOT=yes\nTYPE=Ethernet\n"
+		_ = os.WriteFile(filepath.Join(sysconfigDir, "ifcfg-eth0"), []byte(ifcfg), 0644)
+	}
+
+	// 4. Debian / Ubuntu / Alpine / TurnKey ifupdown interfaces
+	netDir := filepath.Join(rootfsPath, "etc/network")
+	_ = os.MkdirAll(netDir, 0755)
+	interfacesPath := filepath.Join(netDir, "interfaces")
+	if _, err := os.Stat(interfacesPath); os.IsNotExist(err) {
+		interfaces := "auto lo\niface lo inet loopback\n\nauto eth0\niface eth0 inet dhcp\n"
+		_ = os.WriteFile(interfacesPath, []byte(interfaces), 0644)
+	}
+
+	// 5. Netplan (modern Ubuntu)
+	netplanDir := filepath.Join(rootfsPath, "etc/netplan")
+	if _, err := os.Stat(netplanDir); err == nil {
+		netplan := "network:\n  version: 2\n  ethernets:\n    eth0:\n      dhcp4: true\n"
+		_ = os.WriteFile(filepath.Join(netplanDir, "10-lxc-eth0.yaml"), []byte(netplan), 0644)
+	}
+}
+
 func (a *Adapter) writeLxcConfig(c domain.LxcContainer) {
 	bridge := c.NetworkBridge
 	if bridge == "" {
@@ -208,8 +283,22 @@ func (a *Adapter) writeLxcConfig(c domain.LxcContainer) {
 	}
 	sb.WriteString(fmt.Sprintf("lxc.rootfs.path = dir:%s\n\n", c.RootfsPath))
 
-	// Network configuration
-	sb.WriteString("# Network Configuration\n")
+	// System includes for common devices, namespaces, and mounts
+	if _, err := os.Stat("/usr/share/lxc/config/common.conf"); err == nil {
+		sb.WriteString("lxc.include = /usr/share/lxc/config/common.conf\n")
+	}
+	if _, err := os.Stat("/usr/share/lxc/config/nesting.conf"); err == nil {
+		sb.WriteString("lxc.include = /usr/share/lxc/config/nesting.conf\n")
+	}
+
+	// Standard systemd / init container mount defaults
+	sb.WriteString("lxc.autodev = 1\n")
+	sb.WriteString("lxc.pty.max = 1024\n")
+	sb.WriteString("lxc.tty.max = 4\n")
+	sb.WriteString("lxc.mount.auto = cgroup:mixed proc:mixed sys:mixed\n\n")
+
+	// Network configuration (DHCP on bridge)
+	sb.WriteString("# Network Configuration (DHCP on bridge)\n")
 	sb.WriteString("lxc.net.0.type = veth\n")
 	sb.WriteString("lxc.net.0.flags = up\n")
 	sb.WriteString(fmt.Sprintf("lxc.net.0.link = %s\n", bridge))
@@ -370,16 +459,42 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 	_ = os.MkdirAll(c.RootfsPath, 0755)
 	_ = os.MkdirAll(filepath.Dir(c.RootfsPath), 0755)
 
-	// Unpack template archive if present
+	// Unpack template archive if present or download remote image
+	tmplToUnpack := ""
 	if c.TemplateArchive != "" {
-		localArchive, err := a.ensureTemplateArchive(ctx, c.TemplateArchive, cleanMainPool, c.ID, c.Distribution)
-		if err == nil && localArchive != "" {
-			if _, statErr := os.Stat(localArchive); statErr == nil {
-				tarCmd := exec.CommandContext(ctx, "tar", "-xf", localArchive, "-C", c.RootfsPath)
-				_ = tarCmd.Run()
+		if fi, err := os.Stat(c.TemplateArchive); err == nil && fi.Size() > 0 {
+			tmplToUnpack = c.TemplateArchive
+		}
+	}
+
+	if tmplToUnpack == "" {
+		sourceURL := c.TemplateDownloadURL
+		if sourceURL == "" && (strings.HasPrefix(c.TemplateArchive, "http://") || strings.HasPrefix(c.TemplateArchive, "https://")) {
+			sourceURL = c.TemplateArchive
+		}
+
+		if sourceURL != "" {
+			downloadTarget := c.TemplateArchive
+			if downloadTarget == "" || strings.HasPrefix(downloadTarget, "http://") || strings.HasPrefix(downloadTarget, "https://") {
+				downloadTarget = ""
+			}
+			downloadedPath, err := a.ensureTemplateArchive(ctx, sourceURL, downloadTarget, cleanMainPool, c.ID, c.Distribution)
+			if err == nil && downloadedPath != "" {
+				tmplToUnpack = downloadedPath
+				c.TemplateArchive = downloadedPath
 			}
 		}
 	}
+
+	if tmplToUnpack != "" {
+		if fi, err := os.Stat(tmplToUnpack); err == nil && fi.Size() > 0 {
+			tarCmd := exec.CommandContext(ctx, "tar", "-xf", tmplToUnpack, "-C", c.RootfsPath)
+			_ = tarCmd.Run()
+		}
+	}
+
+	// Configure DHCP across all networking subsystems in container rootfs
+	a.configureContainerDHCP(c.RootfsPath)
 
 	// Ensure minimal os-release and hostname if rootfs is newly created
 	etcDir := filepath.Join(c.RootfsPath, "etc")
@@ -394,23 +509,13 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 	// Write LXC config files
 	a.writeLxcConfig(c)
 
-	a.nextIP++
 	c.State = "RUNNING"
-	c.IPv4Address = fmt.Sprintf("10.10.20.%d", a.nextIP)
+	c.IPv4Address = ""
 
 	// Attempt real lxc-start if binary exists
 	if _, err := exec.LookPath("lxc-start"); err == nil {
 		_ = exec.CommandContext(ctx, "lxc-start", "-n", c.ID, "-d").Run()
-		if out, err := exec.CommandContext(ctx, "lxc-info", "-n", c.ID, "-i").Output(); err == nil {
-			lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-			for _, l := range lines {
-				parts := strings.Fields(l)
-				if len(parts) >= 2 && !strings.Contains(parts[1], ":") {
-					c.IPv4Address = parts[1]
-					break
-				}
-			}
-		}
+		a.updateLiveStatus(&c)
 	}
 
 	// Trigger installer recipe if present
@@ -481,6 +586,7 @@ func (a *Adapter) UpdateContainer(ctx context.Context, c domain.LxcContainer, fi
 	}
 
 	a.writeLxcConfig(current)
+	a.updateLiveStatus(&current)
 	a.containers[c.ID] = current
 	cp := current
 	return &cp, nil
@@ -493,6 +599,7 @@ func (a *Adapter) DeleteContainer(ctx context.Context, id string, force bool) er
 	if !ok {
 		return fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, id)
 	}
+	a.updateLiveStatus(&c)
 	if c.State == "RUNNING" && !force {
 		return fmt.Errorf("%w: lxc container %q is running; stop it or set force=true", domain.ErrFailedPrecondition, id)
 	}
@@ -520,10 +627,7 @@ func (a *Adapter) StartContainer(ctx context.Context, id string) (*domain.LxcCon
 		_ = exec.CommandContext(ctx, "lxc-start", "-n", id, "-d").Run()
 	}
 	c.State = "RUNNING"
-	if c.IPv4Address == "" || c.IPv4Address == "-" {
-		a.nextIP++
-		c.IPv4Address = fmt.Sprintf("10.10.20.%d", a.nextIP)
-	}
+	a.updateLiveStatus(&c)
 	a.containers[id] = c
 	cp := c
 	return &cp, nil
@@ -540,7 +644,7 @@ func (a *Adapter) StopContainer(ctx context.Context, id string) (*domain.LxcCont
 		_ = exec.CommandContext(ctx, "lxc-stop", "-n", id).Run()
 	}
 	c.State = "STOPPED"
-	c.IPv4Address = "-"
+	c.IPv4Address = ""
 	a.containers[id] = c
 	cp := c
 	return &cp, nil
@@ -557,10 +661,7 @@ func (a *Adapter) RestartContainer(ctx context.Context, id string) (*domain.LxcC
 		_ = exec.CommandContext(ctx, "lxc-stop", "-r", "-n", id).Run()
 	}
 	c.State = "RUNNING"
-	if c.IPv4Address == "" || c.IPv4Address == "-" {
-		a.nextIP++
-		c.IPv4Address = fmt.Sprintf("10.10.20.%d", a.nextIP)
-	}
+	a.updateLiveStatus(&c)
 	a.containers[id] = c
 	cp := c
 	return &cp, nil
@@ -609,15 +710,18 @@ func (a *Adapter) GetContainerLogs(ctx context.Context, id string, tail int) (st
 		}
 	}
 
-	// If no host log file exists, synthesize status logs
 	bridge := c.NetworkBridge
 	if bridge == "" {
 		bridge = "br0"
 	}
+	ipDisplay := c.IPv4Address
+	if ipDisplay == "" {
+		ipDisplay = "DHCP lease requested (awaiting lease from router on " + bridge + ")"
+	}
 	statusLogs := []string{
 		fmt.Sprintf("[lxc-init] Container %s (distro: %s/%s, arch: %s) started", c.ID, c.Distribution, c.Release, c.Architecture),
 		fmt.Sprintf("[lxc-network] veth pair attached to bridge %s", bridge),
-		fmt.Sprintf("[lxc-network] Container IPv4 assigned: %s", c.IPv4Address),
+		fmt.Sprintf("[lxc-network] Container IPv4 status: %s", ipDisplay),
 		fmt.Sprintf("[lxc-cgroup] Allocated %d vCPUs, %d MiB RAM limit", c.CPUCores, c.MemoryLimitMiB),
 	}
 	if c.GpuEnabled {
@@ -639,9 +743,13 @@ func (a *Adapter) GetContainerLogs(ctx context.Context, id string, tail int) (st
 }
 
 func (a *Adapter) ExecAttach(ctx context.Context, id string, cmd []string) (net.Conn, string, error) {
-	a.mu.RLock()
+	a.mu.Lock()
 	c, ok := a.containers[id]
-	a.mu.RUnlock()
+	if ok {
+		a.updateLiveStatus(&c)
+		a.containers[id] = c
+	}
+	a.mu.Unlock()
 	if !ok {
 		return nil, "", fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, id)
 	}

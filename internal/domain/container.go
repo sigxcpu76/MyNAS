@@ -77,6 +77,7 @@ type LxcContainer struct {
 	MemoryUsedMiB   int64
 	InstallRecipe   string
 	InstallScriptURL string
+	TemplateDownloadURL string
 }
 
 func (c *LxcContainer) Validate() error {

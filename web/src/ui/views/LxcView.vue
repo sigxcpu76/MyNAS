@@ -396,6 +396,7 @@ async function handleCreate() {
       mountPoints: validMounts,
       installRecipe: deployingCatalogItem.value?.installRecipe || undefined,
       installScriptUrl: deployingCatalogItem.value?.installScriptUrl || undefined,
+      templateDownloadUrl: deployingCatalogItem.value?.downloadUrl || undefined,
     });
 
     // Start container automatically upon deployment

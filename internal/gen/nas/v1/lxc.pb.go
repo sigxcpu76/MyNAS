@@ -84,30 +84,31 @@ func (x *LxcMountPoint) GetReadOnly() bool {
 }
 
 type LxcContainer struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Name             string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ContainerName    string                 `protobuf:"bytes,2,opt,name=container_name,json=containerName,proto3" json:"container_name,omitempty"`
-	State            string                 `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`               // RUNNING, STOPPED, FROZEN
-	Distribution     string                 `protobuf:"bytes,4,opt,name=distribution,proto3" json:"distribution,omitempty"` // debian, ubuntu, alpine, archlinux
-	Release          string                 `protobuf:"bytes,5,opt,name=release,proto3" json:"release,omitempty"`           // bookworm, noble, 3.20, current
-	Architecture     string                 `protobuf:"bytes,6,opt,name=architecture,proto3" json:"architecture,omitempty"` // amd64, arm64
-	Ipv4Address      string                 `protobuf:"bytes,7,opt,name=ipv4_address,json=ipv4Address,proto3" json:"ipv4_address,omitempty"`
-	Autostart        bool                   `protobuf:"varint,8,opt,name=autostart,proto3" json:"autostart,omitempty"`
-	Unprivileged     bool                   `protobuf:"varint,9,opt,name=unprivileged,proto3" json:"unprivileged,omitempty"`
-	RootfsPath       string                 `protobuf:"bytes,10,opt,name=rootfs_path,json=rootfsPath,proto3" json:"rootfs_path,omitempty"`
-	MemoryLimitMib   int64                  `protobuf:"varint,11,opt,name=memory_limit_mib,json=memoryLimitMib,proto3" json:"memory_limit_mib,omitempty"`
-	CpuCores         int32                  `protobuf:"varint,12,opt,name=cpu_cores,json=cpuCores,proto3" json:"cpu_cores,omitempty"`
-	TemplateArchive  string                 `protobuf:"bytes,13,opt,name=template_archive,json=templateArchive,proto3" json:"template_archive,omitempty"` // Template archive (.tar.gz / .tar.xz) in this pool or another pool
-	MountPoints      []*LxcMountPoint       `protobuf:"bytes,14,rep,name=mount_points,json=mountPoints,proto3" json:"mount_points,omitempty"`
-	GpuEnabled       bool                   `protobuf:"varint,15,opt,name=gpu_enabled,json=gpuEnabled,proto3" json:"gpu_enabled,omitempty"`
-	Description      string                 `protobuf:"bytes,16,opt,name=description,proto3" json:"description,omitempty"`
-	NetworkBridge    string                 `protobuf:"bytes,17,opt,name=network_bridge,json=networkBridge,proto3" json:"network_bridge,omitempty"`
-	CpuPercent       float64                `protobuf:"fixed64,18,opt,name=cpu_percent,json=cpuPercent,proto3" json:"cpu_percent,omitempty"`
-	MemoryUsedMib    int64                  `protobuf:"varint,19,opt,name=memory_used_mib,json=memoryUsedMib,proto3" json:"memory_used_mib,omitempty"`
-	InstallRecipe    string                 `protobuf:"bytes,20,opt,name=install_recipe,json=installRecipe,proto3" json:"install_recipe,omitempty"`
-	InstallScriptUrl string                 `protobuf:"bytes,21,opt,name=install_script_url,json=installScriptUrl,proto3" json:"install_script_url,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Name                string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	ContainerName       string                 `protobuf:"bytes,2,opt,name=container_name,json=containerName,proto3" json:"container_name,omitempty"`
+	State               string                 `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`               // RUNNING, STOPPED, FROZEN
+	Distribution        string                 `protobuf:"bytes,4,opt,name=distribution,proto3" json:"distribution,omitempty"` // debian, ubuntu, alpine, archlinux
+	Release             string                 `protobuf:"bytes,5,opt,name=release,proto3" json:"release,omitempty"`           // bookworm, noble, 3.20, current
+	Architecture        string                 `protobuf:"bytes,6,opt,name=architecture,proto3" json:"architecture,omitempty"` // amd64, arm64
+	Ipv4Address         string                 `protobuf:"bytes,7,opt,name=ipv4_address,json=ipv4Address,proto3" json:"ipv4_address,omitempty"`
+	Autostart           bool                   `protobuf:"varint,8,opt,name=autostart,proto3" json:"autostart,omitempty"`
+	Unprivileged        bool                   `protobuf:"varint,9,opt,name=unprivileged,proto3" json:"unprivileged,omitempty"`
+	RootfsPath          string                 `protobuf:"bytes,10,opt,name=rootfs_path,json=rootfsPath,proto3" json:"rootfs_path,omitempty"`
+	MemoryLimitMib      int64                  `protobuf:"varint,11,opt,name=memory_limit_mib,json=memoryLimitMib,proto3" json:"memory_limit_mib,omitempty"`
+	CpuCores            int32                  `protobuf:"varint,12,opt,name=cpu_cores,json=cpuCores,proto3" json:"cpu_cores,omitempty"`
+	TemplateArchive     string                 `protobuf:"bytes,13,opt,name=template_archive,json=templateArchive,proto3" json:"template_archive,omitempty"` // Template archive (.tar.gz / .tar.xz) in this pool or another pool
+	MountPoints         []*LxcMountPoint       `protobuf:"bytes,14,rep,name=mount_points,json=mountPoints,proto3" json:"mount_points,omitempty"`
+	GpuEnabled          bool                   `protobuf:"varint,15,opt,name=gpu_enabled,json=gpuEnabled,proto3" json:"gpu_enabled,omitempty"`
+	Description         string                 `protobuf:"bytes,16,opt,name=description,proto3" json:"description,omitempty"`
+	NetworkBridge       string                 `protobuf:"bytes,17,opt,name=network_bridge,json=networkBridge,proto3" json:"network_bridge,omitempty"`
+	CpuPercent          float64                `protobuf:"fixed64,18,opt,name=cpu_percent,json=cpuPercent,proto3" json:"cpu_percent,omitempty"`
+	MemoryUsedMib       int64                  `protobuf:"varint,19,opt,name=memory_used_mib,json=memoryUsedMib,proto3" json:"memory_used_mib,omitempty"`
+	InstallRecipe       string                 `protobuf:"bytes,20,opt,name=install_recipe,json=installRecipe,proto3" json:"install_recipe,omitempty"`
+	InstallScriptUrl    string                 `protobuf:"bytes,21,opt,name=install_script_url,json=installScriptUrl,proto3" json:"install_script_url,omitempty"`
+	TemplateDownloadUrl string                 `protobuf:"bytes,22,opt,name=template_download_url,json=templateDownloadUrl,proto3" json:"template_download_url,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *LxcContainer) Reset() {
@@ -283,6 +284,13 @@ func (x *LxcContainer) GetInstallRecipe() string {
 func (x *LxcContainer) GetInstallScriptUrl() string {
 	if x != nil {
 		return x.InstallScriptUrl
+	}
+	return ""
+}
+
+func (x *LxcContainer) GetTemplateDownloadUrl() string {
+	if x != nil {
+		return x.TemplateDownloadUrl
 	}
 	return ""
 }
@@ -1391,7 +1399,7 @@ const file_nas_v1_lxc_proto_rawDesc = "" +
 	"\rLxcMountPoint\x12\x1b\n" +
 	"\thost_path\x18\x01 \x01(\tR\bhostPath\x12%\n" +
 	"\x0econtainer_path\x18\x02 \x01(\tR\rcontainerPath\x12\x1b\n" +
-	"\tread_only\x18\x03 \x01(\bR\breadOnly\"\xfd\x06\n" +
+	"\tread_only\x18\x03 \x01(\bR\breadOnly\"\xb1\a\n" +
 	"\fLxcContainer\x12\x18\n" +
 	"\x04name\x18\x01 \x01(\tB\x04\xe2A\x01\bR\x04name\x12+\n" +
 	"\x0econtainer_name\x18\x02 \x01(\tB\x04\xe2A\x01\x03R\rcontainerName\x12\x1a\n" +
@@ -1417,7 +1425,8 @@ const file_nas_v1_lxc_proto_rawDesc = "" +
 	"cpuPercent\x12,\n" +
 	"\x0fmemory_used_mib\x18\x13 \x01(\x03B\x04\xe2A\x01\x03R\rmemoryUsedMib\x12%\n" +
 	"\x0einstall_recipe\x18\x14 \x01(\tR\rinstallRecipe\x12,\n" +
-	"\x12install_script_url\x18\x15 \x01(\tR\x10installScriptUrl:\\\xeaAY\n" +
+	"\x12install_script_url\x18\x15 \x01(\tR\x10installScriptUrl\x122\n" +
+	"\x15template_download_url\x18\x16 \x01(\tR\x13templateDownloadUrl:\\\xeaAY\n" +
 	"\x1bnas.sigxcpu.io/LxcContainer\x12\x1dlxcContainers/{lxc_container}*\rlxcContainers2\flxcContainer\"n\n" +
 	"\x18ListLxcContainersRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +

@@ -643,6 +643,7 @@ export function mapLxcContainer(raw: any): LxcContainer {
     memoryUsedMib: normalizeInt64(raw?.memoryUsedMib ?? raw?.memory_used_mib ?? 0),
     installRecipe: raw?.installRecipe ?? raw?.install_recipe ?? undefined,
     installScriptUrl: raw?.installScriptUrl ?? raw?.install_script_url ?? undefined,
+    templateDownloadUrl: raw?.templateDownloadUrl ?? raw?.template_download_url ?? undefined,
   };
 }
 
@@ -1661,6 +1662,7 @@ export class HttpLxcAdapter implements LxcPort {
       networkBridge: container.networkBridge,
       installRecipe: container.installRecipe,
       installScriptUrl: container.installScriptUrl,
+      templateDownloadUrl: container.templateDownloadUrl,
     };
     const raw = await this.client.post<any>('lxcContainers', payload, {
       lxcContainerId: containerId,
@@ -1690,6 +1692,7 @@ export class HttpLxcAdapter implements LxcPort {
       networkBridge: container.networkBridge,
       installRecipe: container.installRecipe,
       installScriptUrl: container.installScriptUrl,
+      templateDownloadUrl: container.templateDownloadUrl,
     };
     const raw = await this.client.patch<any>(name, { lxcContainer: payload }, updateMask ?? []);
     return mapLxcContainer(raw);
