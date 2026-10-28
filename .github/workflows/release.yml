@@ -15,8 +15,8 @@ permissions:
   contents: write
 
 jobs:
-  release-binaries:
-    name: Build & Release Binaries
+  build-binaries:
+    name: Build Binaries (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -65,20 +65,18 @@ jobs:
           tar -czf "dist/${OUTPUT_NAME}.tar.gz" -C dist "${OUTPUT_NAME}"
           cd dist && sha256sum "${OUTPUT_NAME}.tar.gz" > "${OUTPUT_NAME}.tar.gz.sha256"
 
-      - name: Publish Release Assets
-        uses: softprops/action-gh-release@v2
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ inputs.tag || github.ref_name }}
-          files: |
+          name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
             dist/*.tar.gz
             dist/*.sha256
             dist/nasctl-*
-          draft: false
-          prerelease: false
-          generate_release_notes: true
+          retention-days: 1
 
-  release-iso:
-    name: Build & Release Appliance ISO
+  build-iso:
+    name: Build Appliance ISO
     runs-on: ubuntu-latest
 
     steps:
@@ -134,12 +132,37 @@ jobs:
           cd release-iso
           sha256sum "${ISO_NAME}" > "${ISO_NAME}.sha256"
 
-      - name: Publish ISO Release Assets
+      - name: Upload ISO Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: appliance-iso
+          path: release-iso/*
+          retention-days: 1
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-binaries, build-iso]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: List Release Assets
+        run: |
+          ls -la release-assets
+
+      - name: Publish Release Assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
-          files: |
-            release-iso/*.iso
-            release-iso/*.sha256
+          files: release-assets/*
           draft: false
           prerelease: false
+          generate_release_notes: true
