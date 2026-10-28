@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import OverviewView from '../src/ui/views/OverviewView.vue';
+import WidgetCpu from '../src/ui/dashboard/widgets/WidgetCpu.vue';
+import WidgetMemory from '../src/ui/dashboard/widgets/WidgetMemory.vue';
 import { nasState } from '../src/ui/store';
 import { formatUptime, type ZfsPool } from '../src/domain/models';
 
@@ -157,21 +159,33 @@ describe('Overview Dashboard & Telemetry', () => {
     const wrapper = mount(OverviewView);
 
     expect(wrapper.text()).toContain('AMD Ryzen 9 9950X 16-Core Processor');
-    expect(wrapper.text()).toContain('16 Physical Cores · 32 Logical Threads');
+    expect(wrapper.text()).toContain('32 Logical Threads (16 Cores)');
     expect(wrapper.text()).toContain('48.5 °C');
     expect(wrapper.text()).toContain('0.65'); // load1
     expect(wrapper.text()).toContain('0.82'); // load5
-    expect(wrapper.text()).toContain('0.95'); // load15
   });
 
-  it('renders RAM information with pie chart breakdown and formatted values', () => {
+  it('renders RAM information and formatted values in overview KPI', () => {
     const wrapper = mount(OverviewView);
 
-    expect(wrapper.text()).toContain('Memory');
-    expect(wrapper.text()).toContain('Services & Apps');
-    expect(wrapper.text()).toContain('ZFS ARC Cache');
-    expect(wrapper.text()).toContain('Buffers / Cache');
-    expect(wrapper.text()).toContain('Free RAM');
+    expect(wrapper.text()).toContain('Memory (RAM)');
+    expect(wrapper.text()).toContain('Services: 12 GiB');
+    expect(wrapper.text()).toContain('ARC: 12 GiB');
+    expect(wrapper.text()).toContain('Free: 16 GiB');
+  });
+
+  it('renders catalog WidgetMemory and WidgetCpu with chart breakdowns when added', () => {
+    const memWrapper = mount(WidgetMemory);
+    expect(memWrapper.text()).toContain('Memory');
+    expect(memWrapper.text()).toContain('Services & Apps');
+    expect(memWrapper.text()).toContain('ZFS ARC Cache');
+    expect(memWrapper.text()).toContain('Buffers / Cache');
+    expect(memWrapper.text()).toContain('Free RAM');
+
+    const cpuWrapper = mount(WidgetCpu);
+    expect(cpuWrapper.text()).toContain('Processor');
+    expect(cpuWrapper.text()).toContain('AMD Ryzen 9 9950X 16-Core Processor');
+    expect(cpuWrapper.text()).toContain('16 Physical Cores · 32 Logical Threads');
   });
 
   it('renders fastfetch / neofetch hardware specification card', () => {
@@ -262,7 +276,7 @@ describe('Overview Dashboard & Telemetry', () => {
 
       // Should now have class col-span-6
       expect(firstWidget.classes()).toContain('col-span-6');
-      expect(store.get('nas_dashboard_layout_v1')).toContain('"colSpan":6');
+      expect(store.get('nas_dashboard_layout_v2')).toContain('"colSpan":6');
     });
 
     it('allows removing a widget from the dashboard', async () => {
@@ -270,14 +284,14 @@ describe('Overview Dashboard & Telemetry', () => {
       await wrapper.find('.edit-dashboard-btn').trigger('click');
 
       const initialCount = wrapper.findAll('.widget-wrapper').length;
-      expect(initialCount).toBe(6);
+      expect(initialCount).toBe(4);
 
       // Remove the first widget
       const removeBtn = wrapper.find('.remove-btn');
       await removeBtn.trigger('click');
 
       expect(wrapper.findAll('.widget-wrapper').length).toBe(initialCount - 1);
-      expect(store.get('nas_dashboard_layout_v1')).toBeDefined();
+      expect(store.get('nas_dashboard_layout_v2')).toBeDefined();
     });
 
     it('allows reordering widgets using move left/right buttons', async () => {
@@ -334,11 +348,11 @@ describe('Overview Dashboard & Telemetry', () => {
       // Remove a couple widgets
       await wrapper.find('.remove-btn').trigger('click');
       await wrapper.find('.remove-btn').trigger('click');
-      expect(wrapper.findAll('.widget-wrapper').length).toBe(4);
+      expect(wrapper.findAll('.widget-wrapper').length).toBe(2);
 
       // Click Reset Default
       await wrapper.find('.reset-layout-btn').trigger('click');
-      expect(wrapper.findAll('.widget-wrapper').length).toBe(6);
+      expect(wrapper.findAll('.widget-wrapper').length).toBe(4);
     });
 
     it('reorders widgets via drag and drop', async () => {

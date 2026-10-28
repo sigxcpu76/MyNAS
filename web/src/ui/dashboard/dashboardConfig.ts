@@ -103,18 +103,28 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardWidgetConfig[] = [
   { id: 'widget-kpis', type: 'kpis', colSpan: 12 },
   { id: 'widget-pools', type: 'pools', colSpan: 12 },
-  { id: 'widget-cpu', type: 'cpu', colSpan: 6 },
-  { id: 'widget-memory', type: 'memory', colSpan: 6 },
   { id: 'widget-system', type: 'system', colSpan: 6 },
   { id: 'widget-network', type: 'network', colSpan: 6 },
 ];
 
-export const STORAGE_KEY = 'nas_dashboard_layout_v1';
+export const STORAGE_KEY = 'nas_dashboard_layout_v2';
 
 export function loadDashboardLayout(): DashboardWidgetConfig[] {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
+      let raw = window.localStorage.getItem(STORAGE_KEY);
+      // Migrate from v1 if v2 is not yet saved: filter out cpu and memory big cards
+      if (!raw) {
+        const v1Raw = window.localStorage.getItem('nas_dashboard_layout_v1');
+        if (v1Raw) {
+          const v1Parsed = JSON.parse(v1Raw);
+          if (Array.isArray(v1Parsed)) {
+            const migrated = v1Parsed.filter((w: any) => w && w.type !== 'cpu' && w.type !== 'memory');
+            saveDashboardLayout(migrated);
+            return migrated;
+          }
+        }
+      }
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
