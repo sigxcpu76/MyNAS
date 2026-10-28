@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
-import { mdiClose, mdiCog, mdiDelete, mdiPencil, mdiPlus } from '@mdi/js';
+import {
+  mdiClose,
+  mdiCog,
+  mdiDelete,
+  mdiFolderNetwork,
+  mdiPencil,
+  mdiPlus,
+  mdiWeb,
+} from '@mdi/js';
 import { services } from '../../container';
 import type { CifsGlobalConfig, CifsShare, WebdavShare } from '../../domain/models';
 import MdiIcon from '../components/MdiIcon.vue';
@@ -11,6 +19,23 @@ import UserGroupSelector from '../components/UserGroupSelector.vue';
 import { useTableSort } from '../composables/useTableSort';
 import { getModuleAvailability, nasState, notify } from '../store';
 import { confirmDelete } from '../modal';
+import { navigateTo } from '../router';
+
+const props = withDefaults(
+  defineProps<{
+    activeSubtab?: 'cifs' | 'webdav' | 'all';
+  }>(),
+  {
+    activeSubtab: undefined,
+  }
+);
+
+const currentSubtab = computed<'cifs' | 'webdav' | 'all'>(() => {
+  if (props.activeSubtab) return props.activeSubtab;
+  if (nasState.activeTab === 'shares-webdav') return 'webdav';
+  if (nasState.activeTab === 'shares-cifs') return 'cifs';
+  return 'all';
+});
 
 const cifsSort = useTableSort(
   () => nasState.cifsShares,
@@ -149,15 +174,15 @@ async function handleSaveGlobalSettings() {
       security: globalForm.security.trim() || 'user',
       mapToGuest: globalForm.mapToGuest,
       guestAccount: globalForm.guestAccount.trim() || 'nobody',
-      maxLogSize: Number(globalForm.maxLogSize) || 50,
+      maxLogSize: globalForm.maxLogSize || 50,
       disableSpoolss: globalForm.disableSpoolss,
       fruitAapl: globalForm.fruitAapl,
       wsddEnabled: globalForm.wsddEnabled,
     });
     nasState.cifsGlobalConfig = updated;
     Object.assign(globalForm, updated);
-    notify('success', 'Samba [global] settings saved and applied');
     showGlobalSettings.value = false;
+    notify('success', 'Samba [global] settings saved');
   } catch (err: any) {
     notify('error', err?.message || 'Failed to update Samba settings');
   }
@@ -183,23 +208,23 @@ async function handleCreateCifs() {
       .filter(Boolean);
 
     const created = await services.shares.createCifsShare(cifsForm.shareId, {
-      path: cifsForm.path.trim(),
-      comment: cifsForm.comment.trim(),
+      path: cifsForm.path,
+      comment: cifsForm.comment,
       validUsers,
       validGroups,
       readList,
       writeList,
-      forceUser: cifsForm.forceUser.trim(),
-      forceGroup: cifsForm.forceGroup.trim(),
-      guestAccount: cifsForm.guestAccount.trim(),
+      forceUser: cifsForm.forceUser.trim() || undefined,
+      forceGroup: cifsForm.forceGroup.trim() || undefined,
+      guestAccount: cifsForm.guestAccount.trim() || undefined,
       readOnly: cifsForm.readOnly,
       guestOk: cifsForm.guestOk,
       guestOnly: cifsForm.guestOnly,
       browseable: cifsForm.browseable,
-      createMask: cifsForm.createMask.trim() || '0664',
-      directoryMask: cifsForm.directoryMask.trim() || '0775',
-      forceCreateMode: cifsForm.forceCreateMode.trim() || '0664',
-      forceDirectoryMode: cifsForm.forceDirectoryMode.trim() || '0775',
+      createMask: cifsForm.createMask.trim() || undefined,
+      directoryMask: cifsForm.directoryMask.trim() || undefined,
+      forceCreateMode: cifsForm.forceCreateMode.trim() || undefined,
+      forceDirectoryMode: cifsForm.forceDirectoryMode.trim() || undefined,
       shadowCopy: cifsForm.shadowCopy,
       timeMachine: cifsForm.timeMachine,
       recycleBin: cifsForm.recycleBin,
@@ -217,7 +242,7 @@ async function handleCreateCifs() {
 function startEditCifs(share: CifsShare) {
   editingCifs.value = share;
   editCifsForm.path = share.path;
-  editCifsForm.comment = share.comment;
+  editCifsForm.comment = share.comment || '';
   editCifsForm.validUsersText = (share.validUsers || []).join(', ');
   editCifsForm.validGroupsText = (share.validGroups || []).join(', ');
   editCifsForm.readListText = (share.readList || []).join(', ');
@@ -262,23 +287,23 @@ async function handleSaveCifsEdit() {
     await services.shares.updateCifsShare(
       editingCifs.value.name,
       {
-        path: editCifsForm.path.trim(),
-        comment: editCifsForm.comment.trim(),
+        path: editCifsForm.path,
+        comment: editCifsForm.comment,
         validUsers,
         validGroups,
         readList,
         writeList,
-        forceUser: editCifsForm.forceUser.trim(),
-        forceGroup: editCifsForm.forceGroup.trim(),
-        guestAccount: editCifsForm.guestAccount.trim(),
+        forceUser: editCifsForm.forceUser.trim() || undefined,
+        forceGroup: editCifsForm.forceGroup.trim() || undefined,
+        guestAccount: editCifsForm.guestAccount.trim() || undefined,
         readOnly: editCifsForm.readOnly,
         guestOk: editCifsForm.guestOk,
         guestOnly: editCifsForm.guestOnly,
         browseable: editCifsForm.browseable,
-        createMask: editCifsForm.createMask.trim(),
-        directoryMask: editCifsForm.directoryMask.trim(),
-        forceCreateMode: editCifsForm.forceCreateMode.trim(),
-        forceDirectoryMode: editCifsForm.forceDirectoryMode.trim(),
+        createMask: editCifsForm.createMask.trim() || undefined,
+        directoryMask: editCifsForm.directoryMask.trim() || undefined,
+        forceCreateMode: editCifsForm.forceCreateMode.trim() || undefined,
+        forceDirectoryMode: editCifsForm.forceDirectoryMode.trim() || undefined,
         shadowCopy: editCifsForm.shadowCopy,
         timeMachine: editCifsForm.timeMachine,
         recycleBin: editCifsForm.recycleBin,
@@ -428,16 +453,45 @@ async function handleDeleteWebdav(share: WebdavShare) {
 </script>
 
 <template>
-  <div class="grid-2">
-    <!-- CIFS / Samba Shares Card -->
-    <div class="card">
+  <div class="shares-view-container">
+    <!-- Sub-navigation Pill Bar -->
+    <div class="shares-subnav">
+      <div class="subnav-pill-group">
+        <button
+          type="button"
+          class="subnav-pill"
+          :class="{ active: currentSubtab === 'cifs' || (currentSubtab === 'all' && nasState.activeTab !== 'shares-webdav') }"
+          @click="navigateTo('shares-cifs')"
+        >
+          <MdiIcon :path="mdiFolderNetwork" size="16" />
+          <span>Windows (SMB / CIFS)</span>
+          <span class="subnav-badge">{{ nasState.cifsShares.length }}</span>
+        </button>
+        <button
+          type="button"
+          class="subnav-pill"
+          :class="{ active: currentSubtab === 'webdav' }"
+          @click="navigateTo('shares-webdav')"
+        >
+          <MdiIcon :path="mdiWeb" size="16" />
+          <span>WebDAV</span>
+          <span class="subnav-badge">{{ nasState.webdavShares.length }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- CIFS / Samba Shares Card (Wide Table) -->
+    <div v-if="currentSubtab === 'cifs' || currentSubtab === 'all'" class="card shares-wide-card">
       <div class="card-header">
         <div>
-          <h3 class="card-title">SMB Shares</h3>
+          <h3 class="card-title">SMB / CIFS Shares</h3>
+          <p class="card-subtitle" style="margin-top: 2px">
+            High-performance network file sharing for Windows, macOS, and Linux clients via Samba.
+          </p>
         </div>
-        <div style="display: flex; gap: 8px">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap">
           <button
-            class="btn btn-sm"
+            class="btn btn-sm btn-secondary"
             :disabled="!cifsModuleStatus.enabled"
             @click="showGlobalSettings = true"
           >
@@ -459,7 +513,7 @@ async function handleDeleteWebdav(share: WebdavShare) {
         v-if="!cifsModuleStatus.enabled"
         style="
           padding: 12px;
-          margin-bottom: 12px;
+          margin-bottom: 14px;
           border-radius: 8px;
           background: var(--danger-bg);
           border: 1px solid var(--danger-border);
@@ -478,8 +532,8 @@ async function handleDeleteWebdav(share: WebdavShare) {
           background: var(--bg-base);
           border: 1px solid var(--border-strong);
           border-radius: 8px;
-          padding: 14px;
-          margin-bottom: 14px;
+          padding: 16px;
+          margin-bottom: 16px;
         "
       >
         <div class="form-grid">
@@ -602,7 +656,7 @@ async function handleDeleteWebdav(share: WebdavShare) {
           </div>
         </div>
 
-        <div style="display: flex; justify-content: flex-end; margin-top: 12px">
+        <div style="display: flex; justify-content: flex-end; margin-top: 14px">
           <button type="submit" class="btn btn-primary btn-sm">Create SMB Share</button>
         </div>
       </form>
@@ -614,11 +668,11 @@ async function handleDeleteWebdav(share: WebdavShare) {
           background: rgba(56, 189, 248, 0.08);
           border: 1px solid var(--accent-primary);
           border-radius: 8px;
-          padding: 12px;
-          margin-bottom: 14px;
+          padding: 14px;
+          margin-bottom: 16px;
         "
       >
-        <div style="font-weight: 600; margin-bottom: 8px; font-size: 13px">
+        <div style="font-weight: 600; margin-bottom: 10px; font-size: 14px">
           Edit SMB Share: {{ editingCifs.shareName }}
         </div>
         <div class="form-grid">
@@ -737,20 +791,22 @@ async function handleDeleteWebdav(share: WebdavShare) {
           </div>
         </div>
 
-        <div style="display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px">
+        <div style="display: flex; justify-content: flex-end; gap: 6px; margin-top: 12px">
           <button class="btn btn-sm" @click="editingCifs = null">Cancel</button>
           <button class="btn btn-primary btn-sm" @click="handleSaveCifsEdit">Save Share</button>
         </div>
       </div>
 
-      <!-- CIFS Shares Table -->
+      <!-- CIFS Shares Wide Table -->
       <div class="table-wrap">
         <table class="data-table">
           <thead>
             <tr>
               <SortableTh :sort="cifsSort" sort-key="share">SMB Share</SortableTh>
-              <SortableTh :sort="cifsSort" sort-key="acl">Access ACLs</SortableTh>
-              <SortableTh :sort="cifsSort" sort-key="mode">Permissions & Features</SortableTh>
+              <th>Filesystem Path & Description</th>
+              <SortableTh :sort="cifsSort" sort-key="acl">Access Control</SortableTh>
+              <SortableTh :sort="cifsSort" sort-key="mode">Permissions</SortableTh>
+              <th>VFS Features & Masks</th>
               <th style="width: 90px; text-align: right">Actions</th>
             </tr>
           </thead>
@@ -760,7 +816,13 @@ async function handleDeleteWebdav(share: WebdavShare) {
                 <td>
                   <div style="display: flex; flex-direction: column; gap: 4px">
                     <SkeletonBox width="140px" height="15px" />
-                    <SkeletonBox width="190px" height="11px" />
+                    <SkeletonBox width="80px" height="11px" />
+                  </div>
+                </td>
+                <td>
+                  <div style="display: flex; flex-direction: column; gap: 4px">
+                    <SkeletonBox width="180px" height="13px" />
+                    <SkeletonBox width="120px" height="11px" />
                   </div>
                 </td>
                 <td>
@@ -775,6 +837,9 @@ async function handleDeleteWebdav(share: WebdavShare) {
                     <SkeletonBox width="45px" height="20px" rounded="10px" />
                   </div>
                 </td>
+                <td>
+                  <SkeletonBox width="120px" height="16px" />
+                </td>
                 <td style="text-align: right">
                   <div style="display: inline-flex; gap: 6px; justify-content: flex-end">
                     <SkeletonBox width="28px" height="28px" rounded="4px" />
@@ -785,7 +850,7 @@ async function handleDeleteWebdav(share: WebdavShare) {
             </template>
 
             <tr v-else-if="nasState.cifsShares.length === 0">
-              <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 32px">
+              <td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 36px">
                 No SMB shares configured.
               </td>
             </tr>
@@ -793,33 +858,50 @@ async function handleDeleteWebdav(share: WebdavShare) {
             <tr v-for="s in cifsSort.sorted.value" :key="s.name">
               <td>
                 <div style="display: flex; align-items: center; gap: 6px">
-                  <span class="mono" style="font-weight: 600">//nas/{{ s.shareName }}</span>
+                  <span class="mono" style="font-weight: 600; font-size: 13.5px; color: var(--accent-primary)">
+                    //nas/{{ s.shareName }}
+                  </span>
                   <span v-if="!s.browseable" class="badge badge-warning" style="font-size: 10px">Hidden</span>
                 </div>
-                <div style="font-size: 11px; color: var(--text-secondary)">{{ s.comment || s.path }}</div>
+              </td>
+              <td>
+                <div class="mono" style="font-size: 12px; color: var(--text-primary)">{{ s.path }}</div>
+                <div v-if="s.comment" style="font-size: 11px; color: var(--text-secondary); margin-top: 2px">
+                  {{ s.comment }}
+                </div>
               </td>
               <td class="mono" style="font-size: 11.5px">
-                <div>Users: {{ (s.validUsers || []).join(', ') || 'all valid' }}</div>
-                <div>Groups: {{ (s.validGroups || []).join(', ') || '—' }}</div>
+                <div>
+                  <span style="color: var(--text-secondary)">Users:</span>
+                  <strong>{{ (s.validUsers || []).join(', ') || 'all valid' }}</strong>
+                </div>
+                <div>
+                  <span style="color: var(--text-secondary)">Groups:</span>
+                  {{ (s.validGroups || []).join(', ') || '—' }}
+                </div>
                 <div v-if="s.forceUser || s.forceGroup" style="color: var(--text-muted); font-size: 10.5px">
                   Force: {{ s.forceUser || '—' }} / {{ s.forceGroup || '—' }}
                 </div>
               </td>
               <td>
-                <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 3px">
+                <div style="display: flex; gap: 4px; flex-wrap: wrap">
                   <span class="badge" :class="s.readOnly ? 'badge-warning' : 'badge-success'">
                     {{ s.readOnly ? 'RO' : 'RW' }}
                   </span>
                   <span v-if="s.guestOk" class="badge badge-info">
                     Guest{{ s.guestOnly ? ' Only' : '' }}
                   </span>
-                  <span v-if="s.shadowCopy" class="badge badge-purple" title="ZFS Snapshots">
+                </div>
+              </td>
+              <td>
+                <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 3px">
+                  <span v-if="s.shadowCopy" class="badge badge-purple" title="ZFS Snapshots (Windows Previous Versions)">
                     Snapshots
                   </span>
-                  <span v-if="s.timeMachine" class="badge badge-info" title="macOS Time Machine">
+                  <span v-if="s.timeMachine" class="badge badge-info" title="macOS Time Machine Target">
                     Time Machine
                   </span>
-                  <span v-if="s.recycleBin" class="badge badge-secondary" title="Recycle Bin">
+                  <span v-if="s.recycleBin" class="badge badge-secondary" title="Recycle Bin Enabled">
                     Recycle
                   </span>
                 </div>
@@ -853,11 +935,14 @@ async function handleDeleteWebdav(share: WebdavShare) {
       </div>
     </div>
 
-    <!-- WebDAV Shares Card -->
-    <div class="card">
+    <!-- WebDAV Shares Card (Wide Table) -->
+    <div v-if="currentSubtab === 'webdav' || currentSubtab === 'all'" class="card shares-wide-card">
       <div class="card-header">
         <div>
-          <h3 class="card-title">WebDAV Shares</h3>
+          <h3 class="card-title">WebDAV Endpoints</h3>
+          <p class="card-subtitle" style="margin-top: 2px">
+            HTTP / HTTPS file sharing endpoints for Nextcloud, mobile devices, and remote syncing.
+          </p>
         </div>
         <button class="btn btn-primary btn-sm" @click="showCreateWebdav = !showCreateWebdav">
           <MdiIcon :path="showCreateWebdav ? mdiClose : mdiPlus" size="14" style="margin-right: 4px" />
@@ -872,8 +957,8 @@ async function handleDeleteWebdav(share: WebdavShare) {
           background: var(--bg-base);
           border: 1px solid var(--border-strong);
           border-radius: 8px;
-          padding: 14px;
-          margin-bottom: 14px;
+          padding: 16px;
+          margin-bottom: 16px;
         "
       >
         <div class="form-grid">
@@ -882,12 +967,16 @@ async function handleDeleteWebdav(share: WebdavShare) {
             <input v-model="webdavForm.shareId" class="input mono" placeholder="documents" required />
           </div>
           <div class="form-group">
-            <label>Path</label>
+            <label>Filesystem Path</label>
             <PathSelector
               v-model="webdavForm.path"
               placeholder="/mnt/tank/documents"
               required
             />
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <input v-model="webdavForm.description" class="input" placeholder="Documents Store" />
           </div>
           <div class="form-group">
             <label>Allowed Users</label>
@@ -908,7 +997,7 @@ async function handleDeleteWebdav(share: WebdavShare) {
             />
           </div>
         </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px">
           <label style="font-size: 12px; display: flex; align-items: center; gap: 5px">
             <input v-model="webdavForm.readOnly" type="checkbox" /> Read-Only
           </label>
@@ -923,11 +1012,11 @@ async function handleDeleteWebdav(share: WebdavShare) {
           background: rgba(56, 189, 248, 0.08);
           border: 1px solid var(--accent-primary);
           border-radius: 8px;
-          padding: 12px;
-          margin-bottom: 14px;
+          padding: 14px;
+          margin-bottom: 16px;
         "
       >
-        <div style="font-weight: 600; margin-bottom: 8px">
+        <div style="font-weight: 600; margin-bottom: 10px; font-size: 14px">
           Edit {{ editingWebdav.urlPrefix }}
         </div>
         <div class="form-grid">
@@ -948,11 +1037,19 @@ async function handleDeleteWebdav(share: WebdavShare) {
             />
           </div>
           <div class="form-group">
+            <label>Allowed Groups</label>
+            <UserGroupSelector
+              v-model="editWebdavForm.allowedGroupsText"
+              type="group"
+              :multiple="true"
+            />
+          </div>
+          <div class="form-group">
             <label>Description</label>
             <input v-model="editWebdavForm.description" class="input" />
           </div>
         </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px">
           <label style="font-size: 12px; display: flex; align-items: center; gap: 5px">
             <input v-model="editWebdavForm.readOnly" type="checkbox" /> Read-Only
           </label>
@@ -963,13 +1060,16 @@ async function handleDeleteWebdav(share: WebdavShare) {
         </div>
       </div>
 
+      <!-- WebDAV Shares Wide Table -->
       <div class="table-wrap">
         <table class="data-table">
           <thead>
             <tr>
-              <SortableTh :sort="webdavSort" sort-key="endpoint">Endpoint URL</SortableTh>
+              <SortableTh :sort="webdavSort" sort-key="endpoint">WebDAV Endpoint</SortableTh>
+              <th>Target Path & Description</th>
               <SortableTh :sort="webdavSort" sort-key="identity">Allowed Identity</SortableTh>
-              <SortableTh :sort="webdavSort" sort-key="access">Access</SortableTh>
+              <SortableTh :sort="webdavSort" sort-key="access">Permissions</SortableTh>
+              <th>Status</th>
               <th style="width: 90px; text-align: right">Actions</th>
             </tr>
           </thead>
@@ -978,8 +1078,14 @@ async function handleDeleteWebdav(share: WebdavShare) {
               <tr v-for="r in 3" :key="r">
                 <td>
                   <div style="display: flex; flex-direction: column; gap: 4px">
-                    <SkeletonBox width="100px" height="15px" />
-                    <SkeletonBox width="170px" height="11px" />
+                    <SkeletonBox width="140px" height="15px" />
+                    <SkeletonBox width="80px" height="11px" />
+                  </div>
+                </td>
+                <td>
+                  <div style="display: flex; flex-direction: column; gap: 4px">
+                    <SkeletonBox width="180px" height="13px" />
+                    <SkeletonBox width="120px" height="11px" />
                   </div>
                 </td>
                 <td>
@@ -988,7 +1094,8 @@ async function handleDeleteWebdav(share: WebdavShare) {
                     <SkeletonBox width="80px" height="13px" />
                   </div>
                 </td>
-                <td><SkeletonBox width="60px" height="20px" rounded="10px" /></td>
+                <td><SkeletonBox width="45px" height="20px" rounded="10px" /></td>
+                <td><SkeletonBox width="55px" height="20px" rounded="10px" /></td>
                 <td style="text-align: right">
                   <div style="display: inline-flex; gap: 6px; justify-content: flex-end">
                     <SkeletonBox width="28px" height="28px" rounded="4px" />
@@ -999,23 +1106,41 @@ async function handleDeleteWebdav(share: WebdavShare) {
             </template>
 
             <tr v-else-if="nasState.webdavShares.length === 0">
-              <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 32px">
+              <td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 36px">
                 No WebDAV shares configured.
               </td>
             </tr>
 
             <tr v-for="w in webdavSort.sorted.value" :key="w.name">
               <td>
-                <div class="mono" style="font-weight: 600; color: var(--success-text)">{{ w.urlPrefix }}</div>
-                <div style="font-size: 11px; color: var(--text-secondary)">{{ w.description }}</div>
+                <div class="mono" style="font-weight: 600; font-size: 13.5px; color: var(--accent-primary)">
+                  {{ w.urlPrefix }}
+                </div>
+              </td>
+              <td>
+                <div class="mono" style="font-size: 12px; color: var(--text-primary)">{{ w.path }}</div>
+                <div v-if="w.description" style="font-size: 11px; color: var(--text-secondary); margin-top: 2px">
+                  {{ w.description }}
+                </div>
               </td>
               <td class="mono" style="font-size: 11.5px">
-                <div>Users: {{ (w.allowedUsers || []).join(', ') || 'authenticated' }}</div>
-                <div>Groups: {{ (w.allowedGroups || []).join(', ') || '—' }}</div>
+                <div>
+                  <span style="color: var(--text-secondary)">Users:</span>
+                  <strong>{{ (w.allowedUsers || []).join(', ') || 'authenticated' }}</strong>
+                </div>
+                <div>
+                  <span style="color: var(--text-secondary)">Groups:</span>
+                  {{ (w.allowedGroups || []).join(', ') || '—' }}
+                </div>
               </td>
               <td>
                 <span class="badge" :class="w.readOnly ? 'badge-warning' : 'badge-success'">
                   {{ w.readOnly ? 'RO' : 'RW' }}
+                </span>
+              </td>
+              <td>
+                <span class="badge" :class="w.enabled ? 'badge-success' : 'badge-neutral'">
+                  {{ w.enabled ? 'ONLINE' : 'DISABLED' }}
                 </span>
               </td>
               <td style="text-align: right">
@@ -1111,3 +1236,67 @@ async function handleDeleteWebdav(share: WebdavShare) {
     </div>
   </div>
 </template>
+
+<style scoped>
+.shares-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.shares-subnav {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 2px;
+}
+
+.subnav-pill-group {
+  display: inline-flex;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 4px;
+}
+
+.subnav-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.subnav-pill:hover {
+  color: var(--text-primary);
+}
+
+.subnav-pill.active {
+  background: var(--bg-tertiary);
+  color: var(--accent-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.subnav-badge {
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 11px;
+  color: var(--text-primary);
+  font-family: var(--font-mono, monospace);
+}
+
+.shares-wide-card {
+  width: 100%;
+}
+</style>

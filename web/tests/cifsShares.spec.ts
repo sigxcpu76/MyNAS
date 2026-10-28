@@ -182,4 +182,33 @@ describe('CIFS Shares & Global Config Mappers', () => {
     expect(deleteWebdavBtn.classes()).toContain('btn-danger');
     expect(deleteWebdavBtn.findComponent(MdiIcon).exists()).toBe(true);
   });
+
+  it('renders nested subtab navigation and switches between CIFS and WebDAV wide tables', async () => {
+    const { mount } = await import('@vue/test-utils');
+    const { default: SharesView } = await import('../src/ui/views/SharesView.vue');
+    const { nasState } = await import('../src/ui/store');
+
+    // Mount with activeSubtab = 'cifs'
+    nasState.activeTab = 'shares-cifs';
+    const wrapper = mount(SharesView, {
+      props: {
+        activeSubtab: 'cifs',
+      },
+    });
+
+    expect(wrapper.find('.shares-subnav').exists()).toBe(true);
+    const subnavPills = wrapper.findAll('.subnav-pill');
+    expect(subnavPills.length).toBe(2);
+    expect(subnavPills[0].text()).toContain('Windows (SMB / CIFS)');
+    expect(subnavPills[1].text()).toContain('WebDAV');
+
+    // Only CIFS card should be present
+    expect(wrapper.text()).toContain('SMB / CIFS Shares');
+    expect(wrapper.text()).not.toContain('WebDAV Endpoints');
+
+    // Re-mount or update prop to 'webdav'
+    await wrapper.setProps({ activeSubtab: 'webdav' });
+    expect(wrapper.text()).toContain('WebDAV Endpoints');
+    expect(wrapper.text()).not.toContain('SMB / CIFS Shares');
+  });
 });

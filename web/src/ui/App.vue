@@ -19,6 +19,7 @@ import {
   mdiRefresh,
   mdiShieldCheck,
   mdiViewDashboard,
+  mdiWeb,
 } from '@mdi/js';
 import { services } from '../container';
 import {
@@ -97,10 +98,45 @@ const isStorageActive = computed(() =>
   nasState.activeTab === 'storage-volumes'
 );
 
+const isSharesActive = computed(() =>
+  nasState.activeTab === 'shares' ||
+  nasState.activeTab === 'shares-cifs' ||
+  nasState.activeTab === 'shares-webdav'
+);
+
+const sharesExpanded = ref(true);
+
 function toggleStorageTree() {
   storageExpanded.value = !storageExpanded.value;
   if (!isStorageActive.value) {
     navigateTo('storage-disks');
+  }
+}
+
+function toggleSharesTree() {
+  sharesExpanded.value = !sharesExpanded.value;
+  if (!isSharesActive.value) {
+    navigateTo('shares-cifs');
+  }
+}
+
+function isGroupActive(item: NavItem): boolean {
+  if (item.label === 'Storage') return isStorageActive.value;
+  if (item.label === 'Shares') return isSharesActive.value;
+  return item.children?.some((c) => c.id === nasState.activeTab) ?? false;
+}
+
+function isGroupExpanded(item: NavItem): boolean {
+  if (item.label === 'Storage') return storageExpanded.value;
+  if (item.label === 'Shares') return sharesExpanded.value;
+  return true;
+}
+
+function toggleGroupTree(item: NavItem) {
+  if (item.label === 'Storage') {
+    toggleStorageTree();
+  } else if (item.label === 'Shares') {
+    toggleSharesTree();
   }
 }
 
@@ -128,6 +164,7 @@ const navItems = computed<NavItem[]>(() => {
   const kvm = getModuleAvailability('kvm');
   const docker = getModuleAvailability('docker');
   const lxc = getModuleAvailability('lxc');
+  const cifs = getModuleAvailability('cifs');
   return [
     { id: 'overview', label: 'Overview', icon: mdiViewDashboard, path: '/' },
     {
@@ -199,11 +236,28 @@ const navItems = computed<NavItem[]>(() => {
       path: getPathFromTab('lxc'),
     },
     {
-      id: 'shares',
+      id: 'shares-cifs',
       label: 'Shares',
       icon: mdiFolderNetwork,
       badge: nasState.cifsShares.length + nasState.webdavShares.length,
-      path: getPathFromTab('shares'),
+      path: '/shares/cifs',
+      children: [
+        {
+          id: 'shares-cifs',
+          label: 'CIFS (SMB)',
+          icon: mdiFolderNetwork,
+          path: '/shares/cifs',
+          badge: nasState.cifsShares.length,
+          disabled: !cifs.enabled,
+        },
+        {
+          id: 'shares-webdav',
+          label: 'WebDAV',
+          icon: mdiWeb,
+          path: '/shares/webdav',
+          badge: nasState.webdavShares.length,
+        },
+      ],
     },
     {
       id: 'identity',
@@ -220,10 +274,11 @@ const currentTabLabel = computed(() => {
     if (item.id === nasState.activeTab) return item.label;
     if (item.children) {
       const child = item.children.find((c) => c.id === nasState.activeTab);
-      if (child) return `Storage · ${child.label}`;
+      if (child) return `${item.label} · ${child.label}`;
     }
   }
   if (nasState.activeTab === 'zfs') return 'Storage · Pools';
+  if (nasState.activeTab === 'shares') return 'Shares · CIFS (SMB)';
   return 'Overview';
 });
 
@@ -242,6 +297,9 @@ const activeTabModule = computed<ManagedModule | null>(() => {
     nasState.activeTab === 'lxc'
   ) {
     return nasState.activeTab;
+  }
+  if (nasState.activeTab === 'shares' || nasState.activeTab === 'shares-cifs') {
+    return 'cifs';
   }
   return null;
 });
@@ -303,13 +361,13 @@ onMounted(() => {
 
       <nav class="nav-list">
         <template v-for="item in navItems" :key="item.id">
-          <!-- Tree Branch with Children (e.g. Storage Section) -->
+          <!-- Tree Branch with Children (Storage, Shares) -->
           <div v-if="item.children" class="nav-tree-group">
             <div
               class="nav-item nav-tree-header"
-              :class="{ active: isStorageActive }"
+              :class="{ active: isGroupActive(item) }"
               :style="item.disabled ? 'opacity: 0.65; pointer-events: none' : ''"
-              @click="toggleStorageTree()"
+              @click="toggleGroupTree(item)"
             >
               <div style="display: flex; align-items: center; gap: 10px">
                 <MdiIcon :path="item.icon" size="18" />
@@ -324,21 +382,26 @@ onMounted(() => {
                   {{ item.badge }}
                 </span>
                 <MdiIcon
-                  :path="storageExpanded ? mdiChevronDown : mdiChevronRight"
+                  :path="isGroupExpanded(item) ? mdiChevronDown : mdiChevronRight"
                   size="16"
                   style="color: var(--text-secondary)"
                 />
               </div>
             </div>
 
-            <!-- Nested Sub-items (Disks, Pools, Datasets, Volumes) -->
-            <div v-show="storageExpanded" class="nav-tree-children">
+            <!-- Nested Sub-items -->
+            <div v-show="isGroupExpanded(item)" class="nav-tree-children">
               <a
                 v-for="child in item.children"
                 :key="child.id"
                 :href="child.path"
                 class="nav-item nav-sub-item"
-                :class="{ active: nasState.activeTab === child.id || (child.id === 'storage-pools' && nasState.activeTab === 'zfs') }"
+                :class="{
+                  active:
+                    nasState.activeTab === child.id ||
+                    (child.id === 'storage-pools' && nasState.activeTab === 'zfs') ||
+                    (child.id === 'shares-cifs' && nasState.activeTab === 'shares'),
+                }"
                 @click.prevent="navigateTo(child.id)"
               >
                 <div style="display: flex; align-items: center; gap: 9px">
@@ -533,7 +596,10 @@ onMounted(() => {
             <KvmView v-else-if="nasState.activeTab === 'kvm'" />
             <DockerView v-else-if="nasState.activeTab === 'docker'" />
             <LxcView v-else-if="nasState.activeTab === 'lxc'" />
-            <SharesView v-else-if="nasState.activeTab === 'shares'" />
+            <SharesView
+              v-else-if="nasState.activeTab === 'shares' || nasState.activeTab === 'shares-cifs' || nasState.activeTab === 'shares-webdav'"
+              :active-subtab="nasState.activeTab === 'shares-webdav' ? 'webdav' : 'cifs'"
+            />
             <IdentityView v-else-if="nasState.activeTab === 'identity'" />
           </template>
         </template>

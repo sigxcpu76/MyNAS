@@ -39,6 +39,8 @@ export type NavTab =
   | 'docker'
   | 'lxc'
   | 'shares'
+  | 'shares-cifs'
+  | 'shares-webdav'
   | 'identity'
   | 'vnc-console';
 
