@@ -12,6 +12,7 @@ import {
   mdiFolder,
   mdiInformationOutline,
   mdiLayers,
+  mdiLoading,
   mdiMagnify,
   mdiOpenInNew,
   mdiPause,
@@ -512,7 +513,10 @@ async function toggleAutostart(lx: LxcContainer) {
 // =============================================================================
 // Container Lifecycle & Actions
 // =============================================================================
+const transitioningContainers = reactive<Record<string, 'starting' | 'stopping' | 'restarting' | 'freezing'>>({});
+
 async function handleAction(name: string, verb: 'start' | 'stop' | 'freeze') {
+  transitioningContainers[name] = verb === 'start' ? 'starting' : verb === 'stop' ? 'stopping' : 'freezing';
   try {
     if (verb === 'start') await services.lxc.startContainer(name);
     else if (verb === 'stop') await services.lxc.stopContainer(name);
@@ -521,16 +525,21 @@ async function handleAction(name: string, verb: 'start' | 'stop' | 'freeze') {
     await refreshLxc();
   } catch (err: any) {
     notify('error', err?.message || `Failed to ${verb} LXC container`);
+  } finally {
+    delete transitioningContainers[name];
   }
 }
 
 async function handleRestart(lx: LxcContainer) {
+  transitioningContainers[lx.name] = 'restarting';
   try {
     await services.lxc.restartContainer(lx.name);
     notify('success', `Restarted LXC container ${lx.containerName}`);
     await refreshLxc();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to restart LXC container');
+  } finally {
+    delete transitioningContainers[lx.name];
   }
 }
 
@@ -1159,6 +1168,15 @@ function copyTemplatePath(path: string) {
               <td>
                 <div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap">
                   <span
+                    v-if="transitioningContainers[lx.name]"
+                    class="badge badge-warning pulse-anim"
+                    style="display: inline-flex; align-items: center; gap: 4px"
+                  >
+                    <MdiIcon :path="mdiLoading" size="12" class="spin-icon" />
+                    {{ transitioningContainers[lx.name].toUpperCase() }}...
+                  </span>
+                  <span
+                    v-else
                     class="badge"
                     :class="
                       lx.state === 'RUNNING'
@@ -1221,50 +1239,80 @@ function copyTemplatePath(path: string) {
                 <div style="display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end">
                   <!-- Start Button -->
                   <button
-                    v-if="lx.state !== 'RUNNING'"
+                    v-if="lx.state !== 'RUNNING' || transitioningContainers[lx.name] === 'starting'"
                     class="btn btn-xs btn-success"
-                    title="Start Container"
+                    :class="{ 'btn-loading': transitioningContainers[lx.name] === 'starting' }"
+                    :disabled="Boolean(transitioningContainers[lx.name])"
+                    :title="transitioningContainers[lx.name] === 'starting' ? 'Starting container...' : 'Start Container'"
                     @click="handleAction(lx.name, 'start')"
                   >
-                    <MdiIcon :path="mdiPlay" size="13" />
+                    <MdiIcon
+                      :path="transitioningContainers[lx.name] === 'starting' ? mdiLoading : mdiPlay"
+                      size="13"
+                      :class="{ 'spin-icon': transitioningContainers[lx.name] === 'starting' }"
+                    />
                   </button>
 
                   <!-- Restart Button -->
                   <button
-                    v-if="lx.state === 'RUNNING'"
+                    v-if="lx.state === 'RUNNING' || transitioningContainers[lx.name] === 'restarting'"
                     class="btn btn-xs"
-                    title="Restart Container"
+                    :class="{ 'btn-loading': transitioningContainers[lx.name] === 'restarting' }"
+                    :disabled="Boolean(transitioningContainers[lx.name])"
+                    :title="transitioningContainers[lx.name] === 'restarting' ? 'Restarting container...' : 'Restart Container'"
                     @click="handleRestart(lx)"
                   >
-                    <MdiIcon :path="mdiRestart" size="13" />
+                    <MdiIcon
+                      :path="transitioningContainers[lx.name] === 'restarting' ? mdiLoading : mdiRestart"
+                      size="13"
+                      :class="{ 'spin-icon': transitioningContainers[lx.name] === 'restarting' }"
+                    />
                   </button>
 
                   <!-- Freeze / Unfreeze -->
                   <button
                     v-if="lx.state === 'RUNNING'"
                     class="btn btn-xs"
-                    title="Freeze Container (pause execution)"
+                    :class="{ 'btn-loading': transitioningContainers[lx.name] === 'freezing' }"
+                    :disabled="Boolean(transitioningContainers[lx.name])"
+                    :title="transitioningContainers[lx.name] === 'freezing' ? 'Freezing container...' : 'Freeze Container (pause execution)'"
                     @click="handleAction(lx.name, 'freeze')"
                   >
-                    <MdiIcon :path="mdiPause" size="13" />
+                    <MdiIcon
+                      :path="transitioningContainers[lx.name] === 'freezing' ? mdiLoading : mdiPause"
+                      size="13"
+                      :class="{ 'spin-icon': transitioningContainers[lx.name] === 'freezing' }"
+                    />
                   </button>
                   <button
                     v-else-if="lx.state === 'FROZEN'"
                     class="btn btn-xs btn-success"
+                    :class="{ 'btn-loading': transitioningContainers[lx.name] === 'starting' }"
+                    :disabled="Boolean(transitioningContainers[lx.name])"
                     title="Unfreeze Container"
                     @click="handleAction(lx.name, 'start')"
                   >
-                    <MdiIcon :path="mdiPlay" size="13" />
+                    <MdiIcon
+                      :path="transitioningContainers[lx.name] === 'starting' ? mdiLoading : mdiPlay"
+                      size="13"
+                      :class="{ 'spin-icon': transitioningContainers[lx.name] === 'starting' }"
+                    />
                   </button>
 
                   <!-- Stop Button -->
                   <button
-                    v-if="lx.state !== 'STOPPED'"
+                    v-if="lx.state !== 'STOPPED' || transitioningContainers[lx.name] === 'stopping'"
                     class="btn btn-xs"
-                    title="Stop Container"
+                    :class="{ 'btn-loading': transitioningContainers[lx.name] === 'stopping' }"
+                    :disabled="Boolean(transitioningContainers[lx.name])"
+                    :title="transitioningContainers[lx.name] === 'stopping' ? 'Stopping container...' : 'Stop Container'"
                     @click="handleAction(lx.name, 'stop')"
                   >
-                    <MdiIcon :path="mdiStop" size="13" />
+                    <MdiIcon
+                      :path="transitioningContainers[lx.name] === 'stopping' ? mdiLoading : mdiStop"
+                      size="13"
+                      :class="{ 'spin-icon': transitioningContainers[lx.name] === 'stopping' }"
+                    />
                   </button>
 
                   <!-- Terminal Button -->
@@ -1832,6 +1880,15 @@ function copyTemplatePath(path: string) {
               {{ inspectedContainer.containerName }}
             </h3>
             <span
+              v-if="transitioningContainers[inspectedContainer.name]"
+              class="badge mono badge-warning pulse-anim"
+              style="font-size: 11px; display: inline-flex; align-items: center; gap: 4px"
+            >
+              <MdiIcon :path="mdiLoading" size="11" class="spin-icon" />
+              {{ transitioningContainers[inspectedContainer.name].toUpperCase() }}...
+            </span>
+            <span
+              v-else
               class="badge"
               :class="
                 inspectedContainer.state === 'RUNNING'
@@ -1864,6 +1921,54 @@ function copyTemplatePath(path: string) {
         </div>
 
         <div style="display: flex; gap: 8px; align-items: center">
+          <button
+            v-if="inspectedContainer.state !== 'RUNNING' || transitioningContainers[inspectedContainer.name] === 'starting'"
+            class="btn btn-sm btn-success"
+            :class="{ 'btn-loading': transitioningContainers[inspectedContainer.name] === 'starting' }"
+            :disabled="Boolean(transitioningContainers[inspectedContainer.name])"
+            @click="handleAction(inspectedContainer.name, 'start')"
+          >
+            <MdiIcon
+              :path="transitioningContainers[inspectedContainer.name] === 'starting' ? mdiLoading : mdiPlay"
+              size="14"
+              :class="{ 'spin-icon': transitioningContainers[inspectedContainer.name] === 'starting' }"
+              style="margin-right: 4px"
+            />
+            {{ transitioningContainers[inspectedContainer.name] === 'starting' ? 'Starting...' : 'Start' }}
+          </button>
+          <template v-else>
+            <button
+              class="btn btn-sm"
+              :class="{ 'btn-loading': transitioningContainers[inspectedContainer.name] === 'restarting' }"
+              :disabled="Boolean(transitioningContainers[inspectedContainer.name])"
+              title="Restart LXC Container"
+              @click="handleRestart(inspectedContainer)"
+            >
+              <MdiIcon
+                :path="transitioningContainers[inspectedContainer.name] === 'restarting' ? mdiLoading : mdiRestart"
+                size="14"
+                :class="{ 'spin-icon': transitioningContainers[inspectedContainer.name] === 'restarting' }"
+                style="margin-right: 4px"
+              />
+              {{ transitioningContainers[inspectedContainer.name] === 'restarting' ? 'Restarting...' : 'Restart' }}
+            </button>
+            <button
+              class="btn btn-sm btn-warning"
+              :class="{ 'btn-loading': transitioningContainers[inspectedContainer.name] === 'stopping' }"
+              :disabled="Boolean(transitioningContainers[inspectedContainer.name])"
+              title="Stop LXC Container"
+              @click="handleAction(inspectedContainer.name, 'stop')"
+            >
+              <MdiIcon
+                :path="transitioningContainers[inspectedContainer.name] === 'stopping' ? mdiLoading : mdiStop"
+                size="14"
+                :class="{ 'spin-icon': transitioningContainers[inspectedContainer.name] === 'stopping' }"
+                style="margin-right: 4px"
+              />
+              {{ transitioningContainers[inspectedContainer.name] === 'stopping' ? 'Stopping...' : 'Stop' }}
+            </button>
+          </template>
+
           <button
             class="btn btn-sm btn-primary"
             :disabled="inspectedContainer.state !== 'RUNNING'"

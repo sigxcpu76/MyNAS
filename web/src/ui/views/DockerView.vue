@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import {
   mdiAlertCircleOutline,
   mdiCheck,
@@ -17,6 +17,7 @@ import {
   mdiHarddisk,
   mdiKeyVariant,
   mdiLayers,
+  mdiLoading,
   mdiMagnify,
   mdiOpenInNew,
   mdiPencil,
@@ -55,6 +56,7 @@ import { confirmDelete } from '../modal';
 const searchQuery = ref('');
 const stateFilter = ref<'ALL' | 'RUNNING' | 'STOPPED' | 'PARTIALLY_RUNNING'>('ALL');
 const isRefreshing = ref(false);
+const transitioningApps = reactive<Record<string, 'starting' | 'stopping' | 'restarting'>>({});
 
 const runningCount = computed(
   () => nasState.dockerApps.filter((a) => a.state === 'RUNNING').length
@@ -674,16 +676,22 @@ function openTerminalForContainer(
 // App Lifecycle Actions
 // =============================================================================
 async function startApp(app: DockerApp) {
+  if (transitioningApps[app.name]) return;
+  transitioningApps[app.name] = 'starting';
   try {
-    await services.apps.startApp(app.name);
     notify('info', `Starting "${app.appId}" in background (pulling images if needed)...`);
+    await services.apps.startApp(app.name);
     await refreshApps();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to start App');
+  } finally {
+    delete transitioningApps[app.name];
   }
 }
 
 async function stopApp(app: DockerApp) {
+  if (transitioningApps[app.name]) return;
+  transitioningApps[app.name] = 'stopping';
   try {
     notify('info', `Stopping app "${app.appId}"...`);
     await services.apps.stopApp(app.name);
@@ -691,10 +699,14 @@ async function stopApp(app: DockerApp) {
     await refreshApps();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to stop App');
+  } finally {
+    delete transitioningApps[app.name];
   }
 }
 
 async function restartApp(app: DockerApp) {
+  if (transitioningApps[app.name]) return;
+  transitioningApps[app.name] = 'restarting';
   try {
     notify('info', `Restarting app "${app.appId}"...`);
     await services.apps.restartApp(app.name);
@@ -702,6 +714,8 @@ async function restartApp(app: DockerApp) {
     await refreshApps();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to restart App');
+  } finally {
+    delete transitioningApps[app.name];
   }
 }
 
@@ -1176,7 +1190,15 @@ onUnmounted(() => {
                       {{ app.title || app.appId }}
                     </span>
                     <span
-                      v-if="app.state === 'DEPLOYING'"
+                      v-if="transitioningApps[app.name]"
+                      class="badge badge-warning pulse-anim"
+                      style="font-size: 10px; padding: 1px 6px; display: inline-flex; align-items: center; gap: 4px"
+                    >
+                      <MdiIcon :path="mdiLoading" size="10" class="spin-icon" />
+                      {{ transitioningApps[app.name].toUpperCase() }}...
+                    </span>
+                    <span
+                      v-else-if="app.state === 'DEPLOYING'"
                       class="badge badge-info"
                       style="font-size: 10px; padding: 1px 6px; display: inline-flex; align-items: center; gap: 4px"
                       :title="app.statusText"
@@ -1365,27 +1387,39 @@ onUnmounted(() => {
                   <span class="spinner-sm" style="width: 14px; height: 14px; border-width: 2px"></span>
                 </button>
                 <button
-                  v-else-if="app.state === 'RUNNING'"
+                  v-else-if="app.state === 'RUNNING' || transitioningApps[app.name] === 'stopping'"
                   class="btn btn-sm btn-icon btn-warning"
+                  :class="{ 'btn-loading': transitioningApps[app.name] === 'stopping' }"
+                  :disabled="Boolean(transitioningApps[app.name])"
                   style="flex-shrink: 0"
-                  title="Stop Application"
+                  :title="transitioningApps[app.name] === 'stopping' ? 'Stopping application...' : 'Stop Application'"
                   aria-label="Stop Application"
                   @click="stopApp(app)"
                 >
-                  <MdiIcon :path="mdiStop" size="16" />
+                  <MdiIcon
+                    :path="transitioningApps[app.name] === 'stopping' ? mdiLoading : mdiStop"
+                    :class="{ 'spin-icon': transitioningApps[app.name] === 'stopping' }"
+                    size="16"
+                  />
                 </button>
                 <button
-                  v-if="app.state === 'RUNNING'"
+                  v-if="app.state === 'RUNNING' || transitioningApps[app.name] === 'restarting'"
                   class="btn btn-sm btn-icon"
+                  :class="{ 'btn-loading': transitioningApps[app.name] === 'restarting' }"
+                  :disabled="Boolean(transitioningApps[app.name])"
                   style="flex-shrink: 0"
-                  title="Restart Application"
+                  :title="transitioningApps[app.name] === 'restarting' ? 'Restarting application...' : 'Restart Application'"
                   aria-label="Restart Application"
                   @click="restartApp(app)"
                 >
-                  <MdiIcon :path="mdiRestart" size="16" />
+                  <MdiIcon
+                    :path="transitioningApps[app.name] === 'restarting' ? mdiLoading : mdiRestart"
+                    :class="{ 'spin-icon': transitioningApps[app.name] === 'restarting' }"
+                    size="16"
+                  />
                 </button>
                 <button
-                  v-if="app.state === 'RUNNING'"
+                  v-if="app.state === 'RUNNING' && !transitioningApps[app.name]"
                   class="btn btn-sm btn-icon"
                   style="flex-shrink: 0; color: var(--accent-primary)"
                   title="Open Shell Terminal"
@@ -1395,14 +1429,20 @@ onUnmounted(() => {
                   <MdiIcon :path="mdiConsole" size="16" />
                 </button>
                 <button
-                  v-if="app.state !== 'RUNNING' && app.state !== 'DEPLOYING'"
+                  v-if="(app.state !== 'RUNNING' && app.state !== 'DEPLOYING') || transitioningApps[app.name] === 'starting'"
                   class="btn btn-sm btn-icon btn-success"
+                  :class="{ 'btn-loading': transitioningApps[app.name] === 'starting' }"
+                  :disabled="Boolean(transitioningApps[app.name])"
                   style="flex-shrink: 0"
-                  title="Start Application"
+                  :title="transitioningApps[app.name] === 'starting' ? 'Starting application...' : 'Start Application'"
                   aria-label="Start Application"
                   @click="startApp(app)"
                 >
-                  <MdiIcon :path="mdiPlay" size="16" />
+                  <MdiIcon
+                    :path="transitioningApps[app.name] === 'starting' ? mdiLoading : mdiPlay"
+                    :class="{ 'spin-icon': transitioningApps[app.name] === 'starting' }"
+                    size="16"
+                  />
                 </button>
 
                 <button
@@ -1556,6 +1596,29 @@ onUnmounted(() => {
               <h3 style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin: 0">
                 {{ inspectedApp.title || inspectedApp.appId }}
               </h3>
+              <span
+                v-if="transitioningApps[inspectedApp.name]"
+                class="badge mono badge-warning pulse-anim"
+                style="font-size: 11px; display: inline-flex; align-items: center; gap: 4px"
+              >
+                <MdiIcon :path="mdiLoading" size="11" class="spin-icon" />
+                {{ transitioningApps[inspectedApp.name].toUpperCase() }}...
+              </span>
+              <span
+                v-else
+                class="badge"
+                :class="
+                  inspectedApp.state === 'RUNNING'
+                    ? 'badge-success'
+                    : inspectedApp.state === 'DEPLOYING'
+                    ? 'badge-info'
+                    : inspectedApp.state === 'ERROR'
+                    ? 'badge-danger'
+                    : 'badge-neutral'
+                "
+              >
+                {{ inspectedApp.state }}
+              </span>
               <button
                 type="button"
                 class="badge"
@@ -1576,9 +1639,60 @@ onUnmounted(() => {
               {{ inspectedApp.composeFilePath }}
             </p>
           </div>
-          <button class="btn btn-sm" style="padding: 2px 6px" @click="isInspectModalOpen = false">
-            <MdiIcon :path="mdiClose" size="18" />
-          </button>
+
+          <div style="display: flex; gap: 8px; align-items: center">
+            <button
+              v-if="(inspectedApp.state !== 'RUNNING' && inspectedApp.state !== 'DEPLOYING') || transitioningApps[inspectedApp.name] === 'starting'"
+              class="btn btn-sm btn-success"
+              :class="{ 'btn-loading': transitioningApps[inspectedApp.name] === 'starting' }"
+              :disabled="Boolean(transitioningApps[inspectedApp.name])"
+              @click="startApp(inspectedApp)"
+            >
+              <MdiIcon
+                :path="transitioningApps[inspectedApp.name] === 'starting' ? mdiLoading : mdiPlay"
+                size="14"
+                :class="{ 'spin-icon': transitioningApps[inspectedApp.name] === 'starting' }"
+                style="margin-right: 4px"
+              />
+              {{ transitioningApps[inspectedApp.name] === 'starting' ? 'Starting...' : 'Start' }}
+            </button>
+            <template v-else-if="inspectedApp.state === 'RUNNING'">
+              <button
+                class="btn btn-sm"
+                :class="{ 'btn-loading': transitioningApps[inspectedApp.name] === 'restarting' }"
+                :disabled="Boolean(transitioningApps[inspectedApp.name])"
+                title="Restart Application"
+                @click="restartApp(inspectedApp)"
+              >
+                <MdiIcon
+                  :path="transitioningApps[inspectedApp.name] === 'restarting' ? mdiLoading : mdiRestart"
+                  size="14"
+                  :class="{ 'spin-icon': transitioningApps[inspectedApp.name] === 'restarting' }"
+                  style="margin-right: 4px"
+                />
+                {{ transitioningApps[inspectedApp.name] === 'restarting' ? 'Restarting...' : 'Restart' }}
+              </button>
+              <button
+                class="btn btn-sm btn-warning"
+                :class="{ 'btn-loading': transitioningApps[inspectedApp.name] === 'stopping' }"
+                :disabled="Boolean(transitioningApps[inspectedApp.name])"
+                title="Stop Application"
+                @click="stopApp(inspectedApp)"
+              >
+                <MdiIcon
+                  :path="transitioningApps[inspectedApp.name] === 'stopping' ? mdiLoading : mdiStop"
+                  size="14"
+                  :class="{ 'spin-icon': transitioningApps[inspectedApp.name] === 'stopping' }"
+                  style="margin-right: 4px"
+                />
+                {{ transitioningApps[inspectedApp.name] === 'stopping' ? 'Stopping...' : 'Stop' }}
+              </button>
+            </template>
+
+            <button class="btn btn-sm" style="padding: 2px 6px" @click="isInspectModalOpen = false">
+              <MdiIcon :path="mdiClose" size="18" />
+            </button>
+          </div>
         </div>
 
         <!-- Inspector Tabs -->

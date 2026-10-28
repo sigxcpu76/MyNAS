@@ -35,6 +35,7 @@ import {
   mdiEye,
   mdiHarddisk,
   mdiInformationOutline,
+  mdiLoading,
   mdiMagnify,
   mdiNetwork,
   mdiPause,
@@ -1652,9 +1653,10 @@ async function handleWizardSubmit() {
                   <span v-if="vm.isTemplate" class="badge badge-warning" style="font-size: 9px; margin-left: 4px">TEMPLATE</span>
                   <span
                     v-if="transitioningVms[vm.name]"
-                    class="badge mono badge-warning"
-                    style="font-size: 9px; margin-left: 6px"
+                    class="badge mono badge-warning pulse-anim"
+                    style="font-size: 9px; margin-left: 6px; display: inline-flex; align-items: center; gap: 4px"
                   >
+                    <MdiIcon :path="mdiLoading" size="10" class="spin-icon" />
                     {{ transitioningVms[vm.name] === 'stopping' ? 'SHUTTING DOWN' : transitioningVms[vm.name] === 'starting' ? 'STARTING' : 'REBOOTING' }}
                   </span>
                   <span
@@ -1707,13 +1709,18 @@ async function handleWizardSubmit() {
                 <div style="display: inline-flex; gap: 6px; align-items: center">
                   <!-- Start/Resume -->
                   <button
-                    v-if="vm.state === 'STOPPED'"
+                    v-if="vm.state === 'STOPPED' || transitioningVms[vm.name] === 'starting'"
                     class="btn btn-xs btn-success"
+                    :class="{ 'btn-loading': transitioningVms[vm.name] === 'starting' }"
                     :disabled="Boolean(transitioningVms[vm.name])"
-                    title="Start VM"
+                    :title="transitioningVms[vm.name] === 'starting' ? 'Starting VM...' : 'Start VM'"
                     @click="handlePowerAction(vm, 'start')"
                   >
-                    <MdiIcon :path="mdiPlay" size="13" />
+                    <MdiIcon
+                      :path="transitioningVms[vm.name] === 'starting' ? mdiLoading : mdiPlay"
+                      size="13"
+                      :class="{ 'spin-icon': transitioningVms[vm.name] === 'starting' }"
+                    />
                   </button>
                   <button
                     v-else-if="vm.state === 'PAUSED'"
@@ -1727,7 +1734,7 @@ async function handleWizardSubmit() {
 
                   <!-- Pause -->
                   <button
-                    v-if="vm.state === 'RUNNING'"
+                    v-if="vm.state === 'RUNNING' && !transitioningVms[vm.name]"
                     class="btn btn-xs"
                     :disabled="Boolean(transitioningVms[vm.name])"
                     title="Pause VM"
@@ -1738,24 +1745,34 @@ async function handleWizardSubmit() {
 
                   <!-- Reboot -->
                   <button
-                    v-if="vm.state === 'RUNNING'"
+                    v-if="vm.state === 'RUNNING' || transitioningVms[vm.name] === 'rebooting'"
                     class="btn btn-xs"
+                    :class="{ 'btn-loading': transitioningVms[vm.name] === 'rebooting' }"
                     :disabled="Boolean(transitioningVms[vm.name])"
-                    title="Reboot VM (Hold Shift to Force Reset)"
+                    :title="transitioningVms[vm.name] === 'rebooting' ? 'Rebooting VM...' : 'Reboot VM (Hold Shift to Force Reset)'"
                     @click="handlePowerAction(vm, 'reboot', $event)"
                   >
-                    <MdiIcon :path="mdiRefresh" size="13" />
+                    <MdiIcon
+                      :path="transitioningVms[vm.name] === 'rebooting' ? mdiLoading : mdiRefresh"
+                      size="13"
+                      :class="{ 'spin-icon': transitioningVms[vm.name] === 'rebooting' }"
+                    />
                   </button>
 
                   <!-- Shutdown -->
                   <button
-                    v-if="vm.state === 'RUNNING'"
+                    v-if="vm.state === 'RUNNING' || transitioningVms[vm.name] === 'stopping'"
                     class="btn btn-xs btn-warning"
+                    :class="{ 'btn-loading': transitioningVms[vm.name] === 'stopping' }"
                     :disabled="Boolean(transitioningVms[vm.name])"
-                    title="Shutdown VM (Hold Shift to Force Stop)"
+                    :title="transitioningVms[vm.name] === 'stopping' ? 'Shutting down VM...' : 'Shutdown VM (Hold Shift to Force Stop)'"
                     @click="handlePowerAction(vm, 'stop', $event)"
                   >
-                    <MdiIcon :path="mdiPower" size="13" />
+                    <MdiIcon
+                      :path="transitioningVms[vm.name] === 'stopping' ? mdiLoading : mdiPower"
+                      size="13"
+                      :class="{ 'spin-icon': transitioningVms[vm.name] === 'stopping' }"
+                    />
                   </button>
 
                   <!-- Console -->
@@ -1967,29 +1984,50 @@ async function handleWizardSubmit() {
           <!-- Quick Action Buttons inside Inspector Header -->
           <div style="display: flex; gap: 8px; align-items: center">
             <button
-              v-if="inspectingVm.state !== 'RUNNING'"
+              v-if="inspectingVm.state !== 'RUNNING' || transitioningVms[inspectingVm.name] === 'starting'"
               class="btn btn-sm btn-success"
+              :class="{ 'btn-loading': transitioningVms[inspectingVm.name] === 'starting' }"
               :disabled="Boolean(transitioningVms[inspectingVm.name])"
               @click="handlePowerAction(inspectingVm, 'start', $event)"
             >
-              <MdiIcon :path="mdiPlay" size="14" style="margin-right: 4px" /> Start
+              <MdiIcon
+                :path="transitioningVms[inspectingVm.name] === 'starting' ? mdiLoading : mdiPlay"
+                size="14"
+                :class="{ 'spin-icon': transitioningVms[inspectingVm.name] === 'starting' }"
+                style="margin-right: 4px"
+              />
+              {{ transitioningVms[inspectingVm.name] === 'starting' ? 'Starting...' : 'Start' }}
             </button>
             <template v-else>
               <button
                 class="btn btn-sm"
+                :class="{ 'btn-loading': transitioningVms[inspectingVm.name] === 'rebooting' }"
                 :disabled="Boolean(transitioningVms[inspectingVm.name])"
                 title="Reboot VM (Hold Shift to Force Reset)"
                 @click="handlePowerAction(inspectingVm, 'reboot', $event)"
               >
-                <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" /> Reboot
+                <MdiIcon
+                  :path="transitioningVms[inspectingVm.name] === 'rebooting' ? mdiLoading : mdiRefresh"
+                  size="14"
+                  :class="{ 'spin-icon': transitioningVms[inspectingVm.name] === 'rebooting' }"
+                  style="margin-right: 4px"
+                />
+                {{ transitioningVms[inspectingVm.name] === 'rebooting' ? 'Rebooting...' : 'Reboot' }}
               </button>
               <button
                 class="btn btn-sm btn-warning"
+                :class="{ 'btn-loading': transitioningVms[inspectingVm.name] === 'stopping' }"
                 :disabled="Boolean(transitioningVms[inspectingVm.name])"
                 title="Shutdown VM (Hold Shift to Force Stop)"
                 @click="handlePowerAction(inspectingVm, 'stop', $event)"
               >
-                <MdiIcon :path="mdiPower" size="14" style="margin-right: 4px" /> Shutdown
+                <MdiIcon
+                  :path="transitioningVms[inspectingVm.name] === 'stopping' ? mdiLoading : mdiPower"
+                  size="14"
+                  :class="{ 'spin-icon': transitioningVms[inspectingVm.name] === 'stopping' }"
+                  style="margin-right: 4px"
+                />
+                {{ transitioningVms[inspectingVm.name] === 'stopping' ? 'Stopping...' : 'Shutdown' }}
               </button>
             </template>
             <button

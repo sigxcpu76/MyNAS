@@ -1255,7 +1255,28 @@ select option {
    Animations & Spinners
    ========================================================================== */
 .spin-icon {
-  animation: spin 1s linear infinite;
+  animation: spin 0.85s linear infinite;
+  display: inline-block;
+  transform-origin: center center;
+}
+
+.btn-loading {
+  position: relative;
+  pointer-events: none;
+  opacity: 0.85 !important;
+}
+
+@keyframes pulse-subtle {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.pulse-anim {
+  animation: pulse-subtle 1.2s ease-in-out infinite;
 }
 
 .spinner {
