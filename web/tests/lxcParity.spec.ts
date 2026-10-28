@@ -85,15 +85,13 @@ describe('LXC Feature Parity with VMs and Apps', () => {
 
       expect(mockClient.patch).toHaveBeenCalledWith(
         'lxcContainers/ct-test',
-        {
-          lxcContainer: expect.objectContaining({
-            name: 'lxcContainers/ct-test',
-            containerName: 'Updated Name',
-            autostart: false,
-            cpuCores: 8,
-            memoryLimitMib: 4096,
-          }),
-        },
+        expect.objectContaining({
+          name: 'lxcContainers/ct-test',
+          containerName: 'Updated Name',
+          autostart: false,
+          cpuCores: 8,
+          memoryLimitMib: 4096,
+        }),
         ['container_name', 'autostart', 'cpu_cores', 'memory_limit_mib']
       );
       expect(res.containerName).toBe('Updated Name');

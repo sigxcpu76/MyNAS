@@ -234,6 +234,19 @@ func (a *Adapter) discoverContainerLocked(id string) *domain.LxcContainer {
 	return c
 }
 
+// getOrDiscoverContainerLocked returns the container from memory if present,
+// or attempts to discover it from disk (/var/lib/lxc/<id>/config) under the adapter lock.
+func (a *Adapter) getOrDiscoverContainerLocked(id string) (*domain.LxcContainer, bool) {
+	if c, ok := a.containers[id]; ok {
+		return &c, true
+	}
+	if disc := a.discoverContainerLocked(id); disc != nil {
+		a.containers[id] = *disc
+		return disc, true
+	}
+	return nil, false
+}
+
 func (a *Adapter) ListContainers(ctx context.Context) ([]domain.LxcContainer, error) {
 	// 1. Fetch live container statuses in one fast lxc-ls execution outside the lock
 	liveStatuses := a.fetchLiveStatuses(ctx)
@@ -281,20 +294,13 @@ func (a *Adapter) ListContainers(ctx context.Context) ([]domain.LxcContainer, er
 }
 
 func (a *Adapter) GetContainer(ctx context.Context, id string) (*domain.LxcContainer, error) {
-	a.mu.RLock()
-	c, ok := a.containers[id]
-	a.mu.RUnlock()
-
-	if !ok {
-		a.mu.Lock()
-		disc := a.discoverContainerLocked(id)
-		if disc != nil {
-			a.containers[id] = *disc
-			c = *disc
-			ok = true
-		}
-		a.mu.Unlock()
+	a.mu.Lock()
+	cPtr, ok := a.getOrDiscoverContainerLocked(id)
+	var c domain.LxcContainer
+	if ok {
+		c = *cPtr
 	}
+	a.mu.Unlock()
 
 	if !ok {
 		return nil, fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, id)
@@ -548,9 +554,31 @@ func (a *Adapter) writeLxcConfig(c domain.LxcContainer) {
 		bridge = "br0"
 	}
 
+	// Preserve existing MAC if config exists, otherwise generate a new one
+	mac := ""
+	configPath := fmt.Sprintf("/var/lib/lxc/%s/config", c.ID)
+	if data, err := os.ReadFile(configPath); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "lxc.net.0.hwaddr") && strings.Contains(line, "=") {
+				parts := strings.SplitN(line, "=", 2)
+				mac = strings.TrimSpace(parts[1])
+				break
+			}
+		}
+	}
+	if mac == "" {
+		mac = generateRandomMAC()
+	}
+
+	utsName := c.ContainerName
+	if utsName == "" {
+		utsName = c.ID
+	}
+
 	var sb strings.Builder
 	sb.WriteString("# AegisNAS LXC Container Configuration\n")
-	sb.WriteString(fmt.Sprintf("lxc.uts.name = %s\n", c.ID))
+	sb.WriteString(fmt.Sprintf("lxc.uts.name = %s\n", utsName))
 	if c.Architecture != "" {
 		sb.WriteString(fmt.Sprintf("lxc.arch = %s\n", c.Architecture))
 	}
@@ -578,7 +606,7 @@ func (a *Adapter) writeLxcConfig(c domain.LxcContainer) {
 	sb.WriteString("lxc.net.0.type = veth\n")
 	sb.WriteString("lxc.net.0.flags = up\n")
 	sb.WriteString(fmt.Sprintf("lxc.net.0.link = %s\n", bridge))
-	sb.WriteString(fmt.Sprintf("lxc.net.0.hwaddr = %s\n\n", generateRandomMAC()))
+	sb.WriteString(fmt.Sprintf("lxc.net.0.hwaddr = %s\n\n", mac))
 
 	// Resource limits
 	sb.WriteString("# Resource Limits\n")
@@ -623,8 +651,10 @@ func (a *Adapter) writeLxcConfig(c domain.LxcContainer) {
 	configData := []byte(sb.String())
 
 	// Write to container dataset directory
-	containerDir := filepath.Dir(c.RootfsPath)
-	_ = os.WriteFile(filepath.Join(containerDir, "config"), configData, 0644)
+	if c.RootfsPath != "" {
+		containerDir := filepath.Dir(c.RootfsPath)
+		_ = os.WriteFile(filepath.Join(containerDir, "config"), configData, 0644)
+	}
 
 	// Write to host LXC directory (/var/lib/lxc/<id>/config)
 	hostLxcDir := fmt.Sprintf("/var/lib/lxc/%s", c.ID)
@@ -820,10 +850,11 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 func (a *Adapter) UpdateContainer(ctx context.Context, c domain.LxcContainer, fields []string) (*domain.LxcContainer, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	current, ok := a.containers[c.ID]
+	currentPtr, ok := a.getOrDiscoverContainerLocked(c.ID)
 	if !ok {
 		return nil, fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, c.ID)
 	}
+	current := *currentPtr
 
 	if len(fields) == 0 {
 		if c.ContainerName != "" {
@@ -883,19 +914,20 @@ func (a *Adapter) UpdateContainer(ctx context.Context, c domain.LxcContainer, fi
 func (a *Adapter) DeleteContainer(ctx context.Context, id string, force bool) error {
 	if st := a.fetchSingleContainerStatus(ctx, id); st != nil {
 		a.mu.Lock()
-		if c, ok := a.containers[id]; ok {
+		if c, ok := a.getOrDiscoverContainerLocked(id); ok {
 			c.State = st.state
-			a.containers[id] = c
+			a.containers[id] = *c
 		}
 		a.mu.Unlock()
 	}
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	c, ok := a.containers[id]
+	cPtr, ok := a.getOrDiscoverContainerLocked(id)
 	if !ok {
 		return fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, id)
 	}
+	c := *cPtr
 	if c.State == "RUNNING" && !force {
 		return fmt.Errorf("%w: lxc container %q is running; stop it or set force=true", domain.ErrFailedPrecondition, id)
 	}
@@ -956,19 +988,12 @@ func (a *Adapter) StartContainer(ctx context.Context, id string) (*domain.LxcCon
 	slog.Info("[lxc] starting container", "container_id", id)
 
 	a.mu.Lock()
-	c, ok := a.containers[id]
-	a.mu.Unlock()
-
-	if !ok {
-		a.mu.Lock()
-		disc := a.discoverContainerLocked(id)
-		if disc != nil {
-			a.containers[id] = *disc
-			c = *disc
-			ok = true
-		}
-		a.mu.Unlock()
+	cPtr, ok := a.getOrDiscoverContainerLocked(id)
+	var c domain.LxcContainer
+	if ok {
+		c = *cPtr
 	}
+	a.mu.Unlock()
 
 	if !ok {
 		slog.Error("[lxc] container not found", "container_id", id)
@@ -1027,7 +1052,11 @@ func (a *Adapter) StopContainer(ctx context.Context, id string) (*domain.LxcCont
 	slog.Info("[lxc] stopping container", "container_id", id)
 
 	a.mu.Lock()
-	c, ok := a.containers[id]
+	cPtr, ok := a.getOrDiscoverContainerLocked(id)
+	var c domain.LxcContainer
+	if ok {
+		c = *cPtr
+	}
 	a.mu.Unlock()
 
 	if !ok {
@@ -1063,7 +1092,11 @@ func (a *Adapter) RestartContainer(ctx context.Context, id string) (*domain.LxcC
 	slog.Info("[lxc] restarting container", "container_id", id)
 
 	a.mu.Lock()
-	c, ok := a.containers[id]
+	cPtr, ok := a.getOrDiscoverContainerLocked(id)
+	var c domain.LxcContainer
+	if ok {
+		c = *cPtr
+	}
 	a.mu.Unlock()
 
 	if !ok {
@@ -1098,7 +1131,11 @@ func (a *Adapter) FreezeContainer(ctx context.Context, id string) (*domain.LxcCo
 	slog.Info("[lxc] freezing container", "container_id", id)
 
 	a.mu.Lock()
-	c, ok := a.containers[id]
+	cPtr, ok := a.getOrDiscoverContainerLocked(id)
+	var c domain.LxcContainer
+	if ok {
+		c = *cPtr
+	}
 	a.mu.Unlock()
 
 	if !ok {
@@ -1129,9 +1166,13 @@ func (a *Adapter) FreezeContainer(ctx context.Context, id string) (*domain.LxcCo
 }
 
 func (a *Adapter) GetContainerLogs(ctx context.Context, id string, tail int) (string, error) {
-	a.mu.RLock()
-	c, ok := a.containers[id]
-	a.mu.RUnlock()
+	a.mu.Lock()
+	cPtr, ok := a.getOrDiscoverContainerLocked(id)
+	var c domain.LxcContainer
+	if ok {
+		c = *cPtr
+	}
+	a.mu.Unlock()
 	if !ok {
 		return "", fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, id)
 	}
@@ -1188,9 +1229,13 @@ func (a *Adapter) GetContainerLogs(ctx context.Context, id string, tail int) (st
 }
 
 func (a *Adapter) ExecAttach(ctx context.Context, id string, cmd []string) (net.Conn, string, error) {
-	a.mu.RLock()
-	c, ok := a.containers[id]
-	a.mu.RUnlock()
+	a.mu.Lock()
+	cPtr, ok := a.getOrDiscoverContainerLocked(id)
+	var c domain.LxcContainer
+	if ok {
+		c = *cPtr
+	}
+	a.mu.Unlock()
 	if !ok {
 		return nil, "", fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, id)
 	}

@@ -1694,7 +1694,7 @@ export class HttpLxcAdapter implements LxcPort {
       installScriptUrl: container.installScriptUrl,
       templateDownloadUrl: container.templateDownloadUrl,
     };
-    const raw = await this.client.patch<any>(name, { lxcContainer: payload }, updateMask ?? []);
+    const raw = await this.client.patch<any>(name, payload, updateMask ?? []);
     return mapLxcContainer(raw);
   }
 
