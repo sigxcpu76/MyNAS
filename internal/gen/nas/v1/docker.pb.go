@@ -2630,6 +2630,178 @@ func (x *DeleteDockerRegistryRequest) GetName() string {
 	return ""
 }
 
+type DockerNetwork struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Driver        string                 `protobuf:"bytes,3,opt,name=driver,proto3" json:"driver,omitempty"`
+	Scope         string                 `protobuf:"bytes,4,opt,name=scope,proto3" json:"scope,omitempty"`
+	Internal      bool                   `protobuf:"varint,5,opt,name=internal,proto3" json:"internal,omitempty"`
+	Attachable    bool                   `protobuf:"varint,6,opt,name=attachable,proto3" json:"attachable,omitempty"`
+	IpamSubnets   []string               `protobuf:"bytes,7,rep,name=ipam_subnets,json=ipamSubnets,proto3" json:"ipam_subnets,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DockerNetwork) Reset() {
+	*x = DockerNetwork{}
+	mi := &file_nas_v1_docker_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DockerNetwork) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DockerNetwork) ProtoMessage() {}
+
+func (x *DockerNetwork) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_docker_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DockerNetwork.ProtoReflect.Descriptor instead.
+func (*DockerNetwork) Descriptor() ([]byte, []int) {
+	return file_nas_v1_docker_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *DockerNetwork) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *DockerNetwork) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DockerNetwork) GetDriver() string {
+	if x != nil {
+		return x.Driver
+	}
+	return ""
+}
+
+func (x *DockerNetwork) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+func (x *DockerNetwork) GetInternal() bool {
+	if x != nil {
+		return x.Internal
+	}
+	return false
+}
+
+func (x *DockerNetwork) GetAttachable() bool {
+	if x != nil {
+		return x.Attachable
+	}
+	return false
+}
+
+func (x *DockerNetwork) GetIpamSubnets() []string {
+	if x != nil {
+		return x.IpamSubnets
+	}
+	return nil
+}
+
+type ListDockerNetworksRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDockerNetworksRequest) Reset() {
+	*x = ListDockerNetworksRequest{}
+	mi := &file_nas_v1_docker_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDockerNetworksRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDockerNetworksRequest) ProtoMessage() {}
+
+func (x *ListDockerNetworksRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_docker_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDockerNetworksRequest.ProtoReflect.Descriptor instead.
+func (*ListDockerNetworksRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_docker_proto_rawDescGZIP(), []int{42}
+}
+
+type ListDockerNetworksResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Networks      []*DockerNetwork       `protobuf:"bytes,1,rep,name=networks,proto3" json:"networks,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDockerNetworksResponse) Reset() {
+	*x = ListDockerNetworksResponse{}
+	mi := &file_nas_v1_docker_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDockerNetworksResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDockerNetworksResponse) ProtoMessage() {}
+
+func (x *ListDockerNetworksResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_docker_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDockerNetworksResponse.ProtoReflect.Descriptor instead.
+func (*ListDockerNetworksResponse) Descriptor() ([]byte, []int) {
+	return file_nas_v1_docker_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *ListDockerNetworksResponse) GetNetworks() []*DockerNetwork {
+	if x != nil {
+		return x.Networks
+	}
+	return nil
+}
+
 var File_nas_v1_docker_proto protoreflect.FileDescriptor
 
 const file_nas_v1_docker_proto_rawDesc = "" +
@@ -2869,7 +3041,20 @@ const file_nas_v1_docker_proto_rawDesc = "" +
 	"updateMask\"Y\n" +
 	"\x1bDeleteDockerRegistryRequest\x12:\n" +
 	"\x04name\x18\x01 \x01(\tB&\xe2A\x01\x02\xfaA\x1f\n" +
-	"\x1dnas.sigxcpu.io/DockerRegistryR\x04nameB2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
+	"\x1dnas.sigxcpu.io/DockerRegistryR\x04name\"\xc0\x01\n" +
+	"\rDockerNetwork\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
+	"\x06driver\x18\x03 \x01(\tR\x06driver\x12\x14\n" +
+	"\x05scope\x18\x04 \x01(\tR\x05scope\x12\x1a\n" +
+	"\binternal\x18\x05 \x01(\bR\binternal\x12\x1e\n" +
+	"\n" +
+	"attachable\x18\x06 \x01(\bR\n" +
+	"attachable\x12!\n" +
+	"\fipam_subnets\x18\a \x03(\tR\vipamSubnets\"\x1b\n" +
+	"\x19ListDockerNetworksRequest\"O\n" +
+	"\x1aListDockerNetworksResponse\x121\n" +
+	"\bnetworks\x18\x01 \x03(\v2\x15.nas.v1.DockerNetworkR\bnetworksB2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
 
 var (
 	file_nas_v1_docker_proto_rawDescOnce sync.Once
@@ -2883,7 +3068,7 @@ func file_nas_v1_docker_proto_rawDescGZIP() []byte {
 	return file_nas_v1_docker_proto_rawDescData
 }
 
-var file_nas_v1_docker_proto_msgTypes = make([]protoimpl.MessageInfo, 41)
+var file_nas_v1_docker_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
 var file_nas_v1_docker_proto_goTypes = []any{
 	(*DockerContainer)(nil),                // 0: nas.v1.DockerContainer
 	(*ListDockerContainersRequest)(nil),    // 1: nas.v1.ListDockerContainersRequest
@@ -2926,31 +3111,35 @@ var file_nas_v1_docker_proto_goTypes = []any{
 	(*CreateDockerRegistryRequest)(nil),    // 38: nas.v1.CreateDockerRegistryRequest
 	(*UpdateDockerRegistryRequest)(nil),    // 39: nas.v1.UpdateDockerRegistryRequest
 	(*DeleteDockerRegistryRequest)(nil),    // 40: nas.v1.DeleteDockerRegistryRequest
-	(*fieldmaskpb.FieldMask)(nil),          // 41: google.protobuf.FieldMask
+	(*DockerNetwork)(nil),                  // 41: nas.v1.DockerNetwork
+	(*ListDockerNetworksRequest)(nil),      // 42: nas.v1.ListDockerNetworksRequest
+	(*ListDockerNetworksResponse)(nil),     // 43: nas.v1.ListDockerNetworksResponse
+	(*fieldmaskpb.FieldMask)(nil),          // 44: google.protobuf.FieldMask
 }
 var file_nas_v1_docker_proto_depIdxs = []int32{
 	0,  // 0: nas.v1.ListDockerContainersResponse.docker_containers:type_name -> nas.v1.DockerContainer
 	0,  // 1: nas.v1.CreateDockerContainerRequest.docker_container:type_name -> nas.v1.DockerContainer
 	0,  // 2: nas.v1.UpdateDockerContainerRequest.docker_container:type_name -> nas.v1.DockerContainer
-	41, // 3: nas.v1.UpdateDockerContainerRequest.update_mask:type_name -> google.protobuf.FieldMask
+	44, // 3: nas.v1.UpdateDockerContainerRequest.update_mask:type_name -> google.protobuf.FieldMask
 	14, // 4: nas.v1.DockerApp.containers:type_name -> nas.v1.DockerAppContainer
 	13, // 5: nas.v1.DockerApp.portals:type_name -> nas.v1.DockerAppPortal
 	12, // 6: nas.v1.ListDockerAppsResponse.docker_apps:type_name -> nas.v1.DockerApp
 	12, // 7: nas.v1.CreateDockerAppRequest.docker_app:type_name -> nas.v1.DockerApp
 	12, // 8: nas.v1.UpdateDockerAppRequest.docker_app:type_name -> nas.v1.DockerApp
-	41, // 9: nas.v1.UpdateDockerAppRequest.update_mask:type_name -> google.protobuf.FieldMask
+	44, // 9: nas.v1.UpdateDockerAppRequest.update_mask:type_name -> google.protobuf.FieldMask
 	26, // 10: nas.v1.UpdateDockerConfigRequest.docker_config:type_name -> nas.v1.DockerConfig
-	41, // 11: nas.v1.UpdateDockerConfigRequest.update_mask:type_name -> google.protobuf.FieldMask
+	44, // 11: nas.v1.UpdateDockerConfigRequest.update_mask:type_name -> google.protobuf.FieldMask
 	32, // 12: nas.v1.CheckHostPortsResponse.ports:type_name -> nas.v1.HostPortStatus
 	34, // 13: nas.v1.ListDockerRegistriesResponse.docker_registries:type_name -> nas.v1.DockerRegistry
 	34, // 14: nas.v1.CreateDockerRegistryRequest.docker_registry:type_name -> nas.v1.DockerRegistry
 	34, // 15: nas.v1.UpdateDockerRegistryRequest.docker_registry:type_name -> nas.v1.DockerRegistry
-	41, // 16: nas.v1.UpdateDockerRegistryRequest.update_mask:type_name -> google.protobuf.FieldMask
-	17, // [17:17] is the sub-list for method output_type
-	17, // [17:17] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	44, // 16: nas.v1.UpdateDockerRegistryRequest.update_mask:type_name -> google.protobuf.FieldMask
+	41, // 17: nas.v1.ListDockerNetworksResponse.networks:type_name -> nas.v1.DockerNetwork
+	18, // [18:18] is the sub-list for method output_type
+	18, // [18:18] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_nas_v1_docker_proto_init() }
@@ -2964,7 +3153,7 @@ func file_nas_v1_docker_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nas_v1_docker_proto_rawDesc), len(file_nas_v1_docker_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   41,
+			NumMessages:   44,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -20,6 +20,7 @@ import type {
   DockerAppContainer,
   DockerConfig,
   DockerContainer,
+  DockerNetworkInfo,
   Group,
   HostPortStatus,
   LinuxFlavor,
@@ -1548,6 +1549,30 @@ export class HttpDockerAppAdapter implements DockerAppPort {
       available: Boolean(p.available),
       inUseBy: String(p.inUseBy ?? p.in_use_by ?? ''),
     }));
+  }
+
+  async listNetworks(): Promise<DockerNetworkInfo[]> {
+    try {
+      const raw = await this.client.get<any>('dockerNetworks');
+      const items = raw?.networks ?? [];
+      return items.map((n: any) => ({
+        id: String(n.id || n.name || ''),
+        name: String(n.name || ''),
+        driver: String(n.driver || 'bridge'),
+        scope: String(n.scope || 'local'),
+        internal: Boolean(n.internal ?? false),
+        attachable: Boolean(n.attachable ?? false),
+        ipamSubnets: Array.isArray(n.ipamSubnets ?? n.ipam_subnets)
+          ? (n.ipamSubnets ?? n.ipam_subnets).map(String)
+          : [],
+      }));
+    } catch {
+      return [
+        { id: 'bridge', name: 'bridge', driver: 'bridge', scope: 'local' },
+        { id: 'host', name: 'host', driver: 'host', scope: 'local' },
+        { id: 'none', name: 'none', driver: 'null', scope: 'local' },
+      ];
+    }
   }
 }
 

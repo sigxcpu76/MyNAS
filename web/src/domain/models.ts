@@ -468,6 +468,16 @@ export interface HostPortStatus {
   inUseBy: string;
 }
 
+export interface DockerNetworkInfo {
+  id: string;
+  name: string;
+  driver: string;
+  scope?: string;
+  internal?: boolean;
+  attachable?: boolean;
+  ipamSubnets?: string[];
+}
+
 export interface DockerAppContainer {
   containerId: string;
   name: string;

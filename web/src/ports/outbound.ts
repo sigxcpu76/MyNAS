@@ -14,6 +14,7 @@ import type {
   DockerApp,
   DockerConfig,
   DockerContainer,
+  DockerNetworkInfo,
   Group,
   HostPortStatus,
   LxcContainer,
@@ -143,6 +144,7 @@ export interface DockerAppPort {
   listDirectories(path?: string): Promise<DirectoryList>;
   checkHostPort(port: number, protocol?: string, excludeAppId?: string): Promise<HostPortStatus>;
   checkHostPorts(ports: number[], protocol?: string, excludeAppId?: string): Promise<HostPortStatus[]>;
+  listNetworks(): Promise<DockerNetworkInfo[]>;
   listRegistries(): Promise<DockerRegistry[]>;
   createRegistry(input: DockerRegistryInput): Promise<DockerRegistry>;
   updateRegistry(name: string, input: DockerRegistryInput): Promise<DockerRegistry>;

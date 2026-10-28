@@ -90,6 +90,7 @@ const (
 	NasService_StopDockerApp_FullMethodName                  = "/nas.v1.NasService/StopDockerApp"
 	NasService_RestartDockerApp_FullMethodName               = "/nas.v1.NasService/RestartDockerApp"
 	NasService_GetDockerAppLogs_FullMethodName               = "/nas.v1.NasService/GetDockerAppLogs"
+	NasService_ListDockerNetworks_FullMethodName             = "/nas.v1.NasService/ListDockerNetworks"
 	NasService_GetDockerConfig_FullMethodName                = "/nas.v1.NasService/GetDockerConfig"
 	NasService_UpdateDockerConfig_FullMethodName             = "/nas.v1.NasService/UpdateDockerConfig"
 	NasService_CheckHostPort_FullMethodName                  = "/nas.v1.NasService/CheckHostPort"
@@ -214,6 +215,7 @@ type NasServiceClient interface {
 	StopDockerApp(ctx context.Context, in *StopDockerAppRequest, opts ...grpc.CallOption) (*DockerApp, error)
 	RestartDockerApp(ctx context.Context, in *RestartDockerAppRequest, opts ...grpc.CallOption) (*DockerApp, error)
 	GetDockerAppLogs(ctx context.Context, in *GetDockerAppLogsRequest, opts ...grpc.CallOption) (*GetDockerAppLogsResponse, error)
+	ListDockerNetworks(ctx context.Context, in *ListDockerNetworksRequest, opts ...grpc.CallOption) (*ListDockerNetworksResponse, error)
 	GetDockerConfig(ctx context.Context, in *GetDockerConfigRequest, opts ...grpc.CallOption) (*DockerConfig, error)
 	UpdateDockerConfig(ctx context.Context, in *UpdateDockerConfigRequest, opts ...grpc.CallOption) (*DockerConfig, error)
 	CheckHostPort(ctx context.Context, in *CheckHostPortRequest, opts ...grpc.CallOption) (*CheckHostPortResponse, error)
@@ -966,6 +968,16 @@ func (c *nasServiceClient) GetDockerAppLogs(ctx context.Context, in *GetDockerAp
 	return out, nil
 }
 
+func (c *nasServiceClient) ListDockerNetworks(ctx context.Context, in *ListDockerNetworksRequest, opts ...grpc.CallOption) (*ListDockerNetworksResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListDockerNetworksResponse)
+	err := c.cc.Invoke(ctx, NasService_ListDockerNetworks_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nasServiceClient) GetDockerConfig(ctx context.Context, in *GetDockerConfigRequest, opts ...grpc.CallOption) (*DockerConfig, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DockerConfig)
@@ -1466,6 +1478,7 @@ type NasServiceServer interface {
 	StopDockerApp(context.Context, *StopDockerAppRequest) (*DockerApp, error)
 	RestartDockerApp(context.Context, *RestartDockerAppRequest) (*DockerApp, error)
 	GetDockerAppLogs(context.Context, *GetDockerAppLogsRequest) (*GetDockerAppLogsResponse, error)
+	ListDockerNetworks(context.Context, *ListDockerNetworksRequest) (*ListDockerNetworksResponse, error)
 	GetDockerConfig(context.Context, *GetDockerConfigRequest) (*DockerConfig, error)
 	UpdateDockerConfig(context.Context, *UpdateDockerConfigRequest) (*DockerConfig, error)
 	CheckHostPort(context.Context, *CheckHostPortRequest) (*CheckHostPortResponse, error)
@@ -1727,6 +1740,9 @@ func (UnimplementedNasServiceServer) RestartDockerApp(context.Context, *RestartD
 }
 func (UnimplementedNasServiceServer) GetDockerAppLogs(context.Context, *GetDockerAppLogsRequest) (*GetDockerAppLogsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetDockerAppLogs not implemented")
+}
+func (UnimplementedNasServiceServer) ListDockerNetworks(context.Context, *ListDockerNetworksRequest) (*ListDockerNetworksResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListDockerNetworks not implemented")
 }
 func (UnimplementedNasServiceServer) GetDockerConfig(context.Context, *GetDockerConfigRequest) (*DockerConfig, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetDockerConfig not implemented")
@@ -3135,6 +3151,24 @@ func _NasService_GetDockerAppLogs_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NasService_ListDockerNetworks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListDockerNetworksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).ListDockerNetworks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_ListDockerNetworks_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).ListDockerNetworks(ctx, req.(*ListDockerNetworksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NasService_GetDockerConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetDockerConfigRequest)
 	if err := dec(in); err != nil {
@@ -4177,6 +4211,10 @@ var NasService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetDockerAppLogs",
 			Handler:    _NasService_GetDockerAppLogs_Handler,
+		},
+		{
+			MethodName: "ListDockerNetworks",
+			Handler:    _NasService_ListDockerNetworks_Handler,
 		},
 		{
 			MethodName: "GetDockerConfig",

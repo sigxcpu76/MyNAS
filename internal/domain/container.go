@@ -39,6 +39,16 @@ func (c *DockerContainer) Validate() error {
 	return nil
 }
 
+type DockerNetwork struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Driver      string   `json:"driver"`
+	Scope       string   `json:"scope"`
+	Internal    bool     `json:"internal"`
+	Attachable  bool     `json:"attachable"`
+	IPAMSubnets []string `json:"ipamSubnets"`
+}
+
 type LxcContainer struct {
 	ID             string
 	ContainerName  string

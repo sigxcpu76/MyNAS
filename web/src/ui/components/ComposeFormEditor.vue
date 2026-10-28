@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
   type ComposeAppFormModel,
   type ComposeEnvModel,
@@ -18,7 +18,7 @@ import {
 } from '../../domain/composeModel';
 import { nasState, notify } from '../store';
 import { generateNanosecondId, toZfsSafeSlug } from '../../domain/id';
-import { isDotDataset } from '../../domain/models';
+import { isDotDataset, type DockerNetworkInfo } from '../../domain/models';
 import CodeMirrorEditor from './CodeMirrorEditor.vue';
 import MdiIcon from './MdiIcon.vue';
 import PathSelector from './PathSelector.vue';
@@ -26,6 +26,7 @@ import { services } from '../../container';
 import {
   mdiAlert,
   mdiAlertCircle,
+  mdiCheck,
   mdiCheckCircle,
   mdiChip,
   mdiClose,
@@ -483,6 +484,81 @@ function removeVolumeMount(svc: ComposeServiceModel, idx: number) {
   svc.volumes.splice(idx, 1);
 }
 
+// Discovered Host Docker Networks & Ad-Hoc Networks
+const hostNetworks = ref<DockerNetworkInfo[]>([]);
+const isLoadingHostNetworks = ref(false);
+const selectedNetworkSource = ref('');
+const adHocNetworkName = ref('');
+const adHocNetworkDriver = ref('bridge');
+
+async function loadHostNetworks() {
+  isLoadingHostNetworks.value = true;
+  try {
+    hostNetworks.value = await services.apps.listNetworks();
+  } catch (err) {
+    console.error('Failed to load host Docker networks:', err);
+  } finally {
+    isLoadingHostNetworks.value = false;
+  }
+}
+
+onMounted(() => {
+  loadHostNetworks();
+});
+
+const filteredHostNetworks = computed(() => {
+  const existing = new Set(form.networks.map((n) => n.name.trim()));
+  return hostNetworks.value.filter((h) => !existing.has(h.name));
+});
+
+const canAddNetwork = computed(() => {
+  if (selectedNetworkSource.value === '__ad_hoc__') {
+    const name = adHocNetworkName.value.trim();
+    return name.length > 0 && !form.networks.some((n) => n.name === name);
+  }
+  return (
+    selectedNetworkSource.value.length > 0 &&
+    !form.networks.some((n) => n.name === selectedNetworkSource.value)
+  );
+});
+
+function addNetwork() {
+  if (selectedNetworkSource.value === '__ad_hoc__') {
+    const name = adHocNetworkName.value.trim();
+    if (!name) return;
+    form.networks.push({
+      id: generateUid(),
+      name,
+      driver: adHocNetworkDriver.value,
+      internal: false,
+      external: false,
+    });
+    // Auto-attach current active service if any
+    if (activeService.value && !activeService.value.networks.includes(name)) {
+      activeService.value.networks.push(name);
+    }
+    adHocNetworkName.value = '';
+    selectedNetworkSource.value = '';
+    notify('success', `Added ad-hoc network "${name}"`);
+  } else if (selectedNetworkSource.value) {
+    const netName = selectedNetworkSource.value;
+    const hostNet = hostNetworks.value.find((h) => h.name === netName);
+    form.networks.push({
+      id: generateUid(),
+      name: netName,
+      driver: hostNet?.driver || 'bridge',
+      internal: Boolean(hostNet?.internal ?? false),
+      external: true, // Discovered host networks are external
+    });
+    // Auto-attach active service if any
+    if (activeService.value && !activeService.value.networks.includes(netName)) {
+      activeService.value.networks.push(netName);
+    }
+    selectedNetworkSource.value = '';
+    notify('success', `Added external Docker network "${netName}"`);
+  }
+}
+
 // Top-Level Networks
 function addTopLevelNetwork() {
   form.networks.push({
@@ -495,7 +571,32 @@ function addTopLevelNetwork() {
 }
 
 function removeTopLevelNetwork(idx: number) {
+  const removed = form.networks[idx];
+  if (removed) {
+    const netName = removed.name.trim();
+    for (const svc of form.services) {
+      if (svc.networks) {
+        svc.networks = svc.networks.filter((n) => n !== netName);
+      }
+    }
+  }
   form.networks.splice(idx, 1);
+}
+
+function isServiceAttached(svc: ComposeServiceModel, netName: string): boolean {
+  return (svc.networks || []).includes(netName);
+}
+
+function toggleServiceNetwork(svc: ComposeServiceModel, netName: string) {
+  if (!svc.networks) {
+    svc.networks = [];
+  }
+  const idx = svc.networks.indexOf(netName);
+  if (idx >= 0) {
+    svc.networks.splice(idx, 1);
+  } else {
+    svc.networks.push(netName);
+  }
 }
 
 // Top-Level Volumes
@@ -1515,27 +1616,38 @@ function copyYaml() {
             </div>
 
             <!-- Connect to top-level networks -->
-            <div v-if="availableNetworkNames.length > 0">
-              <label class="form-label">Custom Networks (<code>networks:</code>)</label>
-              <div style="display: flex; gap: 12px; flex-wrap: wrap">
+            <div style="margin-top: 14px">
+              <label class="form-label">Attached Networks (<code>networks:</code>)</label>
+              <div v-if="form.networks.length === 0" style="font-size: 12px; color: var(--text-secondary)">
+                No custom networks defined in this app yet. Switch to the <strong>Networks</strong> tab above to attach known host networks (e.g. proxy_net) or create ad-hoc networks.
+              </div>
+              <div v-else style="display: flex; gap: 8px; flex-wrap: wrap">
                 <label
-                  v-for="netName in availableNetworkNames"
-                  :key="netName"
-                  style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer"
+                  v-for="net in form.networks"
+                  :key="net.id"
+                  style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-subtle); transition: all 0.15s ease"
+                  :style="{
+                    background: activeService.networks.includes(net.name) ? 'var(--badge-primary-bg, rgba(59, 130, 246, 0.15))' : 'var(--bg-surface-secondary)',
+                    borderColor: activeService.networks.includes(net.name) ? 'var(--accent-primary)' : 'var(--border-subtle)'
+                  }"
                 >
                   <input
                     type="checkbox"
-                    :value="netName"
-                    :checked="activeService.networks.includes(netName)"
+                    :value="net.name"
+                    :checked="activeService.networks.includes(net.name)"
                     @change="(e: any) => {
                       if (e.target.checked) {
-                        activeService.networks.push(netName);
+                        if (!activeService.networks.includes(net.name)) {
+                          activeService.networks.push(net.name);
+                        }
                       } else {
-                        activeService.networks = activeService.networks.filter((n) => n !== netName);
+                        activeService.networks = activeService.networks.filter((n) => n !== net.name);
                       }
                     }"
                   />
-                  <code>{{ netName }}</code>
+                  <code :style="{ color: activeService.networks.includes(net.name) ? 'var(--accent-primary)' : 'var(--text-primary)', fontWeight: 600 }">{{ net.name }}</code>
+                  <span v-if="net.external" class="badge badge-info" style="font-size: 9.5px; padding: 0 4px">External</span>
+                  <span v-else class="badge badge-neutral" style="font-size: 9.5px; padding: 0 4px">Ad-Hoc</span>
                 </label>
               </div>
             </div>
@@ -1545,50 +1657,138 @@ function copyYaml() {
 
       <!-- TAB 2: Top-Level Networks Editor -->
       <div v-else-if="currentTopTab === 'networks'" class="card" style="padding: 16px">
-        <div style="margin-bottom: 12px; font-size: 12.5px; color: var(--text-secondary)">
-          Declare application-scoped custom Docker networks (top-level <code>networks:</code> in Compose).
+        <div style="margin-bottom: 14px; font-size: 12.5px; color: var(--text-secondary)">
+          Declare application Docker networks (top-level <code>networks:</code>) and assign compose service containers to them.
+        </div>
+
+        <!-- Add Network Toolbar (Select known Docker network or create ad-hoc) -->
+        <div style="background: var(--bg-surface-secondary); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px; margin-bottom: 16px">
+          <div style="font-weight: 600; font-size: 12.5px; margin-bottom: 8px; color: var(--text-primary); display: flex; align-items: center; gap: 6px">
+            <MdiIcon :path="mdiLanConnect" size="16" style="color: var(--accent-primary)" />
+            Add Network to App
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+            <select v-model="selectedNetworkSource" class="form-input" style="min-width: 250px; font-size: 12px">
+              <option value="">-- Choose a Docker Network --</option>
+              <optgroup v-if="filteredHostNetworks.length > 0" label="Discovered Host Networks">
+                <option v-for="net in filteredHostNetworks" :key="net.id" :value="net.name">
+                  {{ net.name }} ({{ net.driver || 'bridge' }}{{ net.internal ? ', internal' : '' }})
+                </option>
+              </optgroup>
+              <option value="__ad_hoc__">+ Create New Ad-Hoc Network...</option>
+            </select>
+
+            <input
+              v-if="selectedNetworkSource === '__ad_hoc__'"
+              v-model="adHocNetworkName"
+              type="text"
+              class="form-input mono"
+              placeholder="e.g. backend-net"
+              style="min-width: 180px; font-size: 12px"
+              @keydown.enter.prevent="addNetwork"
+            />
+
+            <select
+              v-if="selectedNetworkSource === '__ad_hoc__'"
+              v-model="adHocNetworkDriver"
+              class="form-input"
+              style="width: 110px; font-size: 12px"
+            >
+              <option value="bridge">bridge</option>
+              <option value="overlay">overlay</option>
+              <option value="macvlan">macvlan</option>
+            </select>
+
+            <button
+              type="button"
+              class="btn btn-sm btn-primary"
+              :disabled="!canAddNetwork"
+              @click="addNetwork"
+            >
+              <MdiIcon :path="mdiPlus" size="14" style="margin-right: 4px" />
+              Add Network
+            </button>
+          </div>
         </div>
 
         <div v-if="form.networks.length === 0" style="padding: 24px; text-align: center; color: var(--text-secondary); font-size: 13px">
-          No custom networks defined. Services will use default bridge networking.
+          No custom networks defined. Compose services will use the default project bridge network.
         </div>
 
         <table v-else class="table" style="width: 100%; border-collapse: collapse">
           <thead>
             <tr style="text-align: left; font-size: 11.5px; color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle)">
-              <th style="padding: 6px 8px">NETWORK NAME</th>
-              <th style="padding: 6px 8px">DRIVER</th>
-              <th style="padding: 6px 8px">EXTERNAL</th>
-              <th style="padding: 6px 8px">INTERNAL ONLY</th>
-              <th style="padding: 6px 8px; width: 40px"></th>
+              <th style="padding: 8px 10px; width: 170px">NETWORK NAME</th>
+              <th style="padding: 8px 10px; width: 130px">DRIVER & SCOPE</th>
+              <th style="padding: 8px 10px; width: 150px">EXTERNAL</th>
+              <th style="padding: 8px 10px; min-width: 220px">ASSIGNED CONTAINERS (SERVICES)</th>
+              <th style="padding: 8px 10px; width: 40px; text-align: right"></th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="(net, idx) in form.networks" :key="net.id" style="border-bottom: 1px solid var(--border-subtle)">
-              <td style="padding: 6px 8px">
-                <input v-model="net.name" type="text" class="form-input mono" placeholder="e.g. backend" style="padding: 4px 8px; font-size: 12px" />
+              <td style="padding: 8px 10px; vertical-align: top">
+                <input
+                  v-model="net.name"
+                  type="text"
+                  class="form-input mono"
+                  placeholder="e.g. backend"
+                  style="padding: 4px 8px; font-size: 12px; width: 100%"
+                />
               </td>
-              <td style="padding: 6px 8px">
-                <select v-model="net.driver" class="form-input" :disabled="net.external" style="padding: 4px 8px; font-size: 12px">
+              <td style="padding: 8px 10px; vertical-align: top">
+                <select v-model="net.driver" class="form-input" :disabled="net.external" style="padding: 4px 8px; font-size: 12px; width: 100%">
                   <option value="bridge">bridge</option>
                   <option value="overlay">overlay</option>
                   <option value="macvlan">macvlan</option>
                 </select>
+                <div style="margin-top: 4px">
+                  <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; cursor: pointer" :style="{ opacity: net.external ? 0.5 : 1 }">
+                    <input v-model="net.internal" type="checkbox" :disabled="net.external" />
+                    Internal only
+                  </label>
+                </div>
               </td>
-              <td style="padding: 6px 8px">
+              <td style="padding: 8px 10px; vertical-align: top">
                 <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer">
                   <input v-model="net.external" type="checkbox" />
-                  Pre-existing (external)
+                  <span>Pre-existing</span>
                 </label>
+                <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px">
+                  {{ net.external ? 'Attached to host network' : 'Managed by compose stack' }}
+                </div>
               </td>
-              <td style="padding: 6px 8px">
-                <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer" :style="{ opacity: net.external ? 0.5 : 1 }">
-                  <input v-model="net.internal" type="checkbox" :disabled="net.external" />
-                  Isolate from external routing
-                </label>
+              <td style="padding: 8px 10px; vertical-align: top">
+                <div v-if="form.services.length === 0" style="font-size: 11.5px; color: var(--text-secondary)">
+                  No services in stack
+                </div>
+                <div v-else style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center">
+                  <label
+                    v-for="svc in form.services"
+                    :key="svc.id"
+                    style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border-subtle); transition: all 0.15s ease"
+                    :style="{
+                      background: isServiceAttached(svc, net.name) ? 'var(--badge-primary-bg, rgba(59, 130, 246, 0.15))' : 'var(--bg-surface-secondary)',
+                      borderColor: isServiceAttached(svc, net.name) ? 'var(--accent-primary)' : 'var(--border-subtle)'
+                    }"
+                  >
+                    <input
+                      type="checkbox"
+                      :checked="isServiceAttached(svc, net.name)"
+                      style="cursor: pointer"
+                      @change="toggleServiceNetwork(svc, net.name)"
+                    />
+                    <span class="mono" :style="{ color: isServiceAttached(svc, net.name) ? 'var(--accent-primary)' : 'var(--text-primary)', fontWeight: 600 }">
+                      {{ svc.name }}
+                    </span>
+                    <span v-if="svc.containerName && svc.containerName !== svc.name" style="font-size: 10px; color: var(--text-secondary)">
+                      ({{ svc.containerName }})
+                    </span>
+                  </label>
+                </div>
               </td>
-              <td style="padding: 6px 8px; text-align: center">
-                <button class="btn btn-sm btn-danger" style="padding: 2px 6px" @click="removeTopLevelNetwork(idx)">
+              <td style="padding: 8px 10px; text-align: right; vertical-align: top">
+                <button class="btn btn-sm btn-danger" style="padding: 4px 6px" title="Remove network" @click="removeTopLevelNetwork(idx)">
                   <MdiIcon :path="mdiClose" size="13" />
                 </button>
               </td>

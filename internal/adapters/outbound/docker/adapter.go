@@ -3173,3 +3173,96 @@ func (a *Adapter) ensureExternalNetworks(ctx context.Context, composeYAML string
 		}
 	}
 }
+
+type dockerNetworkRaw struct {
+	ID         string `json:"Id"`
+	Name       string `json:"Name"`
+	Driver     string `json:"Driver"`
+	Scope      string `json:"Scope"`
+	Internal   bool   `json:"Internal"`
+	Attachable bool   `json:"Attachable"`
+	IPAM       struct {
+		Config []struct {
+			Subnet  string `json:"Subnet"`
+			Gateway string `json:"Gateway"`
+		} `json:"Config"`
+	} `json:"IPAM"`
+}
+
+// ListNetworks retrieves all Docker networks on the host daemon (e.g. bridge, host, custom bridge, proxy_net).
+func (a *Adapter) ListNetworks(ctx context.Context) ([]domain.DockerNetwork, error) {
+	if a.hasSocket {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.baseURL()+"/networks", nil)
+		if err == nil {
+			resp, err := a.client.Do(req)
+			if err == nil {
+				defer resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					var rawList []dockerNetworkRaw
+					if err := json.NewDecoder(resp.Body).Decode(&rawList); err == nil {
+						var result []domain.DockerNetwork
+						for _, r := range rawList {
+							var subnets []string
+							for _, c := range r.IPAM.Config {
+								if c.Subnet != "" {
+									subnets = append(subnets, c.Subnet)
+								}
+							}
+							result = append(result, domain.DockerNetwork{
+								ID:          r.ID,
+								Name:        r.Name,
+								Driver:      r.Driver,
+								Scope:       r.Scope,
+								Internal:    r.Internal,
+								Attachable:  r.Attachable,
+								IPAMSubnets: subnets,
+							})
+						}
+						sort.Slice(result, func(i, j int) bool {
+							return result[i].Name < result[j].Name
+						})
+						return result, nil
+					}
+				}
+			}
+		}
+	}
+
+	// Fallback to docker CLI if socket is unavailable
+	if a.hasCompose || a.hasSocket {
+		cmd := exec.CommandContext(ctx, "docker", "network", "ls", "--format", "{{.ID}}\t{{.Name}}\t{{.Driver}}\t{{.Scope}}")
+		cmd.Env = a.dockerCLIEnv()
+		if out, err := cmd.Output(); err == nil {
+			var result []domain.DockerNetwork
+			lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+			for _, l := range lines {
+				parts := strings.Split(l, "\t")
+				if len(parts) >= 3 {
+					scope := "local"
+					if len(parts) >= 4 {
+						scope = parts[3]
+					}
+					result = append(result, domain.DockerNetwork{
+						ID:     parts[0],
+						Name:   parts[1],
+						Driver: parts[2],
+						Scope:  scope,
+					})
+				}
+			}
+			if len(result) > 0 {
+				sort.Slice(result, func(i, j int) bool {
+					return result[i].Name < result[j].Name
+				})
+				return result, nil
+			}
+		}
+	}
+
+	// Standard default docker fallback
+	return []domain.DockerNetwork{
+		{ID: "bridge", Name: "bridge", Driver: "bridge", Scope: "local"},
+		{ID: "host", Name: "host", Driver: "host", Scope: "local"},
+		{ID: "none", Name: "none", Driver: "null", Scope: "local"},
+	}, nil
+}

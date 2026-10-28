@@ -112,6 +112,7 @@ type DockerAppPort interface {
 	GetAppLogs(ctx context.Context, id string, tail int, serviceName string) (string, error)
 	CheckHostPort(ctx context.Context, port int, protocol string, excludeAppID string) (domain.HostPortStatus, error)
 	CheckHostPorts(ctx context.Context, ports []int, protocol string, excludeAppID string) ([]domain.HostPortStatus, error)
+	ListNetworks(ctx context.Context) ([]domain.DockerNetwork, error)
 }
 
 type LxcRuntimePort interface {

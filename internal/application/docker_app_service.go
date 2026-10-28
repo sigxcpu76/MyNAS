@@ -172,3 +172,8 @@ func (s *DockerAppService) CheckHostPort(ctx context.Context, port int, protocol
 func (s *DockerAppService) CheckHostPorts(ctx context.Context, ports []int, protocol string, excludeAppID string) ([]domain.HostPortStatus, error) {
 	return s.port.CheckHostPorts(ctx, ports, protocol, excludeAppID)
 }
+
+// ListNetworks retrieves all Docker networks on the host daemon.
+func (s *DockerAppService) ListNetworks(ctx context.Context) ([]domain.DockerNetwork, error) {
+	return s.port.ListNetworks(ctx)
+}

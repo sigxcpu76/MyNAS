@@ -14,6 +14,7 @@ import {
   type DockerAppContainer,
   type DockerConfig,
   type DockerContainer,
+  type DockerNetworkInfo,
   type Group,
   type HostPortStatus,
   isValidResourceId,
@@ -629,6 +630,10 @@ export class DockerAppService {
 
   async checkHostPorts(ports: number[], protocol?: string, excludeAppId?: string): Promise<HostPortStatus[]> {
     return this.appPort.checkHostPorts(ports, protocol, excludeAppId);
+  }
+
+  async listNetworks(): Promise<DockerNetworkInfo[]> {
+    return this.appPort.listNetworks();
   }
 
   async listRegistries(): Promise<DockerRegistry[]> {

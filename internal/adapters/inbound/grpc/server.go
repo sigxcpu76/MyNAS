@@ -1672,6 +1672,29 @@ func (s *Server) GetDockerAppLogs(ctx context.Context, req *nasv1.GetDockerAppLo
 	}, nil
 }
 
+func (s *Server) ListDockerNetworks(ctx context.Context, _ *nasv1.ListDockerNetworksRequest) (*nasv1.ListDockerNetworksResponse, error) {
+	if err := s.prereq.RequireModule("docker"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	nets, err := s.dockerApp.ListNetworks(ctx)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	var pbNets []*nasv1.DockerNetwork
+	for _, n := range nets {
+		pbNets = append(pbNets, &nasv1.DockerNetwork{
+			Id:          n.ID,
+			Name:        n.Name,
+			Driver:      n.Driver,
+			Scope:       n.Scope,
+			Internal:    n.Internal,
+			Attachable:  n.Attachable,
+			IpamSubnets: n.IPAMSubnets,
+		})
+	}
+	return &nasv1.ListDockerNetworksResponse{Networks: pbNets}, nil
+}
+
 // =============================================================================
 // Docker Storage Pool Configuration & Host Filesystem Browser
 // =============================================================================

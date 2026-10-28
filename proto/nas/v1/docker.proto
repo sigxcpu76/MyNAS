@@ -356,3 +356,23 @@ message DeleteDockerRegistryRequest {
     (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerRegistry"}
   ];
 }
+
+// =============================================================================
+// Docker Networks
+// =============================================================================
+
+message DockerNetwork {
+  string id = 1;
+  string name = 2;
+  string driver = 3;
+  string scope = 4;
+  bool internal = 5;
+  bool attachable = 6;
+  repeated string ipam_subnets = 7;
+}
+
+message ListDockerNetworksRequest {}
+
+message ListDockerNetworksResponse {
+  repeated DockerNetwork networks = 1;
+}

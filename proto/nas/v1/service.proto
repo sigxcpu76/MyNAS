@@ -559,6 +559,12 @@ service NasService {
     };
   }
 
+  rpc ListDockerNetworks(ListDockerNetworksRequest) returns (ListDockerNetworksResponse) {
+    option (google.api.http) = {
+      get: "/v1/dockerNetworks"
+    };
+  }
+
   // ---------------------------------------------------------------------------
   // Docker Storage & Apps Pool Configuration
   // ---------------------------------------------------------------------------

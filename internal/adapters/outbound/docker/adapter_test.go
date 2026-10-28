@@ -733,3 +733,25 @@ func TestDockerHostPortPreemptiveCheck(t *testing.T) {
 		t.Fatalf("UpdateApp failed with unexpected port conflict: %v", err)
 	}
 }
+
+func TestAdapterListNetworks(t *testing.T) {
+	ctx := context.Background()
+	adapter := docker.NewAdapterWithClient(http.DefaultClient, "http://docker")
+	nets, err := adapter.ListNetworks(ctx)
+	if err != nil {
+		t.Fatalf("ListNetworks failed: %v", err)
+	}
+	if len(nets) == 0 {
+		t.Fatalf("expected at least default fallback networks, got 0")
+	}
+	hasBridge := false
+	for _, n := range nets {
+		if n.Name == "bridge" {
+			hasBridge = true
+			break
+		}
+	}
+	if !hasBridge {
+		t.Errorf("expected bridge network to be present in %v", nets)
+	}
+}
