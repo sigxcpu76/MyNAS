@@ -41,14 +41,9 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 // ---------------------------------------------------------------------------
 // System Network Interface & Traffic History
 // ---------------------------------------------------------------------------
-export interface TrafficPoint {
-  time: string;
-  rxRate: number;
-  txRate: number;
-}
+export type { TrafficPoint } from '../store';
 
-const trafficHistory = ref<TrafficPoint[]>([]);
-const MAX_HISTORY_POINTS = 16;
+const trafficHistory = computed(() => nasState.networkTrafficHistory);
 
 const systemInterface = computed<NetworkInterfaceTelemetry | null>(() => {
   const list = telemetry.value?.network || [];
@@ -79,44 +74,11 @@ const systemInterface = computed<NetworkInterfaceTelemetry | null>(() => {
   return list.find((n) => n.name !== 'lo') || list[0] || null;
 });
 
-function recordTrafficSample() {
-  const iface = systemInterface.value;
-  const now = new Date();
-  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  const rx = iface?.rxRateBytesPerSec || 0;
-  const tx = iface?.txRateBytesPerSec || 0;
-
-  trafficHistory.value.push({
-    time: timeStr,
-    rxRate: rx,
-    txRate: tx,
-  });
-
-  if (trafficHistory.value.length > MAX_HISTORY_POINTS) {
-    trafficHistory.value.shift();
-  }
-}
-
 onMounted(() => {
-  const now = Date.now();
-  const iface = systemInterface.value;
-  const initRx = iface?.rxRateBytesPerSec || 0;
-  const initTx = iface?.txRateBytesPerSec || 0;
-
-  for (let i = 8; i >= 0; i--) {
-    const t = new Date(now - i * 4000);
-    trafficHistory.value.push({
-      time: t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      rxRate: i === 0 ? initRx : 0,
-      txRate: i === 0 ? initTx : 0,
-    });
-  }
-
   refreshTelemetry();
-  pollTimer = setInterval(async () => {
-    await refreshTelemetry();
-    recordTrafficSample();
-  }, 4000);
+  pollTimer = setInterval(() => {
+    refreshTelemetry();
+  }, 1000);
 });
 
 onBeforeUnmount(() => {

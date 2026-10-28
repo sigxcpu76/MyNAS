@@ -8,10 +8,12 @@ const props = withDefaults(
     options: echarts.EChartsOption;
     height?: string;
     loading?: boolean;
+    notMerge?: boolean;
   }>(),
   {
     height: '200px',
     loading: false,
+    notMerge: true,
   }
 );
 
@@ -73,7 +75,7 @@ watch(
   () => props.options,
   (newOpts) => {
     if (chartInstance && newOpts) {
-      chartInstance.setOption(newOpts, true);
+      chartInstance.setOption(newOpts, props.notMerge);
     }
   },
   { deep: true }

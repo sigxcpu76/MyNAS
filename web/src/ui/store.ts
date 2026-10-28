@@ -67,6 +67,12 @@ export interface ToastNotification {
   message: string;
 }
 
+export interface TrafficPoint {
+  time: string;
+  rxRate: number;
+  txRate: number;
+}
+
 let nextToastId = 1;
 
 interface LocalCachePayload {
@@ -151,6 +157,7 @@ export const nasState = reactive({
   groups: [] as Group[],
   includeSystemAccounts: false,
   includeSystemGroups: false,
+  networkTrafficHistory: [] as TrafficPoint[],
 
   toasts: [] as ToastNotification[],
 });
@@ -341,11 +348,67 @@ export async function refreshDockerData(): Promise<void> {
   }
 }
 
+export const MAX_TRAFFIC_HISTORY_POINTS = 30;
+
+export function recordNetworkTrafficSample(telem?: SystemTelemetry | null): void {
+  const current = telem || nasState.systemTelemetry;
+  if (!current?.network || current.network.length === 0) return;
+
+  const list = current.network;
+  const def = list.find((n) => n.isDefault);
+  const activePhysical = list.find(
+    (n) =>
+      n.isUp &&
+      n.ipAddresses &&
+      n.ipAddresses.length > 0 &&
+      !n.name.startsWith('docker') &&
+      !n.name.startsWith('br-') &&
+      !n.name.startsWith('vmnet') &&
+      !n.name.startsWith('veth') &&
+      !n.name.startsWith('virbr') &&
+      n.name !== 'lo'
+  );
+  const activeWithIp = list.find(
+    (n) => n.isUp && n.ipAddresses && n.ipAddresses.length > 0 && n.name !== 'lo'
+  );
+  const iface = def || activePhysical || activeWithIp || list.find((n) => n.name !== 'lo') || list[0];
+  if (!iface) return;
+
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const rx = iface.rxRateBytesPerSec || 0;
+  const tx = iface.txRateBytesPerSec || 0;
+
+  if (nasState.networkTrafficHistory.length === 0) {
+    const ts = now.getTime();
+    for (let i = MAX_TRAFFIC_HISTORY_POINTS - 1; i >= 0; i--) {
+      const t = new Date(ts - i * 1000);
+      nasState.networkTrafficHistory.push({
+        time: t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        rxRate: rx,
+        txRate: tx,
+      });
+    }
+    return;
+  }
+
+  nasState.networkTrafficHistory.push({
+    time: timeStr,
+    rxRate: rx,
+    txRate: tx,
+  });
+
+  if (nasState.networkTrafficHistory.length > MAX_TRAFFIC_HISTORY_POINTS) {
+    nasState.networkTrafficHistory.shift();
+  }
+}
+
 export async function refreshTelemetry(): Promise<void> {
   try {
     const telem = await services.system.getTelemetry();
     if (telem) {
       nasState.systemTelemetry = telem;
+      recordNetworkTrafficSample(telem);
     }
   } catch {
     // ignore

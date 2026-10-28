@@ -52,7 +52,12 @@ const systemInterface = computed<NetworkInterfaceTelemetry | null>(() => {
   return list.find((n) => n.name !== 'lo') || list[0] || null;
 });
 
-const historyPoints = computed(() => props.trafficHistory || []);
+const historyPoints = computed(() => {
+  if (props.trafficHistory && props.trafficHistory.length > 0) {
+    return props.trafficHistory;
+  }
+  return nasState.networkTrafficHistory || [];
+});
 
 const networkTrafficChartOptions = computed<echarts.EChartsOption>(() => {
   const p = chartPalette.value;
@@ -61,8 +66,17 @@ const networkTrafficChartOptions = computed<echarts.EChartsOption>(() => {
   const inRates = history.map((pt) => pt.rxRate);
   const outRates = history.map((pt) => pt.txRate);
 
+  const maxVal = Math.max(...inRates, ...outRates, 0);
+  // Baseline minimum scale of 64 KB/s so idle network noise doesn't spike to 100% height
+  const baselineMax = maxVal < 65536 ? 65536 : undefined;
+
   return {
     backgroundColor: 'transparent',
+    animation: true,
+    animationDuration: 1000,
+    animationDurationUpdate: 1000,
+    animationEasing: 'linear',
+    animationEasingUpdate: 'linear',
     tooltip: {
       trigger: 'axis',
       backgroundColor: p.tooltipBg,
@@ -106,12 +120,19 @@ const networkTrafficChartOptions = computed<echarts.EChartsOption>(() => {
       boundaryGap: false,
       data: times,
       axisLine: { lineStyle: { color: p.borderColor } },
-      axisLabel: { color: p.subtextColor, fontSize: 10 },
+      axisLabel: {
+        color: p.subtextColor,
+        fontSize: 10,
+        showMaxLabel: true,
+        showMinLabel: true,
+        interval: (index: number) => index % 6 === 0 || index === times.length - 1,
+      },
       splitLine: { show: false },
     },
     yAxis: {
       type: 'value',
       min: 0,
+      max: baselineMax,
       splitLine: {
         lineStyle: { color: p.gridBorder, type: 'dashed' },
       },
@@ -125,7 +146,7 @@ const networkTrafficChartOptions = computed<echarts.EChartsOption>(() => {
       {
         name: 'Inbound (RX / In)',
         type: 'line',
-        smooth: true,
+        smooth: 0.25,
         showSymbol: false,
         lineStyle: { width: 2, color: p.netIn },
         itemStyle: { color: p.netIn },
@@ -137,7 +158,7 @@ const networkTrafficChartOptions = computed<echarts.EChartsOption>(() => {
       {
         name: 'Outbound (TX / Out)',
         type: 'line',
-        smooth: true,
+        smooth: 0.25,
         showSymbol: false,
         lineStyle: { width: 2, color: p.netOut },
         itemStyle: { color: p.netOut },
@@ -229,6 +250,7 @@ const networkTrafficChartOptions = computed<echarts.EChartsOption>(() => {
         </div>
         <EChart
           :options="networkTrafficChartOptions"
+          :not-merge="false"
           height="165px"
         />
       </div>
