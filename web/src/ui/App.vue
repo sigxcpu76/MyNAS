@@ -45,6 +45,8 @@ import { useTableSort } from './composables/useTableSort';
 import ThemeSelector from './components/ThemeSelector.vue';
 import PrerequisitesTopBarButton from './components/PrerequisitesTopBarButton.vue';
 import PrerequisitesModal from './components/PrerequisitesModal.vue';
+import SystemDetailsTopBarButton from './components/SystemDetailsTopBarButton.vue';
+import SystemDetailsModal from './components/SystemDetailsModal.vue';
 import NanLogo from './components/NanLogo.vue';
 import OverviewSkeleton from './components/OverviewSkeleton.vue';
 import OverviewView from './views/OverviewView.vue';
@@ -62,6 +64,7 @@ import IdentityView from './views/IdentityView.vue';
 const storageExpanded = ref(true);
 const showPoolModal = ref(false);
 const showPrerequisitesModal = ref(false);
+const showSystemDetailsModal = ref(false);
 
 watch(
   () => nasState.activeTab,
@@ -485,6 +488,7 @@ onMounted(() => {
         </div>
 
         <div style="display: flex; align-items: center; gap: 10px">
+          <SystemDetailsTopBarButton @click="showSystemDetailsModal = true" />
           <PrerequisitesTopBarButton @click="showPrerequisitesModal = true" />
           <ThemeSelector />
 
@@ -616,6 +620,12 @@ onMounted(() => {
     <PrerequisitesModal
       v-if="showPrerequisitesModal"
       @close="showPrerequisitesModal = false"
+    />
+
+    <!-- System Details Specifications & Telemetry Modal -->
+    <SystemDetailsModal
+      v-if="showSystemDetailsModal"
+      @close="showSystemDetailsModal = false"
     />
 
     <!-- Confirmation / Question / Alert Modal -->

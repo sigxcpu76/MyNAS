@@ -3,6 +3,9 @@ import { mount } from '@vue/test-utils';
 import OverviewView from '../src/ui/views/OverviewView.vue';
 import WidgetCpu from '../src/ui/dashboard/widgets/WidgetCpu.vue';
 import WidgetMemory from '../src/ui/dashboard/widgets/WidgetMemory.vue';
+import WidgetSystem from '../src/ui/dashboard/widgets/WidgetSystem.vue';
+import SystemDetailsTopBarButton from '../src/ui/components/SystemDetailsTopBarButton.vue';
+import SystemDetailsModal from '../src/ui/components/SystemDetailsModal.vue';
 import { nasState } from '../src/ui/store';
 import { formatUptime, type ZfsPool } from '../src/domain/models';
 
@@ -158,7 +161,7 @@ describe('Overview Dashboard & Telemetry', () => {
   it('renders CPU telemetry with load averages, core counts and temperature', () => {
     const wrapper = mount(OverviewView);
 
-    expect(wrapper.text()).toContain('AMD Ryzen 9 9950X 16-Core Processor');
+    expect(wrapper.text()).toContain('Processor & Load');
     expect(wrapper.text()).toContain('32 Logical Threads (16 Cores)');
     expect(wrapper.text()).toContain('48.5 °C');
     expect(wrapper.text()).toContain('0.65'); // load1
@@ -188,8 +191,8 @@ describe('Overview Dashboard & Telemetry', () => {
     expect(cpuWrapper.text()).toContain('16 Physical Cores · 32 Logical Threads');
   });
 
-  it('renders fastfetch / neofetch hardware specification card', () => {
-    const wrapper = mount(OverviewView);
+  it('renders fastfetch / neofetch hardware specification card when WidgetSystem is used', () => {
+    const wrapper = mount(WidgetSystem);
 
     const fastfetch = wrapper.find('.fastfetch-card');
     expect(fastfetch.exists()).toBe(true);
@@ -201,6 +204,22 @@ describe('Overview Dashboard & Telemetry', () => {
     expect(fastfetch.text()).toContain('RTX A5000');
     expect(fastfetch.text()).toContain('AMD Radeon RX 6600');
     expect(fastfetch.find('.ascii-art').exists()).toBe(false);
+  });
+
+  it('renders system details top bar button and opens modal with detailed specs', async () => {
+    const btnWrapper = mount(SystemDetailsTopBarButton);
+    expect(btnWrapper.text()).toContain('titan-nas');
+    expect(btnWrapper.text()).toContain('2d 3h 30m');
+
+    await btnWrapper.trigger('click');
+    expect(btnWrapper.emitted('click')).toBeTruthy();
+
+    const modalWrapper = mount(SystemDetailsModal);
+    expect(modalWrapper.text()).toContain('System Information');
+    expect(modalWrapper.text()).toContain('ROG STRIX X870-E');
+    expect(modalWrapper.text()).toContain('AMD Ryzen 9 9950X 16-Core Processor');
+    expect(modalWrapper.text()).toContain('American Megatrends Inc.');
+    expect(modalWrapper.text()).toContain('enp15s0');
   });
 
   it('renders system network interface with IPs, MAC, and live in/out throughput graph', () => {
@@ -276,7 +295,7 @@ describe('Overview Dashboard & Telemetry', () => {
 
       // Should now have class col-span-6
       expect(firstWidget.classes()).toContain('col-span-6');
-      expect(store.get('nas_dashboard_layout_v2')).toContain('"colSpan":6');
+      expect(store.get('nas_dashboard_layout_v3')).toContain('"colSpan":6');
     });
 
     it('allows removing a widget from the dashboard', async () => {
@@ -284,14 +303,14 @@ describe('Overview Dashboard & Telemetry', () => {
       await wrapper.find('.edit-dashboard-btn').trigger('click');
 
       const initialCount = wrapper.findAll('.widget-wrapper').length;
-      expect(initialCount).toBe(4);
+      expect(initialCount).toBe(3);
 
       // Remove the first widget
       const removeBtn = wrapper.find('.remove-btn');
       await removeBtn.trigger('click');
 
       expect(wrapper.findAll('.widget-wrapper').length).toBe(initialCount - 1);
-      expect(store.get('nas_dashboard_layout_v2')).toBeDefined();
+      expect(store.get('nas_dashboard_layout_v3')).toBeDefined();
     });
 
     it('allows reordering widgets using move left/right buttons', async () => {
@@ -345,14 +364,13 @@ describe('Overview Dashboard & Telemetry', () => {
       const wrapper = mount(OverviewView);
       await wrapper.find('.edit-dashboard-btn').trigger('click');
 
-      // Remove a couple widgets
-      await wrapper.find('.remove-btn').trigger('click');
+      // Remove a widget
       await wrapper.find('.remove-btn').trigger('click');
       expect(wrapper.findAll('.widget-wrapper').length).toBe(2);
 
       // Click Reset Default
       await wrapper.find('.reset-layout-btn').trigger('click');
-      expect(wrapper.findAll('.widget-wrapper').length).toBe(4);
+      expect(wrapper.findAll('.widget-wrapper').length).toBe(3);
     });
 
     it('reorders widgets via drag and drop', async () => {
