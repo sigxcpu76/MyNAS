@@ -708,7 +708,27 @@ func (a *Adapter) runInstallerInContainer(id, scriptURL, recipe, rootfsPath stri
 
 	installerScript := strings.TrimSpace(recipe)
 	if installerScript == "" && scriptURL != "" {
-		installerScript = fmt.Sprintf("curl -fsSL %q | bash", scriptURL)
+		if strings.Contains(scriptURL, "community-scripts/ProxmoxVE") && strings.Contains(scriptURL, "/ct/") {
+			installURL := strings.Replace(scriptURL, "/ct/", "/install/", 1)
+			installURL = strings.TrimSuffix(installURL, ".sh") + "-install.sh"
+			installerScript = fmt.Sprintf(`export DEBIAN_FRONTEND=noninteractive
+export TERM=xterm-256color
+if command -v apt-get >/dev/null 2>&1; then
+  apt-get update -y && apt-get install -y curl ca-certificates gnupg gpg sudo
+elif command -v apk >/dev/null 2>&1; then
+  apk add --no-cache curl ca-certificates bash gnupg sudo
+elif command -v dnf >/dev/null 2>&1; then
+  dnf install -y curl ca-certificates gnupg2 sudo
+fi
+export FUNCTIONS_FILE_PATH="$(curl -fsSL https://raw.githubusercontent.com/community-scripts/core/main/lxc/install.func)"
+curl -fsSL %q | bash
+`, installURL)
+		} else {
+			installerScript = fmt.Sprintf(`export DEBIAN_FRONTEND=noninteractive
+export TERM=xterm-256color
+curl -fsSL %q | bash
+`, scriptURL)
+		}
 	}
 
 	if installerScript == "" {
@@ -716,10 +736,10 @@ func (a *Adapter) runInstallerInContainer(id, scriptURL, recipe, rootfsPath stri
 		return
 	}
 
-	// Write installer script inside container rootfs
-	containerTmp := filepath.Join(rootfsPath, "tmp")
-	_ = os.MkdirAll(containerTmp, 0755)
-	scriptFile := filepath.Join(containerTmp, "installer.sh")
+	// Write installer script to /root/installer.sh in container rootfs (never shadowed by systemd tmpfs)
+	containerRoot := filepath.Join(rootfsPath, "root")
+	_ = os.MkdirAll(containerRoot, 0700)
+	scriptFile := filepath.Join(containerRoot, "installer.sh")
 	_ = os.WriteFile(scriptFile, []byte("#!/bin/bash\nset -e\n"+installerScript+"\n"), 0755)
 
 	if _, err := exec.LookPath("lxc-attach"); err == nil {
@@ -736,7 +756,7 @@ func (a *Adapter) runInstallerInContainer(id, scriptURL, recipe, rootfsPath stri
 		}
 
 		fmt.Fprintf(logFile, "[%s] Running installation recipe inside container...\n", time.Now().Format(time.RFC3339))
-		cmd := exec.Command("lxc-attach", "-n", id, "--", "/bin/bash", "/tmp/installer.sh")
+		cmd := exec.Command("lxc-attach", "-n", id, "-v", "TERM=xterm-256color", "-v", "DEBIAN_FRONTEND=noninteractive", "--", "/bin/bash", "/root/installer.sh")
 		cmd.Stdout = logFile
 		cmd.Stderr = logFile
 		if err := cmd.Run(); err != nil {
@@ -755,9 +775,6 @@ func resolveDefaultLinuxContainersURL(distro, release string) string {
 	r := strings.ToLower(release)
 	switch d {
 	case "debian":
-		if r == "13" || r == "trixie" {
-			return "https://images.linuxcontainers.org/images/debian/trixie/amd64/default/20261028_05:24/rootfs.tar.xz"
-		}
 		return "https://images.linuxcontainers.org/images/debian/bookworm/amd64/default/20261028_05:24/rootfs.tar.xz"
 	case "ubuntu":
 		if r == "jammy" || r == "22.04" {
