@@ -56,10 +56,27 @@ function ipv4ToNumber(ip: string | undefined): number | null {
 // =============================================================================
 // Top Navigation Subtabs
 // =============================================================================
-const activeMainTab = ref<'containers' | 'catalog' | 'templates'>('containers');
+function getInitialLxcTab(): 'containers' | 'catalog' | 'templates' {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const saved = window.localStorage.getItem('lxc_active_tab');
+      if (saved === 'catalog' || saved === 'templates' || saved === 'containers') {
+        return saved;
+      }
+    }
+  } catch {}
+  return 'containers';
+}
+
+const activeMainTab = ref<'containers' | 'catalog' | 'templates'>(getInitialLxcTab());
 
 function switchTab(tab: 'containers' | 'catalog' | 'templates') {
   activeMainTab.value = tab;
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem('lxc_active_tab', tab);
+    }
+  } catch {}
   if (tab === 'catalog' && catalogItems.value.length === 0 && !isLoadingCatalog.value) {
     loadCatalog();
   }
@@ -198,13 +215,13 @@ const templateSort = useTableSort(() => nasState.lxcTemplates, {
 // =============================================================================
 // App Catalog State & Filters
 // =============================================================================
-const catalogItems = ref<LxcCatalogItem[]>([]);
+const catalogItems = ref<LxcCatalogItem[]>(nasState.lxcCatalogItems || []);
 const isLoadingCatalog = ref(false);
 const isSyncingCatalog = ref(false);
 const catalogSourceFilter = ref<string>('all');
 const catalogCategoryFilter = ref<string>('all');
 const catalogQuery = ref<string>('');
-const catalogLastSync = ref<string>('');
+const catalogLastSync = ref<string>(nasState.lxcCatalogLastSync || '');
 
 function formatSyncTime(iso?: string): string {
   if (!iso) return '';
@@ -248,8 +265,11 @@ async function loadCatalog() {
   isLoadingCatalog.value = true;
   try {
     const res = await services.lxc.listCatalogItems();
-    catalogItems.value = res?.items ?? (Array.isArray(res) ? res : []);
+    const items = res?.items ?? (Array.isArray(res) ? res : []);
+    catalogItems.value = items;
+    nasState.lxcCatalogItems = items;
     catalogLastSync.value = res?.lastSyncTime ?? '';
+    nasState.lxcCatalogLastSync = catalogLastSync.value;
   } catch (err: any) {
     console.error('Failed to load LXC catalog:', err);
   } finally {
@@ -263,6 +283,7 @@ async function handleSyncCatalog() {
     const res = await services.lxc.syncCatalog(true);
     notify('success', res.message || `Successfully synced ${res.totalItems} catalog items`);
     catalogLastSync.value = res.lastSyncTime;
+    nasState.lxcCatalogLastSync = res.lastSyncTime;
     await loadCatalog();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to sync LXC catalog');
@@ -694,6 +715,7 @@ onMounted(async () => {
   isViewActive = true;
   await refreshLxc();
   refreshTemplates().catch(() => {});
+  loadCatalog().catch(() => {});
   runContainerLoop();
 });
 

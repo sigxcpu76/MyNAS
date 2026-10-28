@@ -214,14 +214,14 @@ async function runTelemetryLoop() {
 // TrueNAS Application Catalog
 // =============================================================================
 const isCatalogModalOpen = ref(false);
-const catalogApps = ref<CatalogApp[]>([]);
+const catalogApps = ref<CatalogApp[]>(nasState.catalogApps || []);
 const isLoadingCatalog = ref(false);
 const isSyncingCatalog = ref(false);
 const catalogSearchQuery = ref('');
 const catalogSelectedTrain = ref<'ALL' | 'stable' | 'community'>('ALL');
 const catalogSelectedCategory = ref<string>('ALL');
-const catalogLastSyncTime = ref<string>('');
-const catalogTotalCount = ref<number>(0);
+const catalogLastSyncTime = ref<string>(nasState.catalogLastSync || '');
+const catalogTotalCount = ref<number>(nasState.catalogApps?.length || 0);
 const failedIcons = ref<Record<string, boolean>>({});
 const importingAppId = ref<string | null>(null);
 
@@ -279,9 +279,11 @@ async function loadCatalog() {
   try {
     const res = await services.catalog.listApps();
     catalogApps.value = res.apps;
+    nasState.catalogApps = res.apps;
     catalogTotalCount.value = res.totalSize;
     if (res.lastSyncTime) {
       catalogLastSyncTime.value = res.lastSyncTime;
+      nasState.catalogLastSync = res.lastSyncTime;
     }
   } catch (err: any) {
     notify('error', err?.message || 'Failed to load Application Catalog');
@@ -296,6 +298,7 @@ async function syncCatalog() {
     notify('info', 'Syncing app catalog...');
     const res = await services.catalog.syncCatalog(true);
     catalogLastSyncTime.value = res.lastSyncTime;
+    nasState.catalogLastSync = res.lastSyncTime;
     notify(
       'success',
       res.message || `Catalog synchronized: ${res.totalApps} applications available.`
@@ -858,6 +861,7 @@ onMounted(() => {
   if (nasState.dockerApps.length === 0) {
     refreshApps();
   }
+  loadCatalog().catch(() => {});
   runTelemetryLoop();
 });
 
