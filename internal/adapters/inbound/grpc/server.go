@@ -3210,9 +3210,17 @@ func (s *Server) ListLxcCatalogItems(ctx context.Context, req *nasv1.ListLxcCata
 		return nil, status.Errorf(codes.Internal, "failed to list LXC catalog items: %v", err)
 	}
 
-	paged, _, total, err := PaginateSlice(items, req.GetPageSize(), req.GetPageToken())
-	if err != nil {
-		return nil, err
+	var paged []domain.LxcCatalogItem
+	var total int32
+	if req.GetPageSize() > 0 || req.GetPageToken() != "" {
+		var err error
+		paged, _, total, err = PaginateSlice(items, req.GetPageSize(), req.GetPageToken())
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		paged = items
+		total = int32(len(items))
 	}
 
 	out := make([]*nasv1.LxcCatalogItem, 0, len(paged))

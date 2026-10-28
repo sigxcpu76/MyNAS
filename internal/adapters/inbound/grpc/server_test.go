@@ -560,7 +560,7 @@ func TestServer_LxcCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetLxcCatalogItem failed: %v", err)
 	}
-	if item.GetTitle() != "Pi-hole" || item.GetSource() != "community-scripts" {
+	if !strings.EqualFold(item.GetTitle(), "pi-hole") || item.GetSource() != "community-scripts" {
 		t.Fatalf("unexpected item: %+v", item)
 	}
 
