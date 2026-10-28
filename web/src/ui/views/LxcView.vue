@@ -206,6 +206,17 @@ const catalogCategoryFilter = ref<string>('all');
 const catalogQuery = ref<string>('');
 const catalogLastSync = ref<string>('');
 
+function formatSyncTime(iso?: string): string {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
 const catalogCategories = computed(() => {
   const cats = new Set<string>();
   for (const item of catalogItems.value) {
@@ -1274,7 +1285,7 @@ function copyTemplatePath(path: string) {
 
         <div style="display: flex; gap: 8px; align-items: center">
           <span v-if="catalogLastSync" style="font-size: 11px; color: var(--text-muted)">
-            Synced: {{ new Date(catalogLastSync).toLocaleDateString() }}
+            Last synced: {{ formatSyncTime(catalogLastSync) }}
           </span>
           <button class="btn btn-sm" :disabled="isSyncingCatalog" @click="handleSyncCatalog">
             <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" />

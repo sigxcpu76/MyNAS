@@ -2,6 +2,9 @@ package lxc_catalog_test
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/sigxcpu/nas/internal/adapters/outbound/lxc_catalog"
@@ -84,5 +87,89 @@ func TestLxcCatalogAdapter_SeedAndFilter(t *testing.T) {
 	}
 	if item.Title != "Plex Media Server" || !item.GpuRecommended || item.DefaultPort != 32400 {
 		t.Fatalf("unexpected item values: %+v", item)
+	}
+}
+
+func TestLxcCatalogAdapter_PersistentDiskCacheAndOnDemandSync(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Mock server for TurnKey aplinfo
+	turnkeyMock := `Package: turnkey-mock-app
+Version: 18.0-1
+OS: debian-12
+Architecture: amd64
+Location: debian-12-turnkey-mock-app_18.0-1_amd64.tar.gz
+Infopage: https://www.turnkeylinux.org/mock-app
+Description: Mock appliance for disk caching test
+`
+	tsTurnkey := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		fmt.Fprint(w, turnkeyMock)
+	}))
+	defer tsTurnkey.Close()
+
+	// Mock server for LinuxContainers index-system
+	lxcMock := `testos;testrel;amd64;default;20261028_00:00;/images/testos/testrel/amd64/default/20261028_00:00/
+`
+	tsLxc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		fmt.Fprint(w, lxcMock)
+	}))
+	defer tsLxc.Close()
+
+	// 1. Adapter 1: runs on-demand sync and persists to cache directory
+	adapter1 := lxc_catalog.NewAdapter(tempDir)
+	adapter1.SetURLsForTest("http://127.0.0.1:0/unreachable", tsTurnkey.URL, tsLxc.URL)
+
+	ctx := context.Background()
+	count1, syncTime1, err := adapter1.SyncCatalog(ctx, true)
+	if err != nil {
+		t.Fatalf("SyncCatalog failed: %v", err)
+	}
+	if count1 == 0 || syncTime1.IsZero() {
+		t.Fatalf("expected non-zero count and syncTime: count=%d, time=%v", count1, syncTime1)
+	}
+
+	// Verify items from sync are present in adapter1
+	_, err = adapter1.GetItem(ctx, "turnkey-mock-app")
+	if err != nil {
+		t.Fatalf("turnkey-mock-app not found in adapter1: %v", err)
+	}
+	_, err = adapter1.GetItem(ctx, "lxc-testos-testrel")
+	if err != nil {
+		t.Fatalf("lxc-testos-testrel not found in adapter1: %v", err)
+	}
+
+	// 2. Adapter 2: created against the same directory, starts without network
+	adapter2 := lxc_catalog.NewAdapter(tempDir)
+	adapter2.SetURLsForTest("http://127.0.0.1:0/unreachable", "http://127.0.0.1:0/unreachable", "http://127.0.0.1:0/unreachable")
+
+	syncTime2 := adapter2.LastSyncTime()
+	if syncTime2.IsZero() {
+		t.Fatalf("expected adapter2 to restore lastSyncTime from cache, got zero")
+	}
+	if syncTime2.Unix() != syncTime1.Unix() {
+		t.Errorf("expected lastSync time to match: %v vs %v", syncTime2, syncTime1)
+	}
+
+	// Verify items loaded from disk cache
+	item2, err := adapter2.GetItem(ctx, "turnkey-mock-app")
+	if err != nil {
+		t.Fatalf("turnkey-mock-app not found in cached adapter2: %v", err)
+	}
+	if item2.Title != "Mock App" {
+		t.Errorf("unexpected item title: %s", item2.Title)
+	}
+
+	// 3. On-demand sync with force=false returns cached results without error
+	count3, syncTime3, err := adapter2.SyncCatalog(ctx, false)
+	if err != nil {
+		t.Fatalf("SyncCatalog(force=false) failed on cached catalog: %v", err)
+	}
+	if count3 != count1 {
+		t.Errorf("expected count3 == count1 (%d vs %d)", count3, count1)
+	}
+	if syncTime3.Unix() != syncTime1.Unix() {
+		t.Errorf("expected syncTime %v, got %v", syncTime1, syncTime3)
 	}
 }

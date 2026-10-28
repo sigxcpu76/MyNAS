@@ -12,7 +12,7 @@ export class CatalogService {
     return this.port.getApp(appId, train);
   }
 
-  async syncCatalog(force = false): Promise<{ success: boolean; message: string; totalApps: number; lastSyncTime: string }> {
+  async syncCatalog(force = true): Promise<{ success: boolean; message: string; totalApps: number; lastSyncTime: string }> {
     return this.port.syncCatalog(force);
   }
 }

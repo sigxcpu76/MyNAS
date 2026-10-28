@@ -1086,8 +1086,101 @@ func newLxcCmd(rootOpts *RootOptions) *cobra.Command {
 		},
 	}
 
+	cmd.AddCommand(listCmd, newLxcCatalogCmd(rootOpts))
+	return cmd
+}
 
-	cmd.AddCommand(listCmd)
+func newLxcCatalogCmd(rootOpts *RootOptions) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "catalog",
+		Aliases: []string{"cat"},
+		Short:   "Browse and sync LXC application, appliance, and OS template catalog",
+	}
+
+	var sourceFilter, categoryFilter, queryFilter string
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List items available in the LXC application catalog",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			resp, err := client.ListLxcCatalogItems(cmd.Context(), &nasv1.ListLxcCatalogItemsRequest{
+				Source:   sourceFilter,
+				Category: categoryFilter,
+				Query:    queryFilter,
+			})
+			if err != nil {
+				return err
+			}
+
+			if rootOpts.JSONOutput {
+				return rootOpts.printJSON(resp)
+			}
+
+			w := tabwriter.NewWriter(rootOpts.Out, 0, 0, 3, ' ', 0)
+			fmt.Fprintln(w, "ID\tTITLE\tSOURCE\tCATEGORY\tDISTRO/RELEASE")
+			for _, it := range resp.GetItems() {
+				distro := it.GetBaseDistribution()
+				if it.GetBaseRelease() != "" {
+					distro += " " + it.GetBaseRelease()
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+					it.GetId(),
+					it.GetTitle(),
+					it.GetSource(),
+					it.GetCategory(),
+					distro,
+				)
+			}
+			w.Flush()
+			if resp.GetLastSyncTime() != "" {
+				fmt.Fprintf(rootOpts.Out, "\nTotal items: %d (Last synced: %s)\n", resp.GetTotalSize(), resp.GetLastSyncTime())
+			}
+			return nil
+		},
+	}
+	listCmd.Flags().StringVar(&sourceFilter, "source", "", "Filter by source (community-scripts, turnkey, linuxcontainers)")
+	listCmd.Flags().StringVar(&categoryFilter, "category", "", "Filter by category")
+	listCmd.Flags().StringVarP(&queryFilter, "query", "q", "", "Search query for title or description")
+
+	var forceSync bool
+	syncCmd := &cobra.Command{
+		Use:   "sync",
+		Short: "Synchronize LXC catalog items from upstream repositories on demand",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			summary, err := client.SyncLxcCatalog(cmd.Context(), &nasv1.SyncLxcCatalogRequest{
+				Force: forceSync,
+			})
+			if err != nil {
+				return err
+			}
+
+			if rootOpts.JSONOutput {
+				return rootOpts.printJSON(summary)
+			}
+
+			fmt.Fprintf(rootOpts.Out, "Successfully synchronized LXC catalog:\n")
+			fmt.Fprintf(rootOpts.Out, "  Message:            %s\n", summary.GetMessage())
+			fmt.Fprintf(rootOpts.Out, "  Total items:        %d\n", summary.GetTotalItems())
+			if summary.GetLastSyncTime() != "" {
+				fmt.Fprintf(rootOpts.Out, "  Sync timestamp:     %s\n", summary.GetLastSyncTime())
+			}
+			return nil
+		},
+	}
+	syncCmd.Flags().BoolVarP(&forceSync, "force", "f", false, "Force re-download even if cache is fresh")
+
+	cmd.AddCommand(listCmd, syncCmd)
 	return cmd
 }
 

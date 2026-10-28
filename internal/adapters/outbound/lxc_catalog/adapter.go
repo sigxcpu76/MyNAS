@@ -26,12 +26,21 @@ const (
 	linuxContainersURL    = "https://images.linuxcontainers.org/meta/1.0/index-system"
 )
 
+type CatalogMeta struct {
+	LastSync   time.Time `json:"last_sync"`
+	TotalItems int       `json:"total_items"`
+	Version    int       `json:"version"`
+}
+
 type Adapter struct {
-	mu         sync.RWMutex
-	cacheDir   string
-	items      map[string]domain.LxcCatalogItem
-	lastSync   time.Time
-	httpClient *http.Client
+	mu                    sync.RWMutex
+	cacheDir              string
+	items                 map[string]domain.LxcCatalogItem
+	lastSync              time.Time
+	httpClient            *http.Client
+	communityScriptsPBURL string
+	turnkeyAplInfoURL     string
+	linuxContainersURL    string
 }
 
 func NewAdapter(cacheDir string) *Adapter {
@@ -41,9 +50,12 @@ func NewAdapter(cacheDir string) *Adapter {
 	_ = os.MkdirAll(cacheDir, 0755)
 
 	a := &Adapter{
-		cacheDir:   cacheDir,
-		items:      make(map[string]domain.LxcCatalogItem),
-		httpClient: &http.Client{Timeout: 45 * time.Second},
+		cacheDir:              cacheDir,
+		items:                 make(map[string]domain.LxcCatalogItem),
+		httpClient:            &http.Client{Timeout: 45 * time.Second},
+		communityScriptsPBURL: communityScriptsPBURL,
+		turnkeyAplInfoURL:     turnkeyAplInfoURL,
+		linuxContainersURL:    linuxContainersURL,
 	}
 
 	// 1. Seed pre-defined embedded catalog items (900+ community scripts, turnkey, and linuxcontainers)
@@ -53,6 +65,20 @@ func NewAdapter(cacheDir string) *Adapter {
 	a.loadCacheFromDisk()
 
 	return a
+}
+
+func (a *Adapter) SetURLsForTest(communityScripts, turnkey, linuxContainers string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if communityScripts != "" {
+		a.communityScriptsPBURL = communityScripts
+	}
+	if turnkey != "" {
+		a.turnkeyAplInfoURL = turnkey
+	}
+	if linuxContainers != "" {
+		a.linuxContainersURL = linuxContainers
+	}
 }
 
 func (a *Adapter) LastSyncTime() time.Time {
@@ -132,7 +158,7 @@ func (a *Adapter) SyncCatalog(ctx context.Context, force bool) (int, time.Time, 
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if !force && time.Since(a.lastSync) < 12*time.Hour && len(a.items) > 0 {
+	if !force && !a.lastSync.IsZero() && time.Since(a.lastSync) < 1*time.Hour && len(a.items) > 0 {
 		return len(a.items), a.lastSync, nil
 	}
 
@@ -145,8 +171,8 @@ func (a *Adapter) SyncCatalog(ctx context.Context, force bool) (int, time.Time, 
 	// 3. Sync LinuxContainers official OS minimal templates from index-system
 	a.syncLinuxContainers(ctx)
 
-	a.lastSync = time.Now()
-	a.saveCacheToDisk()
+	a.lastSync = time.Now().UTC()
+	_ = a.saveCacheToDiskLocked()
 
 	return len(a.items), a.lastSync, nil
 }
@@ -188,9 +214,14 @@ type pbCategoryResponse struct {
 }
 
 func (a *Adapter) syncCommunityScripts(ctx context.Context) {
+	pbURL := a.communityScriptsPBURL
+	if pbURL == "" {
+		pbURL = communityScriptsPBURL
+	}
+
 	// Categories lookup
 	catMap := make(map[string]string)
-	catReq, err := http.NewRequestWithContext(ctx, http.MethodGet, communityScriptsPBURL+"/api/collections/script_categories/records?perPage=100", nil)
+	catReq, err := http.NewRequestWithContext(ctx, http.MethodGet, pbURL+"/api/collections/script_categories/records?perPage=100", nil)
 	if err == nil {
 		resp, err := a.httpClient.Do(catReq)
 		if err == nil {
@@ -206,7 +237,7 @@ func (a *Adapter) syncCommunityScripts(ctx context.Context) {
 
 	now := time.Now()
 	for page := 1; page <= 5; page++ {
-		url := fmt.Sprintf("%s/api/collections/script_scripts/records?page=%d&perPage=500", communityScriptsPBURL, page)
+		url := fmt.Sprintf("%s/api/collections/script_scripts/records?page=%d&perPage=500", pbURL, page)
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {
 			break
@@ -303,7 +334,11 @@ func (a *Adapter) syncCommunityScripts(ctx context.Context) {
 }
 
 func (a *Adapter) syncTurnKey(ctx context.Context) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, turnkeyAplInfoURL, nil)
+	url := a.turnkeyAplInfoURL
+	if url == "" {
+		url = turnkeyAplInfoURL
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return
 	}
@@ -427,7 +462,11 @@ func (a *Adapter) syncTurnKey(ctx context.Context) {
 }
 
 func (a *Adapter) syncLinuxContainers(ctx context.Context) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, linuxContainersURL, nil)
+	url := a.linuxContainersURL
+	if url == "" {
+		url = linuxContainersURL
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return
 	}
@@ -488,6 +527,37 @@ func (a *Adapter) syncLinuxContainers(ctx context.Context) {
 	}
 }
 
+func atomicWriteFile(filename string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(filename)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	tmpFile, err := os.CreateTemp(dir, "."+filepath.Base(filename)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmpFile.Name()
+	defer func() {
+		_ = os.Remove(tmpPath)
+	}()
+
+	if _, err := tmpFile.Write(data); err != nil {
+		_ = tmpFile.Close()
+		return err
+	}
+	if err := tmpFile.Sync(); err != nil {
+		_ = tmpFile.Close()
+		return err
+	}
+	if err := tmpFile.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpPath, perm); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, filename)
+}
+
 func (a *Adapter) loadCacheFromDisk() {
 	cacheFile := filepath.Join(a.cacheDir, "lxc_catalog.json")
 	data, err := os.ReadFile(cacheFile)
@@ -500,14 +570,28 @@ func (a *Adapter) loadCacheFromDisk() {
 		return
 	}
 
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	for _, item := range cachedItems {
 		a.items[item.ID] = item
 	}
-	a.lastSync = time.Now()
+
+	metaFile := filepath.Join(a.cacheDir, "lxc_catalog_meta.json")
+	if metaData, err := os.ReadFile(metaFile); err == nil {
+		var meta CatalogMeta
+		if err := json.Unmarshal(metaData, &meta); err == nil && !meta.LastSync.IsZero() {
+			a.lastSync = meta.LastSync.UTC()
+			return
+		}
+	}
+
+	if fi, err := os.Stat(cacheFile); err == nil {
+		a.lastSync = fi.ModTime().UTC()
+	}
 }
 
-func (a *Adapter) saveCacheToDisk() {
-	cacheFile := filepath.Join(a.cacheDir, "lxc_catalog.json")
+func (a *Adapter) saveCacheToDiskLocked() error {
 	var items []domain.LxcCatalogItem
 	for _, item := range a.items {
 		items = append(items, item)
@@ -515,9 +599,32 @@ func (a *Adapter) saveCacheToDisk() {
 
 	data, err := json.MarshalIndent(items, "", "  ")
 	if err != nil {
-		return
+		return err
 	}
-	_ = os.WriteFile(cacheFile, data, 0644)
+
+	cacheFile := filepath.Join(a.cacheDir, "lxc_catalog.json")
+	if err := atomicWriteFile(cacheFile, data, 0644); err != nil {
+		return err
+	}
+
+	meta := CatalogMeta{
+		LastSync:   a.lastSync.UTC(),
+		TotalItems: len(items),
+		Version:    1,
+	}
+	metaData, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	metaFile := filepath.Join(a.cacheDir, "lxc_catalog_meta.json")
+	return atomicWriteFile(metaFile, metaData, 0644)
+}
+
+func (a *Adapter) saveCacheToDisk() error {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.saveCacheToDiskLocked()
 }
 
 func (a *Adapter) seedDefaultItems() {

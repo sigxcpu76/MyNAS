@@ -2146,7 +2146,7 @@ export class HttpCatalogAdapter implements CatalogPort {
     return mapCatalogApp(raw);
   }
 
-  async syncCatalog(force = false): Promise<{ success: boolean; message: string; totalApps: number; lastSyncTime: string }> {
+  async syncCatalog(force = true): Promise<{ success: boolean; message: string; totalApps: number; lastSyncTime: string }> {
     const raw = await this.client.customMethod<any>('catalog', 'sync', { force });
     return {
       success: Boolean(raw?.success ?? true),

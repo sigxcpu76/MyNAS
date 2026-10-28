@@ -24,6 +24,12 @@ const (
 	defaultSyncPeriod = 24 * time.Hour
 )
 
+type CatalogMeta struct {
+	LastSync  time.Time `json:"last_sync"`
+	TotalApps int       `json:"total_apps"`
+	Version   int       `json:"version"`
+}
+
 type rawCatalogEntry struct {
 	Name        string   `json:"name"`
 	Title       string   `json:"title"`
@@ -174,6 +180,15 @@ func (a *Adapter) GetApp(ctx context.Context, train, appID string) (*domain.Cata
 }
 
 func (a *Adapter) SyncCatalog(ctx context.Context, force bool) (int, time.Time, error) {
+	a.mu.RLock()
+	if !force && !a.lastSync.IsZero() && time.Since(a.lastSync) < 1*time.Hour && len(a.apps) > 0 {
+		count := len(a.apps)
+		lastSync := a.lastSync
+		a.mu.RUnlock()
+		return count, lastSync, nil
+	}
+	a.mu.RUnlock()
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.catalogURL, nil)
 	if err != nil {
 		return 0, a.lastSync, fmt.Errorf("failed to create sync request: %w", err)
@@ -261,7 +276,7 @@ func (a *Adapter) SyncCatalog(ctx context.Context, force bool) (int, time.Time, 
 	a.lastSync = time.Now().UTC()
 	_ = a.saveCacheToDisk(body)
 
-	return count, a.lastSync, nil
+	return len(a.apps), a.lastSync, nil
 }
 
 func (a *Adapter) LastSyncTime() time.Time {
@@ -342,9 +357,55 @@ func (a *Adapter) ensureComposeYAML(app domain.CatalogApp) domain.CatalogApp {
 	return app
 }
 
+func atomicWriteFile(filename string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(filename)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	tmpFile, err := os.CreateTemp(dir, "."+filepath.Base(filename)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmpFile.Name()
+	defer func() {
+		_ = os.Remove(tmpPath)
+	}()
+
+	if _, err := tmpFile.Write(data); err != nil {
+		_ = tmpFile.Close()
+		return err
+	}
+	if err := tmpFile.Sync(); err != nil {
+		_ = tmpFile.Close()
+		return err
+	}
+	if err := tmpFile.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpPath, perm); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, filename)
+}
+
 func (a *Adapter) saveCacheToDisk(data []byte) error {
 	cacheFile := filepath.Join(a.cacheDir, "catalog.json")
-	return os.WriteFile(cacheFile, data, 0644)
+	if err := atomicWriteFile(cacheFile, data, 0644); err != nil {
+		return err
+	}
+
+	meta := CatalogMeta{
+		LastSync:  a.lastSync.UTC(),
+		TotalApps: len(a.apps),
+		Version:   1,
+	}
+	metaData, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	metaFile := filepath.Join(a.cacheDir, "catalog_meta.json")
+	return atomicWriteFile(metaFile, metaData, 0644)
 }
 
 func (a *Adapter) loadCacheFromDisk() {
@@ -412,6 +473,15 @@ func (a *Adapter) loadCacheFromDisk() {
 				ComposeYAML:    compose,
 				DefaultPort:    defaultPort,
 			}
+		}
+	}
+
+	metaFile := filepath.Join(a.cacheDir, "catalog_meta.json")
+	if metaData, err := os.ReadFile(metaFile); err == nil {
+		var meta CatalogMeta
+		if err := json.Unmarshal(metaData, &meta); err == nil && !meta.LastSync.IsZero() {
+			a.lastSync = meta.LastSync.UTC()
+			return
 		}
 	}
 

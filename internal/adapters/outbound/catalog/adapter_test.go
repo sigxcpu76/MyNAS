@@ -257,3 +257,71 @@ questions:
 		t.Errorf("unexpected portal 2: %+v", p2)
 	}
 }
+
+func TestCatalogAdapter_PersistentDiskCache(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockCatalog := map[string]map[string]any{
+		"stable": {
+			"persistent-app": map[string]any{
+				"name":        "persistent-app",
+				"title":       "Persistent App",
+				"description": "App tested for disk caching",
+				"categories":  []string{"Storage"},
+				"sources":     []string{"https://github.com/test/app"},
+			},
+		},
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(mockCatalog)
+	}))
+	defer ts.Close()
+
+	// 1. First adapter instance: syncs and persists
+	adapter1 := catalog.NewAdapter(tempDir)
+	adapter1.SetCatalogURLForTest(ts.URL)
+
+	ctx := context.Background()
+	count, syncTime1, err := adapter1.SyncCatalog(ctx, true)
+	if err != nil {
+		t.Fatalf("SyncCatalog failed: %v", err)
+	}
+	if count < 1 {
+		t.Fatalf("expected count >= 1, got %d", count)
+	}
+
+	// 2. Second adapter instance: reads from existing disk cache on startup without network
+	adapter2 := catalog.NewAdapter(tempDir)
+	// Points to invalid server so if it tries to fetch, it will fail
+	adapter2.SetCatalogURLForTest("http://127.0.0.1:0/unreachable")
+
+	syncTime2 := adapter2.LastSyncTime()
+	if syncTime2.IsZero() {
+		t.Fatalf("expected adapter2 to restore lastSyncTime from cache, got zero")
+	}
+	if syncTime2.Unix() != syncTime1.Unix() {
+		t.Errorf("expected lastSync time to match: %v vs %v", syncTime2, syncTime1)
+	}
+
+	app, err := adapter2.GetApp(ctx, "stable", "persistent-app")
+	if err != nil {
+		t.Fatalf("GetApp persistent-app from cache failed: %v", err)
+	}
+	if app.Title != "Persistent App" {
+		t.Errorf("expected 'Persistent App', got %q", app.Title)
+	}
+
+	// 3. Force=false returns cached values without calling unreachable server
+	count3, syncTime3, err := adapter2.SyncCatalog(ctx, false)
+	if err != nil {
+		t.Fatalf("SyncCatalog(force=false) should not fail on fresh cache: %v", err)
+	}
+	if count3 != count {
+		t.Errorf("expected count %d, got %d", count, count3)
+	}
+	if syncTime3.Unix() != syncTime1.Unix() {
+		t.Errorf("expected syncTime %v, got %v", syncTime1, syncTime3)
+	}
+}

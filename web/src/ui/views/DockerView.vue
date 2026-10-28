@@ -294,7 +294,7 @@ async function syncCatalog() {
   isSyncingCatalog.value = true;
   try {
     notify('info', 'Syncing app catalog...');
-    const res = await services.catalog.syncCatalog();
+    const res = await services.catalog.syncCatalog(true);
     catalogLastSyncTime.value = res.lastSyncTime;
     notify(
       'success',
