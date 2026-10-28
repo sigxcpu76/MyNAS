@@ -13,13 +13,15 @@
 
 - [Reason for Being](#reason-for-being)
 - [Key Features & Capabilities](#key-features--capabilities)
-  - [1. Unified Storage Subsystem](#1-unified-storage-subsystem)
-  - [2. Docker Compose Applications (TrueNAS SCALE Architecture)](#2-docker-compose-applications-truenas-scale-architecture)
-  - [3. KVM Hypervisor & HTML5 noVNC Console](#3-kvm-hypervisor--html5-novnc-console)
-  - [4. LXC System Containers](#4-lxc-system-containers)
-  - [5. Network File Sharing (CIFS & WebDAV)](#5-network-file-sharing-cifs--webdav)
-  - [6. Linux PAM Identity & SSH Key Management](#6-linux-pam-identity--ssh-key-management)
-  - [7. Dynamic Prerequisites & System Health Engine](#7-dynamic-prerequisites--system-health-engine)
+  - [1. Customizable Real-Time Dashboard](#1-customizable-real-time-dashboard)
+  - [2. Unified Storage Subsystem](#2-unified-storage-subsystem)
+  - [3. Docker Compose Applications (TrueNAS SCALE Architecture)](#3-docker-compose-applications-truenas-scale-architecture)
+  - [4. KVM Hypervisor & HTML5 noVNC Console](#4-kvm-hypervisor--html5-novnc-console)
+  - [5. LXC System Containers](#5-lxc-system-containers)
+  - [6. Network File Sharing (CIFS & WebDAV)](#6-network-file-sharing-cifs--webdav)
+  - [7. Linux PAM Identity & Access Governance](#7-linux-pam-identity--access-governance)
+  - [8. Dynamic Prerequisites & System Health Engine](#8-dynamic-prerequisites--system-health-engine)
+  - [9. Multi-Theme Design System (WCAG AA/AAA)](#9-multi-theme-design-system-wcag-aaaaa)
 - [Architecture & Design Principles](#architecture--design-principles)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
@@ -54,7 +56,7 @@ Traditional Network-Attached Storage (NAS) operating systems (such as TrueNAS, U
 ```
 +---------------------------------------------------------------------------------+
 |                                   NaN UI                                        |
-|  [Disks]  [Pools]  [Datasets]  [Volumes]  [Apps]  [KVM]  [LXC]  [Shares]  [Auth]|
+| [Dashboard] [Storage] [Apps] [KVM] [LXC] [Shares] [Users & Groups] [Health]    |
 +---------------------------------------------------------------------------------+
 |                        Google AIP gRPC & REST Gateway                           |
 |       /v1/disks · /v1/zfsPools · /v1/dockerApps · /v1/virtualMachines · ...     |
@@ -64,7 +66,27 @@ Traditional Network-Attached Storage (NAS) operating systems (such as TrueNAS, U
 +---------------------------------------------------------------------------------+
 ```
 
-### 1. Unified Storage Subsystem
+### 1. Customizable Real-Time Dashboard
+
+NaN features a modular, user-customizable dashboard powered by a responsive 12-column CSS Grid:
+
+- **Modular Widget Architecture**:
+  - **Overview KPIs**: High-level telemetry for storage, processor, RAM, and active workloads.
+  - **ZFS Storage Pools**: Per-pool cards with interactive Donut charts toggling between capacity usage and fragmentation percentages, dedup ratios, and scrub status.
+  - **Processor Telemetry**: Real-time CPU utilization gauge, core/thread topology, package thermals, and 1m/5m/15m load averages.
+  - **Memory & ZFS ARC**: Donut chart breakdown distinguishing active application services, ZFS ARC cache, Linux kernel buffers, and free RAM.
+  - **Network Throughput**: Default adapter detection, IP/MAC metadata, live RX/TX throughput pills, and rolling throughput history graphs.
+  - **Hardware & Platform Info**: Fastfetch-style specification sheet detailing motherboard vendor, BIOS version/date, CPU model, discrete GPUs, kernel, and system uptime.
+  - **Physical Disks**: Drive models, bus types (NVMe/SATA/SAS), capacities, temperatures, and S.M.A.R.T. health badges.
+  - **Workloads & Services**: Active VM, container, and file share counters with direct jump links.
+- **Customization & Edit Mode**:
+  - **Column Resizing**: Quickly set widget widths with column pills: `1/4` (3 cols), `1/3` (4 cols), `1/2` (6 cols), `2/3` (8 cols), or `Full` (12 cols).
+  - **Drag-and-Drop & Arrow Reordering**: Rearrange widgets via native HTML5 drag-and-drop or directional reordering controls (`←`, `→`).
+  - **Widget Catalog Drawer / Modal**: Browse available widgets by category (*System*, *Storage*, *Network*, *Workloads*) and add them with one click.
+  - **Persistence & Factory Reset**: Dashboard layout is saved automatically to `localStorage` with instant one-click reset to factory defaults.
+  - **Theme-Aware Charts**: Embedded Apache ECharts automatically sync with light and dark themes via `ResizeObserver` and reactive palettes.
+
+### 2. Unified Storage Subsystem
 
 The storage subsystem provides an appliance-grade management interface with an expandable sidebar tree:
 
@@ -93,7 +115,7 @@ The storage subsystem provides an appliance-grade management interface with an e
   - Thin (sparse) vs. Thick (reserved) provisioning modes.
   - Live volume resizing and `volblocksize` optimization.
 
-### 2. Docker Compose Applications (TrueNAS SCALE Architecture)
+### 3. Docker Compose Applications (TrueNAS SCALE Architecture)
 
 NaN adopts the TrueNAS SCALE Electric Eel philosophy where containers are organized exclusively as **Apps**:
 
@@ -101,6 +123,7 @@ NaN adopts the TrueNAS SCALE Electric Eel philosophy where containers are organi
 - **TrueNAS SCALE Application Catalog Live Sync**:
   - Clones the official `truenas/apps` catalog locally with automatic periodic background synchronization and a manual "Sync Now" button.
   - Searchable catalog modal with category filters, app details, and 1-click installation into the visual editor.
+  - **Question / Answer Wizard Engine**: Supports TrueNAS SCALE `questions.yaml` dynamic form schemas with conditional groups, variable substitution, and password generation.
 - **ZFS Dataset Ownership for Containers**:
   - Docker engine and container state own a specific ZFS dataset (e.g., `tank/apps`).
   - Automatically provisions `{dataset}/appdata` (for bind mounts) and `{dataset}/docker` (for the Docker runtime).
@@ -111,32 +134,43 @@ NaN adopts the TrueNAS SCALE Electric Eel philosophy where containers are organi
   - Monospaced CodeMirror YAML editor with live synchronization.
 - **Hybrid Path Selector**: Dual-mode input combining instant directory auto-completion with an interactive folder browser modal.
 
-### 3. KVM Hypervisor & HTML5 noVNC Console
+### 4. KVM Hypervisor & HTML5 noVNC Console
 
 - **libvirt / QEMU-KVM Integration**: Create and manage hardware-accelerated Linux and Windows virtual machines.
 - **Interactive Browser Console**: Built-in HTML5 Canvas RFB console proxy connecting directly to QEMU via a single-binary WebSocket bridge (`/ws/novnc/{vmName}`), complete with keyboard, mouse, and Ctrl+Alt+Del controls.
 - **Storage Flexibility**: Back VMs using raw ZFS block volumes (ZVols) or qcow2 image files.
+- **Drag-and-Drop ISO Uploader**: Modern drag-and-drop uploader with real-time transfer progress for uploading installation ISOs directly into storage repositories.
 
-### 4. LXC System Containers
+### 5. LXC System Containers
 
 - Native Linux Container management using `lxc-ls`, `lxc-start`, `lxc-stop`, and `lxc-freeze`.
 - Lightweight OS-level virtualization for network utilities, DNS servers, and isolated system workloads.
+- **Drag-and-Drop Template Uploader**: Upload rootfs archives and container templates directly from the browser.
 
-### 5. Network File Sharing (CIFS & WebDAV)
+### 6. Network File Sharing (CIFS & WebDAV)
 
-- **Samba / CIFS Sharing**: Manage SMB shares, valid user groups, guest access, and file creation masks.
+- **Samba / CIFS Sharing**: Manage SMB shares, valid users and groups, guest access, and file creation masks.
 - **Embedded WebDAV Server**: Single-binary built-in Go WebDAV engine accessible at `/dav/...` with zero external dependencies.
+- **Interactive Path Selectors**: Browse server file hierarchies directly from modal folder pickers instead of typing raw disk paths.
 
-### 6. Linux PAM Identity & SSH Key Management
+### 7. Linux PAM Identity & Access Governance
 
 - Authentic Linux operating system security backed by `/etc/passwd`, `/etc/shadow`, and PAM.
-- Manage Linux user accounts, primary/supplementary groups, shell selection, and account lock states.
+- **Fuzzy Search Selectors**: Search and assign users and groups with keyboard-friendly fuzzy search dropdowns across all sharing and access forms.
+- **Strict UID/GID Governance**: Prevents duplicate IDs, filters system accounts (`< 1000` or `> 10000`) by default, and eliminates artificial hardcoded usernames.
 - OpenSSH public key management with real-time validation and automatic synchronization to `~/.ssh/authorized_keys`.
 
-### 7. Dynamic Prerequisites & System Health Engine
+### 8. Dynamic Prerequisites & System Health Engine
 
 - The system continuously audits host binaries (`zpool`, `zfs`, `docker`, `virsh`, `qemu-system-x86_64`, `smartctl`, `nvme`, `lxc-ls`, `smbd`, `sshd`), shared libraries (`libzfs.so`, `libvirt.so`, `liblxc.so`), and kernel modules (`/dev/kvm`).
 - Modules with missing host binaries are gracefully disabled in the UI with actionable installation hints (`apt install ...` or `pacman -S ...`), preventing crashes on minimal server installations.
+
+### 9. Multi-Theme Design System (WCAG AA/AAA)
+
+NaN includes a built-in theme manager with 6 colorways:
+- **Dark Themes**: Tokyo Night (signature dark navy with neon accents), Catppuccin Mocha, and GitHub Dark.
+- **Light Themes**: GitHub Light, Catppuccin Latte, and One Light.
+- All themes are verified for contrast ratios (>= 5:1 for body copy and >= 3:1 for graphical UI elements).
 
 ---
 
