@@ -183,6 +183,10 @@ func (a *Adapter) discoverContainerLocked(id string) *domain.LxcContainer {
 	lines := strings.Split(string(data), "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "# nan.description =") {
+			c.Description = strings.TrimSpace(strings.TrimPrefix(line, "# nan.description ="))
+			continue
+		}
 		if strings.HasPrefix(line, "# aegis.description =") {
 			c.Description = strings.TrimSpace(strings.TrimPrefix(line, "# aegis.description ="))
 			continue
@@ -590,10 +594,10 @@ func (a *Adapter) writeLxcConfig(c domain.LxcContainer) {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("# AegisNAS LXC Container Configuration\n")
+	sb.WriteString("# NaN LXC Container Configuration\n")
 	sb.WriteString(fmt.Sprintf("lxc.uts.name = %s\n", utsName))
 	if c.Description != "" {
-		sb.WriteString(fmt.Sprintf("# aegis.description = %s\n", strings.ReplaceAll(c.Description, "\n", " ")))
+		sb.WriteString(fmt.Sprintf("# nan.description = %s\n", strings.ReplaceAll(c.Description, "\n", " ")))
 	}
 	if c.Architecture != "" {
 		sb.WriteString(fmt.Sprintf("lxc.arch = %s\n", c.Architecture))
@@ -703,7 +707,7 @@ func (a *Adapter) runInstallerInContainer(id, scriptURL, recipe, rootfsPath stri
 	}
 	defer logFile.Close()
 
-	fmt.Fprintf(logFile, "\n[%s] === AegisNAS Container Application Deployment ===\n", time.Now().Format(time.RFC3339))
+	fmt.Fprintf(logFile, "\n[%s] === NaN Container Application Deployment ===\n", time.Now().Format(time.RFC3339))
 	fmt.Fprintf(logFile, "[%s] Deploying container %s...\n", time.Now().Format(time.RFC3339), id)
 
 	installerScript := strings.TrimSpace(recipe)

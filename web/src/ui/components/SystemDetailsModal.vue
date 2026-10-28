@@ -118,7 +118,7 @@ async function copySystemSummary() {
             <div style="display: flex; align-items: center; gap: 8px">
               <h3 class="modal-title" style="margin: 0; font-size: 18px">System Information</h3>
               <span class="badge badge-success mono">
-                {{ host?.hostname || 'titan-nas' }}
+                {{ host?.hostname || 'nan-nas' }}
               </span>
               <span class="badge badge-neutral mono">
                 {{ host?.architecture || 'x86_64' }}
