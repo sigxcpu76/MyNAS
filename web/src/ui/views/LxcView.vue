@@ -65,9 +65,54 @@ function switchTab(tab: 'containers' | 'catalog' | 'templates') {
   }
 }
 
+function cleanPoolName(name: string | undefined | null): string {
+  if (!name) return '';
+  return name.replace(/^zfsPools\//, '').trim();
+}
+
 // Main storage pool and templates directory
-const mainPool = computed(() => nasState.selectedPoolName || nasState.systemConfig?.mainPool || (nasState.pools?.[0]?.poolName || 'tank'));
+const mainPool = computed(() => {
+  const p =
+    cleanPoolName(nasState.systemConfig?.mainPool) ||
+    cleanPoolName(nasState.selectedPoolName) ||
+    cleanPoolName(nasState.pools?.[0]?.poolName) ||
+    cleanPoolName(nasState.pools?.[0]?.name) ||
+    'tank';
+  return p || 'tank';
+});
 const lxcTemplatesDir = computed(() => `/mnt/${mainPool.value}/lxc-templates`);
+
+/**
+ * Computes a unique, collision-free, ZFS-safe template archive filename for catalog items.
+ * If upstream has generic names like "rootfs.tar.xz", names it after the template (e.g. debian-bookworm-amd64-rootfs.tar.xz).
+ */
+function computeSafeTemplateFilename(item: LxcCatalogItem): string {
+  if (!item.downloadUrl) return '';
+
+  const cleanUrl = item.downloadUrl.split('?')[0].split('#')[0];
+  let ext = '.tar.xz';
+  const matchExt = cleanUrl.match(/\.(tar\.(?:xz|gz|zst|bz2)|tgz|txz|tar)$/i);
+  if (matchExt) {
+    ext = matchExt[0].toLowerCase();
+  }
+
+  const parts = cleanUrl.split('/');
+  const rawBase = parts[parts.length - 1] || '';
+  const nameWithoutExt = rawBase.replace(/\.(tar\.(?:xz|gz|zst|bz2)|tgz|txz|tar)$/i, '');
+
+  const genericNames = new Set(['rootfs', 'system', 'template', 'image', 'archive', 'download', 'base', 'default', '']);
+  const isGeneric = genericNames.has(nameWithoutExt.toLowerCase().trim());
+
+  if (isGeneric) {
+    const baseSlug = toZfsSafeSlug(item.title || item.id || 'template');
+    const arch = item.architecture ? toZfsSafeSlug(item.architecture) : '';
+    const fullSlug = arch && !baseSlug.includes(arch) ? `${baseSlug}-${arch}` : baseSlug;
+    return `${fullSlug}-rootfs${ext}`;
+  }
+
+  const safeSlug = toZfsSafeSlug(nameWithoutExt);
+  return `${safeSlug}${ext}`;
+}
 
 interface BridgeOption {
   name: string;
@@ -315,9 +360,8 @@ function openDeployModal(item: LxcCatalogItem) {
 
   // Pre-fill archive filename in lxc-templates directory if downloadUrl is provided
   if (!form.templateArchive && item.downloadUrl) {
-    const urlParts = item.downloadUrl.split('/');
-    const fname = urlParts[urlParts.length - 1]?.split('?')[0] || `${item.id}-rootfs.tar.xz`;
-    form.templateArchive = `${lxcTemplatesDir.value}/${fname}`;
+    const safeFname = computeSafeTemplateFilename(item);
+    form.templateArchive = `${lxcTemplatesDir.value}/${safeFname}`;
   }
 
   // Pre-fill recommended mount points with the active main pool

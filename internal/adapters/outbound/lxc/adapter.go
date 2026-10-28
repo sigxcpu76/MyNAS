@@ -102,12 +102,16 @@ func generateRandomMAC() string {
 	return fmt.Sprintf("00:16:3e:%02x:%02x:%02x", buf[0], buf[1], buf[2])
 }
 
-func (a *Adapter) ensureTemplateArchive(ctx context.Context, tmplSource, mainPool string) (string, error) {
+func (a *Adapter) ensureTemplateArchive(ctx context.Context, tmplSource, mainPool, containerID, distro string) (string, error) {
 	if !strings.HasPrefix(tmplSource, "http://") && !strings.HasPrefix(tmplSource, "https://") {
 		return tmplSource, nil
 	}
 
-	tmplDir := fmt.Sprintf("/mnt/%s/lxc-templates", mainPool)
+	cleanPool := strings.TrimPrefix(strings.TrimSpace(mainPool), "zfsPools/")
+	if cleanPool == "" {
+		cleanPool = "tank"
+	}
+	tmplDir := fmt.Sprintf("/mnt/%s/lxc-templates", cleanPool)
 	_ = os.MkdirAll(tmplDir, 0755)
 
 	parts := strings.Split(tmplSource, "/")
@@ -115,9 +119,45 @@ func (a *Adapter) ensureTemplateArchive(ctx context.Context, tmplSource, mainPoo
 	if idx := strings.Index(rawFilename, "?"); idx != -1 {
 		rawFilename = rawFilename[:idx]
 	}
-	if rawFilename == "" {
-		rawFilename = "template.tar.xz"
+	if idx := strings.Index(rawFilename, "#"); idx != -1 {
+		rawFilename = rawFilename[:idx]
 	}
+
+	// Determine archive extension
+	ext := ".tar.xz"
+	switch {
+	case strings.HasSuffix(rawFilename, ".tar.gz"):
+		ext = ".tar.gz"
+	case strings.HasSuffix(rawFilename, ".tar.zst"):
+		ext = ".tar.zst"
+	case strings.HasSuffix(rawFilename, ".tgz"):
+		ext = ".tgz"
+	case strings.HasSuffix(rawFilename, ".tar"):
+		ext = ".tar"
+	}
+
+	baseNoExt := strings.TrimSuffix(rawFilename, ext)
+	genericNames := map[string]bool{
+		"rootfs": true, "system": true, "template": true, "image": true,
+		"archive": true, "download": true, "base": true, "default": true, "": true,
+	}
+
+	if genericNames[strings.ToLower(strings.TrimSpace(baseNoExt))] {
+		slug := domain.ToZfsSafeSlug(containerID)
+		if slug == "" {
+			slug = domain.ToZfsSafeSlug(distro)
+		}
+		if slug == "" {
+			slug = "lxc-template"
+		}
+		rawFilename = fmt.Sprintf("%s-rootfs%s", slug, ext)
+	} else {
+		safeBase := domain.ToZfsSafeSlug(baseNoExt)
+		if safeBase != "" {
+			rawFilename = fmt.Sprintf("%s%s", safeBase, ext)
+		}
+	}
+
 	destPath := filepath.Join(tmplDir, rawFilename)
 
 	if fi, err := os.Stat(destPath); err == nil && fi.Size() > 0 {
@@ -297,18 +337,19 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 	if mainPool == "" {
 		mainPool = config.GetGlobal().System.MainPool
 	}
+	cleanMainPool := strings.TrimPrefix(strings.TrimSpace(mainPool), "zfsPools/")
 
-	if mainPool != "" {
+	if cleanMainPool != "" {
 		if c.RootfsPath == "" {
-			c.RootfsPath = domain.GenerateLxcRootfsPath(mainPool, c.ID)
+			c.RootfsPath = domain.GenerateLxcRootfsPath(cleanMainPool, c.ID)
 		} else {
 			cleaned := filepath.Clean(c.RootfsPath)
-			hasMntPrefix := cleaned == "/mnt/"+mainPool || strings.HasPrefix(cleaned, "/mnt/"+mainPool+"/")
-			hasNasPrefix := cleaned == "/nas/"+mainPool || strings.HasPrefix(cleaned, "/nas/"+mainPool+"/")
-			hasDirectPrefix := cleaned == "/"+mainPool || strings.HasPrefix(cleaned, "/"+mainPool+"/")
-			hasDatasetPrefix := cleaned == mainPool || strings.HasPrefix(cleaned, mainPool+"/")
+			hasMntPrefix := cleaned == "/mnt/"+cleanMainPool || strings.HasPrefix(cleaned, "/mnt/"+cleanMainPool+"/")
+			hasNasPrefix := cleaned == "/nas/"+cleanMainPool || strings.HasPrefix(cleaned, "/nas/"+cleanMainPool+"/")
+			hasDirectPrefix := cleaned == "/"+cleanMainPool || strings.HasPrefix(cleaned, "/"+cleanMainPool+"/")
+			hasDatasetPrefix := cleaned == cleanMainPool || strings.HasPrefix(cleaned, cleanMainPool+"/")
 			if !hasMntPrefix && !hasNasPrefix && !hasDirectPrefix && !hasDatasetPrefix {
-				return nil, fmt.Errorf("%w: lxc rootfs must reside on the main pool (%s); path %q is not permitted", domain.ErrInvalidArgument, mainPool, c.RootfsPath)
+				return nil, fmt.Errorf("%w: lxc rootfs must reside on the main pool (%s); path %q is not permitted", domain.ErrInvalidArgument, cleanMainPool, c.RootfsPath)
 			}
 		}
 	} else if c.RootfsPath == "" {
@@ -331,7 +372,7 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 
 	// Unpack template archive if present
 	if c.TemplateArchive != "" {
-		localArchive, err := a.ensureTemplateArchive(ctx, c.TemplateArchive, mainPool)
+		localArchive, err := a.ensureTemplateArchive(ctx, c.TemplateArchive, cleanMainPool, c.ID, c.Distribution)
 		if err == nil && localArchive != "" {
 			if _, statErr := os.Stat(localArchive); statErr == nil {
 				tarCmd := exec.CommandContext(ctx, "tar", "-xf", localArchive, "-C", c.RootfsPath)

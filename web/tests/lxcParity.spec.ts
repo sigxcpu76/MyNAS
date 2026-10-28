@@ -450,6 +450,57 @@ describe('LXC Feature Parity with VMs and Apps', () => {
         const gpuCheckbox = checkboxes.find(c => c.element.parentElement?.textContent?.includes('GPU Acceleration'));
         expect(gpuCheckbox?.element.checked).toBe(true);
       });
+
+      it('populates template archive path with safe slug filename and cleans zfsPools prefix from pool', async () => {
+        nasState.selectedPoolName = 'zfsPools/fast';
+        vi.spyOn(services.lxc, 'listContainers').mockResolvedValue([]);
+        vi.spyOn(services.lxc, 'listTemplates').mockResolvedValue([]);
+        vi.spyOn(services.lxc, 'listCatalogItems').mockResolvedValue({
+          items: [
+            {
+              id: 'linuxcontainers-debian-bookworm-amd64',
+              title: 'Debian Bookworm',
+              description: 'Minimal Debian Bookworm rootfs',
+              category: 'Operating System',
+              categories: ['Operating System'],
+              source: 'linuxcontainers',
+              baseDistribution: 'debian',
+              baseRelease: 'bookworm',
+              architecture: 'amd64',
+              defaultCpuCores: 1,
+              defaultMemoryLimitMib: 512,
+              defaultPort: 22,
+              website: 'https://linuxcontainers.org',
+              downloadUrl: 'https://images.linuxcontainers.org/images/debian/bookworm/amd64/default/20261028_05:24/rootfs.tar.xz',
+              privilegedRequired: false,
+              recommendedMounts: [],
+              gpuRecommended: false,
+            },
+          ],
+          totalSize: 1,
+          lastSyncTime: '2026-10-28T22:00:00Z',
+        });
+
+        const wrapper = mount(LxcView);
+        await nextTick();
+
+        // Switch to catalog and deploy Debian Bookworm
+        const catalogTab = wrapper.findAll('button').find(b => b.text().includes('App Catalog'));
+        await catalogTab!.trigger('click');
+        await nextTick();
+
+        const deployBtn = wrapper.find('button[title="Deploy Debian Bookworm as LXC container"]');
+        expect(deployBtn.exists()).toBe(true);
+        await deployBtn.trigger('click');
+        await nextTick();
+
+        // Find the PathSelector input for template archive
+        const pathInput = wrapper.find<HTMLInputElement>('input[placeholder*="lxc-templates"]');
+        expect(pathInput.exists()).toBe(true);
+        expect(pathInput.element.value).toBe('/mnt/fast/lxc-templates/debian-bookworm-amd64-rootfs.tar.xz');
+        expect(pathInput.element.value).not.toContain('zfsPools');
+        expect(pathInput.element.value).not.toBe('/mnt/fast/lxc-templates/rootfs.tar.xz');
+      });
     });
   });
 });
