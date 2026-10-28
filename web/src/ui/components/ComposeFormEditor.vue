@@ -490,6 +490,7 @@ function addTopLevelNetwork() {
     name: `net-${form.networks.length + 1}`,
     driver: 'bridge',
     internal: false,
+    external: false,
   });
 }
 
@@ -1557,6 +1558,7 @@ function copyYaml() {
             <tr style="text-align: left; font-size: 11.5px; color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle)">
               <th style="padding: 6px 8px">NETWORK NAME</th>
               <th style="padding: 6px 8px">DRIVER</th>
+              <th style="padding: 6px 8px">EXTERNAL</th>
               <th style="padding: 6px 8px">INTERNAL ONLY</th>
               <th style="padding: 6px 8px; width: 40px"></th>
             </tr>
@@ -1567,7 +1569,7 @@ function copyYaml() {
                 <input v-model="net.name" type="text" class="form-input mono" placeholder="e.g. backend" style="padding: 4px 8px; font-size: 12px" />
               </td>
               <td style="padding: 6px 8px">
-                <select v-model="net.driver" class="form-input" style="padding: 4px 8px; font-size: 12px">
+                <select v-model="net.driver" class="form-input" :disabled="net.external" style="padding: 4px 8px; font-size: 12px">
                   <option value="bridge">bridge</option>
                   <option value="overlay">overlay</option>
                   <option value="macvlan">macvlan</option>
@@ -1575,7 +1577,13 @@ function copyYaml() {
               </td>
               <td style="padding: 6px 8px">
                 <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer">
-                  <input v-model="net.internal" type="checkbox" />
+                  <input v-model="net.external" type="checkbox" />
+                  Pre-existing (external)
+                </label>
+              </td>
+              <td style="padding: 6px 8px">
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer" :style="{ opacity: net.external ? 0.5 : 1 }">
+                  <input v-model="net.internal" type="checkbox" :disabled="net.external" />
                   Isolate from external routing
                 </label>
               </td>

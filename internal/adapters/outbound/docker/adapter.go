@@ -2006,9 +2006,14 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 		if msg, isDeploying := a.deployingApps[appID]; isDeploying {
 			state = "DEPLOYING"
 			statusText = msg
-		} else if errMsg, hasErr := a.deployingErrors[appID]; hasErr && runningCount == 0 {
-			state = "ERROR"
-			statusText = errMsg
+		} else if errMsg, hasErr := a.deployingErrors[appID]; hasErr {
+			if runningCount == 0 {
+				state = "ERROR"
+				statusText = errMsg
+			} else {
+				state = "ERROR"
+				statusText = fmt.Sprintf("%d/%d running (%s)", runningCount, total, errMsg)
+			}
 		}
 	}
 

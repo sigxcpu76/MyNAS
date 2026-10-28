@@ -105,3 +105,82 @@ describe('composeModel - GPU Acceleration', () => {
     expect(reloaded.services[0].gpuDeviceIds).toBe('0, 1');
   });
 });
+
+describe('composeModel - Networks & Volumes Preservation', () => {
+  it('preserves top-level external networks (e.g. proxy_net) without converting to null', () => {
+    const yaml = `services:
+  web:
+    image: nginx:alpine
+    networks:
+      - proxy_net
+networks:
+  proxy_net:
+    external: true
+`;
+    const form = composeYamlToForm(yaml, 'web-app', 'Web App');
+    expect(form.networks).toHaveLength(1);
+    expect(form.networks[0].name).toBe('proxy_net');
+    expect(form.networks[0].external).toBe(true);
+
+    const generated = formToComposeYaml(form);
+    expect(generated).not.toContain('proxy_net: null');
+    expect(generated).toContain('proxy_net:');
+    expect(generated).toContain('external: true');
+
+    // Round-trip test
+    const reloaded = composeYamlToForm(generated, 'web-app', 'Web App');
+    expect(reloaded.networks).toHaveLength(1);
+    expect(reloaded.networks[0].name).toBe('proxy_net');
+    expect(reloaded.networks[0].external).toBe(true);
+  });
+
+  it('preserves custom network attributes like attachable, name, and ipam', () => {
+    const yaml = `services:
+  app:
+    image: myapp:1.0
+    networks:
+      - custom_net
+networks:
+  custom_net:
+    name: override_name
+    external: true
+    attachable: true
+`;
+    const form = composeYamlToForm(yaml, 'app', 'App');
+    expect(form.networks).toHaveLength(1);
+    expect(form.networks[0].name).toBe('custom_net');
+    expect(form.networks[0].external).toBe(true);
+
+    const generated = formToComposeYaml(form);
+    expect(generated).toContain('name: override_name');
+    expect(generated).toContain('external: true');
+    expect(generated).toContain('attachable: true');
+    expect(generated).not.toContain('custom_net: null');
+  });
+
+  it('outputs empty object {} instead of null for default bridge networks and named volumes', () => {
+    const yaml = `services:
+  app:
+    image: alpine:latest
+    networks:
+      - local_net
+    volumes:
+      - local_vol:/data
+networks:
+  local_net: {}
+volumes:
+  local_vol: {}
+`;
+    const form = composeYamlToForm(yaml, 'app', 'App');
+    expect(form.networks).toHaveLength(1);
+    expect(form.networks[0].name).toBe('local_net');
+    expect(form.volumes).toHaveLength(1);
+    expect(form.volumes[0].name).toBe('local_vol');
+
+    const generated = formToComposeYaml(form);
+    expect(generated).not.toContain('local_net: null');
+    expect(generated).not.toContain('local_vol: null');
+    expect(generated).toContain('local_net: {}');
+    expect(generated).toContain('local_vol: {}');
+  });
+});

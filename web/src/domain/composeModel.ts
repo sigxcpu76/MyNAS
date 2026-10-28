@@ -48,15 +48,18 @@ export interface ComposeServiceModel {
 export interface ComposeTopLevelNetwork {
   id: string;
   name: string;
-  driver: 'bridge' | 'overlay' | 'macvlan' | string;
-  internal: boolean;
+  driver?: 'bridge' | 'overlay' | 'macvlan' | string;
+  internal?: boolean;
+  external?: boolean;
+  rawConfig?: Record<string, any>;
 }
 
 export interface ComposeTopLevelVolume {
   id: string;
   name: string;
-  driver: string;
-  external: boolean;
+  driver?: string;
+  external?: boolean;
+  rawConfig?: Record<string, any>;
 }
 
 export interface ComposePortalModel {
@@ -485,12 +488,29 @@ export function composeYamlToForm(
   // 2. Parse Top-Level Networks
   if (parsed.networks && typeof parsed.networks === 'object') {
     for (const [netName, netConfig] of Object.entries(parsed.networks)) {
-      const net = (netConfig || {}) as any;
+      const net = (netConfig && typeof netConfig === 'object') ? (netConfig as any) : {};
+      const isExternal = Boolean(
+        net.external === true ||
+        (net.external && typeof net.external === 'object')
+      );
+
+      // Preserve any custom or unrecognized network attributes (e.g. driver_opts, labels, attachable, name, ipam)
+      const rawConfig: Record<string, any> = {};
+      if (netConfig && typeof netConfig === 'object') {
+        for (const [k, v] of Object.entries(netConfig)) {
+          if (!['driver', 'internal', 'external'].includes(k)) {
+            rawConfig[k] = v;
+          }
+        }
+      }
+
       model.networks.push({
         id: generateUid(),
         name: netName,
-        driver: net.driver || 'bridge',
+        driver: net.driver || (isExternal ? '' : 'bridge'),
         internal: Boolean(net.internal ?? false),
+        external: isExternal,
+        rawConfig: Object.keys(rawConfig).length > 0 ? rawConfig : undefined,
       });
     }
   }
@@ -498,12 +518,28 @@ export function composeYamlToForm(
   // 3. Parse Top-Level Volumes
   if (parsed.volumes && typeof parsed.volumes === 'object') {
     for (const [volName, volConfig] of Object.entries(parsed.volumes)) {
-      const vol = (volConfig || {}) as any;
+      const vol = (volConfig && typeof volConfig === 'object') ? (volConfig as any) : {};
+      const isExternal = Boolean(
+        vol.external === true ||
+        (vol.external && typeof vol.external === 'object')
+      );
+
+      // Preserve any custom volume attributes (e.g. driver_opts, labels, name)
+      const rawConfig: Record<string, any> = {};
+      if (volConfig && typeof volConfig === 'object') {
+        for (const [k, v] of Object.entries(volConfig)) {
+          if (!['driver', 'external'].includes(k)) {
+            rawConfig[k] = v;
+          }
+        }
+      }
+
       model.volumes.push({
         id: generateUid(),
         name: volName,
-        driver: vol.driver || 'local',
-        external: Boolean(vol.external ?? false),
+        driver: vol.driver || (isExternal ? '' : 'local'),
+        external: isExternal,
+        rawConfig: Object.keys(rawConfig).length > 0 ? rawConfig : undefined,
       });
     }
   }
@@ -758,14 +794,19 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
     rootObj.networks = {};
     for (const net of activeNets) {
       const netKey = net.name.trim();
-      const netObj: any = {};
-      if (net.driver && net.driver !== 'bridge') {
-        netObj.driver = net.driver;
+      const netObj: any = net.rawConfig ? { ...net.rawConfig } : {};
+      if (net.external) {
+        netObj.external = true;
+      } else {
+        delete netObj.external;
+        if (net.driver && net.driver !== 'bridge') {
+          netObj.driver = net.driver;
+        }
+        if (net.internal) {
+          netObj.internal = true;
+        }
       }
-      if (net.internal) {
-        netObj.internal = true;
-      }
-      rootObj.networks[netKey] = Object.keys(netObj).length > 0 ? netObj : null;
+      rootObj.networks[netKey] = Object.keys(netObj).length > 0 ? netObj : {};
     }
   }
 
@@ -775,14 +816,16 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
     rootObj.volumes = {};
     for (const vol of activeTopVols) {
       const volKey = vol.name.trim();
-      const volObj: any = {};
-      if (vol.driver && vol.driver !== 'local') {
-        volObj.driver = vol.driver;
-      }
+      const volObj: any = vol.rawConfig ? { ...vol.rawConfig } : {};
       if (vol.external) {
         volObj.external = true;
+      } else {
+        delete volObj.external;
+        if (vol.driver && vol.driver !== 'local') {
+          volObj.driver = vol.driver;
+        }
       }
-      rootObj.volumes[volKey] = Object.keys(volObj).length > 0 ? volObj : null;
+      rootObj.volumes[volKey] = Object.keys(volObj).length > 0 ? volObj : {};
     }
   }
 
