@@ -1230,12 +1230,36 @@ func (a *Adapter) RestartContainer(ctx context.Context, id string) (*domain.LxcC
 	configPath := fmt.Sprintf("/var/lib/lxc/%s/config", id)
 	if _, err := os.Stat(configPath); err == nil {
 		if _, err := exec.LookPath("lxc-stop"); err == nil {
-			cmd := exec.CommandContext(ctx, "lxc-stop", "-r", "-n", id, "-s", "lxc.apparmor.profile=unconfined")
-			out, err := cmd.CombinedOutput()
+			// 1. Try graceful reboot with timeout
+			rebootCmd := exec.CommandContext(ctx, "lxc-stop", "-r", "-n", id, "-t", "5")
+			out, err := rebootCmd.CombinedOutput()
 			outputStr := strings.TrimSpace(string(out))
-			if err != nil && !strings.Contains(outputStr, "not running") && !strings.Contains(outputStr, "doesn't exist") {
-				slog.Error("[lxc] lxc restart failed", "container_id", id, "error", err, "output", outputStr)
-				return nil, fmt.Errorf("lxc restart failed: %v: %s", err, outputStr)
+
+			rebootOK := false
+			if err == nil {
+				time.Sleep(500 * time.Millisecond)
+				st := a.fetchSingleContainerStatus(ctx, id)
+				if st != nil && st.state == "RUNNING" {
+					rebootOK = true
+					c.State = st.state
+					c.IPv4Address = st.ipv4
+				}
+			}
+
+			// 2. Fallback to stop followed by start if reboot failed or container is not running
+			if !rebootOK {
+				slog.Warn("[lxc] clean reboot failed or not supported, falling back to stop then start", "container_id", id, "output", outputStr, "error", err)
+
+				// Ensure container is stopped (force kill after 3 seconds if needed)
+				_ = exec.CommandContext(ctx, "lxc-stop", "-n", id, "-t", "3", "-k").Run()
+				time.Sleep(300 * time.Millisecond)
+
+				started, startErr := a.StartContainer(ctx, id)
+				if startErr != nil {
+					slog.Error("[lxc] fallback start failed after stop", "container_id", id, "error", startErr)
+					return nil, fmt.Errorf("lxc restart failed (stop+start fallback): %w", startErr)
+				}
+				return started, nil
 			}
 		}
 	}
