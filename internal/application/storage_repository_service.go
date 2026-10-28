@@ -104,10 +104,20 @@ func (s *StorageRepoService) EnsureRepositories(ctx context.Context) error {
 				Mountpoint:  s.GetLxcTemplatesDirectory(),
 			})
 		}
+		// Ensure containers parent dataset
+		if _, err := s.zfsPort.GetDataset(ctx, pool, "containers"); err != nil {
+			_, _ = s.zfsPort.CreateDataset(ctx, domain.ZfsDataset{
+				PoolID:      pool,
+				ID:          "containers",
+				DatasetPath: fmt.Sprintf("%s/containers", pool),
+				Mountpoint:  fmt.Sprintf("/mnt/%s/containers", pool),
+			})
+		}
 	}
 
 	_ = os.MkdirAll(s.GetIsosDirectory(), 0755)
 	_ = os.MkdirAll(s.GetLxcTemplatesDirectory(), 0755)
+	_ = os.MkdirAll(fmt.Sprintf("/mnt/%s/containers", pool), 0755)
 	return nil
 }
 

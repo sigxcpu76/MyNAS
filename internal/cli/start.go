@@ -234,6 +234,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	step("catalog adapter initialized (cache load)")
 
 	dockerAdapter.SetZfsPort(zfsAdapter)
+	lxcAdapter.SetZfsPort(zfsAdapter)
 	if activeMainPool != "" {
 		dockerAdapter.SetMainPool(activeMainPool)
 		lxcAdapter.SetMainPool(activeMainPool)

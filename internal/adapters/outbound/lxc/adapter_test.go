@@ -7,6 +7,7 @@ import (
 
 	"github.com/sigxcpu/nas/internal/adapters/outbound/lxc"
 	"github.com/sigxcpu/nas/internal/domain"
+	"github.com/sigxcpu/nas/internal/ports"
 )
 
 func TestLxcAdapter_MainPoolEnforcement(t *testing.T) {
@@ -187,4 +188,80 @@ func TestLxcAdapter_ParityFeatures(t *testing.T) {
 		t.Fatalf("ExecAttach returned nil conn or empty execID")
 	}
 	_ = conn.Close()
+}
+
+type mockZfsEngine struct {
+	ports.ZfsEnginePort
+	createdDatasets []domain.ZfsDataset
+	deletedDatasets []string
+}
+
+func (m *mockZfsEngine) GetDataset(ctx context.Context, poolID, datasetID string) (*domain.ZfsDataset, error) {
+	for _, ds := range m.createdDatasets {
+		if ds.ID == datasetID || ds.DatasetPath == poolID+"/"+datasetID {
+			return &ds, nil
+		}
+	}
+	return nil, domain.ErrNotFound
+}
+func (m *mockZfsEngine) CreateDataset(ctx context.Context, dataset domain.ZfsDataset) (*domain.ZfsDataset, error) {
+	m.createdDatasets = append(m.createdDatasets, dataset)
+	return &dataset, nil
+}
+func (m *mockZfsEngine) DeleteDataset(ctx context.Context, poolID, datasetID string, recursive bool) error {
+	m.deletedDatasets = append(m.deletedDatasets, datasetID)
+	return nil
+}
+
+func TestLxcAdapter_DedicatedZfsDataset(t *testing.T) {
+	ctx := context.Background()
+	adapter := lxc.NewAdapter()
+	adapter.SetMainPool("fast")
+
+	zfsMock := &mockZfsEngine{}
+	adapter.SetZfsPort(zfsMock)
+
+	// Create container on main pool fast
+	created, err := adapter.CreateContainer(ctx, domain.LxcContainer{
+		ID:           "alpine-vpn",
+		Distribution: "alpine",
+		Release:      "3.20",
+	})
+	if err != nil {
+		t.Fatalf("CreateContainer failed: %v", err)
+	}
+
+	// Verify that dedicated ZFS dataset was created
+	foundChild := false
+	for _, ds := range zfsMock.createdDatasets {
+		if ds.DatasetPath == "fast/containers/alpine-vpn" {
+			foundChild = true
+			if ds.Mountpoint != "/mnt/fast/containers/alpine-vpn" {
+				t.Errorf("expected mountpoint /mnt/fast/containers/alpine-vpn, got %s", ds.Mountpoint)
+			}
+			if ds.Compression != "lz4" {
+				t.Errorf("expected lz4 compression, got %s", ds.Compression)
+			}
+		}
+	}
+	if !foundChild {
+		t.Fatalf("expected dedicated dataset fast/containers/alpine-vpn to be created, got: %+v", zfsMock.createdDatasets)
+	}
+
+	// Delete container
+	if err := adapter.DeleteContainer(ctx, created.ID, true); err != nil {
+		t.Fatalf("DeleteContainer failed: %v", err)
+	}
+
+	// Verify that dedicated ZFS dataset was destroyed
+	foundDeleted := false
+	for _, d := range zfsMock.deletedDatasets {
+		if d == "containers/alpine-vpn" || d == "fast/containers/alpine-vpn" {
+			foundDeleted = true
+			break
+		}
+	}
+	if !foundDeleted {
+		t.Fatalf("expected dataset containers/alpine-vpn to be deleted, got: %+v", zfsMock.deletedDatasets)
+	}
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/creack/pty"
 	"github.com/sigxcpu/nas/internal/config"
 	"github.com/sigxcpu/nas/internal/domain"
+	"github.com/sigxcpu/nas/internal/ports"
 )
 
 type ptyConn struct {
@@ -54,6 +55,7 @@ func (c *ptyConn) SetWriteDeadline(t time.Time) error { return nil }
 type Adapter struct {
 	mu         sync.RWMutex
 	mainPool   string
+	zfsPort    ports.ZfsEnginePort
 	containers map[string]domain.LxcContainer
 	execPTYs   map[string]*os.File
 	httpClient *http.Client
@@ -65,6 +67,12 @@ func NewAdapter() *Adapter {
 		execPTYs:   make(map[string]*os.File),
 		httpClient: &http.Client{Timeout: 30 * time.Minute},
 	}
+}
+
+func (a *Adapter) SetZfsPort(zfsPort ports.ZfsEnginePort) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.zfsPort = zfsPort
 }
 
 type lxcStatus struct {
@@ -413,6 +421,90 @@ func (a *Adapter) ensureTemplateArchive(ctx context.Context, sourceURL, targetPa
 	return destPath, nil
 }
 
+func (a *Adapter) ensureContainerDataset(ctx context.Context, pool, datasetPath, mountpoint string) error {
+	if pool == "" || datasetPath == "" {
+		return nil
+	}
+
+	// 1. If zfsPort is available, use it
+	if a.zfsPort != nil {
+		parent := filepath.Dir(datasetPath)
+		if parent != pool && parent != "." {
+			parentID := strings.TrimPrefix(parent, pool+"/")
+			if _, err := a.zfsPort.GetDataset(ctx, pool, parentID); err != nil {
+				_, _ = a.zfsPort.CreateDataset(ctx, domain.ZfsDataset{
+					PoolID:      pool,
+					ID:          parentID,
+					DatasetPath: parent,
+					Mountpoint:  fmt.Sprintf("/mnt/%s", parent),
+				})
+			}
+		}
+
+		childID := strings.TrimPrefix(datasetPath, pool+"/")
+		if _, err := a.zfsPort.GetDataset(ctx, pool, childID); err != nil {
+			_, err = a.zfsPort.CreateDataset(ctx, domain.ZfsDataset{
+				PoolID:      pool,
+				ID:          childID,
+				DatasetPath: datasetPath,
+				Mountpoint:  mountpoint,
+				Compression: "lz4",
+			})
+			if err != nil {
+				slog.Warn("[lxc] zfsPort.CreateDataset failed, checking host CLI fallback", "dataset", datasetPath, "error", err)
+			} else {
+				slog.Info("[lxc] created dedicated ZFS dataset for container", "dataset", datasetPath, "mountpoint", mountpoint)
+				return nil
+			}
+		} else {
+			return nil
+		}
+	}
+
+	// 2. Direct host CLI fallback
+	if _, err := exec.LookPath("zfs"); err == nil {
+		if err := exec.CommandContext(ctx, "zfs", "list", datasetPath).Run(); err != nil {
+			parent := filepath.Dir(datasetPath)
+			if parent != pool && parent != "." {
+				_ = exec.CommandContext(ctx, "zfs", "create", "-p", "-o", "canmount=off", parent).Run()
+			}
+			out, err := exec.CommandContext(ctx, "zfs", "create", "-o", "compression=lz4", datasetPath).CombinedOutput()
+			if err != nil {
+				slog.Warn("[lxc] zfs create dataset failed (falling back to directory)", "dataset", datasetPath, "error", err, "output", strings.TrimSpace(string(out)))
+			} else {
+				slog.Info("[lxc] created dedicated ZFS dataset for container via host CLI", "dataset", datasetPath, "mountpoint", mountpoint)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (a *Adapter) destroyContainerDataset(ctx context.Context, pool, datasetPath, mountpoint string) {
+	if pool == "" || datasetPath == "" {
+		return
+	}
+
+	if a.zfsPort != nil {
+		childID := strings.TrimPrefix(datasetPath, pool+"/")
+		if err := a.zfsPort.DeleteDataset(ctx, pool, childID, true); err == nil {
+			slog.Info("[lxc] destroyed ZFS dataset for container", "dataset", datasetPath)
+			return
+		}
+	}
+
+	if _, err := exec.LookPath("zfs"); err == nil {
+		if err := exec.CommandContext(ctx, "zfs", "list", datasetPath).Run(); err == nil {
+			out, err := exec.CommandContext(ctx, "zfs", "destroy", "-r", datasetPath).CombinedOutput()
+			if err != nil {
+				slog.Warn("[lxc] zfs destroy failed", "dataset", datasetPath, "error", err, "output", strings.TrimSpace(string(out)))
+			} else {
+				slog.Info("[lxc] destroyed ZFS dataset for container via host CLI", "dataset", datasetPath)
+			}
+		}
+	}
+}
+
 func (a *Adapter) configureContainerDHCP(rootfsPath string) {
 	// 1. Systemd-networkd (AlmaLinux, CentOS, Fedora, Debian, Ubuntu, Arch)
 	networkdDir := filepath.Join(rootfsPath, "etc/systemd/network")
@@ -639,6 +731,20 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 		c.NetworkBridge = "br0"
 	}
 
+	// Create dedicated ZFS dataset for container if on main pool
+	if cleanMainPool != "" {
+		containerDir := filepath.Dir(c.RootfsPath)
+		cleanDir := filepath.Clean(containerDir)
+		rel := strings.TrimPrefix(strings.TrimPrefix(cleanDir, "/mnt/"), "/")
+		var datasetPath string
+		if strings.HasPrefix(rel, cleanMainPool+"/") {
+			datasetPath = rel
+		} else {
+			datasetPath = fmt.Sprintf("%s/containers/%s", cleanMainPool, c.ID)
+		}
+		_ = a.ensureContainerDataset(ctx, cleanMainPool, datasetPath, containerDir)
+	}
+
 	// Create rootfs and container datasets/directories
 	_ = os.MkdirAll(c.RootfsPath, 0755)
 	_ = os.MkdirAll(filepath.Dir(c.RootfsPath), 0755)
@@ -801,6 +907,29 @@ func (a *Adapter) DeleteContainer(ctx context.Context, id string, force bool) er
 	// Clean up config and log files
 	_ = os.RemoveAll(fmt.Sprintf("/var/lib/lxc/%s", id))
 	_ = os.Remove(fmt.Sprintf("/var/log/lxc/%s.log", id))
+
+	// Destroy dedicated ZFS dataset if container was hosted on ZFS
+	cleanMainPool := strings.TrimPrefix(strings.TrimSpace(a.mainPool), "zfsPools/")
+	if cleanMainPool == "" {
+		cleanMainPool = strings.TrimPrefix(strings.TrimSpace(config.GetGlobal().System.MainPool), "zfsPools/")
+	}
+	if cleanMainPool != "" {
+		containerDir := filepath.Dir(c.RootfsPath)
+		cleanDir := filepath.Clean(containerDir)
+		rel := strings.TrimPrefix(strings.TrimPrefix(cleanDir, "/mnt/"), "/")
+		var datasetPath string
+		if strings.HasPrefix(rel, cleanMainPool+"/") {
+			datasetPath = rel
+		} else {
+			datasetPath = fmt.Sprintf("%s/containers/%s", cleanMainPool, id)
+		}
+		a.destroyContainerDataset(ctx, cleanMainPool, datasetPath, containerDir)
+	}
+
+	// Remove container directory if still remaining (e.g. non-ZFS fallback)
+	if c.RootfsPath != "" {
+		_ = os.RemoveAll(filepath.Dir(c.RootfsPath))
+	}
 
 	delete(a.containers, id)
 	return nil
