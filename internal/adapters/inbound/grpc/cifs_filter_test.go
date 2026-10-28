@@ -26,6 +26,8 @@ import (
 func TestCifsShares_HiddenShareUserFiltering(t *testing.T) {
 	tempDir := t.TempDir()
 	checker := prereq.NewSystemChecker()
+	checker.SetAllModulesInstalledForTest()
+	checker.SetMainPool("tank")
 	dockerAdapter := docker.NewAdapter()
 	zfsAdapter := newStubZfsServerPort(tempDir)
 	sysAdapter := system.NewAdapter(zfsAdapter, checker)
