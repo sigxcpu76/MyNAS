@@ -3,6 +3,7 @@ package grpcadapter
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -1021,10 +1022,13 @@ func (s *Server) StartVirtualMachine(ctx context.Context, req *nasv1.StartVirtua
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("[vm] start requested", "vm_id", id)
 	vm, err := s.kvm.StartVM(ctx, id)
 	if err != nil {
+		slog.Error("[vm] start failed", "vm_id", id, "error", err)
 		return nil, ToGRPCError(err)
 	}
+	slog.Info("[vm] started successfully", "vm_id", id, "state", vm.State)
 	return toProtoVM(*vm), nil
 }
 
@@ -1036,10 +1040,13 @@ func (s *Server) StopVirtualMachine(ctx context.Context, req *nasv1.StopVirtualM
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("[vm] stop requested", "vm_id", id, "force", req.GetForce())
 	vm, err := s.kvm.StopVM(ctx, id, req.GetForce())
 	if err != nil {
+		slog.Error("[vm] stop failed", "vm_id", id, "error", err)
 		return nil, ToGRPCError(err)
 	}
+	slog.Info("[vm] stopped successfully", "vm_id", id, "state", vm.State)
 	return toProtoVM(*vm), nil
 }
 
@@ -1051,10 +1058,13 @@ func (s *Server) RebootVirtualMachine(ctx context.Context, req *nasv1.RebootVirt
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("[vm] reboot requested", "vm_id", id, "force", req.GetForce())
 	vm, err := s.kvm.RebootVM(ctx, id, req.GetForce())
 	if err != nil {
+		slog.Error("[vm] reboot failed", "vm_id", id, "error", err)
 		return nil, ToGRPCError(err)
 	}
+	slog.Info("[vm] rebooted successfully", "vm_id", id, "state", vm.State)
 	return toProtoVM(*vm), nil
 }
 
@@ -1401,10 +1411,13 @@ func (s *Server) StartDockerContainer(ctx context.Context, req *nasv1.StartDocke
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("[docker] start container requested", "container_id", id)
 	c, err := s.docker.StartContainer(ctx, id)
 	if err != nil {
+		slog.Error("[docker] start container failed", "container_id", id, "error", err)
 		return nil, ToGRPCError(err)
 	}
+	slog.Info("[docker] container started successfully", "container_id", id, "state", c.State)
 	return toProtoDocker(*c), nil
 }
 
@@ -1416,10 +1429,13 @@ func (s *Server) StopDockerContainer(ctx context.Context, req *nasv1.StopDockerC
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("[docker] stop container requested", "container_id", id)
 	c, err := s.docker.StopContainer(ctx, id)
 	if err != nil {
+		slog.Error("[docker] stop container failed", "container_id", id, "error", err)
 		return nil, ToGRPCError(err)
 	}
+	slog.Info("[docker] container stopped successfully", "container_id", id, "state", c.State)
 	return toProtoDocker(*c), nil
 }
 
@@ -1431,10 +1447,13 @@ func (s *Server) RestartDockerContainer(ctx context.Context, req *nasv1.RestartD
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("[docker] restart container requested", "container_id", id)
 	c, err := s.docker.RestartContainer(ctx, id)
 	if err != nil {
+		slog.Error("[docker] restart container failed", "container_id", id, "error", err)
 		return nil, ToGRPCError(err)
 	}
+	slog.Info("[docker] container restarted successfully", "container_id", id, "state", c.State)
 	return toProtoDocker(*c), nil
 }
 
@@ -1614,10 +1633,13 @@ func (s *Server) StartDockerApp(ctx context.Context, req *nasv1.StartDockerAppRe
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("[app] start requested", "app_id", id)
 	app, err := s.dockerApp.StartApp(ctx, id)
 	if err != nil {
+		slog.Error("[app] start failed", "app_id", id, "error", err)
 		return nil, ToGRPCError(err)
 	}
+	slog.Info("[app] started successfully", "app_id", id, "state", app.State)
 	return dockerAppToProto(app), nil
 }
 
@@ -1629,10 +1651,13 @@ func (s *Server) StopDockerApp(ctx context.Context, req *nasv1.StopDockerAppRequ
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("[app] stop requested", "app_id", id)
 	app, err := s.dockerApp.StopApp(ctx, id)
 	if err != nil {
+		slog.Error("[app] stop failed", "app_id", id, "error", err)
 		return nil, ToGRPCError(err)
 	}
+	slog.Info("[app] stopped successfully", "app_id", id, "state", app.State)
 	return dockerAppToProto(app), nil
 }
 
@@ -1644,10 +1669,13 @@ func (s *Server) RestartDockerApp(ctx context.Context, req *nasv1.RestartDockerA
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("[app] restart requested", "app_id", id)
 	app, err := s.dockerApp.RestartApp(ctx, id)
 	if err != nil {
+		slog.Error("[app] restart failed", "app_id", id, "error", err)
 		return nil, ToGRPCError(err)
 	}
+	slog.Info("[app] restarted successfully", "app_id", id, "state", app.State)
 	return dockerAppToProto(app), nil
 }
 
@@ -1989,10 +2017,13 @@ func (s *Server) StartLxcContainer(ctx context.Context, req *nasv1.StartLxcConta
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("[lxc] start container requested", "container_id", id)
 	c, err := s.lxc.StartContainer(ctx, id)
 	if err != nil {
+		slog.Error("[lxc] start container failed", "container_id", id, "error", err)
 		return nil, ToGRPCError(err)
 	}
+	slog.Info("[lxc] container started successfully", "container_id", id, "state", c.State, "ipv4", c.IPv4Address)
 	return toProtoLxc(*c), nil
 }
 
@@ -2004,10 +2035,13 @@ func (s *Server) StopLxcContainer(ctx context.Context, req *nasv1.StopLxcContain
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("[lxc] stop container requested", "container_id", id)
 	c, err := s.lxc.StopContainer(ctx, id)
 	if err != nil {
+		slog.Error("[lxc] stop container failed", "container_id", id, "error", err)
 		return nil, ToGRPCError(err)
 	}
+	slog.Info("[lxc] container stopped successfully", "container_id", id, "state", c.State)
 	return toProtoLxc(*c), nil
 }
 
@@ -2019,10 +2053,13 @@ func (s *Server) RestartLxcContainer(ctx context.Context, req *nasv1.RestartLxcC
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("[lxc] restart container requested", "container_id", id)
 	c, err := s.lxc.RestartContainer(ctx, id)
 	if err != nil {
+		slog.Error("[lxc] restart container failed", "container_id", id, "error", err)
 		return nil, ToGRPCError(err)
 	}
+	slog.Info("[lxc] container restarted successfully", "container_id", id, "state", c.State)
 	return toProtoLxc(*c), nil
 }
 
@@ -2034,10 +2071,13 @@ func (s *Server) FreezeLxcContainer(ctx context.Context, req *nasv1.FreezeLxcCon
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("[lxc] freeze container requested", "container_id", id)
 	c, err := s.lxc.FreezeContainer(ctx, id)
 	if err != nil {
+		slog.Error("[lxc] freeze container failed", "container_id", id, "error", err)
 		return nil, ToGRPCError(err)
 	}
+	slog.Info("[lxc] container frozen successfully", "container_id", id, "state", c.State)
 	return toProtoLxc(*c), nil
 }
 

@@ -456,7 +456,7 @@ async function handleAction(name: string, verb: 'start' | 'stop' | 'freeze') {
     if (verb === 'start') await services.lxc.startContainer(name);
     else if (verb === 'stop') await services.lxc.stopContainer(name);
     else await services.lxc.freezeContainer(name);
-    notify('success', `LXC :${verb} succeeded on ${name}`);
+    notify('success', `Container ${verb === 'start' ? 'started' : verb === 'stop' ? 'stopped' : 'frozen'} successfully`);
     await refreshLxc();
   } catch (err: any) {
     notify('error', err?.message || `Failed to ${verb} LXC container`);

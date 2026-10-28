@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -471,6 +472,9 @@ func (a *Adapter) writeLxcConfig(c domain.LxcContainer) {
 		sb.WriteString("lxc.include = /usr/share/lxc/config/nesting.conf\n")
 	}
 
+	// Override AppArmor profile to unconfined to ensure sync wake pipes work reliably
+	sb.WriteString("lxc.apparmor.profile = unconfined\n")
+
 	// Standard systemd / init container mount defaults
 	sb.WriteString("lxc.autodev = 1\n")
 	sb.WriteString("lxc.pty.max = 1024\n")
@@ -802,67 +806,195 @@ func (a *Adapter) DeleteContainer(ctx context.Context, id string, force bool) er
 	return nil
 }
 
+func getContainerLogTail(id string, lines int) string {
+	paths := []string{
+		fmt.Sprintf("/var/log/lxc/%s.log", id),
+		fmt.Sprintf("/var/lib/lxc/%s/console.log", id),
+	}
+	for _, p := range paths {
+		if data, err := os.ReadFile(p); err == nil && len(data) > 0 {
+			split := strings.Split(strings.TrimSpace(string(data)), "\n")
+			if len(split) > lines {
+				split = split[len(split)-lines:]
+			}
+			return strings.Join(split, "\n")
+		}
+	}
+	return ""
+}
+
 func (a *Adapter) StartContainer(ctx context.Context, id string) (*domain.LxcContainer, error) {
+	slog.Info("[lxc] starting container", "container_id", id)
+
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	c, ok := a.containers[id]
+	a.mu.Unlock()
+
 	if !ok {
+		a.mu.Lock()
+		disc := a.discoverContainerLocked(id)
+		if disc != nil {
+			a.containers[id] = *disc
+			c = *disc
+			ok = true
+		}
+		a.mu.Unlock()
+	}
+
+	if !ok {
+		slog.Error("[lxc] container not found", "container_id", id)
 		return nil, fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, id)
 	}
-	if _, err := exec.LookPath("lxc-start"); err == nil {
-		_ = exec.CommandContext(ctx, "lxc-start", "-n", id, "-d").Run()
+
+	configPath := fmt.Sprintf("/var/lib/lxc/%s/config", id)
+	hasHostConfig := false
+	if _, err := os.Stat(configPath); err == nil {
+		hasHostConfig = true
 	}
-	c.State = "RUNNING"
+
+	if hasHostConfig {
+		if _, err := exec.LookPath("lxc-start"); err == nil {
+			logPath := fmt.Sprintf("/var/log/lxc/%s.log", id)
+			_ = os.MkdirAll("/var/log/lxc", 0755)
+			cmd := exec.CommandContext(ctx, "lxc-start", "-n", id, "-d", "-s", "lxc.apparmor.profile=unconfined", "-l", "DEBUG", "-o", logPath)
+			out, err := cmd.CombinedOutput()
+			outputStr := strings.TrimSpace(string(out))
+			if err != nil && !strings.Contains(outputStr, "already running") {
+				logTail := getContainerLogTail(id, 6)
+				slog.Error("[lxc] lxc-start execution failed", "container_id", id, "error", err, "output", outputStr, "log", logTail)
+				return nil, fmt.Errorf("lxc-start failed: %v: %s (log: %s)", err, outputStr, logTail)
+			}
+
+			// Wait briefly and verify container actually entered RUNNING state
+			time.Sleep(300 * time.Millisecond)
+			if st := a.fetchSingleContainerStatus(ctx, id); st != nil {
+				if st.state != "RUNNING" {
+					logTail := getContainerLogTail(id, 6)
+					slog.Error("[lxc] container exited immediately after start", "container_id", id, "state", st.state, "log", logTail)
+					return nil, fmt.Errorf("container aborted immediately after start (state: %s): %s", st.state, logTail)
+				}
+				c.State = st.state
+				c.IPv4Address = st.ipv4
+			} else {
+				c.State = "RUNNING"
+			}
+		} else {
+			c.State = "RUNNING"
+		}
+	} else {
+		c.State = "RUNNING"
+	}
+
+	a.mu.Lock()
 	a.containers[id] = c
+	a.mu.Unlock()
+
+	slog.Info("[lxc] container started successfully", "container_id", id, "state", c.State, "ipv4", c.IPv4Address)
 	cp := c
 	return &cp, nil
 }
 
 func (a *Adapter) StopContainer(ctx context.Context, id string) (*domain.LxcContainer, error) {
+	slog.Info("[lxc] stopping container", "container_id", id)
+
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	c, ok := a.containers[id]
+	a.mu.Unlock()
+
 	if !ok {
+		slog.Error("[lxc] container not found", "container_id", id)
 		return nil, fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, id)
 	}
-	if _, err := exec.LookPath("lxc-stop"); err == nil {
-		_ = exec.CommandContext(ctx, "lxc-stop", "-n", id).Run()
+
+	configPath := fmt.Sprintf("/var/lib/lxc/%s/config", id)
+	if _, err := os.Stat(configPath); err == nil {
+		if _, err := exec.LookPath("lxc-stop"); err == nil {
+			cmd := exec.CommandContext(ctx, "lxc-stop", "-n", id)
+			out, err := cmd.CombinedOutput()
+			outputStr := strings.TrimSpace(string(out))
+			if err != nil && !strings.Contains(outputStr, "not running") && !strings.Contains(outputStr, "doesn't exist") {
+				slog.Error("[lxc] lxc-stop execution failed", "container_id", id, "error", err, "output", outputStr)
+				return nil, fmt.Errorf("lxc-stop failed: %v: %s", err, outputStr)
+			}
+		}
 	}
 	c.State = "STOPPED"
 	c.IPv4Address = ""
+
+	a.mu.Lock()
 	a.containers[id] = c
+	a.mu.Unlock()
+
+	slog.Info("[lxc] container stopped successfully", "container_id", id)
 	cp := c
 	return &cp, nil
 }
 
 func (a *Adapter) RestartContainer(ctx context.Context, id string) (*domain.LxcContainer, error) {
+	slog.Info("[lxc] restarting container", "container_id", id)
+
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	c, ok := a.containers[id]
+	a.mu.Unlock()
+
 	if !ok {
+		slog.Error("[lxc] container not found", "container_id", id)
 		return nil, fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, id)
 	}
-	if _, err := exec.LookPath("lxc-stop"); err == nil {
-		_ = exec.CommandContext(ctx, "lxc-stop", "-r", "-n", id).Run()
+
+	configPath := fmt.Sprintf("/var/lib/lxc/%s/config", id)
+	if _, err := os.Stat(configPath); err == nil {
+		if _, err := exec.LookPath("lxc-stop"); err == nil {
+			cmd := exec.CommandContext(ctx, "lxc-stop", "-r", "-n", id, "-s", "lxc.apparmor.profile=unconfined")
+			out, err := cmd.CombinedOutput()
+			outputStr := strings.TrimSpace(string(out))
+			if err != nil && !strings.Contains(outputStr, "not running") && !strings.Contains(outputStr, "doesn't exist") {
+				slog.Error("[lxc] lxc restart failed", "container_id", id, "error", err, "output", outputStr)
+				return nil, fmt.Errorf("lxc restart failed: %v: %s", err, outputStr)
+			}
+		}
 	}
 	c.State = "RUNNING"
+
+	a.mu.Lock()
 	a.containers[id] = c
+	a.mu.Unlock()
+
+	slog.Info("[lxc] container restarted successfully", "container_id", id)
 	cp := c
 	return &cp, nil
 }
 
 func (a *Adapter) FreezeContainer(ctx context.Context, id string) (*domain.LxcContainer, error) {
+	slog.Info("[lxc] freezing container", "container_id", id)
+
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	c, ok := a.containers[id]
+	a.mu.Unlock()
+
 	if !ok {
 		return nil, fmt.Errorf("%w: lxc container %q", domain.ErrNotFound, id)
 	}
-	if _, err := exec.LookPath("lxc-freeze"); err == nil {
-		_ = exec.CommandContext(ctx, "lxc-freeze", "-n", id).Run()
+
+	configPath := fmt.Sprintf("/var/lib/lxc/%s/config", id)
+	if _, err := os.Stat(configPath); err == nil {
+		if _, err := exec.LookPath("lxc-freeze"); err == nil {
+			cmd := exec.CommandContext(ctx, "lxc-freeze", "-n", id)
+			out, err := cmd.CombinedOutput()
+			outputStr := strings.TrimSpace(string(out))
+			if err != nil && !strings.Contains(outputStr, "not running") && !strings.Contains(outputStr, "doesn't exist") {
+				slog.Error("[lxc] lxc-freeze execution failed", "container_id", id, "error", err, "output", outputStr)
+				return nil, fmt.Errorf("lxc-freeze failed: %v: %s", err, outputStr)
+			}
+		}
 	}
 	c.State = "FROZEN"
+
+	a.mu.Lock()
 	a.containers[id] = c
+	a.mu.Unlock()
+
+	slog.Info("[lxc] container frozen successfully", "container_id", id)
 	cp := c
 	return &cp, nil
 }
