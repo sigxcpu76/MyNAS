@@ -152,8 +152,56 @@ EOF
 # Ensure root password is set for rescue mode
 echo "root:mynas" | chroot "$CHROOT_DIR" chpasswd
 
+# Strip consumer GPU/WiFi firmware, sound/media drivers, and documentation to optimize ISO size
+echo ">> [4b/7] Stripping consumer GPU/WiFi firmware and non-server kernel modules..."
+
+# 1. Strip consumer desktop GPU firmware
+rm -rf "$CHROOT_DIR/usr/lib/firmware/nvidia" \
+       "$CHROOT_DIR/usr/lib/firmware/amdgpu" \
+       "$CHROOT_DIR/usr/lib/firmware/radeon" \
+       "$CHROOT_DIR/usr/lib/firmware/xe" \
+       "$CHROOT_DIR/usr/lib/firmware/cirrus" \
+       "$CHROOT_DIR/usr/lib/firmware/amdnpu"
+
+# 2. Strip consumer WiFi and Bluetooth firmware (servers use wired Ethernet / SFP+)
+rm -rf "$CHROOT_DIR/usr/lib/firmware/ath10k" \
+       "$CHROOT_DIR/usr/lib/firmware/ath11k" \
+       "$CHROOT_DIR/usr/lib/firmware/ath12k" \
+       "$CHROOT_DIR/usr/lib/firmware/brcm" \
+       "$CHROOT_DIR/usr/lib/firmware/cypress" \
+       "$CHROOT_DIR/usr/lib/firmware/mediatek" \
+       "$CHROOT_DIR/usr/lib/firmware/rtw89" \
+       "$CHROOT_DIR/usr/lib/firmware/rtl_bt" \
+       "$CHROOT_DIR/usr/lib/firmware/libertas" \
+       "$CHROOT_DIR/usr/lib/firmware/ti-connectivity" \
+       "$CHROOT_DIR/usr/lib/firmware/mrvl"
+
+# 3. Strip non-server kernel modules (audio, TV tuners, consumer sensors, wireless)
+PVE_KVER=$(ls "$CHROOT_DIR/usr/lib/modules" | grep pve | head -n 1)
+if [ -n "$PVE_KVER" ]; then
+    KMOD_DIR="$CHROOT_DIR/usr/lib/modules/$PVE_KVER/kernel"
+    rm -rf "$KMOD_DIR/sound" \
+           "$KMOD_DIR/drivers/media" \
+           "$KMOD_DIR/drivers/iio" \
+           "$KMOD_DIR/drivers/net/wireless" \
+           "$KMOD_DIR/drivers/comedi" \
+           "$KMOD_DIR/drivers/isdn" \
+           "$KMOD_DIR/drivers/net/can" \
+           "$KMOD_DIR/net/wireless" \
+           "$KMOD_DIR/net/mac80211" \
+           "$KMOD_DIR/net/bluetooth"
+    # Rebuild module dependency maps
+    chroot "$CHROOT_DIR" depmod -a "$PVE_KVER"
+fi
+
+# 4. Strip documentation, man pages, locales, and dev headers
+rm -rf "$CHROOT_DIR/usr/share/doc/"* \
+       "$CHROOT_DIR/usr/share/man/"* \
+       "$CHROOT_DIR/usr/share/info/"* \
+       "$CHROOT_DIR/usr/include/"*
+
 # Configure initramfs for Live ISO boot
-echo ">> [4b/7] Configuring initramfs for Live boot..."
+echo ">> [4c/7] Configuring initramfs for Live boot..."
 mkdir -p "$CHROOT_DIR/etc/initramfs-tools/conf.d"
 cat << 'EOF' > "$CHROOT_DIR/etc/initramfs-tools/conf.d/live.conf"
 BOOT=live
