@@ -2108,6 +2108,48 @@ func (s *Server) GetLxcContainerLogs(ctx context.Context, req *nasv1.GetLxcConta
 // CIFS & WebDAV Shares
 // =============================================================================
 
+func (s *Server) authenticateCaller(ctx context.Context) *domain.User {
+	if s.identity == nil {
+		return nil
+	}
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		authVals := md.Get("authorization")
+		if len(authVals) > 0 {
+			u, err := s.identity.VerifyToken(ctx, authVals[0])
+			if err == nil {
+				return u
+			}
+		}
+	}
+	return nil
+}
+
+func isCallerAuthorizedForCifsShare(caller *domain.User, sh domain.CifsShare) bool {
+	if caller == nil {
+		return false
+	}
+	if caller.IsAdmin {
+		return true
+	}
+	for _, u := range sh.ValidUsers {
+		if u == caller.Username {
+			return true
+		}
+	}
+	for _, g := range sh.ValidGroups {
+		grp := strings.TrimPrefix(g, "@")
+		if grp == caller.PrimaryGroup {
+			return true
+		}
+		for _, sg := range caller.SupplementaryGroups {
+			if grp == sg {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (s *Server) ListCifsShares(ctx context.Context, req *nasv1.ListCifsSharesRequest) (*nasv1.ListCifsSharesResponse, error) {
 	if err := s.prereq.RequireModule("cifs"); err != nil {
 		return nil, ToGRPCError(err)
@@ -2116,6 +2158,22 @@ func (s *Server) ListCifsShares(ctx context.Context, req *nasv1.ListCifsSharesRe
 	if err != nil {
 		return nil, ToGRPCError(err)
 	}
+
+	caller := s.authenticateCaller(ctx)
+
+	filtered := make([]domain.CifsShare, 0, len(items))
+	for _, sh := range items {
+		// SMB shares that are hidden and have a specific user should not be listed outside that user
+		if !sh.Browseable {
+			hasSpecificUsers := len(sh.ValidUsers) > 0 || len(sh.ValidGroups) > 0
+			if hasSpecificUsers && !isCallerAuthorizedForCifsShare(caller, sh) {
+				continue
+			}
+		}
+		filtered = append(filtered, sh)
+	}
+	items = filtered
+
 	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
 	paged, nextToken, total, err := PaginateSlice(items, req.GetPageSize(), req.GetPageToken())
 	if err != nil {
@@ -2144,6 +2202,18 @@ func (s *Server) GetCifsShare(ctx context.Context, req *nasv1.GetCifsShareReques
 	if err != nil {
 		return nil, ToGRPCError(err)
 	}
+
+	// SMB shares that are hidden and have a specific user should not be accessible/listed outside that user
+	if !sh.Browseable {
+		hasSpecificUsers := len(sh.ValidUsers) > 0 || len(sh.ValidGroups) > 0
+		if hasSpecificUsers {
+			caller := s.authenticateCaller(ctx)
+			if !isCallerAuthorizedForCifsShare(caller, *sh) {
+				return nil, ToGRPCError(domain.ErrNotFound)
+			}
+		}
+	}
+
 	return toProtoCifs(*sh), nil
 }
 

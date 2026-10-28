@@ -45,8 +45,25 @@ const currentSubtab = computed<'cifs' | 'webdav' | 'all'>(() => {
   return 'all';
 });
 
+const visibleCifsShares = computed(() => {
+  const user = nasState.currentUser;
+  if (!user || user.isAdmin) {
+    return nasState.cifsShares;
+  }
+  return nasState.cifsShares.filter((s) => {
+    // Hidden shares with specific users should not be listed outside that user
+    if (!s.browseable) {
+      const hasSpecificUsers = (s.validUsers && s.validUsers.length > 0) || (s.validGroups && s.validGroups.length > 0);
+      if (hasSpecificUsers) {
+        return (s.validUsers || []).includes(user.username);
+      }
+    }
+    return true;
+  });
+});
+
 const cifsSort = useTableSort(
-  () => nasState.cifsShares,
+  () => visibleCifsShares.value,
   {
     share: (s: CifsShare) => s.shareName,
     path: (s: CifsShare) => s.path + ' ' + (s.comment || ''),
@@ -536,7 +553,7 @@ async function handleDeleteWebdav(share: WebdavShare) {
         >
           <MdiIcon :path="mdiFolderNetwork" size="16" />
           <span>Windows (SMB / CIFS)</span>
-          <span class="subnav-badge">{{ nasState.cifsShares.length }}</span>
+          <span class="subnav-badge">{{ visibleCifsShares.length }}</span>
         </button>
         <button
           type="button"
@@ -882,7 +899,7 @@ async function handleDeleteWebdav(share: WebdavShare) {
             </tr>
           </thead>
           <tbody>
-            <template v-if="nasState.loading && nasState.cifsShares.length === 0">
+            <template v-if="nasState.loading && visibleCifsShares.length === 0">
               <tr v-for="r in 3" :key="r">
                 <td>
                   <div style="display: flex; flex-direction: column; gap: 4px">
@@ -920,7 +937,7 @@ async function handleDeleteWebdav(share: WebdavShare) {
               </tr>
             </template>
 
-            <tr v-else-if="nasState.cifsShares.length === 0">
+            <tr v-else-if="visibleCifsShares.length === 0">
               <td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 36px">
                 No SMB shares configured.
               </td>

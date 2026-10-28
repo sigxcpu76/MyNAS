@@ -713,6 +713,10 @@ func (a *Adapter) runInstallerInContainer(id, scriptURL, recipe, rootfsPath stri
 			installURL = strings.TrimSuffix(installURL, ".sh") + "-install.sh"
 			installerScript = fmt.Sprintf(`export DEBIAN_FRONTEND=noninteractive
 export TERM=xterm-256color
+export var_apache_tomcat_version="${var_apache_tomcat_version:-11}"
+export var_apache_tomcat_jdk_version="${var_apache_tomcat_jdk_version:-21}"
+export app="${app:-Apache-Tomcat}"
+export APP="${APP:-Apache-Tomcat}"
 if command -v apt-get >/dev/null 2>&1; then
   apt-get update -y && apt-get install -y curl ca-certificates gnupg gpg sudo
 elif command -v apk >/dev/null 2>&1; then

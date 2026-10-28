@@ -446,6 +446,7 @@ func (a *CifsAdapter) syncSambaConfig() error {
 	buf.WriteString("   directory mask = 0775\n")
 	buf.WriteString("   force create mode = 0664\n")
 	buf.WriteString("   force directory mode = 0775\n")
+	buf.WriteString("   access based share enum = yes\n")
 
 	// Global Fruit / macOS support
 	if a.globalConfig.FruitAAPL {
@@ -485,6 +486,7 @@ func (a *CifsAdapter) syncSambaConfig() error {
 		}
 		if len(principals) > 0 {
 			fmt.Fprintf(&buf, "   valid users = %s\n", strings.Join(principals, " "))
+			fmt.Fprintf(&buf, "   access based share enum = yes\n")
 		}
 		if len(s.ReadList) > 0 {
 			fmt.Fprintf(&buf, "   read list = %s\n", strings.Join(s.ReadList, " "))
