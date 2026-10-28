@@ -60,6 +60,9 @@ func newStartCmd(rootOpts *RootOptions) *cobra.Command {
 	}
 
 	cmd.Flags().IntVar(&opts.HTTPPort, "http-port", opts.HTTPPort, "HTTP/WebUI/gRPC-Gateway/WebDAV/noVNC listen port")
+	cmd.Flags().IntVar(&opts.HTTPPort, "port", opts.HTTPPort, "Alias for --http-port")
+	var dummyBind string
+	cmd.Flags().StringVar(&dummyBind, "bind", "0.0.0.0", "Bind interface/address (default 0.0.0.0)")
 	cmd.Flags().IntVar(&opts.GRPCPort, "grpc-port", opts.GRPCPort, "Native gRPC API server listen port")
 	cmd.Flags().IntVar(&opts.WebdavPort, "webdav-port", opts.WebdavPort, "Dedicated WebDAV server listen port (default 8081, 0 to disable dedicated port)")
 	cmd.Flags().StringVar(&opts.StateDir, "state-dir", opts.StateDir, "Directory for NAS share & config state")
@@ -246,8 +249,12 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 		logger.Debug("docker event captured", "action", evt.Action, "resource", evt.Resource)
 		eventBus.Publish(evt)
 	})
+	kvmAdapter.StartEventWatcher(ctx, func(evt domain.Event) {
+		logger.Debug("kvm event captured", "action", evt.Action, "resource", evt.Resource)
+		eventBus.Publish(evt)
+	})
 
-	step("docker event watcher started")
+	step("docker and kvm event watchers started")
 
 	// 2b. Application Services (Hexagonal Core Use-Cases)
 	prereqSvc := application.NewPrerequisiteService(prereqAdapter)

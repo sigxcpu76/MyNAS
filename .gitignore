@@ -52,5 +52,11 @@ Thumbs.db
 *~
 .vite/
 
+# ISO build artifacts and output images
+iso/build/
+iso/output/
+*.iso
+*.squashfs
+
 nasctl
 

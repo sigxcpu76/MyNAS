@@ -146,3 +146,51 @@ func TestGenerateComposeFromQuestions(t *testing.T) {
 		t.Errorf("expected x-portals in compose, got:\n%s", compose)
 	}
 }
+
+func TestGenerateComposeFromQuestions_OnlyPortalsInWebUICandidates(t *testing.T) {
+	app := domain.CatalogApp{
+		AppID:          "qbittorrent",
+		ContainerImage: "ghcr.io/home-operations/qbittorrent:latest",
+		DefaultPort:    8080,
+		Questions: []domain.CatalogQuestion{
+			{
+				Variable:     "network.web_port",
+				Label:        "WebUI Port",
+				Type:         "int",
+				DefaultValue: "30024",
+			},
+			{
+				Variable:     "network.bt_port",
+				Label:        "BT Port",
+				Type:         "int",
+				DefaultValue: "51413",
+			},
+		},
+	}
+
+	answers := map[string]string{
+		"network.web_port": "30024",
+		"network.bt_port":  "51413",
+	}
+
+	compose := GenerateComposeFromQuestions(app, answers, "tank", "/mnt/tank/apps")
+
+	// Both ports should be exposed in ports mapping
+	if !strings.Contains(compose, `"30024:8080"`) && !strings.Contains(compose, `"30024:30024"`) {
+		t.Errorf("expected web port in compose ports, got:\n%s", compose)
+	}
+	if !strings.Contains(compose, `"51413:51413"`) {
+		t.Errorf("expected bt port 51413:51413 in compose ports, got:\n%s", compose)
+	}
+
+	// But ONLY web_port should be in x-portals!
+	if !strings.Contains(compose, "x-portals:") {
+		t.Fatalf("expected x-portals in compose, got:\n%s", compose)
+	}
+	if !strings.Contains(compose, `name: "WebUI Port"`) || !strings.Contains(compose, `port: 30024`) {
+		t.Errorf("expected WebUI Port 30024 in x-portals, got:\n%s", compose)
+	}
+	if strings.Contains(compose, `name: "BT Port"`) || strings.Contains(compose, `port: 51413`) {
+		t.Errorf("BT Port must NOT be exposed as a Web UI candidate portal, got:\n%s", compose)
+	}
+}

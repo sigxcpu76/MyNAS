@@ -429,7 +429,10 @@ func (g *Gateway) handleSPA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cleanPath := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
-	if cleanPath == "" {
+	if cleanPath == "" || cleanPath == "index.html" {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
 		cleanPath = "index.html"
 	}
 	// Check if file exists in embedded FS; otherwise serve index.html for Vue Router SPA navigation
@@ -437,6 +440,9 @@ func (g *Gateway) handleSPA(w http.ResponseWriter, r *http.Request) {
 		info, statErr := f.Stat()
 		_ = f.Close()
 		if statErr == nil && !info.IsDir() {
+			if strings.HasPrefix(cleanPath, "assets/") {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			}
 			http.FileServer(http.FS(g.uiFS)).ServeHTTP(w, r)
 			return
 		}
@@ -446,6 +452,9 @@ func (g *Gateway) handleSPA(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "UI index.html not found", http.StatusNotFound)
 		return
 	}
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(indexBytes)
@@ -456,6 +465,10 @@ func corsMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS, PROPFIND, MKCOL, MOVE, COPY")
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Depth, Destination, Overwrite")
+		if strings.HasPrefix(r.URL.Path, "/v1/") {
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			w.Header().Set("Pragma", "no-cache")
+		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

@@ -59,6 +59,14 @@ func (s *ZfsService) ExportPool(ctx context.Context, id string, force bool) erro
 	return s.engine.ExportPool(ctx, id, force)
 }
 
+func (s *ZfsService) ImportPool(ctx context.Context, poolName string, force bool, altroot string) (*domain.ZfsPool, error) {
+	cleanName := strings.TrimPrefix(strings.TrimSpace(poolName), "zfsPools/")
+	if cleanName == "" {
+		return nil, fmt.Errorf("%w: pool name cannot be empty", domain.ErrInvalidArgument)
+	}
+	return s.engine.ImportPool(ctx, cleanName, force, altroot)
+}
+
 func (s *ZfsService) ScrubPool(ctx context.Context, id string) (*domain.ZfsPool, error) {
 	if err := domain.ValidateResourceID(id, "zfs_pool"); err != nil {
 		return nil, err

@@ -713,6 +713,8 @@ interface AppPortEntry {
   protocol: string;
 }
 
+const WELL_KNOWN_WEB_PORTS = new Set(['80', '81', '443', '3000', '5000', '5001', '8000', '8080', '8088', '8096', '8123', '8384', '8443', '9000', '9443']);
+
 function getAppPorts(app: DockerApp): AppPortEntry[] {
   const result: AppPortEntry[] = [];
   const seen = new Set<string>();
@@ -769,6 +771,14 @@ function getAppPorts(app: DockerApp): AppPortEntry[] {
   return result;
 }
 
+function getAppWebPorts(app: DockerApp): AppPortEntry[] {
+  const ports = getAppPorts(app);
+  return ports.filter(p => {
+    if (p.protocol && p.protocol.toLowerCase() === 'udp') return false;
+    return WELL_KNOWN_WEB_PORTS.has(p.containerPort) || WELL_KNOWN_WEB_PORTS.has(p.hostPort);
+  });
+}
+
 function togglePortMenu(appId: string) {
   if (activePortMenuAppId.value === appId) {
     activePortMenuAppId.value = null;
@@ -797,13 +807,13 @@ function handleGlobalClick(e: MouseEvent) {
 }
 
 function getPrimaryWebUiUrl(app: DockerApp): string {
-  if (app.webUiUrl) return app.webUiUrl;
   if (app.portals && app.portals.length > 0 && app.portals[0].url) {
     return app.portals[0].url;
   }
-  const ports = getAppPorts(app);
-  if (ports.length > 0 && ports[0].hostPort) {
-    return `http://${window.location.hostname || 'localhost'}:${ports[0].hostPort}`;
+  if (app.webUiUrl) return app.webUiUrl;
+  const webPorts = getAppWebPorts(app);
+  if (webPorts.length > 0 && webPorts[0].hostPort) {
+    return `http://${window.location.hostname || 'localhost'}:${webPorts[0].hostPort}`;
   }
   return '';
 }
@@ -1193,7 +1203,7 @@ onUnmounted(() => {
                   {{ app.portals && app.portals.length > 0 ? (app.portals[0].name || 'Open UI') : 'Open UI' }}
                 </button>
                 <button
-                  v-if="(app.portals && app.portals.length > 1) || getAppPorts(app).length > 1"
+                  v-if="(app.portals && app.portals.length > 1) || (!app.portals?.length && getAppWebPorts(app).length > 1)"
                   type="button"
                   class="btn btn-sm btn-icon webui-port-trigger"
                   style="padding: 3px 4px; font-size: 11px; color: var(--success-text); border-color: var(--success-border)"
@@ -1237,31 +1247,32 @@ onUnmounted(() => {
                   </button>
                 </template>
 
-                <!-- Container Exposed Ports -->
-                <div
-                  v-if="getAppPorts(app).length > 0"
-                  style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); padding: 4px 8px; border-bottom: 1px solid var(--border-subtle); margin-top: 4px; margin-bottom: 2px"
-                >
-                  Container Ports
-                </div>
-                <button
-                  v-for="p in getAppPorts(app)"
-                  :key="p.containerPort"
-                  type="button"
-                  class="btn btn-sm btn-ghost"
-                  style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 5px 8px; text-align: left; font-size: 12px"
-                  @click="openPortUrl(p.hostPort)"
-                >
-                  <span class="mono font-semibold" style="color: var(--accent-primary)">
-                    :{{ p.containerPort }}
-                  </span>
-                  <span style="color: var(--text-secondary); font-size: 11px">
-                    → host :{{ p.hostPort }}
-                  </span>
-                  <span v-if="isPortActiveWebUi(app, p)" class="badge badge-success" style="font-size: 9px; padding: 1px 4px">
-                    UI
-                  </span>
-                </button>
+                <!-- Fallback Web UI Ports (when no explicit portals defined) -->
+                <template v-else-if="getAppWebPorts(app).length > 0">
+                  <div
+                    style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); padding: 4px 8px; border-bottom: 1px solid var(--border-subtle); margin-top: 4px; margin-bottom: 2px"
+                  >
+                    Web UI Ports
+                  </div>
+                  <button
+                    v-for="p in getAppWebPorts(app)"
+                    :key="p.containerPort"
+                    type="button"
+                    class="btn btn-sm btn-ghost"
+                    style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 5px 8px; text-align: left; font-size: 12px"
+                    @click="openPortUrl(p.hostPort)"
+                  >
+                    <span class="mono font-semibold" style="color: var(--accent-primary)">
+                      :{{ p.containerPort }}
+                    </span>
+                    <span style="color: var(--text-secondary); font-size: 11px">
+                      → host :{{ p.hostPort }}
+                    </span>
+                    <span v-if="isPortActiveWebUi(app, p)" class="badge badge-success" style="font-size: 9px; padding: 1px 4px">
+                      UI
+                    </span>
+                  </button>
+                </template>
               </div>
             </td>
 

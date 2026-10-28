@@ -249,6 +249,8 @@ export class AipClient {
   private async request<T>(method: string, url: string, body?: unknown): Promise<T> {
     const headers: Record<string, string> = {
       Accept: 'application/json',
+      'Cache-Control': 'no-cache',
+      Pragma: 'no-cache',
     };
     if (body !== undefined) {
       headers['Content-Type'] = 'application/json';

@@ -1,0 +1,18 @@
+[Unit]
+Description=nasctl Unified Storage & Virtualization Platform
+After=network.target zfs-mount.service docker.service libvirtd.service
+Wants=zfs-mount.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root
+ExecStart=/usr/local/bin/nasctl start --http-port 8080 --grpc-port 9090 --webdav-port 8081
+Restart=always
+RestartSec=3s
+LimitNOFILE=65536
+LimitNPROC=65536
+
+[Install]
+WantedBy=multi-user.target

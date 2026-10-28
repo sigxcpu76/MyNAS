@@ -49,8 +49,10 @@ const cifsSort = useTableSort(
   () => nasState.cifsShares,
   {
     share: (s: CifsShare) => s.shareName,
+    path: (s: CifsShare) => s.path + ' ' + (s.comment || ''),
     acl: (s: CifsShare) => (s.validUsers || []).join(', '),
-    mode: (s: CifsShare) => s.readOnly,
+    mode: (s: CifsShare) => (s.readOnly ? 'ro' : 'rw'),
+    features: (s: CifsShare) => [s.shadowCopy ? 'shadow' : '', s.timeMachine ? 'tm' : '', s.recycleBin ? 'recycle' : '', s.createMask || '', s.directoryMask || ''].join(' '),
   }
 );
 
@@ -58,8 +60,10 @@ const webdavSort = useTableSort(
   () => nasState.webdavShares,
   {
     endpoint: (w: WebdavShare) => w.urlPrefix,
+    path: (w: WebdavShare) => w.path + ' ' + (w.description || ''),
     identity: (w: WebdavShare) => (w.allowedUsers || []).join(', '),
-    access: (w: WebdavShare) => w.readOnly,
+    access: (w: WebdavShare) => (w.readOnly ? 'ro' : 'rw'),
+    status: (w: WebdavShare) => (w.enabled ? 1 : 0),
   }
 );
 
@@ -870,10 +874,10 @@ async function handleDeleteWebdav(share: WebdavShare) {
           <thead>
             <tr>
               <SortableTh :sort="cifsSort" sort-key="share">SMB Share</SortableTh>
-              <th>Filesystem Path & Description</th>
+              <SortableTh :sort="cifsSort" sort-key="path">Filesystem Path & Description</SortableTh>
               <SortableTh :sort="cifsSort" sort-key="acl">Access Control</SortableTh>
               <SortableTh :sort="cifsSort" sort-key="mode">Permissions</SortableTh>
-              <th>VFS Features & Masks</th>
+              <SortableTh :sort="cifsSort" sort-key="features">VFS Features & Masks</SortableTh>
               <th style="width: 90px; text-align: right">Actions</th>
             </tr>
           </thead>
@@ -1193,10 +1197,10 @@ async function handleDeleteWebdav(share: WebdavShare) {
           <thead>
             <tr>
               <SortableTh :sort="webdavSort" sort-key="endpoint">WebDAV Endpoint</SortableTh>
-              <th>Target Path & Description</th>
+              <SortableTh :sort="webdavSort" sort-key="path">Target Path & Description</SortableTh>
               <SortableTh :sort="webdavSort" sort-key="identity">Allowed Identity</SortableTh>
               <SortableTh :sort="webdavSort" sort-key="access">Permissions</SortableTh>
-              <th>Status</th>
+              <SortableTh :sort="webdavSort" sort-key="status">Status</SortableTh>
               <th style="width: 90px; text-align: right">Actions</th>
             </tr>
           </thead>

@@ -254,6 +254,15 @@ func TestWebdavAdapter_AutoIndexAndFileServing(t *testing.T) {
 	if !strings.Contains(body, "[Parent Directory]") {
 		t.Fatalf("expected parent directory link in subdir auto-index")
 	}
+	if !strings.Contains(body, "onclick=\"sortTable('name')\"") ||
+		!strings.Contains(body, "onclick=\"sortTable('size')\"") ||
+		!strings.Contains(body, "onclick=\"sortTable('date')\"") ||
+		!strings.Contains(body, "onclick=\"sortTable('type')\"") {
+		t.Fatalf("expected sortable columns in auto-index table, got: %s", body)
+	}
+	if !strings.Contains(body, "data-size=") || !strings.Contains(body, "data-time=") {
+		t.Fatalf("expected data-size and data-time attributes in auto-index rows, got: %s", body)
+	}
 
 	// 4. Custom index.html overrides auto-index
 	indexPath := filepath.Join(shareDir, "index.html")
@@ -278,6 +287,10 @@ func TestWebdavAdapter_AutoIndexAndFileServing(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "Available WebDAV Shares") || !strings.Contains(w.Body.String(), "media") {
 		t.Fatalf("expected root shares index to list 'media', got: %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "onclick=\"sortShares('id')\"") ||
+		!strings.Contains(w.Body.String(), "onclick=\"sortShares('path')\"") {
+		t.Fatalf("expected sortable columns in shares index, got: %s", w.Body.String())
 	}
 
 	// 6. Direct access without /dav/ prefix (dedicated port simulation: /media/photos/family.jpg)

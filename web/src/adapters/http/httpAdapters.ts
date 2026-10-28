@@ -867,6 +867,15 @@ export class HttpZfsAdapter implements ZfsPort {
     await this.client.customMethod<any>(name, 'export', { force });
   }
 
+  async importPool(poolName: string, force = true, altroot = '/mnt'): Promise<ZfsPool> {
+    const raw = await this.client.post<any>('zfsPools:import', {
+      pool_name: poolName,
+      force,
+      altroot,
+    });
+    return mapZfsPool(raw);
+  }
+
   async scrubPool(name: string): Promise<ZfsPool> {
     const raw = await this.client.customMethod<any>(name, 'scrub', {});
     return mapZfsPool(raw);

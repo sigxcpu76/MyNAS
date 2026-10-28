@@ -334,12 +334,19 @@ func GenerateComposeFromQuestions(app domain.CatalogApp, answers map[string]stri
 		// 1. Ports
 		if strings.Contains(vLower, "port") && q.Type == "int" {
 			if p, err := strconv.Atoi(val); err == nil && p > 0 {
+				isPortal := isWebPortalVariable(q.Variable, q.Label)
 				containerPort := p
-				if app.DefaultPort > 0 {
+				if isPortal && app.DefaultPort > 0 && app.DefaultPort != p {
 					containerPort = app.DefaultPort
 				}
 				ports = append(ports, fmt.Sprintf("%d:%d", p, containerPort))
-				portals = append(portals, fmt.Sprintf("  - name: %q\n    port: %d\n    scheme: \"http\"\n    path: \"/\"", q.Label, p))
+				if isPortal {
+					portalName := q.Label
+					if portalName == "" {
+						portalName = "Web UI"
+					}
+					portals = append(portals, fmt.Sprintf("  - name: %q\n    port: %d\n    scheme: \"http\"\n    path: \"/\"", portalName, p))
+				}
 			}
 		}
 
@@ -376,10 +383,14 @@ func GenerateComposeFromQuestions(app domain.CatalogApp, answers map[string]stri
 		}
 	}
 
-	// Fallbacks if no questions provided
-	if len(ports) == 0 && app.DefaultPort > 0 {
-		ports = append(ports, fmt.Sprintf("%d:%d", app.DefaultPort, app.DefaultPort))
+	// Fallbacks if no portals identified
+	if len(portals) == 0 && app.DefaultPort > 0 {
 		portals = append(portals, fmt.Sprintf("  - name: \"Web UI\"\n    port: %d\n    scheme: \"http\"\n    path: \"/\"", app.DefaultPort))
+	} else if len(portals) == 0 && len(ports) == 1 {
+		hPort, _ := parsePortMapping(ports[0])
+		if p, err := strconv.Atoi(hPort); err == nil && p > 0 {
+			portals = append(portals, fmt.Sprintf("  - name: \"Web UI\"\n    port: %d\n    scheme: \"http\"\n    path: \"/\"", p))
+		}
 	}
 	if len(volumes) == 0 {
 		volumes = append(volumes, fmt.Sprintf("%s/%s/data:/data", appdataPath, serviceName))
@@ -603,4 +614,50 @@ func GetCuratedQuestions(app domain.CatalogApp, appsPool, appdataPath string) ([
 	}
 
 	return groups, flat
+}
+
+func isWebPortalVariable(v, label string) bool {
+	vLower := strings.ToLower(v)
+	lLower := strings.ToLower(label)
+
+	// Explicit non-web port patterns (torrent, peer, dns, dhcp, metrics, exporter, sync, cluster, vpn, etc.)
+	nonWebPatterns := []string{
+		"bt_port", "torrent", "peer", "dns", "dhcp", "metrics",
+		"prometheus", "exporter", "sync", "cluster", "member",
+		"wireguard", "vpn", "tunnel", "rtp", "sip", "tftp",
+	}
+	for _, p := range nonWebPatterns {
+		if strings.Contains(vLower, p) || strings.Contains(lLower, p) {
+			return false
+		}
+	}
+
+	// Web portal patterns
+	webPatterns := []string{
+		"web_port", "webui", "web_ui", "portal", "http", "https",
+		"admin", "dashboard", "gui", "ui_port", "frontend",
+	}
+	for _, p := range webPatterns {
+		if strings.Contains(vLower, p) || strings.Contains(lLower, p) {
+			return true
+		}
+	}
+
+	if strings.Contains(lLower, "web ui") || strings.Contains(lLower, "web portal") || strings.Contains(lLower, "web interface") {
+		return true
+	}
+
+	return false
+}
+
+func parsePortMapping(p string) (hostPort, containerPort string) {
+	p = strings.Trim(p, `"`)
+	if idx := strings.Index(p, "/"); idx != -1 {
+		p = p[:idx]
+	}
+	parts := strings.Split(p, ":")
+	if len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+	return p, p
 }

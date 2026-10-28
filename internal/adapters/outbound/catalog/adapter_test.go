@@ -222,3 +222,38 @@ consts:
 		t.Fatalf("expected port 8096, got %d", port2)
 	}
 }
+
+func TestExtractPortalsFromTemplate_MultipleAndFromQuestions(t *testing.T) {
+	tpl := `
+  {% do c1.add_port(values.network.web_port) %}
+  {% do c1.add_port(values.network.bt_port) %}
+  {% do tpl.portals.add(values.network.web_port, {"scheme": "http"}) %}
+  {% do tpl.portals.add(values.network.web_port, {"name": "Admin Portal", "path": "/admin", "scheme": "https"}) %}
+`
+	questions := []byte(`
+questions:
+  - variable: network
+    schema:
+      attrs:
+        - variable: web_port
+          schema:
+            attrs:
+              - variable: port_number
+                default: 30024
+`)
+
+	portals := catalog.ExtractPortalsFromTemplate(tpl, "", questions)
+	if len(portals) != 2 {
+		t.Fatalf("expected 2 portals, got %d", len(portals))
+	}
+
+	p1 := portals[0]
+	if p1.Name != "Web UI" || p1.Port != 30024 || p1.Scheme != "http" || p1.Path != "/" {
+		t.Errorf("unexpected portal 1: %+v", p1)
+	}
+
+	p2 := portals[1]
+	if p2.Name != "Admin Portal" || p2.Port != 30024 || p2.Scheme != "https" || p2.Path != "/admin" {
+		t.Errorf("unexpected portal 2: %+v", p2)
+	}
+}

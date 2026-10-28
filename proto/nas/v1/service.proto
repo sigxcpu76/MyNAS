@@ -161,6 +161,14 @@ service NasService {
     option (google.api.method_signature) = "name";
   }
 
+  rpc ImportZfsPool(ImportZfsPoolRequest) returns (ZfsPool) {
+    option (google.api.http) = {
+      post: "/v1/zfsPools:import"
+      body: "*"
+    };
+    option (google.api.method_signature) = "pool_name,force,altroot";
+  }
+
   rpc ScrubZfsPool(ScrubZfsPoolRequest) returns (ZfsPool) {
     option (google.api.http) = {
       post: "/v1/{name=zfsPools/*}:scrub"

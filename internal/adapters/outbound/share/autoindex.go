@@ -319,6 +319,32 @@ func serveAutoIndex(w http.ResponseWriter, r *http.Request, share domain.WebdavS
     letter-spacing: 0.05em;
     border-bottom: 1px solid var(--border);
   }
+  th.sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s ease;
+  }
+  th.sortable:hover {
+    color: var(--accent);
+  }
+  .th-content {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .sort-icon {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    opacity: 0.35;
+    transition: opacity 0.15s ease;
+  }
+  th.sortable.active-sort {
+    color: var(--accent);
+  }
+  th.sortable.active-sort .sort-icon {
+    opacity: 1;
+  }
   td {
     padding: 12px 24px;
     border-bottom: 1px solid var(--border);
@@ -422,10 +448,18 @@ func serveAutoIndex(w http.ResponseWriter, r *http.Request, share domain.WebdavS
     <table>
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Size</th>
-          <th>Last Modified</th>
+          <th class="sortable active-sort" onclick="sortTable('name')" id="th-name" title="Click to sort by Name">
+            <span class="th-content">Name <span class="sort-icon" id="icon-name">&#9650;</span></span>
+          </th>
+          <th class="sortable" onclick="sortTable('type')" id="th-type" title="Click to sort by Type">
+            <span class="th-content">Type <span class="sort-icon" id="icon-type">&#8645;</span></span>
+          </th>
+          <th class="sortable" onclick="sortTable('size')" id="th-size" title="Click to sort by Size">
+            <span class="th-content">Size <span class="sort-icon" id="icon-size">&#8645;</span></span>
+          </th>
+          <th class="sortable" onclick="sortTable('date')" id="th-date" title="Click to sort by Last Modified">
+            <span class="th-content">Last Modified <span class="sort-icon" id="icon-date">&#8645;</span></span>
+          </th>
           <th style="text-align: right">Action</th>
         </tr>
       </thead>
@@ -434,7 +468,7 @@ func serveAutoIndex(w http.ResponseWriter, r *http.Request, share domain.WebdavS
 
 	if !isRoot {
 		fmt.Fprintf(w, `
-        <tr class="item-row">
+        <tr class="parent-directory-row">
           <td>
             <div class="name-cell">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -468,7 +502,7 @@ func serveAutoIndex(w http.ResponseWriter, r *http.Request, share domain.WebdavS
 				actionLabel = "Download"
 			}
 			fmt.Fprintf(w, `
-        <tr class="item-row" data-name="%s">
+        <tr class="item-row" data-name="%s" data-type="%s" data-size="%d" data-time="%d" data-is-dir="%t">
           <td>
             <div class="name-cell">
               %s
@@ -484,6 +518,10 @@ func serveAutoIndex(w http.ResponseWriter, r *http.Request, share domain.WebdavS
         </tr>
 `,
 				html.EscapeString(strings.ToLower(it.Name)),
+				html.EscapeString(strings.ToLower(it.Type)),
+				it.Size,
+				it.ModTime.Unix(),
+				it.IsDir,
 				it.Icon,
 				html.EscapeString(it.URL),
 				html.EscapeString(it.Name),
@@ -513,6 +551,75 @@ func serveAutoIndex(w http.ResponseWriter, r *http.Request, share domain.WebdavS
   </div>
 </div>
 <script>
+var currentSortKey = 'name';
+var currentSortAsc = true;
+
+function sortTable(key) {
+  if (currentSortKey === key) {
+    currentSortAsc = !currentSortAsc;
+  } else {
+    currentSortKey = key;
+    currentSortAsc = (key === 'size' || key === 'date') ? false : true;
+  }
+
+  updateSortIcons();
+
+  var tbody = document.getElementById('file-list');
+  if (!tbody) return;
+  var rows = Array.from(tbody.querySelectorAll('tr.item-row'));
+
+  rows.sort(function(a, b) {
+    var aIsDir = a.getAttribute('data-is-dir') === 'true';
+    var bIsDir = b.getAttribute('data-is-dir') === 'true';
+
+    // Group directories at top
+    if (aIsDir !== bIsDir) {
+      return aIsDir ? -1 : 1;
+    }
+
+    if (key === 'size') {
+      var sA = parseInt(a.getAttribute('data-size') || '0', 10);
+      var sB = parseInt(b.getAttribute('data-size') || '0', 10);
+      if (sA !== sB) return currentSortAsc ? (sA - sB) : (sB - sA);
+    } else if (key === 'date') {
+      var tA = parseInt(a.getAttribute('data-time') || '0', 10);
+      var tB = parseInt(b.getAttribute('data-time') || '0', 10);
+      if (tA !== tB) return currentSortAsc ? (tA - tB) : (tB - tA);
+    } else if (key === 'type') {
+      var yA = a.getAttribute('data-type') || '';
+      var yB = b.getAttribute('data-type') || '';
+      var cmp = yA.localeCompare(yB);
+      if (cmp !== 0) return currentSortAsc ? cmp : -cmp;
+    }
+
+    // Default or tie-breaker: sort by name
+    var nA = a.getAttribute('data-name') || '';
+    var nB = b.getAttribute('data-name') || '';
+    return currentSortAsc ? nA.localeCompare(nB) : nB.localeCompare(nA);
+  });
+
+  for (var i = 0; i < rows.length; i++) {
+    tbody.appendChild(rows[i]);
+  }
+}
+
+function updateSortIcons() {
+  var keys = ['name', 'type', 'size', 'date'];
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    var th = document.getElementById('th-' + k);
+    var icon = document.getElementById('icon-' + k);
+    if (!th || !icon) continue;
+    if (k === currentSortKey) {
+      th.classList.add('active-sort');
+      icon.innerHTML = currentSortAsc ? '&#9650;' : '&#9660;';
+    } else {
+      th.classList.remove('active-sort');
+      icon.innerHTML = '&#8645;';
+    }
+  }
+}
+
 function filterItems(q) {
   var rows = document.querySelectorAll('#file-list tr.item-row');
   var query = q.trim().toLowerCase();
@@ -596,6 +703,32 @@ func serveSharesIndex(w http.ResponseWriter, r *http.Request, shares []domain.We
     text-transform: uppercase;
     border-bottom: 1px solid var(--border);
   }
+  th.sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s ease;
+  }
+  th.sortable:hover {
+    color: var(--accent);
+  }
+  .th-content {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .sort-icon {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    opacity: 0.35;
+    transition: opacity 0.15s ease;
+  }
+  th.sortable.active-sort {
+    color: var(--accent);
+  }
+  th.sortable.active-sort .sort-icon {
+    opacity: 1;
+  }
   td { padding: 14px 24px; border-bottom: 1px solid var(--border); }
   tr:hover td { background-color: var(--hover-row); }
   .name-cell a { color: var(--accent); text-decoration: none; font-weight: 600; font-size: 14px; }
@@ -618,6 +751,29 @@ func serveSharesIndex(w http.ResponseWriter, r *http.Request, shares []domain.We
     font-size: 12px;
     font-weight: 500;
   }
+  .filter-input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 13px;
+    width: 240px;
+    outline: none;
+  }
+  .filter-input:focus {
+    border-color: var(--accent);
+  }
+  .toolbar {
+    padding: 12px 24px;
+    background: rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
 </style>
 </head>
 <body>
@@ -630,17 +786,28 @@ func serveSharesIndex(w http.ResponseWriter, r *http.Request, shares []domain.We
       </h1>
       <span style="font-size: 13px; color: var(--text-secondary)">%d configured</span>
     </div>
+    <div class="toolbar">
+      <input type="text" id="share-filter" class="filter-input" placeholder="Filter shares..." oninput="filterShares(this.value)">
+    </div>
     <table>
       <thead>
         <tr>
-          <th>Share ID</th>
-          <th>Filesystem Path & Description</th>
-          <th>Access</th>
-          <th>Allowed</th>
+          <th class="sortable active-sort" onclick="sortShares('id')" id="th-share-id" title="Click to sort by Share ID">
+            <span class="th-content">Share ID <span class="sort-icon" id="icon-share-id">&#9650;</span></span>
+          </th>
+          <th class="sortable" onclick="sortShares('path')" id="th-share-path" title="Click to sort by Path">
+            <span class="th-content">Filesystem Path &amp; Description <span class="sort-icon" id="icon-share-path">&#8645;</span></span>
+          </th>
+          <th class="sortable" onclick="sortShares('access')" id="th-share-access" title="Click to sort by Access">
+            <span class="th-content">Access <span class="sort-icon" id="icon-share-access">&#8645;</span></span>
+          </th>
+          <th class="sortable" onclick="sortShares('allowed')" id="th-share-allowed" title="Click to sort by Allowed Identity">
+            <span class="th-content">Allowed <span class="sort-icon" id="icon-share-allowed">&#8645;</span></span>
+          </th>
           <th style="text-align: right">Action</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="shares-list">
 `, len(shares))
 
 	if len(shares) == 0 {
@@ -666,7 +833,7 @@ func serveSharesIndex(w http.ResponseWriter, r *http.Request, shares []domain.We
 			shareHref := fmt.Sprintf("/dav/%s/", s.ID)
 
 			fmt.Fprintf(w, `
-        <tr>
+        <tr class="share-row" data-id="%s" data-path="%s" data-access="%s" data-allowed="%s">
           <td class="name-cell">
             <a href="%s">%s</a>
           </td>
@@ -681,6 +848,10 @@ func serveSharesIndex(w http.ResponseWriter, r *http.Request, shares []domain.We
           </td>
         </tr>
 `,
+				html.EscapeString(strings.ToLower(s.ID)),
+				html.EscapeString(strings.ToLower(s.Path+" "+s.Description)),
+				html.EscapeString(strings.ToLower(modeLabel)),
+				html.EscapeString(strings.ToLower(allowed)),
 				shareHref,
 				html.EscapeString(s.ID),
 				html.EscapeString(s.Path),
@@ -698,6 +869,58 @@ func serveSharesIndex(w http.ResponseWriter, r *http.Request, shares []domain.We
     </table>
   </div>
 </div>
+<script>
+var currentShareSort = 'id';
+var currentShareAsc = true;
+
+function sortShares(key) {
+  if (currentShareSort === key) {
+    currentShareAsc = !currentShareAsc;
+  } else {
+    currentShareSort = key;
+    currentShareAsc = true;
+  }
+  updateShareSortIcons();
+  var tbody = document.getElementById('shares-list');
+  if (!tbody) return;
+  var rows = Array.from(tbody.querySelectorAll('tr.share-row'));
+  rows.sort(function(a, b) {
+    var aVal = a.getAttribute('data-' + key) || '';
+    var bVal = b.getAttribute('data-' + key) || '';
+    return currentShareAsc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+  });
+  for (var i = 0; i < rows.length; i++) {
+    tbody.appendChild(rows[i]);
+  }
+}
+
+function updateShareSortIcons() {
+  var keys = ['id', 'path', 'access', 'allowed'];
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    var th = document.getElementById('th-share-' + k);
+    var icon = document.getElementById('icon-share-' + k);
+    if (!th || !icon) continue;
+    if (k === currentShareSort) {
+      th.classList.add('active-sort');
+      icon.innerHTML = currentShareAsc ? '&#9650;' : '&#9660;';
+    } else {
+      th.classList.remove('active-sort');
+      icon.innerHTML = '&#8645;';
+    }
+  }
+}
+
+function filterShares(q) {
+  var rows = document.querySelectorAll('#shares-list tr.share-row');
+  var query = q.trim().toLowerCase();
+  for (var i = 0; i < rows.length; i++) {
+    var id = rows[i].getAttribute('data-id') || '';
+    var path = rows[i].getAttribute('data-path') || '';
+    rows[i].style.display = (id.indexOf(query) !== -1 || path.indexOf(query) !== -1) ? '' : 'none';
+  }
+}
+</script>
 </body>
 </html>
 `)

@@ -139,6 +139,13 @@ const editPlatformForm = reactive({
   secureBoot: false,
 });
 
+const showEditBootOrderModal = ref(false);
+const editBootOrderError = ref('');
+const isSavingBootOrder = ref(false);
+const editBootOrderForm = reactive({
+  bootOrder: 'hd,cdrom',
+});
+
 const showEditDisplayModal = ref(false);
 const editDisplayForm = reactive({
   displayType: 'virtio-gpu',
@@ -219,6 +226,7 @@ const wizardForm = reactive({
   tpmVersion: 'none',
   secureBoot: false,
   bootIso: '',
+  bootOrder: 'hd,cdrom',
 
   sockets: 1,
   cores: 2,
@@ -240,7 +248,7 @@ const wizardForm = reactive({
   ciIpConfig: 'dhcp',
 });
 
-const wizardEditModal = ref<'cpu' | 'memory' | 'platform' | 'display' | 'disk' | 'nic' | null>(null);
+const wizardEditModal = ref<'cpu' | 'memory' | 'platform' | 'bootOrder' | 'display' | 'disk' | 'nic' | null>(null);
 const editingWizardDiskIndex = ref<number>(-1);
 const editingWizardNicIndex = ref<number>(-1);
 
@@ -548,7 +556,7 @@ function saveEditWizardNic() {
   wizardEditModal.value = null;
 }
 
-function openWizardEdit(component: 'cpu' | 'memory' | 'platform' | 'display') {
+function openWizardEdit(component: 'cpu' | 'memory' | 'platform' | 'bootOrder' | 'display') {
   wizardEditModal.value = component;
 }
 
@@ -642,6 +650,19 @@ async function refreshVms(silent: boolean | Event = false) {
     }
   }
 }
+
+watch(
+  () => nasState.vms,
+  (newVms) => {
+    if (inspectingVm.value) {
+      const updated = newVms.find((v) => v.name === inspectingVm.value?.name);
+      if (updated) {
+        inspectingVm.value = updated;
+      }
+    }
+  },
+  { deep: true }
+);
 
 async function openInspector(vm: VirtualMachine, tab: 'summary' | 'hardware' | 'cloudinit' | 'snapshots' = 'summary') {
   inspectingVm.value = vm;
@@ -1275,6 +1296,82 @@ async function handleUpdatePlatform() {
   }
 }
 
+function formatBootOrder(bo?: string): string {
+  if (!bo) return 'Hard Disk -> CD-ROM (Default)';
+  const devs = bo.split(',').map((d) => d.trim().toLowerCase()).filter(Boolean);
+  if (devs.length === 0) return 'Hard Disk -> CD-ROM (Default)';
+  const names: Record<string, string> = {
+    hd: 'Hard Disk',
+    cdrom: 'CD-ROM',
+    network: 'Network (PXE)',
+    fd: 'Floppy',
+  };
+  return devs.map((d) => names[d] || d).join(' -> ');
+}
+
+const isUpdatingBootOrder = ref(false);
+
+function normalizeBootOrder(bo?: string): string {
+  if (!bo) return 'hd,cdrom';
+  const clean = bo.toLowerCase().replace(/\s+/g, '');
+  if (['hd,cdrom', 'cdrom,hd', 'hd', 'cdrom', 'network,hd', 'network,hd,cdrom'].includes(clean)) {
+    return clean;
+  }
+  return clean;
+}
+
+async function handleBootOrderSelect(event: Event) {
+  const target = event.target as HTMLSelectElement;
+  if (!target || !inspectingVm.value) return;
+  const newOrder = target.value;
+  isUpdatingBootOrder.value = true;
+  try {
+    await services.kvm.updateVirtualMachine(
+      inspectingVm.value.name,
+      { bootOrder: newOrder },
+      ['boot_order']
+    );
+    notify('success', `Updated boot order to ${formatBootOrder(newOrder)}`);
+    await refreshVms();
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to update boot order');
+  } finally {
+    isUpdatingBootOrder.value = false;
+  }
+}
+
+function openEditBootOrderModal() {
+  if (!inspectingVm.value) return;
+  editBootOrderError.value = '';
+  isSavingBootOrder.value = false;
+  editBootOrderForm.bootOrder = inspectingVm.value.bootOrder || 'hd,cdrom';
+  showEditBootOrderModal.value = true;
+}
+
+async function handleUpdateBootOrder() {
+  if (!inspectingVm.value) return;
+  editBootOrderError.value = '';
+  isSavingBootOrder.value = true;
+  try {
+    await services.kvm.updateVirtualMachine(
+      inspectingVm.value.name,
+      {
+        bootOrder: editBootOrderForm.bootOrder,
+      },
+      ['boot_order']
+    );
+    notify('success', `Updated boot order for ${inspectingVm.value.vmName}`);
+    showEditBootOrderModal.value = false;
+    await refreshVms();
+  } catch (err: any) {
+    const msg = err?.message || 'Failed to update boot order';
+    editBootOrderError.value = msg;
+    notify('error', msg);
+  } finally {
+    isSavingBootOrder.value = false;
+  }
+}
+
 function openEditDisplayModal() {
   if (!inspectingVm.value) return;
   editDisplayError.value = '';
@@ -1409,6 +1506,7 @@ async function handleWizardSubmit() {
       tpmVersion: wizardForm.tpmVersion,
       secureBoot: wizardForm.secureBoot,
       cdromIsoImage: wizardForm.bootIso || undefined,
+      bootOrder: wizardForm.bootOrder || 'hd,cdrom',
       displayType: wizardForm.displayType || 'virtio-gpu',
       disks,
       networkInterfaces: nics,
@@ -2067,6 +2165,35 @@ async function handleWizardSubmit() {
                     </td>
                     <td style="text-align: right">
                       <button class="btn btn-xs" @click.stop="openEditPlatformModal">
+                        <MdiIcon :path="mdiPencil" size="12" /> Edit
+                      </button>
+                    </td>
+                  </tr>
+
+                  <!-- Boot Order -->
+                  <tr>
+                    <td class="font-semibold">Boot Order</td>
+                    <td>
+                      <div style="display: flex; align-items: center; gap: 8px">
+                        <select
+                          :value="normalizeBootOrder(inspectingVm.bootOrder)"
+                          @change="handleBootOrderSelect($event)"
+                          class="select select-sm mono"
+                          style="min-width: 300px; max-width: 380px"
+                          :disabled="isUpdatingBootOrder"
+                        >
+                          <option value="hd,cdrom">Hard Disk -> CD-ROM (Recommended)</option>
+                          <option value="cdrom,hd">CD-ROM -> Hard Disk (Install / Rescue)</option>
+                          <option value="hd">Hard Disk Only</option>
+                          <option value="cdrom">CD-ROM Only</option>
+                          <option value="network,hd">Network (PXE) -> Hard Disk</option>
+                          <option value="network,hd,cdrom">Network (PXE) -> Hard Disk -> CD-ROM</option>
+                        </select>
+                        <span v-if="isUpdatingBootOrder" class="spinner-sm" title="Saving boot order..."></span>
+                      </div>
+                    </td>
+                    <td style="text-align: right">
+                      <button class="btn btn-xs" @click.stop="openEditBootOrderModal" title="Open boot order dialog">
                         <MdiIcon :path="mdiPencil" size="12" /> Edit
                       </button>
                     </td>
@@ -2818,6 +2945,60 @@ async function handleWizardSubmit() {
     </div>
 
     <!-- ======================================================================= -->
+    <!-- EDIT BOOT ORDER MODAL -->
+    <!-- ======================================================================= -->
+    <div v-if="showEditBootOrderModal" class="modal-backdrop">
+      <div class="modal-card" style="max-width: 500px">
+        <div class="modal-header">
+          <h3 class="modal-title">Edit Boot Order ({{ inspectingVm?.vmName }})</h3>
+          <button class="btn btn-sm" @click="showEditBootOrderModal = false">
+            <MdiIcon :path="mdiClose" size="16" />
+          </button>
+        </div>
+        <form @submit.prevent="handleUpdateBootOrder" style="padding: 16px; display: flex; flex-direction: column; gap: 14px">
+          <div
+            v-if="editBootOrderError"
+            style="
+              background: var(--btn-danger-bg);
+              border: 1px solid var(--btn-danger-border);
+              color: var(--btn-danger-text);
+              padding: 10px 14px;
+              border-radius: 6px;
+              font-size: 13px;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            "
+          >
+            <MdiIcon :path="mdiAlertCircleOutline" size="16" />
+            <span>{{ editBootOrderError }}</span>
+          </div>
+          <div class="form-group">
+            <label>Boot Device Priority</label>
+            <select v-model="editBootOrderForm.bootOrder" class="select mono">
+              <option value="hd,cdrom">Hard Disk -> CD-ROM (Recommended)</option>
+              <option value="cdrom,hd">CD-ROM -> Hard Disk (Install / Rescue)</option>
+              <option value="hd">Hard Disk Only</option>
+              <option value="cdrom">CD-ROM Only</option>
+              <option value="network,hd">Network (PXE) -> Hard Disk</option>
+              <option value="network,hd,cdrom">Network (PXE) -> Hard Disk -> CD-ROM</option>
+            </select>
+          </div>
+          <div class="text-muted" style="font-size: 11px">
+            Configures the BIOS / UEFI boot device search order. For turn-key appliance installation, Hard Disk first falls back to CD-ROM when the drive is blank, then boots directly from the installed disk on reboot.
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px">
+            <button type="button" class="btn" :disabled="isSavingBootOrder" @click="showEditBootOrderModal = false">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="isSavingBootOrder">
+              <span v-if="isSavingBootOrder" class="spinner-sm" style="margin-right: 6px"></span>
+              {{ isSavingBootOrder ? 'Saving...' : 'Save Changes' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ======================================================================= -->
     <!-- EDIT DISPLAY MODAL -->
     <!-- ======================================================================= -->
     <div v-if="showEditDisplayModal" class="modal-backdrop">
@@ -3038,6 +3219,28 @@ async function handleWizardSubmit() {
                       <button class="btn btn-xs" type="button" @click.stop="openWizardEdit('platform')">
                         <MdiIcon :path="mdiPencil" size="12" /> Edit
                       </button>
+                    </td>
+                  </tr>
+
+                  <!-- Boot Order -->
+                  <tr>
+                    <td class="font-semibold">Boot Order</td>
+                    <td>
+                      <select
+                        v-model="wizardForm.bootOrder"
+                        class="select select-sm mono"
+                        style="min-width: 280px; max-width: 360px"
+                      >
+                        <option value="hd,cdrom">Hard Disk -> CD-ROM (Recommended)</option>
+                        <option value="cdrom,hd">CD-ROM -> Hard Disk (Install / Rescue)</option>
+                        <option value="hd">Hard Disk Only</option>
+                        <option value="cdrom">CD-ROM Only</option>
+                        <option value="network,hd">Network (PXE) -> Hard Disk</option>
+                        <option value="network,hd,cdrom">Network (PXE) -> Hard Disk -> CD-ROM</option>
+                      </select>
+                    </td>
+                    <td style="text-align: right">
+                      <span class="text-muted" style="font-size: 11px">Preset</span>
                     </td>
                   </tr>
 
@@ -3297,6 +3500,37 @@ async function handleWizardSubmit() {
               <option :value="true">Enabled</option>
               <option :value="false">Disabled</option>
             </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" @click="wizardEditModal = null">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- WIZARD SUB-MODAL: BOOT ORDER -->
+    <div v-if="wizardEditModal === 'bootOrder'" class="modal-backdrop" style="z-index: 1050">
+      <div class="modal-card" style="max-width: 480px">
+        <div class="modal-header">
+          <h3 class="modal-title">Select Boot Order</h3>
+          <button class="modal-close-btn" type="button" aria-label="Close" @click="wizardEditModal = null">
+            <MdiIcon :path="mdiClose" size="18" />
+          </button>
+        </div>
+        <div class="modal-body form-grid">
+          <div class="form-group" style="grid-column: span 2">
+            <label>Boot Device Priority</label>
+            <select v-model="wizardForm.bootOrder" class="select mono">
+              <option value="hd,cdrom">Hard Disk -> CD-ROM (Recommended)</option>
+              <option value="cdrom,hd">CD-ROM -> Hard Disk (Install / Rescue)</option>
+              <option value="hd">Hard Disk Only</option>
+              <option value="cdrom">CD-ROM Only</option>
+              <option value="network,hd">Network (PXE) -> Hard Disk</option>
+              <option value="network,hd,cdrom">Network (PXE) -> Hard Disk -> CD-ROM</option>
+            </select>
+            <div class="text-muted" style="font-size: 11px; margin-top: 6px">
+              Hard Disk first allows new installations to boot the CD-ROM when empty, and automatically boot from disk after installation completes.
+            </div>
           </div>
         </div>
         <div class="modal-footer">

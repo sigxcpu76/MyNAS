@@ -92,6 +92,12 @@ message ExportZfsPoolRequest {
   bool force = 2;
 }
 
+message ImportZfsPoolRequest {
+  string pool_name = 1 [(google.api.field_behavior) = REQUIRED];
+  bool force = 2;
+  string altroot = 3;
+}
+
 message ScrubZfsPoolRequest {
   string name = 1 [
     (google.api.field_behavior) = REQUIRED,

@@ -1,0 +1,15 @@
+# /etc/network/interfaces managed by mynas appliance
+auto lo
+iface lo inet loopback
+
+# Physical uplink bound to br0
+iface ${PHYS_IFACE} inet manual
+
+# Primary bridge for Host, KVM Virtual Machines, and LXC Containers
+auto br0
+iface br0 inet ${BOOTPROTO}
+    bridge_ports ${PHYS_IFACE}
+    bridge_stp off
+    bridge_fd 0
+    bridge_maxwait 0
+${STATIC_BLOCK}

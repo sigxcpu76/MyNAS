@@ -1,0 +1,12 @@
+[Unit]
+Description=Generate dynamic mynas console banner
+After=network-online.target ifupdown2.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/nas-banner.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

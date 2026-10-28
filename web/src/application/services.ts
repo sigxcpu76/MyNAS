@@ -193,6 +193,14 @@ export class ZfsService {
     return this.zfsPort.exportPool(ResourceNames.zfsPool(poolIdOrName), force);
   }
 
+  async importPool(poolName: string, force = true, altroot = '/mnt'): Promise<ZfsPool> {
+    const cleanName = poolName.trim().replace(/^zfsPools\//, '');
+    if (!cleanName) {
+      throw new Error('Pool name cannot be empty');
+    }
+    return this.zfsPort.importPool(cleanName, force, altroot);
+  }
+
   async scrubPool(poolIdOrName: string): Promise<ZfsPool> {
     return this.zfsPort.scrubPool(ResourceNames.zfsPool(poolIdOrName));
   }

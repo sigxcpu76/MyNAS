@@ -388,6 +388,76 @@ func readSysfsStat(devDir string, d *domain.Disk) (readIOs, writeIOs int64) {
 	return 0, 0
 }
 
+// isHpControllerDevice checks if a device is connected to an HP Smart Array controller
+func isHpControllerDevice(devPath string) bool {
+	if strings.HasPrefix(devPath, "/dev/cciss/") {
+		return true
+	}
+	devName := filepath.Base(devPath)
+	sysDevDir := filepath.Join("/sys/block", devName, "device")
+	if _, err := os.Stat(filepath.Join(sysDevDir, "hp_ssd_smart_path_enabled")); err == nil {
+		return true
+	}
+	if _, err := os.Stat(filepath.Join(sysDevDir, "raid_level")); err == nil {
+		return true
+	}
+	if realPath, err := filepath.EvalSymlinks(sysDevDir); err == nil {
+		if strings.Contains(realPath, "/hpsa/") || strings.Contains(realPath, "/smartpqi/") || strings.Contains(realPath, "/cciss/") {
+			return true
+		}
+	}
+	return false
+}
+
+// detectCcissTarget returns the CCISS disk index and controller device for HP Smart Array controllers.
+// If the device is not on a CCISS / HP Smart Array controller or index cannot be determined directly, it returns (-1, devPath).
+func detectCcissTarget(devPath string) (int, string) {
+	// 1. Traditional /dev/cciss/c0d0 devices
+	if strings.HasPrefix(devPath, "/dev/cciss/") {
+		base := filepath.Base(devPath)
+		// e.g. c0d0 or c0d0p1
+		if idx := strings.Index(base, "d"); idx != -1 {
+			numPart := base[idx+1:]
+			if pIdx := strings.Index(numPart, "p"); pIdx != -1 {
+				numPart = numPart[:pIdx]
+			}
+			if n, err := strconv.Atoi(numPart); err == nil && n >= 0 {
+				return n, devPath
+			}
+		}
+		return -1, devPath
+	}
+
+	// 2. Devices under /dev/sd*
+	devName := filepath.Base(devPath)
+	if !strings.HasPrefix(devName, "sd") {
+		return -1, devPath
+	}
+
+	sysDevDir := filepath.Join("/sys/block", devName, "device")
+	realPath, err := filepath.EvalSymlinks(sysDevDir)
+	if err != nil {
+		return -1, devPath
+	}
+
+	if !isHpControllerDevice(devPath) {
+		return -1, devPath
+	}
+
+	// In hpsa/smartpqi in Linux:
+	// The realPath ends in H:C:T:L (e.g. 2:0:1:0).
+	// Target ID maps to CCISS physical drive index (target ID - 1).
+	scsiAddr := filepath.Base(realPath)
+	parts := strings.Split(scsiAddr, ":")
+	if len(parts) == 4 {
+		if targetID, err := strconv.Atoi(parts[2]); err == nil && targetID >= 1 {
+			return targetID - 1, devPath
+		}
+	}
+
+	return -1, devPath
+}
+
 func (a *Adapter) enrichSmartData(devPath string, d *domain.Disk, readIOs, writeIOs int64) {
 	if d.Type == "VIRTUAL" {
 		d.SmartStatus = "N/A"
@@ -409,17 +479,67 @@ func (a *Adapter) enrichSmartData(devPath string, d *domain.Disk, readIOs, write
 
 	// 1. Try smartctl json (-j -x or -j -a)
 	if smartctlPath, err := exec.LookPath("smartctl"); err == nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, smartctlPath, "-j", "-x", devPath)
-		out, err := cmd.Output()
-		if err != nil || len(out) == 0 {
-			cmd = exec.CommandContext(ctx, smartctlPath, "-j", "-a", devPath)
+
+		ccissIdx, ctrlDev := detectCcissTarget(devPath)
+
+		trySmartctl := func(extraArgs ...string) bool {
+			// Extended info (-j -x)
+			args := append([]string{"-j", "-x"}, extraArgs...)
+			args = append(args, ctrlDev)
+			cmd := exec.CommandContext(ctx, smartctlPath, args...)
+			out, _ := cmd.Output()
+			if len(out) > 0 {
+				if a.parseSmartctlJSON(out, d) {
+					return true
+				}
+			}
+
+			// Fallback (-j -a)
+			args = append([]string{"-j", "-a"}, extraArgs...)
+			args = append(args, ctrlDev)
+			cmd = exec.CommandContext(ctx, smartctlPath, args...)
 			out, _ = cmd.Output()
+			if len(out) > 0 {
+				if a.parseSmartctlJSON(out, d) {
+					return true
+				}
+			}
+			return false
 		}
-		if len(out) > 0 {
-			if a.parseSmartctlJSON(out, d) {
+
+		// First: If on HP Smart Array with detected CCISS index, query -d cciss,<idx>
+		if ccissIdx >= 0 {
+			if trySmartctl("-d", fmt.Sprintf("cciss,%d", ccissIdx)) {
 				return
+			}
+		}
+
+		// Second: Standard direct query on devPath
+		ctrlDev = devPath
+		if trySmartctl() {
+			return
+		}
+
+		// Third: If device is on an HP Smart Array controller, probe CCISS indexes 0..15 matching disk serial
+		if ccissIdx < 0 && isHpControllerDevice(devPath) {
+			for idx := 0; idx < 16; idx++ {
+				pCmd := exec.CommandContext(ctx, smartctlPath, "-j", "-i", "-d", fmt.Sprintf("cciss,%d", idx), devPath)
+				pOut, _ := pCmd.Output()
+				if len(pOut) == 0 {
+					continue
+				}
+				var info struct {
+					SerialNumber string `json:"serial_number"`
+				}
+				if json.Unmarshal(pOut, &info) == nil && info.SerialNumber != "" {
+					if d.Serial != "" && strings.EqualFold(strings.TrimSpace(info.SerialNumber), strings.TrimSpace(d.Serial)) {
+						if trySmartctl("-d", fmt.Sprintf("cciss,%d", idx)) {
+							return
+						}
+					}
+				}
 			}
 		}
 	}
@@ -430,8 +550,8 @@ func (a *Adapter) enrichSmartData(devPath string, d *domain.Disk, readIOs, write
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			cmd := exec.CommandContext(ctx, nvmePath, "log", "smart", devPath, "-o", "json")
-			out, err := cmd.Output()
-			if err != nil || len(out) == 0 {
+			out, _ := cmd.Output()
+			if len(out) == 0 {
 				cmd = exec.CommandContext(ctx, nvmePath, "smart-log", devPath, "-o", "json")
 				out, _ = cmd.Output()
 			}
@@ -504,6 +624,37 @@ func (a *Adapter) parseSmartctlJSON(data []byte, d *domain.Disk) bool {
 			MediaErrors             int64   `json:"media_errors"`
 			NumErrLogEntries        int64   `json:"num_err_log_entries"`
 		} `json:"nvme_smart_health_information_log"`
+		ScsiGrownDefectList *int64 `json:"scsi_grown_defect_list"`
+		ScsiStartStopCycleCounter *struct {
+			SpecifiedCycleCountOverDeviceLifetime int64 `json:"specified_cycle_count_over_device_lifetime"`
+			AccumulatedStartStopCycles            int64 `json:"accumulated_start_stop_cycles"`
+			SpecifiedLoadUnloadCountOverLifetime  int64 `json:"specified_load_unload_count_over_device_lifetime"`
+			AccumulatedLoadUnloadCycles           int64 `json:"accumulated_load_unload_cycles"`
+		} `json:"scsi_start_stop_cycle_counter"`
+		ScsiErrorCounterLog *struct {
+			Read *struct {
+				ErrorsCorrectedByEccfast         int64  `json:"errors_corrected_by_eccfast"`
+				ErrorsCorrectedByEccdelayed      int64  `json:"errors_corrected_by_eccdelayed"`
+				ErrorsCorrectedByRereadsRewrites int64  `json:"errors_corrected_by_rereads_rewrites"`
+				TotalErrorsCorrected             int64  `json:"total_errors_corrected"`
+				CorrectionAlgorithmInvocations   int64  `json:"correction_algorithm_invocations"`
+				GigabytesProcessed               string `json:"gigabytes_processed"`
+				TotalUncorrectedErrors           int64  `json:"total_uncorrected_errors"`
+			} `json:"read"`
+			Write *struct {
+				ErrorsCorrectedByEccfast         int64  `json:"errors_corrected_by_eccfast"`
+				ErrorsCorrectedByEccdelayed      int64  `json:"errors_corrected_by_eccdelayed"`
+				ErrorsCorrectedByRereadsRewrites int64  `json:"errors_corrected_by_rereads_rewrites"`
+				TotalErrorsCorrected             int64  `json:"total_errors_corrected"`
+				CorrectionAlgorithmInvocations   int64  `json:"correction_algorithm_invocations"`
+				GigabytesProcessed               string `json:"gigabytes_processed"`
+				TotalUncorrectedErrors           int64  `json:"total_uncorrected_errors"`
+			} `json:"write"`
+			Verify *struct {
+				TotalErrorsCorrected   int64 `json:"total_errors_corrected"`
+				TotalUncorrectedErrors int64 `json:"total_uncorrected_errors"`
+			} `json:"verify"`
+		} `json:"scsi_error_counter_log"`
 	}
 
 	if err := json.Unmarshal(data, &root); err != nil {
@@ -608,7 +759,194 @@ func (a *Adapter) parseSmartctlJSON(data []byte, d *domain.Disk) bool {
 		return true
 	}
 
-	return root.SmartStatus != nil
+	// 3. SCSI / SAS SMART Data
+	if root.ScsiGrownDefectList != nil || root.ScsiErrorCounterLog != nil || root.ScsiStartStopCycleCounter != nil {
+		if root.ScsiStartStopCycleCounter != nil {
+			if d.PowerCycleCount == 0 && root.ScsiStartStopCycleCounter.AccumulatedStartStopCycles > 0 {
+				d.PowerCycleCount = root.ScsiStartStopCycleCounter.AccumulatedStartStopCycles
+			}
+			if root.ScsiStartStopCycleCounter.AccumulatedLoadUnloadCycles > 0 {
+				threshStr := "N/A"
+				if root.ScsiStartStopCycleCounter.SpecifiedLoadUnloadCountOverLifetime > 0 {
+					threshStr = strconv.FormatInt(root.ScsiStartStopCycleCounter.SpecifiedLoadUnloadCountOverLifetime, 10)
+				}
+				d.SmartParameters = append(d.SmartParameters, domain.SmartParameter{
+					ID:          193,
+					Name:        "Load_Cycle_Count",
+					Value:       strconv.FormatInt(root.ScsiStartStopCycleCounter.AccumulatedLoadUnloadCycles, 10),
+					Worst:       "N/A",
+					Threshold:   threshStr,
+					RawValue:    strconv.FormatInt(root.ScsiStartStopCycleCounter.AccumulatedLoadUnloadCycles, 10),
+					Status:      "OK",
+					Type:        "Old_age",
+					Description: "Count of load/unload cycles into head landing zone position",
+				})
+			}
+		}
+
+		if root.ScsiGrownDefectList != nil {
+			d.ReallocatedSectors = *root.ScsiGrownDefectList
+			defectStatus := "OK"
+			if *root.ScsiGrownDefectList > 50 {
+				defectStatus = "WARNING"
+			}
+			if *root.ScsiGrownDefectList > 200 {
+				defectStatus = "FAILED"
+			}
+			d.SmartParameters = append(d.SmartParameters, domain.SmartParameter{
+				ID:          5,
+				Name:        "Elements_In_Grown_Defect_List",
+				Value:       strconv.FormatInt(*root.ScsiGrownDefectList, 10),
+				Worst:       "N/A",
+				Threshold:   "N/A",
+				RawValue:    strconv.FormatInt(*root.ScsiGrownDefectList, 10),
+				Status:      defectStatus,
+				Type:        "Pre-fail",
+				Description: "Number of defects accumulated over disk lifetime (reallocated sectors)",
+			})
+		}
+
+		if root.ScsiErrorCounterLog != nil {
+			if readLog := root.ScsiErrorCounterLog.Read; readLog != nil {
+				readStatus := "OK"
+				if readLog.TotalUncorrectedErrors > 0 {
+					readStatus = "FAILED"
+					if d.SmartStatus != "FAILED" {
+						d.SmartStatus = "FAILED"
+					}
+				}
+				d.SmartParameters = append(d.SmartParameters, domain.SmartParameter{
+					ID:          1,
+					Name:        "Read_Total_Uncorrected_Errors",
+					Value:       strconv.FormatInt(readLog.TotalUncorrectedErrors, 10),
+					Worst:       "N/A",
+					Threshold:   "0",
+					RawValue:    strconv.FormatInt(readLog.TotalUncorrectedErrors, 10),
+					Status:      readStatus,
+					Type:        "Pre-fail",
+					Description: "Uncorrected read errors encountered by the SCSI disk",
+				})
+				if readLog.TotalErrorsCorrected > 0 {
+					d.SmartParameters = append(d.SmartParameters, domain.SmartParameter{
+						ID:          195,
+						Name:        "Read_Errors_Corrected",
+						Value:       strconv.FormatInt(readLog.TotalErrorsCorrected, 10),
+						Worst:       "N/A",
+						Threshold:   "N/A",
+						RawValue:    strconv.FormatInt(readLog.TotalErrorsCorrected, 10),
+						Status:      "OK",
+						Type:        "Old_age",
+						Description: "Total read errors corrected by ECC and reread algorithm",
+					})
+				}
+				if readLog.GigabytesProcessed != "" {
+					d.SmartParameters = append(d.SmartParameters, domain.SmartParameter{
+						ID:          242,
+						Name:        "Total_LBAs_Read_GiB",
+						Value:       readLog.GigabytesProcessed,
+						Worst:       "N/A",
+						Threshold:   "N/A",
+						RawValue:    readLog.GigabytesProcessed + " GB",
+						Status:      "OK",
+						Type:        "Old_age",
+						Description: "Lifetime gigabytes processed during read operations",
+					})
+				}
+			}
+
+			if writeLog := root.ScsiErrorCounterLog.Write; writeLog != nil {
+				writeStatus := "OK"
+				if writeLog.TotalUncorrectedErrors > 0 {
+					writeStatus = "FAILED"
+					if d.SmartStatus != "FAILED" {
+						d.SmartStatus = "FAILED"
+					}
+				}
+				d.SmartParameters = append(d.SmartParameters, domain.SmartParameter{
+					ID:          7,
+					Name:        "Write_Total_Uncorrected_Errors",
+					Value:       strconv.FormatInt(writeLog.TotalUncorrectedErrors, 10),
+					Worst:       "N/A",
+					Threshold:   "0",
+					RawValue:    strconv.FormatInt(writeLog.TotalUncorrectedErrors, 10),
+					Status:      writeStatus,
+					Type:        "Pre-fail",
+					Description: "Uncorrected write errors encountered by the SCSI disk",
+				})
+				if writeLog.TotalErrorsCorrected > 0 {
+					d.SmartParameters = append(d.SmartParameters, domain.SmartParameter{
+						ID:          196,
+						Name:        "Write_Errors_Corrected",
+						Value:       strconv.FormatInt(writeLog.TotalErrorsCorrected, 10),
+						Worst:       "N/A",
+						Threshold:   "N/A",
+						RawValue:    strconv.FormatInt(writeLog.TotalErrorsCorrected, 10),
+						Status:      "OK",
+						Type:        "Old_age",
+						Description: "Total write errors corrected by ECC and rewrite algorithm",
+					})
+				}
+				if writeLog.GigabytesProcessed != "" {
+					d.SmartParameters = append(d.SmartParameters, domain.SmartParameter{
+						ID:          241,
+						Name:        "Total_LBAs_Written_GiB",
+						Value:       writeLog.GigabytesProcessed,
+						Worst:       "N/A",
+						Threshold:   "N/A",
+						RawValue:    writeLog.GigabytesProcessed + " GB",
+						Status:      "OK",
+						Type:        "Old_age",
+						Description: "Lifetime gigabytes processed during write operations",
+					})
+				}
+			}
+
+			if root.ScsiErrorCounterLog.Verify != nil && root.ScsiErrorCounterLog.Verify.TotalUncorrectedErrors > 0 {
+				d.SmartParameters = append(d.SmartParameters, domain.SmartParameter{
+					ID:          187,
+					Name:        "Verify_Total_Uncorrected_Errors",
+					Value:       strconv.FormatInt(root.ScsiErrorCounterLog.Verify.TotalUncorrectedErrors, 10),
+					Worst:       "N/A",
+					Threshold:   "0",
+					RawValue:    strconv.FormatInt(root.ScsiErrorCounterLog.Verify.TotalUncorrectedErrors, 10),
+					Status:      "FAILED",
+					Type:        "Pre-fail",
+					Description: "Uncorrected verify errors encountered by the SCSI disk",
+				})
+			}
+		}
+
+		if d.PowerOnHours > 0 {
+			d.SmartParameters = append(d.SmartParameters, domain.SmartParameter{
+				ID:          9,
+				Name:        "Power_On_Hours",
+				Value:       strconv.FormatInt(d.PowerOnHours, 10),
+				Worst:       "N/A",
+				Threshold:   "N/A",
+				RawValue:    strconv.FormatInt(d.PowerOnHours, 10),
+				Status:      "OK",
+				Type:        "Old_age",
+				Description: "Count of hours in power-on state",
+			})
+		}
+
+		if d.TemperatureCelsius > 0 {
+			d.SmartParameters = append(d.SmartParameters, domain.SmartParameter{
+				ID:          194,
+				Name:        "Temperature_Celsius",
+				Value:       strconv.FormatInt(int64(d.TemperatureCelsius), 10),
+				Worst:       "N/A",
+				Threshold:   "N/A",
+				RawValue:    fmt.Sprintf("%.0f C", d.TemperatureCelsius),
+				Status:      "OK",
+				Type:        "Old_age",
+				Description: "Current internal temperature of the drive",
+			})
+		}
+		return true
+	}
+
+	return root.SmartStatus != nil || len(d.SmartParameters) > 0
 }
 
 func (a *Adapter) parseNvmeSmartJSON(data []byte, d *domain.Disk) bool {

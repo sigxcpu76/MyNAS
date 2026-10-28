@@ -8,6 +8,7 @@ import {
   mdiDatabase,
   mdiDatabaseCheck,
   mdiDatabaseExportOutline,
+  mdiDatabaseImportOutline,
   mdiDelete,
   mdiDragVariant,
   mdiFlash,
@@ -97,6 +98,58 @@ function openCreatePoolModal() {
     refreshAllData();
   }
   showCreatePool.value = true;
+}
+
+const showImportPool = ref(false);
+const importingPool = ref(false);
+const discoveringPools = ref(false);
+const unimportedPoolsList = ref<string[]>([]);
+const importForm = reactive({
+  poolName: '',
+  force: true,
+  altroot: '/mnt',
+});
+
+async function openImportPoolModal() {
+  importForm.poolName = '';
+  importForm.force = true;
+  importForm.altroot = '/mnt';
+  showImportPool.value = true;
+  discoveringPools.value = true;
+  try {
+    const res = await services.system.discoverPools();
+    const unimported = res.filter((p: any) => !p.isImported).map((p: any) => p.poolName);
+    unimportedPoolsList.value = unimported;
+    if (unimported.length > 0) {
+      importForm.poolName = unimported[0];
+    }
+  } catch {
+    unimportedPoolsList.value = [];
+  } finally {
+    discoveringPools.value = false;
+  }
+}
+
+async function handleImportPool() {
+  if (!importForm.poolName.trim()) {
+    notify('error', 'Please select or enter a pool name to import');
+    return;
+  }
+  importingPool.value = true;
+  try {
+    const imported = await services.zfs.importPool(
+      importForm.poolName.trim(),
+      importForm.force,
+      importForm.altroot.trim() || '/mnt'
+    );
+    notify('success', `Pool "${imported.poolName || importForm.poolName}" imported successfully under ${importForm.altroot.trim() || '/mnt'}`);
+    showImportPool.value = false;
+    await refreshAllData();
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to import ZFS pool');
+  } finally {
+    importingPool.value = false;
+  }
 }
 
 // Drives not attached to an imported pool (excluding system OS disks and zvols)
@@ -840,6 +893,10 @@ function viewPoolDatasets(poolName: string) {
             <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" />
             Refresh
           </button>
+          <button class="btn btn-sm" @click="openImportPoolModal">
+            <MdiIcon :path="mdiDatabaseImportOutline" size="15" style="margin-right: 4px" />
+            Import Pool
+          </button>
           <button class="btn btn-primary btn-sm" @click="openCreatePoolModal">
             <MdiIcon :path="mdiPlus" size="16" style="margin-right: 4px" />
             New Pool
@@ -887,10 +944,16 @@ function viewPoolDatasets(poolName: string) {
     >
       <MdiIcon :path="mdiDatabase" size="44" style="opacity: 0.35; margin-bottom: 12px; color: var(--accent-primary)" />
       <div style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 18px">No pools</div>
-      <button class="btn btn-primary btn-sm" @click="openCreatePoolModal">
-        <MdiIcon :path="mdiPlus" size="16" style="margin-right: 4px" />
-        New Pool
-      </button>
+      <div style="display: flex; gap: 10px; justify-content: center">
+        <button class="btn btn-sm" @click="openImportPoolModal">
+          <MdiIcon :path="mdiDatabaseImportOutline" size="15" style="margin-right: 4px" />
+          Import Pool
+        </button>
+        <button class="btn btn-primary btn-sm" @click="openCreatePoolModal">
+          <MdiIcon :path="mdiPlus" size="16" style="margin-right: 4px" />
+          New Pool
+        </button>
+      </div>
     </div>
 
     <div v-else class="pools-grid">
@@ -1068,6 +1131,112 @@ function viewPoolDatasets(poolName: string) {
             </button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Import Existing ZFS Pool Modal -->
+    <div
+      v-if="showImportPool"
+      style="position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.65); display: flex; align-items: center; justify-content: center; padding: 20px"
+      @click.self="showImportPool = false"
+    >
+      <div
+        class="card"
+        style="width: 100%; max-width: 540px; max-height: 90vh; overflow-y: auto; background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: var(--modal-shadow); padding: 24px"
+      >
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <MdiIcon :path="mdiDatabaseImportOutline" size="20" style="color: var(--accent-primary)" />
+            <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: var(--text-primary)">
+              Import Existing ZFS Pool
+            </h3>
+          </div>
+          <button class="btn btn-icon btn-sm" @click="showImportPool = false">
+            <MdiIcon :path="mdiClose" size="16" />
+          </button>
+        </div>
+
+        <form @submit.prevent="handleImportPool" style="display: flex; flex-direction: column; gap: 16px">
+          <!-- Pool Selection / Name Input -->
+          <div>
+            <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px">
+              Pool to Import
+            </label>
+            <div v-if="discoveringPools" style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px">
+              Scanning disks for unimported pools...
+            </div>
+            <div v-if="unimportedPoolsList.length > 0" style="margin-bottom: 8px">
+              <select
+                v-model="importForm.poolName"
+                class="input"
+                style="width: 100%; padding: 8px 10px; font-size: 13px"
+              >
+                <option v-for="p in unimportedPoolsList" :key="p" :value="p">
+                  {{ p }} (Discovered unimported pool)
+                </option>
+              </select>
+            </div>
+            <div>
+              <input
+                v-model="importForm.poolName"
+                class="input"
+                type="text"
+                placeholder="Or enter pool name / numeric ID directly (e.g. tank)"
+                style="width: 100%; padding: 8px 10px; font-size: 13px"
+                required
+              />
+            </div>
+          </div>
+
+          <!-- Altroot Override -->
+          <div>
+            <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px">
+              Root Mount Directory Override (-R altroot)
+            </label>
+            <input
+              v-model="importForm.altroot"
+              class="input mono"
+              type="text"
+              placeholder="/mnt"
+              style="width: 100%; padding: 8px 10px; font-size: 13px"
+            />
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px">
+              Pool will be mounted under this directory (e.g. <code>{{ (importForm.altroot || '/mnt').replace(/\/+$/, '') }}/{{ importForm.poolName || 'pool' }}</code>), isolating datasets from root filesystem.
+            </div>
+          </div>
+
+          <!-- Force Option -->
+          <div style="background: var(--bg-hover); padding: 12px; border-radius: 6px; border: 1px solid var(--border-subtle)">
+            <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin: 0">
+              <input
+                v-model="importForm.force"
+                type="checkbox"
+                style="margin-top: 2px"
+              />
+              <div style="font-size: 12.5px; color: var(--text-primary)">
+                <strong>Force Import (-f)</strong>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px">
+                  Required if the pool was created on another system or not exported cleanly prior to migration.
+                </div>
+              </div>
+            </label>
+          </div>
+
+          <!-- Actions -->
+          <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; border-top: 1px solid var(--border-subtle); padding-top: 14px">
+            <button type="button" class="btn btn-sm" @click="showImportPool = false">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="btn btn-primary btn-sm"
+              :disabled="importingPool || !importForm.poolName"
+            >
+              <MdiIcon v-if="!importingPool" :path="mdiDatabaseImportOutline" size="15" style="margin-right: 4px" />
+              {{ importingPool ? 'Importing Pool...' : 'Import Pool' }}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
 

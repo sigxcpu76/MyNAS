@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -133,4 +134,22 @@ func (v *ZfsVolume) Validate() error {
 		v.DevicePath = fmt.Sprintf("/dev/zvol/%s/%s", v.PoolID, v.ID)
 	}
 	return nil
+}
+
+// IsZvolDevice reports whether a given device path or name is a ZFS block volume (zvol, e.g. zd0, zd64p2, /dev/zd*).
+// Zvols must never be targeted by zpool commands (create, add, import).
+func IsZvolDevice(dev string) bool {
+	trimmed := strings.TrimSpace(dev)
+	if trimmed == "" {
+		return false
+	}
+	clean := filepath.Base(trimmed)
+	// zd followed by digits (e.g. zd0, zd16, zd64p2)
+	if strings.HasPrefix(clean, "zd") && len(clean) > 2 && clean[2] >= '0' && clean[2] <= '9' {
+		return true
+	}
+	if strings.Contains(trimmed, "/zvol/") || strings.Contains(trimmed, "/zd") {
+		return true
+	}
+	return false
 }

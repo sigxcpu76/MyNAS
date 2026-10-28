@@ -109,4 +109,58 @@ describe('catalogQuestions domain helpers', () => {
     expect(composeYaml).toContain('user: "1001:1001"');
     expect(composeYaml).toContain('- PASSWORD=supersecretpwd');
   });
+
+  it('only includes web portal ports in x-portals, excluding non-portal ports like bt_port', () => {
+    const qbittorrentApp: CatalogApp = {
+      appId: 'qbittorrent',
+      title: 'qBittorrent',
+      description: 'qBittorrent client',
+      category: 'Downloaders',
+      categories: ['Downloaders'],
+      iconUrl: '',
+      home: '',
+      train: 'community',
+      version: '1.0.0',
+      appVersion: '4.6.0',
+      tags: ['torrent'],
+      containerImage: 'ghcr.io/linuxserver/qbittorrent:latest',
+      defaultPort: 8080,
+      questions: [
+        {
+          variable: 'network.web_port',
+          label: 'Web UI Port',
+          description: 'Web UI port',
+          type: 'int',
+          defaultValue: '30024',
+          required: true,
+          group: 'Network Configuration',
+        },
+        {
+          variable: 'network.bt_port',
+          label: 'BitTorrent Port',
+          description: 'BitTorrent peer port',
+          type: 'int',
+          defaultValue: '51413',
+          required: true,
+          group: 'Network Configuration',
+        },
+      ],
+    };
+
+    const answers = {
+      'network.web_port': '30024',
+      'network.bt_port': '51413',
+    };
+
+    const composeYaml = generateComposeFromQuestions(qbittorrentApp, answers, 'tank');
+
+    // x-portals should contain 30024 (web portal) but NOT 51413 (bt_port)
+    expect(composeYaml).toContain('x-portals:');
+    expect(composeYaml).toContain('port: 30024');
+    expect(composeYaml).not.toMatch(/x-portals:[\s\S]*port: 51413/);
+
+    // Both ports should still be published in ports section
+    expect(composeYaml).toContain('- "30024:8080"');
+    expect(composeYaml).toContain('- "51413:51413"');
+  });
 });

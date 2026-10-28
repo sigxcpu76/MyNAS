@@ -135,7 +135,7 @@ describe('Hidden Dot Datasets Filtering', () => {
       expect(text).not.toContain('.system');
     });
 
-    it('DatasetsView hides dot-prefixed datasets', () => {
+    it('DatasetsView hides dot-prefixed datasets', async () => {
       const wrapper = mount(DatasetsView, {
         global: {
           stubs: {
@@ -145,6 +145,9 @@ describe('Hidden Dot Datasets Filtering', () => {
           },
         },
       });
+
+      // Expand all tree nodes so child datasets are visible
+      await wrapper.find('button[title="Expand All"]').trigger('click');
 
       const text = wrapper.text();
       expect(text).toContain('media');

@@ -1848,13 +1848,6 @@ func deriveWebUIURL(ports []string, preferredContainerPort string) string {
 		}
 	}
 
-	// Fallback 2: First non-53 port with a published host port
-	for _, p := range ports {
-		hPort, _ := parsePortMapping(p)
-		if hPort != "" && hPort != "53" && hPort != "22" && hPort != "22000" && hPort != "51820" {
-			return fmt.Sprintf("http://localhost:%s", hPort)
-		}
-	}
 	return ""
 }
 
@@ -2093,32 +2086,23 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 		}
 	}
 
-	if webUI != "" {
+	if len(appPortals) > 0 {
+		webUI = appPortals[0].URL
+	} else if webUI != "" {
 		portVal := 80
 		if u, err := url.Parse(webUI); err == nil {
 			if p, err := strconv.Atoi(u.Port()); err == nil {
 				portVal = p
 			}
 		}
-		alreadyPresent := false
-		for _, ap := range appPortals {
-			if ap.Port == portVal || strings.TrimSuffix(ap.URL, "/") == strings.TrimSuffix(webUI, "/") {
-				alreadyPresent = true
-				break
-			}
+		primaryPortal := domain.DockerAppPortal{
+			Name:     "Web UI",
+			URL:      webUI,
+			Port:     portVal,
+			Protocol: "http",
+			Path:     "/",
 		}
-		if !alreadyPresent {
-			primaryPortal := domain.DockerAppPortal{
-				Name:     "Web UI",
-				URL:      webUI,
-				Port:     portVal,
-				Protocol: "http",
-				Path:     "/",
-			}
-			appPortals = append([]domain.DockerAppPortal{primaryPortal}, appPortals...)
-		}
-	} else if len(appPortals) > 0 {
-		webUI = appPortals[0].URL
+		appPortals = append(appPortals, primaryPortal)
 	}
 
 	title := strings.ReplaceAll(appID, "-", " ")

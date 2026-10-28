@@ -1,0 +1,86 @@
+# Base System & Kernel
+systemd
+systemd-sysv
+dbus
+udev
+linux-base
+proxmox-kernel-7.0
+zfsutils-linux
+zfs-initramfs
+console-setup
+kbd
+
+# Bootloader Support (UEFI + Legacy BIOS)
+grub-efi-amd64-signed
+grub-pc-bin
+shim-signed
+efibootmgr
+dosfstools
+mtools
+
+# Storage Telemetry & Partitions
+smartmontools
+nvme-cli
+util-linux
+gdisk
+parted
+e2fsprogs
+xfsprogs
+
+# Network & Bridging
+ifupdown2
+isc-dhcp-client
+bridge-utils
+iproute2
+iptables
+nftables
+ethtool
+iputils-ping
+dnsutils
+net-tools
+
+# File Sharing & Discovery
+samba
+samba-vfs-modules
+wsdd2
+avahi-daemon
+
+# Container & Virtualization Engines
+docker-ce
+docker-ce-cli
+containerd.io
+docker-compose-plugin
+lxc
+lxc-templates
+debootstrap
+qemu-system-x86
+qemu-utils
+ovmf
+swtpm
+swtpm-tools
+libvirt-daemon-system
+libvirt-clients
+
+# System Services, Utilities & Security
+openssh-server
+libpam-modules
+libpam0g-dev
+chrony
+curl
+wget
+jq
+zstd
+sudo
+htop
+tmux
+rsync
+ca-certificates
+locales
+tzdata
+whiptail
+dialog
+pciutils
+usbutils
+kmod
+less
+procps

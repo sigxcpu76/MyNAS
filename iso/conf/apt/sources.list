@@ -1,0 +1,10 @@
+# Debian 13 (Trixie) Base Repositories
+deb http://deb.debian.org/debian trixie main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian-security trixie-security main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian trixie-updates main contrib non-free non-free-firmware
+
+# Proxmox VE No-Subscription Repository for Trixie (Provides proxmox-kernel-7.0 with built-in OpenZFS)
+deb http://download.proxmox.com/debian/pve trixie pve-no-subscription
+
+# Docker CE Repository for Debian
+deb [signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable

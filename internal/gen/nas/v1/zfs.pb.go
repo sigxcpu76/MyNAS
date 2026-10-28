@@ -631,6 +631,66 @@ func (x *ExportZfsPoolRequest) GetForce() bool {
 	return false
 }
 
+type ImportZfsPoolRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PoolName      string                 `protobuf:"bytes,1,opt,name=pool_name,json=poolName,proto3" json:"pool_name,omitempty"`
+	Force         bool                   `protobuf:"varint,2,opt,name=force,proto3" json:"force,omitempty"`
+	Altroot       string                 `protobuf:"bytes,3,opt,name=altroot,proto3" json:"altroot,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportZfsPoolRequest) Reset() {
+	*x = ImportZfsPoolRequest{}
+	mi := &file_nas_v1_zfs_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportZfsPoolRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportZfsPoolRequest) ProtoMessage() {}
+
+func (x *ImportZfsPoolRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_zfs_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportZfsPoolRequest.ProtoReflect.Descriptor instead.
+func (*ImportZfsPoolRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ImportZfsPoolRequest) GetPoolName() string {
+	if x != nil {
+		return x.PoolName
+	}
+	return ""
+}
+
+func (x *ImportZfsPoolRequest) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
+}
+
+func (x *ImportZfsPoolRequest) GetAltroot() string {
+	if x != nil {
+		return x.Altroot
+	}
+	return ""
+}
+
 type ScrubZfsPoolRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -640,7 +700,7 @@ type ScrubZfsPoolRequest struct {
 
 func (x *ScrubZfsPoolRequest) Reset() {
 	*x = ScrubZfsPoolRequest{}
-	mi := &file_nas_v1_zfs_proto_msgTypes[8]
+	mi := &file_nas_v1_zfs_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -652,7 +712,7 @@ func (x *ScrubZfsPoolRequest) String() string {
 func (*ScrubZfsPoolRequest) ProtoMessage() {}
 
 func (x *ScrubZfsPoolRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_zfs_proto_msgTypes[8]
+	mi := &file_nas_v1_zfs_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -665,7 +725,7 @@ func (x *ScrubZfsPoolRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScrubZfsPoolRequest.ProtoReflect.Descriptor instead.
 func (*ScrubZfsPoolRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{8}
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ScrubZfsPoolRequest) GetName() string {
@@ -685,7 +745,7 @@ type UpdateZfsPoolRequest struct {
 
 func (x *UpdateZfsPoolRequest) Reset() {
 	*x = UpdateZfsPoolRequest{}
-	mi := &file_nas_v1_zfs_proto_msgTypes[9]
+	mi := &file_nas_v1_zfs_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -697,7 +757,7 @@ func (x *UpdateZfsPoolRequest) String() string {
 func (*UpdateZfsPoolRequest) ProtoMessage() {}
 
 func (x *UpdateZfsPoolRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_zfs_proto_msgTypes[9]
+	mi := &file_nas_v1_zfs_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -710,7 +770,7 @@ func (x *UpdateZfsPoolRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateZfsPoolRequest.ProtoReflect.Descriptor instead.
 func (*UpdateZfsPoolRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{9}
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *UpdateZfsPoolRequest) GetZfsPool() *ZfsPool {
@@ -739,7 +799,7 @@ type AddZfsPoolVdevRequest struct {
 
 func (x *AddZfsPoolVdevRequest) Reset() {
 	*x = AddZfsPoolVdevRequest{}
-	mi := &file_nas_v1_zfs_proto_msgTypes[10]
+	mi := &file_nas_v1_zfs_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -751,7 +811,7 @@ func (x *AddZfsPoolVdevRequest) String() string {
 func (*AddZfsPoolVdevRequest) ProtoMessage() {}
 
 func (x *AddZfsPoolVdevRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_zfs_proto_msgTypes[10]
+	mi := &file_nas_v1_zfs_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -764,7 +824,7 @@ func (x *AddZfsPoolVdevRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddZfsPoolVdevRequest.ProtoReflect.Descriptor instead.
 func (*AddZfsPoolVdevRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{10}
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *AddZfsPoolVdevRequest) GetName() string {
@@ -805,7 +865,7 @@ type RemoveZfsPoolVdevRequest struct {
 
 func (x *RemoveZfsPoolVdevRequest) Reset() {
 	*x = RemoveZfsPoolVdevRequest{}
-	mi := &file_nas_v1_zfs_proto_msgTypes[11]
+	mi := &file_nas_v1_zfs_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -817,7 +877,7 @@ func (x *RemoveZfsPoolVdevRequest) String() string {
 func (*RemoveZfsPoolVdevRequest) ProtoMessage() {}
 
 func (x *RemoveZfsPoolVdevRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_zfs_proto_msgTypes[11]
+	mi := &file_nas_v1_zfs_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -830,7 +890,7 @@ func (x *RemoveZfsPoolVdevRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveZfsPoolVdevRequest.ProtoReflect.Descriptor instead.
 func (*RemoveZfsPoolVdevRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{11}
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *RemoveZfsPoolVdevRequest) GetName() string {
@@ -871,7 +931,7 @@ type ZfsDataset struct {
 
 func (x *ZfsDataset) Reset() {
 	*x = ZfsDataset{}
-	mi := &file_nas_v1_zfs_proto_msgTypes[12]
+	mi := &file_nas_v1_zfs_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -883,7 +943,7 @@ func (x *ZfsDataset) String() string {
 func (*ZfsDataset) ProtoMessage() {}
 
 func (x *ZfsDataset) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_zfs_proto_msgTypes[12]
+	mi := &file_nas_v1_zfs_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -896,7 +956,7 @@ func (x *ZfsDataset) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ZfsDataset.ProtoReflect.Descriptor instead.
 func (*ZfsDataset) Descriptor() ([]byte, []int) {
-	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{12}
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ZfsDataset) GetName() string {
@@ -1023,7 +1083,7 @@ type ListZfsDatasetsRequest struct {
 
 func (x *ListZfsDatasetsRequest) Reset() {
 	*x = ListZfsDatasetsRequest{}
-	mi := &file_nas_v1_zfs_proto_msgTypes[13]
+	mi := &file_nas_v1_zfs_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1035,7 +1095,7 @@ func (x *ListZfsDatasetsRequest) String() string {
 func (*ListZfsDatasetsRequest) ProtoMessage() {}
 
 func (x *ListZfsDatasetsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_zfs_proto_msgTypes[13]
+	mi := &file_nas_v1_zfs_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1048,7 +1108,7 @@ func (x *ListZfsDatasetsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListZfsDatasetsRequest.ProtoReflect.Descriptor instead.
 func (*ListZfsDatasetsRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{13}
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ListZfsDatasetsRequest) GetParent() string {
@@ -1090,7 +1150,7 @@ type ListZfsDatasetsResponse struct {
 
 func (x *ListZfsDatasetsResponse) Reset() {
 	*x = ListZfsDatasetsResponse{}
-	mi := &file_nas_v1_zfs_proto_msgTypes[14]
+	mi := &file_nas_v1_zfs_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1102,7 +1162,7 @@ func (x *ListZfsDatasetsResponse) String() string {
 func (*ListZfsDatasetsResponse) ProtoMessage() {}
 
 func (x *ListZfsDatasetsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_zfs_proto_msgTypes[14]
+	mi := &file_nas_v1_zfs_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1115,7 +1175,7 @@ func (x *ListZfsDatasetsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListZfsDatasetsResponse.ProtoReflect.Descriptor instead.
 func (*ListZfsDatasetsResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{14}
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListZfsDatasetsResponse) GetZfsDatasets() []*ZfsDataset {
@@ -1148,7 +1208,7 @@ type GetZfsDatasetRequest struct {
 
 func (x *GetZfsDatasetRequest) Reset() {
 	*x = GetZfsDatasetRequest{}
-	mi := &file_nas_v1_zfs_proto_msgTypes[15]
+	mi := &file_nas_v1_zfs_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1160,7 +1220,7 @@ func (x *GetZfsDatasetRequest) String() string {
 func (*GetZfsDatasetRequest) ProtoMessage() {}
 
 func (x *GetZfsDatasetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_zfs_proto_msgTypes[15]
+	mi := &file_nas_v1_zfs_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1173,7 +1233,7 @@ func (x *GetZfsDatasetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetZfsDatasetRequest.ProtoReflect.Descriptor instead.
 func (*GetZfsDatasetRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{15}
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *GetZfsDatasetRequest) GetName() string {
@@ -1194,7 +1254,7 @@ type CreateZfsDatasetRequest struct {
 
 func (x *CreateZfsDatasetRequest) Reset() {
 	*x = CreateZfsDatasetRequest{}
-	mi := &file_nas_v1_zfs_proto_msgTypes[16]
+	mi := &file_nas_v1_zfs_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1206,7 +1266,7 @@ func (x *CreateZfsDatasetRequest) String() string {
 func (*CreateZfsDatasetRequest) ProtoMessage() {}
 
 func (x *CreateZfsDatasetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_zfs_proto_msgTypes[16]
+	mi := &file_nas_v1_zfs_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1219,7 +1279,7 @@ func (x *CreateZfsDatasetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateZfsDatasetRequest.ProtoReflect.Descriptor instead.
 func (*CreateZfsDatasetRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{16}
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *CreateZfsDatasetRequest) GetParent() string {
@@ -1253,7 +1313,7 @@ type UpdateZfsDatasetRequest struct {
 
 func (x *UpdateZfsDatasetRequest) Reset() {
 	*x = UpdateZfsDatasetRequest{}
-	mi := &file_nas_v1_zfs_proto_msgTypes[17]
+	mi := &file_nas_v1_zfs_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1265,7 +1325,7 @@ func (x *UpdateZfsDatasetRequest) String() string {
 func (*UpdateZfsDatasetRequest) ProtoMessage() {}
 
 func (x *UpdateZfsDatasetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_zfs_proto_msgTypes[17]
+	mi := &file_nas_v1_zfs_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1278,7 +1338,7 @@ func (x *UpdateZfsDatasetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateZfsDatasetRequest.ProtoReflect.Descriptor instead.
 func (*UpdateZfsDatasetRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{17}
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *UpdateZfsDatasetRequest) GetZfsDataset() *ZfsDataset {
@@ -1305,7 +1365,7 @@ type DeleteZfsDatasetRequest struct {
 
 func (x *DeleteZfsDatasetRequest) Reset() {
 	*x = DeleteZfsDatasetRequest{}
-	mi := &file_nas_v1_zfs_proto_msgTypes[18]
+	mi := &file_nas_v1_zfs_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1317,7 +1377,7 @@ func (x *DeleteZfsDatasetRequest) String() string {
 func (*DeleteZfsDatasetRequest) ProtoMessage() {}
 
 func (x *DeleteZfsDatasetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_zfs_proto_msgTypes[18]
+	mi := &file_nas_v1_zfs_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1330,7 +1390,7 @@ func (x *DeleteZfsDatasetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteZfsDatasetRequest.ProtoReflect.Descriptor instead.
 func (*DeleteZfsDatasetRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{18}
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *DeleteZfsDatasetRequest) GetName() string {
@@ -1357,7 +1417,7 @@ type SnapshotZfsDatasetRequest struct {
 
 func (x *SnapshotZfsDatasetRequest) Reset() {
 	*x = SnapshotZfsDatasetRequest{}
-	mi := &file_nas_v1_zfs_proto_msgTypes[19]
+	mi := &file_nas_v1_zfs_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1369,7 +1429,7 @@ func (x *SnapshotZfsDatasetRequest) String() string {
 func (*SnapshotZfsDatasetRequest) ProtoMessage() {}
 
 func (x *SnapshotZfsDatasetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_zfs_proto_msgTypes[19]
+	mi := &file_nas_v1_zfs_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1382,7 +1442,7 @@ func (x *SnapshotZfsDatasetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SnapshotZfsDatasetRequest.ProtoReflect.Descriptor instead.
 func (*SnapshotZfsDatasetRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{19}
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SnapshotZfsDatasetRequest) GetName() string {
@@ -1418,7 +1478,7 @@ type ZfsVolume struct {
 
 func (x *ZfsVolume) Reset() {
 	*x = ZfsVolume{}
-	mi := &file_nas_v1_zfs_proto_msgTypes[20]
+	mi := &file_nas_v1_zfs_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1430,7 +1490,7 @@ func (x *ZfsVolume) String() string {
 func (*ZfsVolume) ProtoMessage() {}
 
 func (x *ZfsVolume) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_zfs_proto_msgTypes[20]
+	mi := &file_nas_v1_zfs_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1443,7 +1503,7 @@ func (x *ZfsVolume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ZfsVolume.ProtoReflect.Descriptor instead.
 func (*ZfsVolume) Descriptor() ([]byte, []int) {
-	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{20}
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ZfsVolume) GetName() string {
@@ -1534,7 +1594,7 @@ type ListZfsVolumesRequest struct {
 
 func (x *ListZfsVolumesRequest) Reset() {
 	*x = ListZfsVolumesRequest{}
-	mi := &file_nas_v1_zfs_proto_msgTypes[21]
+	mi := &file_nas_v1_zfs_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1546,7 +1606,7 @@ func (x *ListZfsVolumesRequest) String() string {
 func (*ListZfsVolumesRequest) ProtoMessage() {}
 
 func (x *ListZfsVolumesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_zfs_proto_msgTypes[21]
+	mi := &file_nas_v1_zfs_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1559,7 +1619,7 @@ func (x *ListZfsVolumesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListZfsVolumesRequest.ProtoReflect.Descriptor instead.
 func (*ListZfsVolumesRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{21}
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ListZfsVolumesRequest) GetParent() string {
@@ -1594,7 +1654,7 @@ type ListZfsVolumesResponse struct {
 
 func (x *ListZfsVolumesResponse) Reset() {
 	*x = ListZfsVolumesResponse{}
-	mi := &file_nas_v1_zfs_proto_msgTypes[22]
+	mi := &file_nas_v1_zfs_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1606,7 +1666,7 @@ func (x *ListZfsVolumesResponse) String() string {
 func (*ListZfsVolumesResponse) ProtoMessage() {}
 
 func (x *ListZfsVolumesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_zfs_proto_msgTypes[22]
+	mi := &file_nas_v1_zfs_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1619,7 +1679,7 @@ func (x *ListZfsVolumesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListZfsVolumesResponse.ProtoReflect.Descriptor instead.
 func (*ListZfsVolumesResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{22}
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ListZfsVolumesResponse) GetZfsVolumes() []*ZfsVolume {
@@ -1652,7 +1712,7 @@ type GetZfsVolumeRequest struct {
 
 func (x *GetZfsVolumeRequest) Reset() {
 	*x = GetZfsVolumeRequest{}
-	mi := &file_nas_v1_zfs_proto_msgTypes[23]
+	mi := &file_nas_v1_zfs_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1664,7 +1724,7 @@ func (x *GetZfsVolumeRequest) String() string {
 func (*GetZfsVolumeRequest) ProtoMessage() {}
 
 func (x *GetZfsVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_zfs_proto_msgTypes[23]
+	mi := &file_nas_v1_zfs_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1677,7 +1737,7 @@ func (x *GetZfsVolumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetZfsVolumeRequest.ProtoReflect.Descriptor instead.
 func (*GetZfsVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{23}
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *GetZfsVolumeRequest) GetName() string {
@@ -1698,7 +1758,7 @@ type CreateZfsVolumeRequest struct {
 
 func (x *CreateZfsVolumeRequest) Reset() {
 	*x = CreateZfsVolumeRequest{}
-	mi := &file_nas_v1_zfs_proto_msgTypes[24]
+	mi := &file_nas_v1_zfs_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1710,7 +1770,7 @@ func (x *CreateZfsVolumeRequest) String() string {
 func (*CreateZfsVolumeRequest) ProtoMessage() {}
 
 func (x *CreateZfsVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_zfs_proto_msgTypes[24]
+	mi := &file_nas_v1_zfs_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1723,7 +1783,7 @@ func (x *CreateZfsVolumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateZfsVolumeRequest.ProtoReflect.Descriptor instead.
 func (*CreateZfsVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{24}
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *CreateZfsVolumeRequest) GetParent() string {
@@ -1757,7 +1817,7 @@ type UpdateZfsVolumeRequest struct {
 
 func (x *UpdateZfsVolumeRequest) Reset() {
 	*x = UpdateZfsVolumeRequest{}
-	mi := &file_nas_v1_zfs_proto_msgTypes[25]
+	mi := &file_nas_v1_zfs_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1769,7 +1829,7 @@ func (x *UpdateZfsVolumeRequest) String() string {
 func (*UpdateZfsVolumeRequest) ProtoMessage() {}
 
 func (x *UpdateZfsVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_zfs_proto_msgTypes[25]
+	mi := &file_nas_v1_zfs_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1782,7 +1842,7 @@ func (x *UpdateZfsVolumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateZfsVolumeRequest.ProtoReflect.Descriptor instead.
 func (*UpdateZfsVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{25}
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *UpdateZfsVolumeRequest) GetZfsVolume() *ZfsVolume {
@@ -1808,7 +1868,7 @@ type DeleteZfsVolumeRequest struct {
 
 func (x *DeleteZfsVolumeRequest) Reset() {
 	*x = DeleteZfsVolumeRequest{}
-	mi := &file_nas_v1_zfs_proto_msgTypes[26]
+	mi := &file_nas_v1_zfs_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1820,7 +1880,7 @@ func (x *DeleteZfsVolumeRequest) String() string {
 func (*DeleteZfsVolumeRequest) ProtoMessage() {}
 
 func (x *DeleteZfsVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_zfs_proto_msgTypes[26]
+	mi := &file_nas_v1_zfs_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1833,7 +1893,7 @@ func (x *DeleteZfsVolumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteZfsVolumeRequest.ProtoReflect.Descriptor instead.
 func (*DeleteZfsVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{26}
+	return file_nas_v1_zfs_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *DeleteZfsVolumeRequest) GetName() string {
@@ -1909,7 +1969,11 @@ const file_nas_v1_zfs_proto_rawDesc = "" +
 	"\x14ExportZfsPoolRequest\x123\n" +
 	"\x04name\x18\x01 \x01(\tB\x1f\xe2A\x01\x02\xfaA\x18\n" +
 	"\x16nas.sigxcpu.io/ZfsPoolR\x04name\x12\x14\n" +
-	"\x05force\x18\x02 \x01(\bR\x05force\"J\n" +
+	"\x05force\x18\x02 \x01(\bR\x05force\"i\n" +
+	"\x14ImportZfsPoolRequest\x12!\n" +
+	"\tpool_name\x18\x01 \x01(\tB\x04\xe2A\x01\x02R\bpoolName\x12\x14\n" +
+	"\x05force\x18\x02 \x01(\bR\x05force\x12\x18\n" +
+	"\aaltroot\x18\x03 \x01(\tR\aaltroot\"J\n" +
 	"\x13ScrubZfsPoolRequest\x123\n" +
 	"\x04name\x18\x01 \x01(\tB\x1f\xe2A\x01\x02\xfaA\x18\n" +
 	"\x16nas.sigxcpu.io/ZfsPoolR\x04name\"\x85\x01\n" +
@@ -2049,7 +2113,7 @@ func file_nas_v1_zfs_proto_rawDescGZIP() []byte {
 	return file_nas_v1_zfs_proto_rawDescData
 }
 
-var file_nas_v1_zfs_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_nas_v1_zfs_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_nas_v1_zfs_proto_goTypes = []any{
 	(*ZfsPool)(nil),                   // 0: nas.v1.ZfsPool
 	(*ZfsVdev)(nil),                   // 1: nas.v1.ZfsVdev
@@ -2059,26 +2123,27 @@ var file_nas_v1_zfs_proto_goTypes = []any{
 	(*CreateZfsPoolRequest)(nil),      // 5: nas.v1.CreateZfsPoolRequest
 	(*DeleteZfsPoolRequest)(nil),      // 6: nas.v1.DeleteZfsPoolRequest
 	(*ExportZfsPoolRequest)(nil),      // 7: nas.v1.ExportZfsPoolRequest
-	(*ScrubZfsPoolRequest)(nil),       // 8: nas.v1.ScrubZfsPoolRequest
-	(*UpdateZfsPoolRequest)(nil),      // 9: nas.v1.UpdateZfsPoolRequest
-	(*AddZfsPoolVdevRequest)(nil),     // 10: nas.v1.AddZfsPoolVdevRequest
-	(*RemoveZfsPoolVdevRequest)(nil),  // 11: nas.v1.RemoveZfsPoolVdevRequest
-	(*ZfsDataset)(nil),                // 12: nas.v1.ZfsDataset
-	(*ListZfsDatasetsRequest)(nil),    // 13: nas.v1.ListZfsDatasetsRequest
-	(*ListZfsDatasetsResponse)(nil),   // 14: nas.v1.ListZfsDatasetsResponse
-	(*GetZfsDatasetRequest)(nil),      // 15: nas.v1.GetZfsDatasetRequest
-	(*CreateZfsDatasetRequest)(nil),   // 16: nas.v1.CreateZfsDatasetRequest
-	(*UpdateZfsDatasetRequest)(nil),   // 17: nas.v1.UpdateZfsDatasetRequest
-	(*DeleteZfsDatasetRequest)(nil),   // 18: nas.v1.DeleteZfsDatasetRequest
-	(*SnapshotZfsDatasetRequest)(nil), // 19: nas.v1.SnapshotZfsDatasetRequest
-	(*ZfsVolume)(nil),                 // 20: nas.v1.ZfsVolume
-	(*ListZfsVolumesRequest)(nil),     // 21: nas.v1.ListZfsVolumesRequest
-	(*ListZfsVolumesResponse)(nil),    // 22: nas.v1.ListZfsVolumesResponse
-	(*GetZfsVolumeRequest)(nil),       // 23: nas.v1.GetZfsVolumeRequest
-	(*CreateZfsVolumeRequest)(nil),    // 24: nas.v1.CreateZfsVolumeRequest
-	(*UpdateZfsVolumeRequest)(nil),    // 25: nas.v1.UpdateZfsVolumeRequest
-	(*DeleteZfsVolumeRequest)(nil),    // 26: nas.v1.DeleteZfsVolumeRequest
-	(*fieldmaskpb.FieldMask)(nil),     // 27: google.protobuf.FieldMask
+	(*ImportZfsPoolRequest)(nil),      // 8: nas.v1.ImportZfsPoolRequest
+	(*ScrubZfsPoolRequest)(nil),       // 9: nas.v1.ScrubZfsPoolRequest
+	(*UpdateZfsPoolRequest)(nil),      // 10: nas.v1.UpdateZfsPoolRequest
+	(*AddZfsPoolVdevRequest)(nil),     // 11: nas.v1.AddZfsPoolVdevRequest
+	(*RemoveZfsPoolVdevRequest)(nil),  // 12: nas.v1.RemoveZfsPoolVdevRequest
+	(*ZfsDataset)(nil),                // 13: nas.v1.ZfsDataset
+	(*ListZfsDatasetsRequest)(nil),    // 14: nas.v1.ListZfsDatasetsRequest
+	(*ListZfsDatasetsResponse)(nil),   // 15: nas.v1.ListZfsDatasetsResponse
+	(*GetZfsDatasetRequest)(nil),      // 16: nas.v1.GetZfsDatasetRequest
+	(*CreateZfsDatasetRequest)(nil),   // 17: nas.v1.CreateZfsDatasetRequest
+	(*UpdateZfsDatasetRequest)(nil),   // 18: nas.v1.UpdateZfsDatasetRequest
+	(*DeleteZfsDatasetRequest)(nil),   // 19: nas.v1.DeleteZfsDatasetRequest
+	(*SnapshotZfsDatasetRequest)(nil), // 20: nas.v1.SnapshotZfsDatasetRequest
+	(*ZfsVolume)(nil),                 // 21: nas.v1.ZfsVolume
+	(*ListZfsVolumesRequest)(nil),     // 22: nas.v1.ListZfsVolumesRequest
+	(*ListZfsVolumesResponse)(nil),    // 23: nas.v1.ListZfsVolumesResponse
+	(*GetZfsVolumeRequest)(nil),       // 24: nas.v1.GetZfsVolumeRequest
+	(*CreateZfsVolumeRequest)(nil),    // 25: nas.v1.CreateZfsVolumeRequest
+	(*UpdateZfsVolumeRequest)(nil),    // 26: nas.v1.UpdateZfsVolumeRequest
+	(*DeleteZfsVolumeRequest)(nil),    // 27: nas.v1.DeleteZfsVolumeRequest
+	(*fieldmaskpb.FieldMask)(nil),     // 28: google.protobuf.FieldMask
 }
 var file_nas_v1_zfs_proto_depIdxs = []int32{
 	1,  // 0: nas.v1.ZfsPool.vdevs:type_name -> nas.v1.ZfsVdev
@@ -2086,15 +2151,15 @@ var file_nas_v1_zfs_proto_depIdxs = []int32{
 	0,  // 2: nas.v1.ListZfsPoolsResponse.zfs_pools:type_name -> nas.v1.ZfsPool
 	0,  // 3: nas.v1.CreateZfsPoolRequest.zfs_pool:type_name -> nas.v1.ZfsPool
 	0,  // 4: nas.v1.UpdateZfsPoolRequest.zfs_pool:type_name -> nas.v1.ZfsPool
-	27, // 5: nas.v1.UpdateZfsPoolRequest.update_mask:type_name -> google.protobuf.FieldMask
-	12, // 6: nas.v1.ListZfsDatasetsResponse.zfs_datasets:type_name -> nas.v1.ZfsDataset
-	12, // 7: nas.v1.CreateZfsDatasetRequest.zfs_dataset:type_name -> nas.v1.ZfsDataset
-	12, // 8: nas.v1.UpdateZfsDatasetRequest.zfs_dataset:type_name -> nas.v1.ZfsDataset
-	27, // 9: nas.v1.UpdateZfsDatasetRequest.update_mask:type_name -> google.protobuf.FieldMask
-	20, // 10: nas.v1.ListZfsVolumesResponse.zfs_volumes:type_name -> nas.v1.ZfsVolume
-	20, // 11: nas.v1.CreateZfsVolumeRequest.zfs_volume:type_name -> nas.v1.ZfsVolume
-	20, // 12: nas.v1.UpdateZfsVolumeRequest.zfs_volume:type_name -> nas.v1.ZfsVolume
-	27, // 13: nas.v1.UpdateZfsVolumeRequest.update_mask:type_name -> google.protobuf.FieldMask
+	28, // 5: nas.v1.UpdateZfsPoolRequest.update_mask:type_name -> google.protobuf.FieldMask
+	13, // 6: nas.v1.ListZfsDatasetsResponse.zfs_datasets:type_name -> nas.v1.ZfsDataset
+	13, // 7: nas.v1.CreateZfsDatasetRequest.zfs_dataset:type_name -> nas.v1.ZfsDataset
+	13, // 8: nas.v1.UpdateZfsDatasetRequest.zfs_dataset:type_name -> nas.v1.ZfsDataset
+	28, // 9: nas.v1.UpdateZfsDatasetRequest.update_mask:type_name -> google.protobuf.FieldMask
+	21, // 10: nas.v1.ListZfsVolumesResponse.zfs_volumes:type_name -> nas.v1.ZfsVolume
+	21, // 11: nas.v1.CreateZfsVolumeRequest.zfs_volume:type_name -> nas.v1.ZfsVolume
+	21, // 12: nas.v1.UpdateZfsVolumeRequest.zfs_volume:type_name -> nas.v1.ZfsVolume
+	28, // 13: nas.v1.UpdateZfsVolumeRequest.update_mask:type_name -> google.protobuf.FieldMask
 	14, // [14:14] is the sub-list for method output_type
 	14, // [14:14] is the sub-list for method input_type
 	14, // [14:14] is the sub-list for extension type_name
@@ -2113,7 +2178,7 @@ func file_nas_v1_zfs_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nas_v1_zfs_proto_rawDesc), len(file_nas_v1_zfs_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   27,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/sigxcpu/nas/internal/domain"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -584,68 +585,185 @@ var (
 	reInternalPort = regexp.MustCompile(`(?i)(?:internal_web_port|web_port|port):\s*(\d+)`)
 )
 
-func ExtractPortalFromTemplate(tplContent, ixValuesContent string) (port int, name, scheme, path string) {
-	name = "Web UI"
-	scheme = "http"
-	path = "/"
+type ExtractedPortal struct {
+	Name    string
+	Port    int
+	Scheme  string
+	Path    string
+	PortVar string
+}
 
-	if m := reTplPortals.FindStringSubmatch(tplContent); len(m) > 1 {
+func ExtractPortalsFromTemplate(tplContent, ixValuesContent string, qData []byte) []ExtractedPortal {
+	var portals []ExtractedPortal
+
+	// 1. Check tpl.portals.add calls in template
+	for _, m := range reTplPortals.FindAllStringSubmatch(tplContent, -1) {
+		if len(m) < 2 {
+			continue
+		}
 		portVar := strings.TrimSpace(m[1])
+		name := "Web UI"
+		scheme := "http"
+		path := "/"
+		port := 0
+
 		if len(m) > 2 && m[2] != "" {
-			if strings.Contains(m[2], `"name":`) {
-				reName := regexp.MustCompile(`"name":\s*"([^"]+)"`)
-				if nm := reName.FindStringSubmatch(m[2]); len(nm) > 1 {
-					name = nm[1]
-				}
+			opts := m[2]
+			if nm := regexp.MustCompile(`"name":\s*"([^"]+)"`).FindStringSubmatch(opts); len(nm) > 1 {
+				name = nm[1]
 			}
-			if strings.Contains(m[2], `"path":`) {
-				rePath := regexp.MustCompile(`"path":\s*"([^"]+)"`)
-				if pm := rePath.FindStringSubmatch(m[2]); len(pm) > 1 {
-					path = pm[1]
-				}
+			if pm := regexp.MustCompile(`"path":\s*"([^"]+)"`).FindStringSubmatch(opts); len(pm) > 1 {
+				path = pm[1]
 			}
-			if strings.Contains(m[2], `"scheme":`) {
-				reScheme := regexp.MustCompile(`"scheme":\s*"([^"]+)"`)
-				if sm := reScheme.FindStringSubmatch(m[2]); len(sm) > 1 {
-					scheme = sm[1]
-				}
+			if sm := regexp.MustCompile(`"scheme":\s*"([^"]+)"`).FindStringSubmatch(opts); len(sm) > 1 {
+				scheme = sm[1]
+			}
+			if pt := regexp.MustCompile(`"port":\s*(\d+)`).FindStringSubmatch(opts); len(pt) > 1 {
+				port, _ = strconv.Atoi(pt[1])
 			}
 		}
 
-		// Look for matching add_port call
-		for _, am := range reAddPort.FindAllStringSubmatch(tplContent, -1) {
-			if len(am) > 1 && strings.TrimSpace(am[1]) == portVar {
-				if len(am) > 2 && am[2] != "" {
-					target := strings.TrimSpace(am[2])
-					if p, err := strconv.Atoi(target); err == nil && p > 0 {
-						port = p
-						return
-					}
-					// Check consts reference e.g. values.consts.internal_web_port
-					if strings.Contains(target, "values.consts.") {
-						constName := strings.TrimPrefix(target, "values.consts.")
-						reNamed := regexp.MustCompile(fmt.Sprintf(`(?m)^\s*%s:\s*(\d+)`, regexp.QuoteMeta(constName)))
-						if nm := reNamed.FindStringSubmatch(ixValuesContent); len(nm) > 1 {
-							if p, err := strconv.Atoi(nm[1]); err == nil && p > 0 {
-								port = p
-								return
+		if port == 0 {
+			if p, err := strconv.Atoi(portVar); err == nil && p > 0 {
+				port = p
+			}
+		}
+
+		if port == 0 {
+			// Look for matching add_port call
+			for _, am := range reAddPort.FindAllStringSubmatch(tplContent, -1) {
+				if len(am) > 1 && strings.TrimSpace(am[1]) == portVar {
+					if len(am) > 2 && am[2] != "" {
+						target := strings.TrimSpace(am[2])
+						if p, err := strconv.Atoi(target); err == nil && p > 0 {
+							port = p
+							break
+						}
+						if strings.Contains(target, "values.consts.") {
+							constName := strings.TrimPrefix(target, "values.consts.")
+							reNamed := regexp.MustCompile(fmt.Sprintf(`(?m)^\s*%s:\s*(\d+)`, regexp.QuoteMeta(constName)))
+							if nm := reNamed.FindStringSubmatch(ixValuesContent); len(nm) > 1 {
+								if p, err := strconv.Atoi(nm[1]); err == nil && p > 0 {
+									port = p
+									break
+								}
 							}
 						}
 					}
 				}
 			}
 		}
+
+		if port == 0 && len(qData) > 0 {
+			parts := strings.Split(portVar, ".")
+			leaf := parts[len(parts)-1]
+			if leaf == "port_number" && len(parts) >= 2 {
+				leaf = parts[len(parts)-2]
+			}
+			reQ := regexp.MustCompile(fmt.Sprintf(`(?s)variable:\s*"?%s"?[^\n]*\n.*?default:\s*(\d+)`, regexp.QuoteMeta(leaf)))
+			if qm := reQ.FindSubmatch(qData); len(qm) > 1 {
+				if p, err := strconv.Atoi(string(qm[1])); err == nil && p > 0 {
+					port = p
+				}
+			}
+		}
+
+		if port == 0 {
+			if m := reInternalPort.FindStringSubmatch(ixValuesContent); len(m) > 1 {
+				if p, err := strconv.Atoi(m[1]); err == nil && p > 0 {
+					port = p
+				}
+			}
+		}
+
+		portals = append(portals, ExtractedPortal{
+			Name:    name,
+			Port:    port,
+			Scheme:  scheme,
+			Path:    path,
+			PortVar: portVar,
+		})
 	}
 
-	// Fallback to ix_values.yaml port definition
-	if m := reInternalPort.FindStringSubmatch(ixValuesContent); len(m) > 1 {
-		if p, err := strconv.Atoi(m[1]); err == nil && p > 0 {
-			port = p
-			return
+	// 2. Check if template or compose content contains explicit x-portals:
+	if len(portals) == 0 {
+		reXPortals := regexp.MustCompile(`(?s)x-portals:\s*\n((?:\s*-\s*[^\n]+\n(?:(?:\s{4,}[^\n]+\n)*)?)+)`)
+		if xm := reXPortals.FindStringSubmatch(tplContent); len(xm) > 1 {
+			var parsed []map[string]any
+			if err := yaml.Unmarshal([]byte(xm[1]), &parsed); err == nil {
+				for _, item := range parsed {
+					pName := "Web UI"
+					if n, ok := item["name"].(string); ok && n != "" {
+						pName = n
+					}
+					pScheme := "http"
+					if s, ok := item["scheme"].(string); ok && s != "" {
+						pScheme = s
+					}
+					pPath := "/"
+					if pt, ok := item["path"].(string); ok && pt != "" {
+						pPath = pt
+					}
+					pPort := 0
+					switch pv := item["port"].(type) {
+					case int:
+						pPort = pv
+					case float64:
+						pPort = int(pv)
+					case string:
+						pPort, _ = strconv.Atoi(strings.TrimSpace(pv))
+					}
+					if pPort > 0 {
+						portals = append(portals, ExtractedPortal{
+							Name:   pName,
+							Port:   pPort,
+							Scheme: pScheme,
+							Path:   pPath,
+						})
+					}
+				}
+			}
 		}
 	}
 
-	return 0, name, scheme, path
+	// 3. Fallback: check questions for a web_port / webui_port question
+	if len(portals) == 0 && len(qData) > 0 {
+		reWebQ := regexp.MustCompile(`(?s)variable:\s*"?([^\s"]*(?:web_port|webui_port|portal_port)[^\s"]*)"?[^\n]*\n.*?default:\s*(\d+)`)
+		if wqm := reWebQ.FindSubmatch(qData); len(wqm) > 2 {
+			if p, err := strconv.Atoi(string(wqm[2])); err == nil && p > 0 {
+				portals = append(portals, ExtractedPortal{
+					Name:   "Web UI",
+					Port:   p,
+					Scheme: "http",
+					Path:   "/",
+				})
+			}
+		}
+	}
+
+	// 4. Fallback: check ixValuesContent
+	if len(portals) == 0 {
+		if m := reInternalPort.FindStringSubmatch(ixValuesContent); len(m) > 1 {
+			if p, err := strconv.Atoi(m[1]); err == nil && p > 0 {
+				portals = append(portals, ExtractedPortal{
+					Name:   "Web UI",
+					Port:   p,
+					Scheme: "http",
+					Path:   "/",
+				})
+			}
+		}
+	}
+
+	return portals
+}
+
+func ExtractPortalFromTemplate(tplContent, ixValuesContent string) (port int, name, scheme, path string) {
+	portals := ExtractPortalsFromTemplate(tplContent, ixValuesContent, nil)
+	if len(portals) > 0 {
+		return portals[0].Port, portals[0].Name, portals[0].Scheme, portals[0].Path
+	}
+	return 0, "Web UI", "http", "/"
 }
 
 func (a *Adapter) enrichFromIXValues(ctx context.Context, app *domain.CatalogApp) {
@@ -719,15 +837,6 @@ func (a *Adapter) enrichFromIXValues(ctx context.Context, app *domain.CatalogApp
 		}
 	}
 
-	if portalPort, portalName, portalScheme, portalPath := ExtractPortalFromTemplate(string(tplData), string(data)); portalPort > 0 {
-		app.DefaultPort = portalPort
-		portalYAML := fmt.Sprintf("x-nas-management-port: %d\nx-portals:\n  - name: %q\n    scheme: %q\n    port: %d\n    path: %q\n",
-			portalPort, portalName, portalScheme, portalPort, portalPath)
-		if !strings.Contains(app.ComposeYAML, "x-portals:") {
-			app.ComposeYAML = portalYAML + app.ComposeYAML
-		}
-	}
-
 	// Fetch questions.yaml if available to extract dynamic configuration questions
 	qCacheFile := filepath.Join(valuesCacheDir, fmt.Sprintf("%s-%s-questions.yaml", app.AppID, app.Version))
 	var qData []byte
@@ -759,6 +868,33 @@ func (a *Adapter) enrichFromIXValues(ctx context.Context, app *domain.CatalogApp
 		groups, flatQs := GetCuratedQuestions(*app, a.getAppsPool(), a.getAppdataPath())
 		app.QuestionGroups = groups
 		app.Questions = flatQs
+	}
+
+	portals := ExtractPortalsFromTemplate(string(tplData), string(data), qData)
+	if len(portals) > 0 {
+		if app.DefaultPort <= 0 && portals[0].Port > 0 {
+			app.DefaultPort = portals[0].Port
+		}
+		var sb strings.Builder
+		if app.DefaultPort > 0 {
+			sb.WriteString(fmt.Sprintf("x-nas-management-port: %d\n", app.DefaultPort))
+		}
+		sb.WriteString("x-portals:\n")
+		hasValid := false
+		for _, p := range portals {
+			portNum := p.Port
+			if portNum <= 0 && app.DefaultPort > 0 {
+				portNum = app.DefaultPort
+			}
+			if portNum > 0 {
+				hasValid = true
+				sb.WriteString(fmt.Sprintf("  - name: %q\n    scheme: %q\n    port: %d\n    path: %q\n",
+					p.Name, p.Scheme, portNum, p.Path))
+			}
+		}
+		if hasValid && !strings.Contains(app.ComposeYAML, "x-portals:") {
+			app.ComposeYAML = sb.String() + app.ComposeYAML
+		}
 	}
 }
 

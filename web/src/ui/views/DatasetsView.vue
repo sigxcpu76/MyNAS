@@ -34,7 +34,7 @@ import { nasState, notify, refreshAllData, refreshZfsSubresources } from '../sto
 const selectedPool = ref<string>('all');
 const searchQuery = ref('');
 const viewMode = ref<'tree' | 'flat'>('tree');
-const collapsedPaths = ref<Set<string>>(new Set());
+const expandedPaths = ref<Set<string>>(new Set());
 
 // Modals
 const showCreateDataset = ref(false);
@@ -239,7 +239,7 @@ const hierarchyTree = computed<DatasetNode[]>(() => {
 function flattenTree(nodes: DatasetNode[], result: DatasetNode[] = []): DatasetNode[] {
   for (const node of nodes) {
     result.push(node);
-    if (!collapsedPaths.value.has(node.id) && node.children.length > 0) {
+    if (expandedPaths.value.has(node.id) && node.children.length > 0) {
       flattenTree(node.children, result);
     }
   }
@@ -319,11 +319,29 @@ const sortedNodes = computed<DatasetNode[]>(() => {
 });
 
 function toggleCollapse(nodeId: string) {
-  if (collapsedPaths.value.has(nodeId)) {
-    collapsedPaths.value.delete(nodeId);
+  if (expandedPaths.value.has(nodeId)) {
+    expandedPaths.value.delete(nodeId);
   } else {
-    collapsedPaths.value.add(nodeId);
+    expandedPaths.value.add(nodeId);
   }
+}
+
+function expandAll() {
+  const set = new Set<string>();
+  const collect = (nodes: DatasetNode[]) => {
+    for (const n of nodes) {
+      if (n.children.length > 0) {
+        set.add(n.id);
+        collect(n.children);
+      }
+    }
+  };
+  collect(hierarchyTree.value);
+  expandedPaths.value = set;
+}
+
+function collapseAll() {
+  expandedPaths.value.clear();
 }
 
 // Open Create Dataset Dialog
@@ -496,6 +514,26 @@ onMounted(async () => {
             </button>
           </div>
 
+          <!-- Tree Expand / Collapse All Controls -->
+          <div v-if="viewMode === 'tree' && !searchQuery" class="tree-expand-controls">
+            <button
+              class="btn btn-sm btn-icon"
+              title="Expand All"
+              aria-label="Expand All"
+              @click="expandAll"
+            >
+              <MdiIcon :path="mdiChevronDown" size="16" />
+            </button>
+            <button
+              class="btn btn-sm btn-icon"
+              title="Collapse All"
+              aria-label="Collapse All"
+              @click="collapseAll"
+            >
+              <MdiIcon :path="mdiChevronRight" size="16" />
+            </button>
+          </div>
+
           <!-- Search Input -->
           <div class="search-input-wrap">
             <MdiIcon :path="mdiMagnify" size="16" class="search-icon" />
@@ -579,10 +617,12 @@ onMounted(async () => {
                   <button
                     v-if="viewMode === 'tree' && !searchQuery && node.children.length > 0"
                     class="chevron-btn"
+                    :title="expandedPaths.has(node.id) ? 'Collapse' : 'Expand'"
+                    :aria-label="expandedPaths.has(node.id) ? 'Collapse' : 'Expand'"
                     @click="toggleCollapse(node.id)"
                   >
                     <MdiIcon
-                      :path="collapsedPaths.has(node.id) ? mdiChevronRight : mdiChevronDown"
+                      :path="expandedPaths.has(node.id) ? mdiChevronDown : mdiChevronRight"
                       size="16"
                     />
                   </button>
@@ -956,6 +996,11 @@ onMounted(async () => {
 .toggle-btn.active {
   background: var(--accent-primary);
   color: #000;
+}
+
+.tree-expand-controls {
+  display: inline-flex;
+  gap: 4px;
 }
 
 .tree-cell {

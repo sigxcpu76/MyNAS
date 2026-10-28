@@ -90,4 +90,45 @@ describe('WebDAV Shares & Port Isolation', () => {
     expect(wrapper.text()).toContain('Dedicated WebDAV Port 8081 Mount URL');
     expect(wrapper.text()).toContain('Map Network Drive');
   });
+
+  it('renders SortableTh for all WebDAV table columns', async () => {
+    nasState.webdavShares = [
+      {
+        name: 'webdavShares/media',
+        shareName: 'media',
+        path: '/mnt/tank/media',
+        urlPrefix: '/dav/media',
+        description: 'Media Store',
+        readOnly: false,
+        allowedUsers: ['alice'],
+        allowedGroups: [],
+        enabled: true,
+      },
+    ];
+
+    const wrapper = mount(SharesView, {
+      props: { activeSubtab: 'webdav' },
+      global: {
+        stubs: {
+          MdiIcon: true,
+          PathSelector: true,
+          UserGroupSelector: true,
+          SortableTh: {
+            props: ['sort', 'sortKey'],
+            template: '<th class="sortable-th" :data-key="sortKey"><slot /></th>',
+          },
+        },
+      },
+    });
+
+    await nextTick();
+
+    const sortThs = wrapper.findAll('th.sortable-th');
+    const sortKeys = sortThs.map((th) => th.attributes('data-key'));
+    expect(sortKeys).toContain('endpoint');
+    expect(sortKeys).toContain('path');
+    expect(sortKeys).toContain('identity');
+    expect(sortKeys).toContain('access');
+    expect(sortKeys).toContain('status');
+  });
 });

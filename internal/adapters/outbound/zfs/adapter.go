@@ -323,6 +323,23 @@ func (a *Adapter) CreatePool(ctx context.Context, pool domain.ZfsPool) (*domain.
 		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
 	}
 
+	// Ensure no zvol (/dev/zd*) devices are ever passed to zpool create
+	for _, dev := range pool.Devices {
+		if domain.IsZvolDevice(dev) {
+			return nil, fmt.Errorf("refusing to use zvol device %q for zfs pool", dev)
+		}
+	}
+	for _, v := range pool.Vdevs {
+		if domain.IsZvolDevice(v.Path) {
+			return nil, fmt.Errorf("refusing to use zvol device %q for zfs pool", v.Path)
+		}
+		for _, c := range v.Children {
+			if domain.IsZvolDevice(c.Path) || domain.IsZvolDevice(c.Name) {
+				return nil, fmt.Errorf("refusing to use zvol device for zfs pool")
+			}
+		}
+	}
+
 	if pool.Mountpoint == "" {
 		pool.Mountpoint = fmt.Sprintf("/mnt/%s", pool.ID)
 	}
@@ -421,6 +438,50 @@ func (a *Adapter) ExportPool(ctx context.Context, id string, force bool) error {
 	return nil
 }
 
+func (a *Adapter) ImportPool(ctx context.Context, poolName string, force bool, altroot string) (*domain.ZfsPool, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	cleanID := strings.TrimPrefix(strings.TrimSpace(poolName), "zfsPools/")
+	if cleanID == "" {
+		return nil, fmt.Errorf("pool name cannot be empty")
+	}
+	if domain.IsZvolDevice(cleanID) {
+		return nil, fmt.Errorf("refusing to import zvol device %q as a zfs pool", cleanID)
+	}
+	if !a.canUseHostZfs() {
+		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
+	}
+	a.invalidateSnapshotCache()
+
+	args := []string{"import"}
+	if force {
+		args = append(args, "-f")
+	}
+	targetAltroot := strings.TrimSpace(altroot)
+	if targetAltroot == "" {
+		targetAltroot = "/mnt"
+	}
+	_ = os.MkdirAll(targetAltroot, 0755)
+	args = append(args, "-R", targetAltroot)
+
+	// Instruct zpool to only scan physical disk paths and ignore /dev/zd* zvols
+	if _, err := os.Stat("/dev/disk/by-id"); err == nil {
+		args = append(args, "-d", "/dev/disk/by-id")
+	}
+	if _, err := os.Stat("/dev/disk/by-path"); err == nil {
+		args = append(args, "-d", "/dev/disk/by-path")
+	}
+
+	args = append(args, cleanID)
+
+	out, err := exec.CommandContext(ctx, "zpool", args...).CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("zpool import failed: %v (%s)", err, strings.TrimSpace(string(out)))
+	}
+
+	return a.GetPool(ctx, cleanID)
+}
+
 func (a *Adapter) DeletePool(ctx context.Context, id string, force bool) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -479,6 +540,12 @@ func (a *Adapter) AddVdev(ctx context.Context, poolID string, req domain.ZfsAddV
 	cleanID := strings.TrimPrefix(poolID, "zfsPools/")
 	if !a.canUseHostZfs() {
 		return nil, fmt.Errorf("zfs tools (zpool/zfs) are not available on this host")
+	}
+
+	for _, dev := range req.Devices {
+		if domain.IsZvolDevice(dev) {
+			return nil, fmt.Errorf("refusing to use zvol device %q for zfs pool", dev)
+		}
 	}
 	args := []string{"add"}
 	vType := strings.ToLower(req.Type)

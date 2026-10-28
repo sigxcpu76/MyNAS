@@ -61,10 +61,12 @@ func NewAdapterWithStateDir(stateDir string) *Adapter {
 		nextPort:  5903,
 	}
 
-	go func() {
-		_ = EnsureHostPermissions()
-		_ = EnsureHostBridging()
-	}()
+	if os.Geteuid() == 0 {
+		go func() {
+			_ = EnsureHostPermissions()
+			_ = EnsureHostBridging()
+		}()
+	}
 
 	return a
 }
@@ -72,6 +74,10 @@ func NewAdapterWithStateDir(stateDir string) *Adapter {
 // EnsureHostPermissions ensures the libvirt/qemu user has group access to block devices (disk/kvm)
 // and that AppArmor profiles allow access to ZFS zvols (/dev/zvol/**, /dev/zd*) and NAS storage (/mnt/**, /nas/**).
 func EnsureHostPermissions() error {
+	if os.Geteuid() != 0 {
+		return nil
+	}
+
 	// 1. Add libvirt-qemu / qemu user to disk and kvm groups
 	for _, user := range []string{"libvirt-qemu", "qemu"} {
 		if _, err := exec.Command("id", user).Output(); err == nil {
@@ -221,6 +227,9 @@ type domainXML struct {
 		Loader struct {
 			Value string `xml:",chardata"`
 		} `xml:"loader"`
+		Boot []struct {
+			Dev string `xml:"dev,attr"`
+		} `xml:"boot"`
 	} `xml:"os"`
 	Devices struct {
 		Disks []struct {
@@ -421,8 +430,12 @@ func (a *Adapter) sanitizeAndEnsureDisks(vm *domain.VirtualMachine) bool {
 }
 
 func (a *Adapter) getDomainFromVirsh(ctx context.Context, name string) (*domain.VirtualMachine, error) {
-	cmd := exec.CommandContext(ctx, "virsh", "dumpxml", name)
+	cmd := exec.CommandContext(ctx, "virsh", "dumpxml", "--inactive", name)
 	xmlBytes, err := cmd.CombinedOutput()
+	if err != nil {
+		cmd = exec.CommandContext(ctx, "virsh", "dumpxml", name)
+		xmlBytes, err = cmd.CombinedOutput()
+	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: domain %q: %s", domain.ErrNotFound, name, strings.TrimSpace(string(xmlBytes)))
 	}
@@ -467,6 +480,16 @@ func (a *Adapter) getDomainFromVirsh(ctx context.Context, name string) (*domain.
 		vm.BiosType = "ovmf"
 	} else {
 		vm.BiosType = "seabios"
+	}
+
+	var parsedBootDevs []string
+	for _, b := range doc.OS.Boot {
+		if b.Dev != "" {
+			parsedBootDevs = append(parsedBootDevs, b.Dev)
+		}
+	}
+	if len(parsedBootDevs) > 0 {
+		vm.BootOrder = strings.Join(parsedBootDevs, ",")
 	}
 
 	for _, d := range doc.Devices.Disks {
@@ -796,9 +819,15 @@ func (a *Adapter) UpdateVM(ctx context.Context, vm domain.VirtualMachine, fields
 	if vm.DisplayType != "" {
 		existing.DisplayType = vm.DisplayType
 	}
+	if vm.BootOrder != "" {
+		existing.BootOrder = vm.BootOrder
+	}
 	hasDisksPath := false
 	hasNicsPath := false
 	for _, p := range fields {
+		if p == "boot_order" || p == "bootOrder" {
+			existing.BootOrder = vm.BootOrder
+		}
 		if p == "disks" {
 			hasDisksPath = true
 		}
@@ -842,6 +871,12 @@ func (a *Adapter) UpdateVM(ctx context.Context, vm domain.VirtualMachine, fields
 			a.logError("define", vm.ID, err, out)
 			return nil, fmt.Errorf("failed to update VM definition in libvirt: %s: %w", strings.TrimSpace(string(out)), err)
 		}
+
+		// Dynamically update boot order in the live QEMU instance so it takes effect on the next soft/guest reboot without cold shutdown
+		if existing.BootOrder != "" {
+			hmpOrder := bootOrderToHMP(existing.BootOrder)
+			_ = exec.CommandContext(ctx, "virsh", "qemu-monitor-command", vm.ID, "--hmp", fmt.Sprintf("boot_set %s", hmpOrder)).Run()
+		}
 	}
 
 	a.mu.Lock()
@@ -870,6 +905,7 @@ func (a *Adapter) DeleteVM(ctx context.Context, id string) error {
 
 func (a *Adapter) StartVM(ctx context.Context, id string) (*domain.VirtualMachine, error) {
 	if a.isRealDomain(ctx, id) {
+		go func() { _ = EnsureHostBridging() }()
 		out, err := exec.CommandContext(ctx, "virsh", "start", id).CombinedOutput()
 		if err != nil {
 			// Auto-heal if start failed (CPU mode unsupported, non-existent disk zvol bind error, macvtap unprivileged error, etc.)
@@ -939,6 +975,12 @@ func (a *Adapter) StopVM(ctx context.Context, id string, force bool) (*domain.Vi
 
 func (a *Adapter) RebootVM(ctx context.Context, id string, force bool) (*domain.VirtualMachine, error) {
 	if a.isRealDomain(ctx, id) {
+		// Ensure live QEMU instance has the latest defined boot order prior to reset/reboot
+		if vm, err := a.getDomainFromVirsh(ctx, id); err == nil && vm.BootOrder != "" {
+			hmpOrder := bootOrderToHMP(vm.BootOrder)
+			_ = exec.CommandContext(ctx, "virsh", "qemu-monitor-command", id, "--hmp", fmt.Sprintf("boot_set %s", hmpOrder)).Run()
+		}
+
 		verb := "reboot"
 		if force {
 			verb = "reset"
@@ -1440,10 +1482,15 @@ func EnsureHostBridging() error {
 		return nil
 	}
 
-	// 1. Enable IPv4 packet forwarding
+	// 1. Load kernel modules for bridge netfilter
+	_ = exec.Command("modprobe", "br_netfilter").Run()
+	_ = exec.Command("modprobe", "xt_physdev").Run()
+	_ = os.WriteFile("/etc/modules-load.d/br_netfilter.conf", []byte("br_netfilter\nxt_physdev\n"), 0644)
+
+	// 2. Enable IPv4 packet forwarding
 	_ = exec.Command("sysctl", "-w", "net.ipv4.ip_forward=1").Run()
 
-	// 2. Disable netfilter interception for bridged packets so Docker's FORWARD DROP policy does not block VM bridge traffic
+	// 3. Disable netfilter interception for bridged packets so Docker's FORWARD DROP policy does not block VM bridge traffic
 	_ = exec.Command("sysctl", "-w", "net.bridge.bridge-nf-call-iptables=0").Run()
 	_ = exec.Command("sysctl", "-w", "net.bridge.bridge-nf-call-ip6tables=0").Run()
 	_ = exec.Command("sysctl", "-w", "net.bridge.bridge-nf-call-arptables=0").Run()
@@ -1462,9 +1509,16 @@ net.bridge.bridge-nf-call-arptables = 0
 	_ = os.Remove("/etc/systemd/system/mynas-ebtables.service")
 	_ = os.Remove("/etc/mynas-ebtables.rules")
 
-	// 3. For standard bridges (br0, vmbr0, virbr0), ensure iptables FORWARD and DOCKER-USER allow bridged traffic
+	// 4. For standard bridges (br0, vmbr0, virbr0), ensure iptables FORWARD and DOCKER-USER allow bridged traffic and DHCP
 	bridges := []string{"br0", "vmbr0", "virbr0"}
 	if iptables, err := exec.LookPath("iptables"); err == nil {
+		// Allow DHCP broadcast and responses in FORWARD and DOCKER-USER
+		for _, chain := range []string{"FORWARD", "DOCKER-USER"} {
+			if exec.Command(iptables, "-C", chain, "-p", "udp", "--dport", "67:68", "--sport", "67:68", "-j", "ACCEPT").Run() != nil {
+				_ = exec.Command(iptables, "-I", chain, "-p", "udp", "--dport", "67:68", "--sport", "67:68", "-j", "ACCEPT").Run()
+			}
+		}
+
 		// If physdev module is loaded, also allow all bridged packets explicitly
 		if exec.Command(iptables, "-C", "FORWARD", "-m", "physdev", "--physdev-is-bridged", "-j", "ACCEPT").Run() != nil {
 			_ = exec.Command(iptables, "-I", "FORWARD", "-m", "physdev", "--physdev-is-bridged", "-j", "ACCEPT").Run()
@@ -1474,13 +1528,14 @@ net.bridge.bridge-nf-call-arptables = 0
 			if !isLinuxBridge(b) {
 				continue
 			}
-			// Allow intra-bridge forwarding in FORWARD
-			if exec.Command(iptables, "-C", "FORWARD", "-i", b, "-o", b, "-j", "ACCEPT").Run() != nil {
-				_ = exec.Command(iptables, "-I", "FORWARD", "-i", b, "-o", b, "-j", "ACCEPT").Run()
-			}
-			// Allow intra-bridge forwarding in DOCKER-USER (if chain exists)
-			if exec.Command(iptables, "-C", "DOCKER-USER", "-i", b, "-o", b, "-j", "ACCEPT").Run() != nil {
-				_ = exec.Command(iptables, "-I", "DOCKER-USER", "-i", b, "-o", b, "-j", "ACCEPT").Run()
+			for _, chain := range []string{"FORWARD", "DOCKER-USER"} {
+				// Allow bidirectional traffic on bridge interface
+				if exec.Command(iptables, "-C", chain, "-i", b, "-j", "ACCEPT").Run() != nil {
+					_ = exec.Command(iptables, "-I", chain, "-i", b, "-j", "ACCEPT").Run()
+				}
+				if exec.Command(iptables, "-C", chain, "-o", b, "-j", "ACCEPT").Run() != nil {
+					_ = exec.Command(iptables, "-I", chain, "-o", b, "-j", "ACCEPT").Run()
+				}
 			}
 		}
 	}
@@ -1517,9 +1572,152 @@ func getDefaultRouteInterface() string {
 	return ""
 }
 
+// StartEventWatcher launches a long-lived background listener attached to libvirt's
+// asynchronous event socket via 'virsh event --all --loop', streaming domain lifecycle,
+// reboot, agent, and device events directly into onEvent.
+func (a *Adapter) StartEventWatcher(ctx context.Context, onEvent func(domain.Event)) {
+	if !a.hasVirsh() {
+		return
+	}
+	go a.watchLibvirtEvents(ctx, onEvent)
+}
+
+func (a *Adapter) watchLibvirtEvents(ctx context.Context, onEvent func(domain.Event)) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		cmd := exec.CommandContext(ctx, "virsh", "event", "--all", "--loop")
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
+				continue
+			}
+		}
+
+		if err := cmd.Start(); err != nil {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
+				continue
+			}
+		}
+
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() {
+			if evt := parseVirshEventLine(scanner.Text()); evt != nil {
+				onEvent(*evt)
+			}
+		}
+
+		_ = cmd.Wait()
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(1 * time.Second):
+		}
+	}
+}
+
+func parseVirshEventLine(line string) *domain.Event {
+	line = strings.TrimSpace(line)
+	if !strings.HasPrefix(line, "event '") {
+		return nil
+	}
+	rest := strings.TrimPrefix(line, "event '")
+	parts := strings.SplitN(rest, "' for domain ", 2)
+	if len(parts) != 2 {
+		return nil
+	}
+	eventType := strings.TrimSpace(parts[0])
+	domAndDetails := strings.SplitN(parts[1], ":", 2)
+	domName := strings.TrimSpace(domAndDetails[0])
+	details := ""
+	if len(domAndDetails) == 2 {
+		details = strings.TrimSpace(domAndDetails[1])
+	}
+	evt := domain.NewEvent("kvm", eventType, fmt.Sprintf("virtualMachines/%s", domName), details)
+	return &evt
+}
+
 // ForcedDomainType specifies that KVM hardware acceleration is strictly enforced;
 // software emulation (qemu TCG) is disallowed.
 const ForcedDomainType = "kvm"
+
+func parseBootOrder(bootOrder string, hasCdrom bool) []string {
+	if bootOrder == "" {
+		if hasCdrom {
+			return []string{"hd", "cdrom"}
+		}
+		return []string{"hd"}
+	}
+	str := strings.TrimPrefix(bootOrder, "order=")
+	tokens := strings.FieldsFunc(str, func(r rune) bool {
+		return r == ',' || r == ';' || r == ' '
+	})
+	var result []string
+	seen := make(map[string]bool)
+	for _, t := range tokens {
+		t = strings.ToLower(strings.TrimSpace(t))
+		var dev string
+		switch {
+		case t == "hd" || strings.HasPrefix(t, "scsi") || strings.HasPrefix(t, "virtio") || strings.HasPrefix(t, "sata") || strings.HasPrefix(t, "nvme") || strings.HasPrefix(t, "disk"):
+			dev = "hd"
+		case t == "cdrom" || strings.HasPrefix(t, "ide") || t == "iso":
+			dev = "cdrom"
+		case t == "network" || t == "net" || strings.HasPrefix(t, "net"):
+			dev = "network"
+		case t == "fd" || strings.HasPrefix(t, "fd"):
+			dev = "fd"
+		}
+		if dev != "" && !seen[dev] {
+			seen[dev] = true
+			result = append(result, dev)
+		}
+	}
+	if len(result) == 0 {
+		if hasCdrom {
+			return []string{"hd", "cdrom"}
+		}
+		return []string{"hd"}
+	}
+	return result
+}
+
+// bootOrderToHMP translates domain BootOrder into QEMU HMP 'boot_set' device string.
+// QEMU boot devices: 'c' = Hard Disk, 'd' = CD-ROM, 'n' = Network, 'a' = Floppy.
+func bootOrderToHMP(bootOrder string) string {
+	devs := parseBootOrder(bootOrder, true)
+	if len(devs) == 0 {
+		return "cd"
+	}
+	var b strings.Builder
+	for _, dev := range devs {
+		switch dev {
+		case "hd":
+			b.WriteByte('c')
+		case "cdrom":
+			b.WriteByte('d')
+		case "network":
+			b.WriteByte('n')
+		case "fd":
+			b.WriteByte('a')
+		}
+	}
+	res := b.String()
+	if res == "" {
+		return "cd"
+	}
+	return res
+}
 
 func buildDomainXML(vm domain.VirtualMachine) string {
 	var sb strings.Builder
@@ -1583,13 +1781,9 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 	sb.WriteString(">\n")
 	sb.WriteString(fmt.Sprintf(`    <type arch='x86_64' machine='%s'>hvm</type>
 `, mach))
-	if vm.CdromIsoImage != "" {
-		sb.WriteString(`    <boot dev='cdrom'/>
-    <boot dev='hd'/>
-`)
-	} else {
-		sb.WriteString(`    <boot dev='hd'/>
-`)
+	bootDevs := parseBootOrder(vm.BootOrder, vm.CdromIsoImage != "")
+	for _, dev := range bootDevs {
+		sb.WriteString(fmt.Sprintf("    <boot dev='%s'/>\n", dev))
 	}
 	sb.WriteString(`  </os>
   <features>

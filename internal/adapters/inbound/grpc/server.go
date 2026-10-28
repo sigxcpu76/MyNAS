@@ -484,6 +484,17 @@ func (s *Server) ExportZfsPool(ctx context.Context, req *nasv1.ExportZfsPoolRequ
 	return &emptypb.Empty{}, nil
 }
 
+func (s *Server) ImportZfsPool(ctx context.Context, req *nasv1.ImportZfsPoolRequest) (*nasv1.ZfsPool, error) {
+	if err := s.prereq.RequireModule("zfs"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	pool, err := s.zfs.ImportPool(ctx, req.GetPoolName(), req.GetForce(), req.GetAltroot())
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoZfsPool(*pool), nil
+}
+
 func (s *Server) ScrubZfsPool(ctx context.Context, req *nasv1.ScrubZfsPoolRequest) (*nasv1.ZfsPool, error) {
 	if err := s.prereq.RequireModule("zfs"); err != nil {
 		return nil, ToGRPCError(err)

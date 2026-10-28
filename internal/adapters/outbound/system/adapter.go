@@ -126,10 +126,18 @@ func (a *Adapter) SelectMainPool(ctx context.Context, poolName string, autoImpor
 		return nil, fmt.Errorf("%w: pool name cannot be empty", domain.ErrInvalidArgument)
 	}
 
-	// Verify pool exists in ZFS
+	// Verify pool exists in ZFS (attempt import if autoImportExisting or not yet imported)
 	p, err := a.zfsPort.GetPool(ctx, cleanPool)
 	if err != nil {
-		return nil, fmt.Errorf("%w: pool %q does not exist or is not imported", domain.ErrNotFound, cleanPool)
+		if autoImportExisting {
+			if impPool, impErr := a.zfsPort.ImportPool(ctx, cleanPool, true, "/mnt"); impErr == nil {
+				p = impPool
+				err = nil
+			}
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%w: pool %q does not exist or is not imported: %v", domain.ErrNotFound, cleanPool, err)
+		}
 	}
 
 	cfg := config.GetGlobal()
@@ -296,28 +304,73 @@ func (a *Adapter) DiscoverPools(ctx context.Context) ([]domain.DiscoveredPool, e
 	return results, nil
 }
 
+func parseUnimportedPools(out string) []string {
+	var pools []string
+	rawPools := strings.Split("\n"+out, "\n  pool: ")
+	if len(rawPools) <= 1 {
+		rawPools = strings.Split("\n"+out, "\npool: ")
+	}
+
+	for _, sec := range rawPools {
+		sec = strings.TrimSpace(sec)
+		if sec == "" {
+			continue
+		}
+		lines := strings.Split(sec, "\n")
+		firstLine := strings.TrimSpace(lines[0])
+		firstLine = strings.TrimPrefix(firstLine, "pool:")
+		poolName := strings.TrimSpace(firstLine)
+		if poolName == "" {
+			continue
+		}
+
+		inConfig := false
+		hasZvol := false
+		for _, line := range lines[1:] {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "config:" {
+				inConfig = true
+				continue
+			}
+			if inConfig && trimmed != "" {
+				fields := strings.Fields(trimmed)
+				if len(fields) > 0 {
+					dev := fields[0]
+					if domain.IsZvolDevice(dev) {
+						hasZvol = true
+						break
+					}
+				}
+			}
+		}
+
+		if !hasZvol {
+			pools = append(pools, poolName)
+		}
+	}
+	return pools
+}
+
 func listUnimportedHostPools(ctx context.Context) ([]string, error) {
-	tctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	tctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(tctx, "zpool", "import")
+	args := []string{"import"}
+	// Instruct zpool to search real physical disk paths and ignore /dev/zd* zvols
+	if _, err := os.Stat("/dev/disk/by-id"); err == nil {
+		args = append(args, "-d", "/dev/disk/by-id")
+	}
+	if _, err := os.Stat("/dev/disk/by-path"); err == nil {
+		args = append(args, "-d", "/dev/disk/by-path")
+	}
+
+	cmd := exec.CommandContext(tctx, "zpool", args...)
 	out, err := cmd.CombinedOutput()
-	if err != nil {
+	if err != nil && len(out) == 0 {
 		return nil, err
 	}
 
-	var pools []string
-	lines := strings.Split(string(out), "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "pool:") {
-			parts := strings.Fields(line)
-			if len(parts) >= 2 {
-				pools = append(pools, parts[1])
-			}
-		}
-	}
-	return pools, nil
+	return parseUnimportedPools(string(out)), nil
 }
 
 func (a *Adapter) GetTelemetry(ctx context.Context) (*domain.SystemTelemetry, error) {

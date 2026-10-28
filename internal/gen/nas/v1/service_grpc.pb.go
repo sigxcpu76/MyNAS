@@ -37,6 +37,7 @@ const (
 	NasService_CreateZfsPool_FullMethodName                  = "/nas.v1.NasService/CreateZfsPool"
 	NasService_DeleteZfsPool_FullMethodName                  = "/nas.v1.NasService/DeleteZfsPool"
 	NasService_ExportZfsPool_FullMethodName                  = "/nas.v1.NasService/ExportZfsPool"
+	NasService_ImportZfsPool_FullMethodName                  = "/nas.v1.NasService/ImportZfsPool"
 	NasService_ScrubZfsPool_FullMethodName                   = "/nas.v1.NasService/ScrubZfsPool"
 	NasService_UpdateZfsPool_FullMethodName                  = "/nas.v1.NasService/UpdateZfsPool"
 	NasService_AddZfsPoolVdev_FullMethodName                 = "/nas.v1.NasService/AddZfsPoolVdev"
@@ -160,6 +161,7 @@ type NasServiceClient interface {
 	CreateZfsPool(ctx context.Context, in *CreateZfsPoolRequest, opts ...grpc.CallOption) (*ZfsPool, error)
 	DeleteZfsPool(ctx context.Context, in *DeleteZfsPoolRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	ExportZfsPool(ctx context.Context, in *ExportZfsPoolRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ImportZfsPool(ctx context.Context, in *ImportZfsPoolRequest, opts ...grpc.CallOption) (*ZfsPool, error)
 	ScrubZfsPool(ctx context.Context, in *ScrubZfsPoolRequest, opts ...grpc.CallOption) (*ZfsPool, error)
 	UpdateZfsPool(ctx context.Context, in *UpdateZfsPoolRequest, opts ...grpc.CallOption) (*ZfsPool, error)
 	AddZfsPoolVdev(ctx context.Context, in *AddZfsPoolVdevRequest, opts ...grpc.CallOption) (*ZfsPool, error)
@@ -428,6 +430,16 @@ func (c *nasServiceClient) ExportZfsPool(ctx context.Context, in *ExportZfsPoolR
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, NasService_ExportZfsPool_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) ImportZfsPool(ctx context.Context, in *ImportZfsPoolRequest, opts ...grpc.CallOption) (*ZfsPool, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ZfsPool)
+	err := c.cc.Invoke(ctx, NasService_ImportZfsPool_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1401,6 +1413,7 @@ type NasServiceServer interface {
 	CreateZfsPool(context.Context, *CreateZfsPoolRequest) (*ZfsPool, error)
 	DeleteZfsPool(context.Context, *DeleteZfsPoolRequest) (*emptypb.Empty, error)
 	ExportZfsPool(context.Context, *ExportZfsPoolRequest) (*emptypb.Empty, error)
+	ImportZfsPool(context.Context, *ImportZfsPoolRequest) (*ZfsPool, error)
 	ScrubZfsPool(context.Context, *ScrubZfsPoolRequest) (*ZfsPool, error)
 	UpdateZfsPool(context.Context, *UpdateZfsPoolRequest) (*ZfsPool, error)
 	AddZfsPoolVdev(context.Context, *AddZfsPoolVdevRequest) (*ZfsPool, error)
@@ -1555,6 +1568,9 @@ func (UnimplementedNasServiceServer) DeleteZfsPool(context.Context, *DeleteZfsPo
 }
 func (UnimplementedNasServiceServer) ExportZfsPool(context.Context, *ExportZfsPoolRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method ExportZfsPool not implemented")
+}
+func (UnimplementedNasServiceServer) ImportZfsPool(context.Context, *ImportZfsPoolRequest) (*ZfsPool, error) {
+	return nil, status.Error(codes.Unimplemented, "method ImportZfsPool not implemented")
 }
 func (UnimplementedNasServiceServer) ScrubZfsPool(context.Context, *ScrubZfsPoolRequest) (*ZfsPool, error) {
 	return nil, status.Error(codes.Unimplemented, "method ScrubZfsPool not implemented")
@@ -2161,6 +2177,24 @@ func _NasService_ExportZfsPool_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NasServiceServer).ExportZfsPool(ctx, req.(*ExportZfsPoolRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_ImportZfsPool_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ImportZfsPoolRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).ImportZfsPool(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_ImportZfsPool_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).ImportZfsPool(ctx, req.(*ImportZfsPoolRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -3931,6 +3965,10 @@ var NasService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ExportZfsPool",
 			Handler:    _NasService_ExportZfsPool_Handler,
+		},
+		{
+			MethodName: "ImportZfsPool",
+			Handler:    _NasService_ImportZfsPool_Handler,
 		},
 		{
 			MethodName: "ScrubZfsPool",

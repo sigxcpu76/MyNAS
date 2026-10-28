@@ -152,6 +152,38 @@ export function getGroupDescription(name: string): string {
   }
 }
 
+export function isWebPortalVariable(variable: string, label: string): boolean {
+  const vLower = variable.toLowerCase();
+  const lLower = label.toLowerCase();
+
+  const nonWebPatterns = [
+    'bt_port', 'torrent', 'peer', 'dns', 'dhcp', 'metrics',
+    'prometheus', 'exporter', 'sync', 'cluster', 'member',
+    'wireguard', 'vpn', 'tunnel', 'rtp', 'sip', 'tftp',
+  ];
+  for (const p of nonWebPatterns) {
+    if (vLower.includes(p) || lLower.includes(p)) {
+      return false;
+    }
+  }
+
+  const webPatterns = [
+    'web_port', 'webui', 'web_ui', 'portal', 'http', 'https',
+    'admin', 'dashboard', 'gui', 'ui_port', 'frontend',
+  ];
+  for (const p of webPatterns) {
+    if (vLower.includes(p) || lLower.includes(p)) {
+      return true;
+    }
+  }
+
+  if (lLower.includes('web ui') || lLower.includes('web portal') || lLower.includes('web interface')) {
+    return true;
+  }
+
+  return false;
+}
+
 /**
  * Generates a clean Docker Compose YAML descriptor from answered TrueNAS SCALE questions.
  */
@@ -181,14 +213,17 @@ export function generateComposeFromQuestions(
     if (q.type === 'int' && (vLower.includes('port') || vLower.includes('web_port'))) {
       const p = parseInt(val, 10);
       if (!isNaN(p) && p > 0) {
-        const containerPort = app.defaultPort && app.defaultPort > 0 ? app.defaultPort : p;
+        const isPortal = isWebPortalVariable(q.variable, q.label || '');
+        const containerPort = isPortal && app.defaultPort && app.defaultPort > 0 && app.defaultPort !== p ? app.defaultPort : p;
         ports.push(`"${p}:${containerPort}"`);
-        portals.push({
-          name: q.label || 'Web UI',
-          port: p,
-          scheme: 'http',
-          path: '/',
-        });
+        if (isPortal) {
+          portals.push({
+            name: q.label || 'Web UI',
+            port: p,
+            scheme: 'http',
+            path: '/',
+          });
+        }
       }
     }
 

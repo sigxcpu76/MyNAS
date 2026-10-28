@@ -619,12 +619,17 @@ func (a *CifsAdapter) syncAvahiDiscovery() {
 	buf.WriteString("</service-group>\n")
 	_ = os.WriteFile(filepath.Join(avahiDir, "smb.service"), buf.Bytes(), 0o644)
 
-	if _, err := exec.LookPath("systemctl"); err == nil {
-		_ = exec.Command("systemctl", "try-reload-or-restart", "avahi-daemon").Run()
+	if os.Geteuid() == 0 {
+		if _, err := exec.LookPath("systemctl"); err == nil {
+			_ = exec.Command("systemctl", "try-reload-or-restart", "avahi-daemon").Run()
+		}
 	}
 }
 
 func (a *CifsAdapter) syncWSDD() {
+	if os.Geteuid() != 0 {
+		return
+	}
 	if _, err := exec.LookPath("systemctl"); err != nil {
 		return
 	}
