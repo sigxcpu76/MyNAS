@@ -58,6 +58,82 @@ function ipv4ToNumber(ip: string | undefined): number | null {
 // =============================================================================
 const activeMainTab = ref<'containers' | 'catalog' | 'templates'>('containers');
 
+function switchTab(tab: 'containers' | 'catalog' | 'templates') {
+  activeMainTab.value = tab;
+  if (tab === 'catalog' && catalogItems.value.length === 0 && !isLoadingCatalog.value) {
+    loadCatalog();
+  }
+}
+
+// Main storage pool and templates directory
+const mainPool = computed(() => nasState.selectedPoolName || nasState.systemConfig?.mainPool || (nasState.pools?.[0]?.poolName || 'tank'));
+const lxcTemplatesDir = computed(() => `/mnt/${mainPool.value}/lxc-templates`);
+
+interface BridgeOption {
+  name: string;
+  label: string;
+}
+
+const defaultBridge = computed<string>(() => {
+  const net = nasState.systemTelemetry?.network;
+  if (!net || !Array.isArray(net)) return 'br0';
+  const br = net.find((n: any) => n.name === 'br0' || n.name === 'vmbr0');
+  if (br) return br.name;
+  const def = net.find((n: any) => n.isDefault);
+  if (def) return def.name;
+  const firstEth = net.find(
+    (n: any) =>
+      !n.name.startsWith('lo') &&
+      !n.name.startsWith('docker') &&
+      !n.name.startsWith('br-') &&
+      !n.name.startsWith('veth') &&
+      !n.name.startsWith('vnet') &&
+      !n.name.startsWith('tap') &&
+      !n.name.startsWith('lxc')
+  );
+  if (firstEth) return firstEth.name;
+  return 'br0';
+});
+
+const hostBridgeInterfaces = computed<BridgeOption[]>(() => {
+  const net = nasState.systemTelemetry?.network;
+  if (!net || !Array.isArray(net)) {
+    return [
+      { name: 'br0', label: 'br0 (main bridge)' },
+      { name: 'lxcbr0', label: 'lxcbr0' },
+    ];
+  }
+  const list = net
+    .filter(
+      (n: any) =>
+        !n.name.startsWith('lo') &&
+        !n.name.startsWith('docker') &&
+        !n.name.startsWith('br-') &&
+        !n.name.startsWith('veth') &&
+        !n.name.startsWith('vnet') &&
+        !n.name.startsWith('tap')
+    )
+    .map((n: any) => {
+      const ip = n.ipAddresses?.find((a: string) => !a.includes(':')) || n.ipAddresses?.[0];
+      const parts = [n.isUp ? 'up' : 'down'];
+      if (ip) parts.push(ip);
+      if (n.isDefault) parts.push('default route');
+      return { name: n.name, label: `${n.name} (${parts.join(', ')})` };
+    });
+  if (!list.some((b) => b.name === 'br0')) {
+    list.unshift({ name: 'br0', label: 'br0 (main bridge)' });
+  }
+  return list;
+});
+
+function bridgeOptionsFor(current: string): BridgeOption[] {
+  const opts = [...hostBridgeInterfaces.value];
+  if (current && !opts.some((o) => o.name === current)) {
+    opts.unshift({ name: current, label: `${current} (custom)` });
+  }
+  return opts;
+}
+
 const lxcSort = useTableSort(() => nasState.lxcContainers, {
   name: (lx) => lx.containerName,
   state: (lx) => lx.state,
@@ -154,7 +230,7 @@ const form = reactive({
   architecture: 'amd64',
   memoryLimitMib: 1024,
   cpuCores: 2,
-  networkBridge: 'lxcbr0',
+  networkBridge: defaultBridge.value || 'br0',
   unprivileged: true,
   autostart: true,
   gpuEnabled: false,
@@ -198,7 +274,7 @@ function toggleCreate() {
     form.architecture = 'amd64';
     form.memoryLimitMib = 1024;
     form.cpuCores = 2;
-    form.networkBridge = 'lxcbr0';
+    form.networkBridge = defaultBridge.value || 'br0';
     form.unprivileged = true;
     form.autostart = true;
     form.gpuEnabled = false;
@@ -218,7 +294,7 @@ function openDeployModal(item: LxcCatalogItem) {
   form.architecture = item.architecture || 'amd64';
   form.cpuCores = item.defaultCpuCores || 2;
   form.memoryLimitMib = item.defaultMemoryLimitMib || 1024;
-  form.networkBridge = 'lxcbr0';
+  form.networkBridge = defaultBridge.value || 'br0';
   form.unprivileged = !item.privilegedRequired;
   form.autostart = true;
   form.gpuEnabled = Boolean(item.gpuRecommended);
@@ -237,15 +313,22 @@ function openDeployModal(item: LxcCatalogItem) {
     }
   }
 
-  // Pre-fill recommended mount points
+  // Pre-fill archive filename in lxc-templates directory if downloadUrl is provided
+  if (!form.templateArchive && item.downloadUrl) {
+    const urlParts = item.downloadUrl.split('/');
+    const fname = urlParts[urlParts.length - 1]?.split('?')[0] || `${item.id}-rootfs.tar.xz`;
+    form.templateArchive = `${lxcTemplatesDir.value}/${fname}`;
+  }
+
+  // Pre-fill recommended mount points with the active main pool
   form.mountPoints = (item.recommendedMounts || []).map((cp) => ({
-    hostPath: `/mnt/tank${cp}`,
+    hostPath: `/mnt/${mainPool.value}${cp}`,
     containerPath: cp,
     readOnly: false,
   }));
 
   showCreate.value = true;
-  activeMainTab.value = 'containers';
+  switchTab('containers');
 }
 
 async function handleCreate() {
@@ -260,13 +343,15 @@ async function handleCreate() {
       architecture: form.architecture,
       memoryLimitMib: form.memoryLimitMib,
       cpuCores: form.cpuCores,
-      networkBridge: form.networkBridge.trim() || 'lxcbr0',
+      networkBridge: form.networkBridge.trim() || defaultBridge.value || 'br0',
       unprivileged: form.unprivileged,
       autostart: form.autostart,
       gpuEnabled: form.gpuEnabled,
       description: form.description.trim(),
       templateArchive: form.templateArchive.trim() || undefined,
       mountPoints: validMounts,
+      installRecipe: deployingCatalogItem.value?.installRecipe || undefined,
+      installScriptUrl: deployingCatalogItem.value?.installScriptUrl || undefined,
     });
 
     // Start container automatically upon deployment
@@ -377,7 +462,7 @@ const editForm = reactive({
   description: '',
   cpuCores: 2,
   memoryLimitMib: 1024,
-  networkBridge: 'lxcbr0',
+  networkBridge: defaultBridge.value || 'br0',
   autostart: true,
   unprivileged: true,
   gpuEnabled: false,
@@ -390,7 +475,7 @@ function openEditModal(lx: LxcContainer) {
   editForm.description = lx.description || '';
   editForm.cpuCores = lx.cpuCores || 2;
   editForm.memoryLimitMib = lx.memoryLimitMib || 1024;
-  editForm.networkBridge = lx.networkBridge || 'lxcbr0';
+  editForm.networkBridge = lx.networkBridge || defaultBridge.value || 'br0';
   editForm.autostart = Boolean(lx.autostart);
   editForm.unprivileged = Boolean(lx.unprivileged);
   editForm.gpuEnabled = Boolean(lx.gpuEnabled);
@@ -424,7 +509,7 @@ async function handleSaveEdit() {
       description: editForm.description.trim(),
       cpuCores: editForm.cpuCores,
       memoryLimitMib: editForm.memoryLimitMib,
-      networkBridge: editForm.networkBridge.trim() || 'lxcbr0',
+      networkBridge: editForm.networkBridge.trim() || defaultBridge.value || 'br0',
       autostart: editForm.autostart,
       unprivileged: editForm.unprivileged,
       gpuEnabled: editForm.gpuEnabled,
@@ -510,15 +595,28 @@ const terminalContainerOptions = computed<TerminalContainerOption[]>(() => {
 // =============================================================================
 // Polling & Lifecycle
 // =============================================================================
+const isRefreshingContainers = ref(false);
+
 async function refreshLxc() {
-  nasState.lxcContainers = await services.lxc.listContainers();
+  if (isRefreshingContainers.value) return;
+  isRefreshingContainers.value = true;
+  try {
+    nasState.lxcContainers = await services.lxc.listContainers();
+  } catch (err: any) {
+    console.error('Failed to list LXC containers:', err);
+  } finally {
+    isRefreshingContainers.value = false;
+  }
 }
 
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+let isViewActive = false;
+let isPolling = false;
+let pollTimer: ReturnType<typeof setTimeout> | null = null;
 
-onMounted(async () => {
-  await Promise.all([refreshLxc(), refreshTemplates(), loadCatalog()]);
-  pollTimer = setInterval(async () => {
+async function runContainerLoop() {
+  if (!isViewActive) return;
+  if (!document.hidden && activeMainTab.value === 'containers' && !isPolling) {
+    isPolling = true;
     try {
       nasState.lxcContainers = await services.lxc.listContainers();
       if (inspectedContainer.value) {
@@ -527,13 +625,26 @@ onMounted(async () => {
       }
     } catch {
       // background polling error ignored
+    } finally {
+      isPolling = false;
     }
-  }, 3000);
+  }
+  if (isViewActive) {
+    pollTimer = setTimeout(runContainerLoop, 5000);
+  }
+}
+
+onMounted(async () => {
+  isViewActive = true;
+  await refreshLxc();
+  refreshTemplates().catch(() => {});
+  runContainerLoop();
 });
 
 onUnmounted(() => {
+  isViewActive = false;
   if (pollTimer) {
-    clearInterval(pollTimer);
+    clearTimeout(pollTimer);
     pollTimer = null;
   }
 });
@@ -646,7 +757,7 @@ function copyTemplatePath(path: string) {
         class="btn btn-sm"
         :class="activeMainTab === 'containers' ? 'btn-primary' : 'btn-ghost'"
         style="padding: 5px 14px; font-weight: 600"
-        @click="activeMainTab = 'containers'"
+        @click="switchTab('containers')"
       >
         <MdiIcon :path="mdiServer" size="14" style="margin-right: 6px" />
         Containers ({{ nasState.lxcContainers.length }})
@@ -656,7 +767,7 @@ function copyTemplatePath(path: string) {
         class="btn btn-sm"
         :class="activeMainTab === 'catalog' ? 'btn-primary' : 'btn-ghost'"
         style="padding: 5px 14px; font-weight: 600"
-        @click="activeMainTab = 'catalog'"
+        @click="switchTab('catalog')"
       >
         <MdiIcon :path="mdiApps" size="14" style="margin-right: 6px" />
         App Catalog ({{ catalogItems?.length || 0 }})
@@ -666,7 +777,7 @@ function copyTemplatePath(path: string) {
         class="btn btn-sm"
         :class="activeMainTab === 'templates' ? 'btn-primary' : 'btn-ghost'"
         style="padding: 5px 14px; font-weight: 600"
-        @click="activeMainTab = 'templates'"
+        @click="switchTab('templates')"
       >
         <MdiIcon :path="mdiArchiveOutline" size="14" style="margin-right: 6px" />
         Templates ({{ nasState.lxcTemplates.length }})
@@ -674,6 +785,10 @@ function copyTemplatePath(path: string) {
     </div>
 
     <div v-if="activeMainTab === 'containers'" style="display: flex; gap: 8px">
+      <button class="btn btn-sm" :disabled="isRefreshingContainers" @click="refreshLxc">
+        <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" />
+        {{ isRefreshingContainers ? 'Refreshing...' : 'Refresh' }}
+      </button>
       <button class="btn btn-primary" @click="toggleCreate">
         {{ showCreate ? 'Cancel' : '+ Create Container' }}
       </button>
@@ -765,7 +880,11 @@ function copyTemplatePath(path: string) {
           </div>
           <div class="form-group">
             <label>Network Bridge</label>
-            <input v-model="form.networkBridge" class="input mono" placeholder="e.g. lxcbr0 or br0" />
+            <select v-model="form.networkBridge" class="select mono">
+              <option v-for="b in bridgeOptionsFor(form.networkBridge)" :key="b.name" :value="b.name">
+                {{ b.label }}
+              </option>
+            </select>
           </div>
           <div class="form-group" style="grid-column: span 2">
             <label>Description (Optional)</label>
@@ -787,8 +906,8 @@ function copyTemplatePath(path: string) {
             </div>
             <PathSelector
               v-model="form.templateArchive"
-              placeholder="/mnt/tank/lxc-templates/debian-12.tar.xz or custom archive path"
-              root-hint="/mnt"
+              :placeholder="lxcTemplatesDir + '/debian-12.tar.xz or custom archive path'"
+              :root-hint="lxcTemplatesDir"
             />
           </div>
         </div>
@@ -1341,7 +1460,7 @@ function copyTemplatePath(path: string) {
         <div>
           <h2 class="card-title" style="font-size: 17px">Template Archives</h2>
           <span style="font-size: 12px; color: var(--text-secondary)">
-            Local template images stored on main pool ZFS dataset: /mnt/tank/lxc-templates
+            Local template images stored on main pool ZFS dataset: {{ lxcTemplatesDir }}
           </span>
         </div>
 
@@ -1493,7 +1612,11 @@ function copyTemplatePath(path: string) {
           </div>
           <div class="form-group">
             <label>Network Bridge</label>
-            <input v-model="editForm.networkBridge" class="input mono" placeholder="lxcbr0" />
+            <select v-model="editForm.networkBridge" class="select mono">
+              <option v-for="b in bridgeOptionsFor(editForm.networkBridge)" :key="b.name" :value="b.name">
+                {{ b.label }}
+              </option>
+            </select>
           </div>
           <div class="form-group">
             <label>CPU Cores</label>
@@ -1692,7 +1815,7 @@ function copyTemplatePath(path: string) {
             <div class="mono" style="font-size: 14px; font-weight: 600; margin-top: 4px" :style="{ color: inspectedContainer.ipv4Address ? 'var(--success-text)' : 'var(--text-muted)' }">
               {{ inspectedContainer.ipv4Address || 'No IP assigned' }}
             </div>
-            <div class="mono" style="font-size: 11px; color: var(--text-secondary)">Bridge: {{ inspectedContainer.networkBridge || 'lxcbr0' }}</div>
+            <div class="mono" style="font-size: 11px; color: var(--text-secondary)">Bridge: {{ inspectedContainer.networkBridge || defaultBridge || 'br0' }}</div>
           </div>
 
           <div class="card" style="padding: 12px; background: var(--bg-surface)">

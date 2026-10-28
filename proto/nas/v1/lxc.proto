@@ -45,6 +45,8 @@ message LxcContainer {
   string network_bridge = 17;
   double cpu_percent = 18 [(google.api.field_behavior) = OUTPUT_ONLY];
   int64 memory_used_mib = 19 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string install_recipe = 20;
+  string install_script_url = 21;
 }
 
 message ListLxcContainersRequest {

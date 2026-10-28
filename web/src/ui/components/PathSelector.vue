@@ -128,10 +128,12 @@ async function openBrowser() {
     initial = '/mnt' + initial;
   }
   if (!initial || !initial.startsWith('/')) {
-    if (nasState.systemConfig?.mainPool) {
+    if (props.rootHint) {
+      initial = props.rootHint;
+    } else if (nasState.systemConfig?.mainPool) {
       initial = `/mnt/${nasState.systemConfig.mainPool}`;
     } else {
-      initial = props.rootHint || '/mnt';
+      initial = '/mnt';
     }
   }
   isBrowserOpen.value = true;

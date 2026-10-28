@@ -1916,6 +1916,8 @@ func (s *Server) CreateLxcContainer(ctx context.Context, req *nasv1.CreateLxcCon
 		GpuEnabled:      in.GetGpuEnabled(),
 		Description:     in.GetDescription(),
 		NetworkBridge:   in.GetNetworkBridge(),
+		InstallRecipe:   in.GetInstallRecipe(),
+		InstallScriptURL: in.GetInstallScriptUrl(),
 	})
 	if err != nil {
 		return nil, ToGRPCError(err)
@@ -2967,6 +2969,8 @@ func toProtoLxc(c domain.LxcContainer) *nasv1.LxcContainer {
 		NetworkBridge:   c.NetworkBridge,
 		CpuPercent:      c.CPUPercent,
 		MemoryUsedMib:   c.MemoryUsedMiB,
+		InstallRecipe:   c.InstallRecipe,
+		InstallScriptUrl: c.InstallScriptURL,
 	}
 }
 

@@ -641,6 +641,8 @@ export function mapLxcContainer(raw: any): LxcContainer {
     networkBridge: raw?.networkBridge ?? raw?.network_bridge ?? '',
     cpuPercent: Number(raw?.cpuPercent ?? raw?.cpu_percent ?? 0),
     memoryUsedMib: normalizeInt64(raw?.memoryUsedMib ?? raw?.memory_used_mib ?? 0),
+    installRecipe: raw?.installRecipe ?? raw?.install_recipe ?? undefined,
+    installScriptUrl: raw?.installScriptUrl ?? raw?.install_script_url ?? undefined,
   };
 }
 
@@ -1657,6 +1659,8 @@ export class HttpLxcAdapter implements LxcPort {
       gpuEnabled: Boolean(container.gpuEnabled),
       description: container.description,
       networkBridge: container.networkBridge,
+      installRecipe: container.installRecipe,
+      installScriptUrl: container.installScriptUrl,
     };
     const raw = await this.client.post<any>('lxcContainers', payload, {
       lxcContainerId: containerId,
@@ -1684,6 +1688,8 @@ export class HttpLxcAdapter implements LxcPort {
       gpuEnabled: Boolean(container.gpuEnabled),
       description: container.description,
       networkBridge: container.networkBridge,
+      installRecipe: container.installRecipe,
+      installScriptUrl: container.installScriptUrl,
     };
     const raw = await this.client.patch<any>(name, { lxcContainer: payload }, updateMask ?? []);
     return mapLxcContainer(raw);

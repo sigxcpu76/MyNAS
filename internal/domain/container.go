@@ -75,6 +75,8 @@ type LxcContainer struct {
 	NetworkBridge   string
 	CPUPercent      float64
 	MemoryUsedMiB   int64
+	InstallRecipe   string
+	InstallScriptURL string
 }
 
 func (c *LxcContainer) Validate() error {

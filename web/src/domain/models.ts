@@ -643,6 +643,8 @@ export interface LxcContainer {
   networkBridge?: string;
   cpuPercent?: number;
   memoryUsedMib?: number;
+  installRecipe?: string;
+  installScriptUrl?: string;
 }
 
 export interface LxcCatalogItem {
