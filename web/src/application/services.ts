@@ -179,10 +179,11 @@ export class ZfsService {
     if (!hasDevices && !hasVdevs) {
       throw new Error('At least one backing device path is required to create a ZFS pool');
     }
-    return this.zfsPort.createPool(poolId.trim(), {
+    const cleanId = poolId.trim().replace(/^zfsPools\//, '');
+    return this.zfsPort.createPool(cleanId, {
       vdevLayout: pool.vdevLayout || 'mirror',
       compression: pool.compression || 'lz4',
-      mountpoint: pool.mountpoint || `/mnt/${poolId.trim()}`,
+      mountpoint: pool.mountpoint || `/mnt/${cleanId}`,
       ...pool,
     });
   }

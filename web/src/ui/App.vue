@@ -529,8 +529,8 @@ onMounted(() => {
             @click="showPoolModal = true"
           >
             <MdiIcon :path="mdiDatabaseCheck" size="14" style="color: var(--accent-primary)" />
-            <span class="hide-mobile">MAIN POOL: {{ nasState.systemConfig.mainPool }}</span>
-            <span class="show-mobile-only">{{ nasState.systemConfig.mainPool }}</span>
+            <span class="hide-mobile">MAIN POOL: {{ nasState.systemConfig.mainPool.replace(/^zfsPools\//, '') }}</span>
+            <span class="show-mobile-only">{{ nasState.systemConfig.mainPool.replace(/^zfsPools\//, '') }}</span>
             <MdiIcon :path="mdiMenuDown" size="13" style="opacity: 0.75" />
           </button>
           <button

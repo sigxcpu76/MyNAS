@@ -23,6 +23,116 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type WatchDockerAppsResponse_EventType int32
+
+const (
+	WatchDockerAppsResponse_EVENT_TYPE_UNSPECIFIED WatchDockerAppsResponse_EventType = 0
+	WatchDockerAppsResponse_SNAPSHOT               WatchDockerAppsResponse_EventType = 1
+	WatchDockerAppsResponse_ADDED                  WatchDockerAppsResponse_EventType = 2
+	WatchDockerAppsResponse_MODIFIED               WatchDockerAppsResponse_EventType = 3
+	WatchDockerAppsResponse_DELETED                WatchDockerAppsResponse_EventType = 4
+)
+
+// Enum value maps for WatchDockerAppsResponse_EventType.
+var (
+	WatchDockerAppsResponse_EventType_name = map[int32]string{
+		0: "EVENT_TYPE_UNSPECIFIED",
+		1: "SNAPSHOT",
+		2: "ADDED",
+		3: "MODIFIED",
+		4: "DELETED",
+	}
+	WatchDockerAppsResponse_EventType_value = map[string]int32{
+		"EVENT_TYPE_UNSPECIFIED": 0,
+		"SNAPSHOT":               1,
+		"ADDED":                  2,
+		"MODIFIED":               3,
+		"DELETED":                4,
+	}
+)
+
+func (x WatchDockerAppsResponse_EventType) Enum() *WatchDockerAppsResponse_EventType {
+	p := new(WatchDockerAppsResponse_EventType)
+	*p = x
+	return p
+}
+
+func (x WatchDockerAppsResponse_EventType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (WatchDockerAppsResponse_EventType) Descriptor() protoreflect.EnumDescriptor {
+	return file_nas_v1_docker_proto_enumTypes[0].Descriptor()
+}
+
+func (WatchDockerAppsResponse_EventType) Type() protoreflect.EnumType {
+	return &file_nas_v1_docker_proto_enumTypes[0]
+}
+
+func (x WatchDockerAppsResponse_EventType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use WatchDockerAppsResponse_EventType.Descriptor instead.
+func (WatchDockerAppsResponse_EventType) EnumDescriptor() ([]byte, []int) {
+	return file_nas_v1_docker_proto_rawDescGZIP(), []int{46, 0}
+}
+
+type WatchDockerContainersResponse_EventType int32
+
+const (
+	WatchDockerContainersResponse_EVENT_TYPE_UNSPECIFIED WatchDockerContainersResponse_EventType = 0
+	WatchDockerContainersResponse_SNAPSHOT               WatchDockerContainersResponse_EventType = 1
+	WatchDockerContainersResponse_ADDED                  WatchDockerContainersResponse_EventType = 2
+	WatchDockerContainersResponse_MODIFIED               WatchDockerContainersResponse_EventType = 3
+	WatchDockerContainersResponse_DELETED                WatchDockerContainersResponse_EventType = 4
+)
+
+// Enum value maps for WatchDockerContainersResponse_EventType.
+var (
+	WatchDockerContainersResponse_EventType_name = map[int32]string{
+		0: "EVENT_TYPE_UNSPECIFIED",
+		1: "SNAPSHOT",
+		2: "ADDED",
+		3: "MODIFIED",
+		4: "DELETED",
+	}
+	WatchDockerContainersResponse_EventType_value = map[string]int32{
+		"EVENT_TYPE_UNSPECIFIED": 0,
+		"SNAPSHOT":               1,
+		"ADDED":                  2,
+		"MODIFIED":               3,
+		"DELETED":                4,
+	}
+)
+
+func (x WatchDockerContainersResponse_EventType) Enum() *WatchDockerContainersResponse_EventType {
+	p := new(WatchDockerContainersResponse_EventType)
+	*p = x
+	return p
+}
+
+func (x WatchDockerContainersResponse_EventType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (WatchDockerContainersResponse_EventType) Descriptor() protoreflect.EnumDescriptor {
+	return file_nas_v1_docker_proto_enumTypes[1].Descriptor()
+}
+
+func (WatchDockerContainersResponse_EventType) Type() protoreflect.EnumType {
+	return &file_nas_v1_docker_proto_enumTypes[1]
+}
+
+func (x WatchDockerContainersResponse_EventType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use WatchDockerContainersResponse_EventType.Descriptor instead.
+func (WatchDockerContainersResponse_EventType) EnumDescriptor() ([]byte, []int) {
+	return file_nas_v1_docker_proto_rawDescGZIP(), []int{48, 0}
+}
+
 type DockerContainer struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -2902,6 +3012,198 @@ func (x *ListDockerNetworksResponse) GetNetworks() []*DockerNetwork {
 	return nil
 }
 
+type WatchDockerAppsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchDockerAppsRequest) Reset() {
+	*x = WatchDockerAppsRequest{}
+	mi := &file_nas_v1_docker_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchDockerAppsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchDockerAppsRequest) ProtoMessage() {}
+
+func (x *WatchDockerAppsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_docker_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchDockerAppsRequest.ProtoReflect.Descriptor instead.
+func (*WatchDockerAppsRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_docker_proto_rawDescGZIP(), []int{45}
+}
+
+type WatchDockerAppsResponse struct {
+	state         protoimpl.MessageState            `protogen:"open.v1"`
+	EventType     WatchDockerAppsResponse_EventType `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=nas.v1.WatchDockerAppsResponse_EventType" json:"event_type,omitempty"`
+	DockerApp     *DockerApp                        `protobuf:"bytes,2,opt,name=docker_app,json=dockerApp,proto3" json:"docker_app,omitempty"`
+	Snapshot      []*DockerApp                      `protobuf:"bytes,3,rep,name=snapshot,proto3" json:"snapshot,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchDockerAppsResponse) Reset() {
+	*x = WatchDockerAppsResponse{}
+	mi := &file_nas_v1_docker_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchDockerAppsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchDockerAppsResponse) ProtoMessage() {}
+
+func (x *WatchDockerAppsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_docker_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchDockerAppsResponse.ProtoReflect.Descriptor instead.
+func (*WatchDockerAppsResponse) Descriptor() ([]byte, []int) {
+	return file_nas_v1_docker_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *WatchDockerAppsResponse) GetEventType() WatchDockerAppsResponse_EventType {
+	if x != nil {
+		return x.EventType
+	}
+	return WatchDockerAppsResponse_EVENT_TYPE_UNSPECIFIED
+}
+
+func (x *WatchDockerAppsResponse) GetDockerApp() *DockerApp {
+	if x != nil {
+		return x.DockerApp
+	}
+	return nil
+}
+
+func (x *WatchDockerAppsResponse) GetSnapshot() []*DockerApp {
+	if x != nil {
+		return x.Snapshot
+	}
+	return nil
+}
+
+type WatchDockerContainersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchDockerContainersRequest) Reset() {
+	*x = WatchDockerContainersRequest{}
+	mi := &file_nas_v1_docker_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchDockerContainersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchDockerContainersRequest) ProtoMessage() {}
+
+func (x *WatchDockerContainersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_docker_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchDockerContainersRequest.ProtoReflect.Descriptor instead.
+func (*WatchDockerContainersRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_docker_proto_rawDescGZIP(), []int{47}
+}
+
+type WatchDockerContainersResponse struct {
+	state           protoimpl.MessageState                  `protogen:"open.v1"`
+	EventType       WatchDockerContainersResponse_EventType `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=nas.v1.WatchDockerContainersResponse_EventType" json:"event_type,omitempty"`
+	DockerContainer *DockerContainer                        `protobuf:"bytes,2,opt,name=docker_container,json=dockerContainer,proto3" json:"docker_container,omitempty"`
+	Snapshot        []*DockerContainer                      `protobuf:"bytes,3,rep,name=snapshot,proto3" json:"snapshot,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *WatchDockerContainersResponse) Reset() {
+	*x = WatchDockerContainersResponse{}
+	mi := &file_nas_v1_docker_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchDockerContainersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchDockerContainersResponse) ProtoMessage() {}
+
+func (x *WatchDockerContainersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_docker_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchDockerContainersResponse.ProtoReflect.Descriptor instead.
+func (*WatchDockerContainersResponse) Descriptor() ([]byte, []int) {
+	return file_nas_v1_docker_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *WatchDockerContainersResponse) GetEventType() WatchDockerContainersResponse_EventType {
+	if x != nil {
+		return x.EventType
+	}
+	return WatchDockerContainersResponse_EVENT_TYPE_UNSPECIFIED
+}
+
+func (x *WatchDockerContainersResponse) GetDockerContainer() *DockerContainer {
+	if x != nil {
+		return x.DockerContainer
+	}
+	return nil
+}
+
+func (x *WatchDockerContainersResponse) GetSnapshot() []*DockerContainer {
+	if x != nil {
+		return x.Snapshot
+	}
+	return nil
+}
+
 var File_nas_v1_docker_proto protoreflect.FileDescriptor
 
 const file_nas_v1_docker_proto_rawDesc = "" +
@@ -3164,7 +3466,32 @@ const file_nas_v1_docker_proto_rawDesc = "" +
 	"\fipam_subnets\x18\a \x03(\tR\vipamSubnets\"\x1b\n" +
 	"\x19ListDockerNetworksRequest\"O\n" +
 	"\x1aListDockerNetworksResponse\x121\n" +
-	"\bnetworks\x18\x01 \x03(\v2\x15.nas.v1.DockerNetworkR\bnetworksB2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
+	"\bnetworks\x18\x01 \x03(\v2\x15.nas.v1.DockerNetworkR\bnetworks\"\x18\n" +
+	"\x16WatchDockerAppsRequest\"\xa1\x02\n" +
+	"\x17WatchDockerAppsResponse\x12H\n" +
+	"\n" +
+	"event_type\x18\x01 \x01(\x0e2).nas.v1.WatchDockerAppsResponse.EventTypeR\teventType\x120\n" +
+	"\n" +
+	"docker_app\x18\x02 \x01(\v2\x11.nas.v1.DockerAppR\tdockerApp\x12-\n" +
+	"\bsnapshot\x18\x03 \x03(\v2\x11.nas.v1.DockerAppR\bsnapshot\"[\n" +
+	"\tEventType\x12\x1a\n" +
+	"\x16EVENT_TYPE_UNSPECIFIED\x10\x00\x12\f\n" +
+	"\bSNAPSHOT\x10\x01\x12\t\n" +
+	"\x05ADDED\x10\x02\x12\f\n" +
+	"\bMODIFIED\x10\x03\x12\v\n" +
+	"\aDELETED\x10\x04\"\x1e\n" +
+	"\x1cWatchDockerContainersRequest\"\xc5\x02\n" +
+	"\x1dWatchDockerContainersResponse\x12N\n" +
+	"\n" +
+	"event_type\x18\x01 \x01(\x0e2/.nas.v1.WatchDockerContainersResponse.EventTypeR\teventType\x12B\n" +
+	"\x10docker_container\x18\x02 \x01(\v2\x17.nas.v1.DockerContainerR\x0fdockerContainer\x123\n" +
+	"\bsnapshot\x18\x03 \x03(\v2\x17.nas.v1.DockerContainerR\bsnapshot\"[\n" +
+	"\tEventType\x12\x1a\n" +
+	"\x16EVENT_TYPE_UNSPECIFIED\x10\x00\x12\f\n" +
+	"\bSNAPSHOT\x10\x01\x12\t\n" +
+	"\x05ADDED\x10\x02\x12\f\n" +
+	"\bMODIFIED\x10\x03\x12\v\n" +
+	"\aDELETED\x10\x04B2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
 
 var (
 	file_nas_v1_docker_proto_rawDescOnce sync.Once
@@ -3178,79 +3505,92 @@ func file_nas_v1_docker_proto_rawDescGZIP() []byte {
 	return file_nas_v1_docker_proto_rawDescData
 }
 
-var file_nas_v1_docker_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
+var file_nas_v1_docker_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_nas_v1_docker_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
 var file_nas_v1_docker_proto_goTypes = []any{
-	(*DockerContainer)(nil),                // 0: nas.v1.DockerContainer
-	(*ListDockerContainersRequest)(nil),    // 1: nas.v1.ListDockerContainersRequest
-	(*ListDockerContainersResponse)(nil),   // 2: nas.v1.ListDockerContainersResponse
-	(*GetDockerContainerRequest)(nil),      // 3: nas.v1.GetDockerContainerRequest
-	(*CreateDockerContainerRequest)(nil),   // 4: nas.v1.CreateDockerContainerRequest
-	(*UpdateDockerContainerRequest)(nil),   // 5: nas.v1.UpdateDockerContainerRequest
-	(*GetDockerContainerLogsRequest)(nil),  // 6: nas.v1.GetDockerContainerLogsRequest
-	(*GetDockerContainerLogsResponse)(nil), // 7: nas.v1.GetDockerContainerLogsResponse
-	(*DeleteDockerContainerRequest)(nil),   // 8: nas.v1.DeleteDockerContainerRequest
-	(*StartDockerContainerRequest)(nil),    // 9: nas.v1.StartDockerContainerRequest
-	(*StopDockerContainerRequest)(nil),     // 10: nas.v1.StopDockerContainerRequest
-	(*RestartDockerContainerRequest)(nil),  // 11: nas.v1.RestartDockerContainerRequest
-	(*DockerApp)(nil),                      // 12: nas.v1.DockerApp
-	(*DockerAppPortal)(nil),                // 13: nas.v1.DockerAppPortal
-	(*DockerAppContainer)(nil),             // 14: nas.v1.DockerAppContainer
-	(*ListDockerAppsRequest)(nil),          // 15: nas.v1.ListDockerAppsRequest
-	(*ListDockerAppsResponse)(nil),         // 16: nas.v1.ListDockerAppsResponse
-	(*GetDockerAppRequest)(nil),            // 17: nas.v1.GetDockerAppRequest
-	(*CreateDockerAppRequest)(nil),         // 18: nas.v1.CreateDockerAppRequest
-	(*UpdateDockerAppRequest)(nil),         // 19: nas.v1.UpdateDockerAppRequest
-	(*DeleteDockerAppRequest)(nil),         // 20: nas.v1.DeleteDockerAppRequest
-	(*StartDockerAppRequest)(nil),          // 21: nas.v1.StartDockerAppRequest
-	(*StopDockerAppRequest)(nil),           // 22: nas.v1.StopDockerAppRequest
-	(*RestartDockerAppRequest)(nil),        // 23: nas.v1.RestartDockerAppRequest
-	(*UpgradeDockerAppRequest)(nil),        // 24: nas.v1.UpgradeDockerAppRequest
-	(*GetDockerAppLogsRequest)(nil),        // 25: nas.v1.GetDockerAppLogsRequest
-	(*GetDockerAppLogsResponse)(nil),       // 26: nas.v1.GetDockerAppLogsResponse
-	(*DockerConfig)(nil),                   // 27: nas.v1.DockerConfig
-	(*GetDockerConfigRequest)(nil),         // 28: nas.v1.GetDockerConfigRequest
-	(*UpdateDockerConfigRequest)(nil),      // 29: nas.v1.UpdateDockerConfigRequest
-	(*CheckHostPortRequest)(nil),           // 30: nas.v1.CheckHostPortRequest
-	(*CheckHostPortResponse)(nil),          // 31: nas.v1.CheckHostPortResponse
-	(*CheckHostPortsRequest)(nil),          // 32: nas.v1.CheckHostPortsRequest
-	(*HostPortStatus)(nil),                 // 33: nas.v1.HostPortStatus
-	(*CheckHostPortsResponse)(nil),         // 34: nas.v1.CheckHostPortsResponse
-	(*DockerRegistry)(nil),                 // 35: nas.v1.DockerRegistry
-	(*ListDockerRegistriesRequest)(nil),    // 36: nas.v1.ListDockerRegistriesRequest
-	(*ListDockerRegistriesResponse)(nil),   // 37: nas.v1.ListDockerRegistriesResponse
-	(*GetDockerRegistryRequest)(nil),       // 38: nas.v1.GetDockerRegistryRequest
-	(*CreateDockerRegistryRequest)(nil),    // 39: nas.v1.CreateDockerRegistryRequest
-	(*UpdateDockerRegistryRequest)(nil),    // 40: nas.v1.UpdateDockerRegistryRequest
-	(*DeleteDockerRegistryRequest)(nil),    // 41: nas.v1.DeleteDockerRegistryRequest
-	(*DockerNetwork)(nil),                  // 42: nas.v1.DockerNetwork
-	(*ListDockerNetworksRequest)(nil),      // 43: nas.v1.ListDockerNetworksRequest
-	(*ListDockerNetworksResponse)(nil),     // 44: nas.v1.ListDockerNetworksResponse
-	(*fieldmaskpb.FieldMask)(nil),          // 45: google.protobuf.FieldMask
+	(WatchDockerAppsResponse_EventType)(0),       // 0: nas.v1.WatchDockerAppsResponse.EventType
+	(WatchDockerContainersResponse_EventType)(0), // 1: nas.v1.WatchDockerContainersResponse.EventType
+	(*DockerContainer)(nil),                      // 2: nas.v1.DockerContainer
+	(*ListDockerContainersRequest)(nil),          // 3: nas.v1.ListDockerContainersRequest
+	(*ListDockerContainersResponse)(nil),         // 4: nas.v1.ListDockerContainersResponse
+	(*GetDockerContainerRequest)(nil),            // 5: nas.v1.GetDockerContainerRequest
+	(*CreateDockerContainerRequest)(nil),         // 6: nas.v1.CreateDockerContainerRequest
+	(*UpdateDockerContainerRequest)(nil),         // 7: nas.v1.UpdateDockerContainerRequest
+	(*GetDockerContainerLogsRequest)(nil),        // 8: nas.v1.GetDockerContainerLogsRequest
+	(*GetDockerContainerLogsResponse)(nil),       // 9: nas.v1.GetDockerContainerLogsResponse
+	(*DeleteDockerContainerRequest)(nil),         // 10: nas.v1.DeleteDockerContainerRequest
+	(*StartDockerContainerRequest)(nil),          // 11: nas.v1.StartDockerContainerRequest
+	(*StopDockerContainerRequest)(nil),           // 12: nas.v1.StopDockerContainerRequest
+	(*RestartDockerContainerRequest)(nil),        // 13: nas.v1.RestartDockerContainerRequest
+	(*DockerApp)(nil),                            // 14: nas.v1.DockerApp
+	(*DockerAppPortal)(nil),                      // 15: nas.v1.DockerAppPortal
+	(*DockerAppContainer)(nil),                   // 16: nas.v1.DockerAppContainer
+	(*ListDockerAppsRequest)(nil),                // 17: nas.v1.ListDockerAppsRequest
+	(*ListDockerAppsResponse)(nil),               // 18: nas.v1.ListDockerAppsResponse
+	(*GetDockerAppRequest)(nil),                  // 19: nas.v1.GetDockerAppRequest
+	(*CreateDockerAppRequest)(nil),               // 20: nas.v1.CreateDockerAppRequest
+	(*UpdateDockerAppRequest)(nil),               // 21: nas.v1.UpdateDockerAppRequest
+	(*DeleteDockerAppRequest)(nil),               // 22: nas.v1.DeleteDockerAppRequest
+	(*StartDockerAppRequest)(nil),                // 23: nas.v1.StartDockerAppRequest
+	(*StopDockerAppRequest)(nil),                 // 24: nas.v1.StopDockerAppRequest
+	(*RestartDockerAppRequest)(nil),              // 25: nas.v1.RestartDockerAppRequest
+	(*UpgradeDockerAppRequest)(nil),              // 26: nas.v1.UpgradeDockerAppRequest
+	(*GetDockerAppLogsRequest)(nil),              // 27: nas.v1.GetDockerAppLogsRequest
+	(*GetDockerAppLogsResponse)(nil),             // 28: nas.v1.GetDockerAppLogsResponse
+	(*DockerConfig)(nil),                         // 29: nas.v1.DockerConfig
+	(*GetDockerConfigRequest)(nil),               // 30: nas.v1.GetDockerConfigRequest
+	(*UpdateDockerConfigRequest)(nil),            // 31: nas.v1.UpdateDockerConfigRequest
+	(*CheckHostPortRequest)(nil),                 // 32: nas.v1.CheckHostPortRequest
+	(*CheckHostPortResponse)(nil),                // 33: nas.v1.CheckHostPortResponse
+	(*CheckHostPortsRequest)(nil),                // 34: nas.v1.CheckHostPortsRequest
+	(*HostPortStatus)(nil),                       // 35: nas.v1.HostPortStatus
+	(*CheckHostPortsResponse)(nil),               // 36: nas.v1.CheckHostPortsResponse
+	(*DockerRegistry)(nil),                       // 37: nas.v1.DockerRegistry
+	(*ListDockerRegistriesRequest)(nil),          // 38: nas.v1.ListDockerRegistriesRequest
+	(*ListDockerRegistriesResponse)(nil),         // 39: nas.v1.ListDockerRegistriesResponse
+	(*GetDockerRegistryRequest)(nil),             // 40: nas.v1.GetDockerRegistryRequest
+	(*CreateDockerRegistryRequest)(nil),          // 41: nas.v1.CreateDockerRegistryRequest
+	(*UpdateDockerRegistryRequest)(nil),          // 42: nas.v1.UpdateDockerRegistryRequest
+	(*DeleteDockerRegistryRequest)(nil),          // 43: nas.v1.DeleteDockerRegistryRequest
+	(*DockerNetwork)(nil),                        // 44: nas.v1.DockerNetwork
+	(*ListDockerNetworksRequest)(nil),            // 45: nas.v1.ListDockerNetworksRequest
+	(*ListDockerNetworksResponse)(nil),           // 46: nas.v1.ListDockerNetworksResponse
+	(*WatchDockerAppsRequest)(nil),               // 47: nas.v1.WatchDockerAppsRequest
+	(*WatchDockerAppsResponse)(nil),              // 48: nas.v1.WatchDockerAppsResponse
+	(*WatchDockerContainersRequest)(nil),         // 49: nas.v1.WatchDockerContainersRequest
+	(*WatchDockerContainersResponse)(nil),        // 50: nas.v1.WatchDockerContainersResponse
+	(*fieldmaskpb.FieldMask)(nil),                // 51: google.protobuf.FieldMask
 }
 var file_nas_v1_docker_proto_depIdxs = []int32{
-	0,  // 0: nas.v1.ListDockerContainersResponse.docker_containers:type_name -> nas.v1.DockerContainer
-	0,  // 1: nas.v1.CreateDockerContainerRequest.docker_container:type_name -> nas.v1.DockerContainer
-	0,  // 2: nas.v1.UpdateDockerContainerRequest.docker_container:type_name -> nas.v1.DockerContainer
-	45, // 3: nas.v1.UpdateDockerContainerRequest.update_mask:type_name -> google.protobuf.FieldMask
-	14, // 4: nas.v1.DockerApp.containers:type_name -> nas.v1.DockerAppContainer
-	13, // 5: nas.v1.DockerApp.portals:type_name -> nas.v1.DockerAppPortal
-	12, // 6: nas.v1.ListDockerAppsResponse.docker_apps:type_name -> nas.v1.DockerApp
-	12, // 7: nas.v1.CreateDockerAppRequest.docker_app:type_name -> nas.v1.DockerApp
-	12, // 8: nas.v1.UpdateDockerAppRequest.docker_app:type_name -> nas.v1.DockerApp
-	45, // 9: nas.v1.UpdateDockerAppRequest.update_mask:type_name -> google.protobuf.FieldMask
-	27, // 10: nas.v1.UpdateDockerConfigRequest.docker_config:type_name -> nas.v1.DockerConfig
-	45, // 11: nas.v1.UpdateDockerConfigRequest.update_mask:type_name -> google.protobuf.FieldMask
-	33, // 12: nas.v1.CheckHostPortsResponse.ports:type_name -> nas.v1.HostPortStatus
-	35, // 13: nas.v1.ListDockerRegistriesResponse.docker_registries:type_name -> nas.v1.DockerRegistry
-	35, // 14: nas.v1.CreateDockerRegistryRequest.docker_registry:type_name -> nas.v1.DockerRegistry
-	35, // 15: nas.v1.UpdateDockerRegistryRequest.docker_registry:type_name -> nas.v1.DockerRegistry
-	45, // 16: nas.v1.UpdateDockerRegistryRequest.update_mask:type_name -> google.protobuf.FieldMask
-	42, // 17: nas.v1.ListDockerNetworksResponse.networks:type_name -> nas.v1.DockerNetwork
-	18, // [18:18] is the sub-list for method output_type
-	18, // [18:18] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	2,  // 0: nas.v1.ListDockerContainersResponse.docker_containers:type_name -> nas.v1.DockerContainer
+	2,  // 1: nas.v1.CreateDockerContainerRequest.docker_container:type_name -> nas.v1.DockerContainer
+	2,  // 2: nas.v1.UpdateDockerContainerRequest.docker_container:type_name -> nas.v1.DockerContainer
+	51, // 3: nas.v1.UpdateDockerContainerRequest.update_mask:type_name -> google.protobuf.FieldMask
+	16, // 4: nas.v1.DockerApp.containers:type_name -> nas.v1.DockerAppContainer
+	15, // 5: nas.v1.DockerApp.portals:type_name -> nas.v1.DockerAppPortal
+	14, // 6: nas.v1.ListDockerAppsResponse.docker_apps:type_name -> nas.v1.DockerApp
+	14, // 7: nas.v1.CreateDockerAppRequest.docker_app:type_name -> nas.v1.DockerApp
+	14, // 8: nas.v1.UpdateDockerAppRequest.docker_app:type_name -> nas.v1.DockerApp
+	51, // 9: nas.v1.UpdateDockerAppRequest.update_mask:type_name -> google.protobuf.FieldMask
+	29, // 10: nas.v1.UpdateDockerConfigRequest.docker_config:type_name -> nas.v1.DockerConfig
+	51, // 11: nas.v1.UpdateDockerConfigRequest.update_mask:type_name -> google.protobuf.FieldMask
+	35, // 12: nas.v1.CheckHostPortsResponse.ports:type_name -> nas.v1.HostPortStatus
+	37, // 13: nas.v1.ListDockerRegistriesResponse.docker_registries:type_name -> nas.v1.DockerRegistry
+	37, // 14: nas.v1.CreateDockerRegistryRequest.docker_registry:type_name -> nas.v1.DockerRegistry
+	37, // 15: nas.v1.UpdateDockerRegistryRequest.docker_registry:type_name -> nas.v1.DockerRegistry
+	51, // 16: nas.v1.UpdateDockerRegistryRequest.update_mask:type_name -> google.protobuf.FieldMask
+	44, // 17: nas.v1.ListDockerNetworksResponse.networks:type_name -> nas.v1.DockerNetwork
+	0,  // 18: nas.v1.WatchDockerAppsResponse.event_type:type_name -> nas.v1.WatchDockerAppsResponse.EventType
+	14, // 19: nas.v1.WatchDockerAppsResponse.docker_app:type_name -> nas.v1.DockerApp
+	14, // 20: nas.v1.WatchDockerAppsResponse.snapshot:type_name -> nas.v1.DockerApp
+	1,  // 21: nas.v1.WatchDockerContainersResponse.event_type:type_name -> nas.v1.WatchDockerContainersResponse.EventType
+	2,  // 22: nas.v1.WatchDockerContainersResponse.docker_container:type_name -> nas.v1.DockerContainer
+	2,  // 23: nas.v1.WatchDockerContainersResponse.snapshot:type_name -> nas.v1.DockerContainer
+	24, // [24:24] is the sub-list for method output_type
+	24, // [24:24] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_nas_v1_docker_proto_init() }
@@ -3263,13 +3603,14 @@ func file_nas_v1_docker_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nas_v1_docker_proto_rawDesc), len(file_nas_v1_docker_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   45,
+			NumEnums:      2,
+			NumMessages:   49,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_nas_v1_docker_proto_goTypes,
 		DependencyIndexes: file_nas_v1_docker_proto_depIdxs,
+		EnumInfos:         file_nas_v1_docker_proto_enumTypes,
 		MessageInfos:      file_nas_v1_docker_proto_msgTypes,
 	}.Build()
 	File_nas_v1_docker_proto = out.File

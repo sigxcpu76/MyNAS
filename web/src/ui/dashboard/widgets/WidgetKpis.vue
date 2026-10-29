@@ -5,6 +5,15 @@ import { nasState } from '../../store';
 
 const telemetry = computed(() => nasState.systemTelemetry);
 
+const packageTemps = computed<number[]>(() => {
+  const temps = telemetry.value?.cpu?.packageTemperatures;
+  if (Array.isArray(temps) && temps.length > 0) {
+    return temps;
+  }
+  const t = telemetry.value?.cpu?.temperatureCelsius;
+  return t && t > 0 ? [t] : [];
+});
+
 const totalStorageBytes = computed(() =>
   nasState.pools.reduce((acc, p) => acc + (p.sizeBytes || 0), 0)
 );
@@ -61,8 +70,20 @@ function getTempClass(temp: number): string {
     <div class="card kpi-card">
       <div class="card-header" style="margin-bottom: 6px">
         <span class="card-subtitle">Processor & Load</span>
+        <div v-if="packageTemps.length > 1" style="display: flex; gap: 4px; align-items: center">
+          <span
+            v-for="(t, idx) in packageTemps"
+            :key="idx"
+            class="badge"
+            :class="getTempClass(t)"
+            style="font-size: 11px; font-weight: 600"
+            :title="`CPU Socket ${idx} Temperature`"
+          >
+            CPU{{ idx }}: {{ t.toFixed(0) }}°C
+          </span>
+        </div>
         <span
-          v-if="(telemetry?.cpu?.temperatureCelsius || 0) > 0"
+          v-else-if="(telemetry?.cpu?.temperatureCelsius || 0) > 0"
           class="badge"
           :class="getTempClass(telemetry?.cpu?.temperatureCelsius || 0)"
         >

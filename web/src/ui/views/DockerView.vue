@@ -203,17 +203,6 @@ async function refreshApps() {
   }
 }
 
-let telemetryTimer: any = null;
-let isViewActive = false;
-
-async function runTelemetryLoop() {
-  if (!isViewActive) return;
-  await updateTelemetry();
-  if (isViewActive) {
-    telemetryTimer = setTimeout(runTelemetryLoop, 2500);
-  }
-}
-
 // =============================================================================
 // TrueNAS Application Catalog
 // =============================================================================
@@ -420,14 +409,15 @@ const selectedDatasetToSave = ref('tank/apps');
 const isSavingDataset = ref(false);
 
 const availableDatasetNames = computed(() => {
-  const mainPool = nasState.systemConfig?.mainPool || (nasState.dockerConfig?.availablePools?.[0] || 'tank');
+  const rawMain = nasState.systemConfig?.mainPool || (nasState.dockerConfig?.availablePools?.[0] || 'tank');
+  const mainPool = rawMain.replace(/^zfsPools\//, '').trim() || 'tank';
   if (nasState.dockerConfig?.availableDatasets && nasState.dockerConfig.availableDatasets.length > 0) {
-    return nasState.dockerConfig.availableDatasets.filter(
-      (d) => (d.startsWith(`${mainPool}/`) || d === mainPool) && !isDotDataset(d)
-    );
+    return nasState.dockerConfig.availableDatasets
+      .map((d) => d.replace(/^zfsPools\//, '').trim())
+      .filter((d) => (d.startsWith(`${mainPool}/`) || d === mainPool) && !isDotDataset(d));
   }
   const list: string[] = [];
-  const poolDatasets = nasState.datasetsByPool[mainPool];
+  const poolDatasets = nasState.datasetsByPool[mainPool] || nasState.datasetsByPool[`zfsPools/${mainPool}`];
   if (poolDatasets && poolDatasets.length > 0) {
     for (const d of poolDatasets) {
       if (isDotDataset(d)) continue;
@@ -445,9 +435,9 @@ async function fetchDockerConfig() {
     const cfg = await services.apps.getDockerConfig();
     nasState.dockerConfig = cfg;
     if (cfg.dataset) {
-      selectedDatasetToSave.value = cfg.dataset;
+      selectedDatasetToSave.value = cfg.dataset.replace(/^zfsPools\//, '').trim();
     } else if (cfg.pool) {
-      selectedDatasetToSave.value = `${cfg.pool}/apps`;
+      selectedDatasetToSave.value = `${cfg.pool.replace(/^zfsPools\//, '').trim()}/apps`;
     }
   } catch {
     // fallback
@@ -932,23 +922,16 @@ function openWebPortal(url: string) {
 }
 
 onMounted(() => {
-  isViewActive = true;
   window.addEventListener('click', handleGlobalClick);
   fetchDockerConfig();
   if (nasState.dockerApps.length === 0) {
     refreshApps();
   }
   loadCatalog().catch(() => {});
-  runTelemetryLoop();
 });
 
 onUnmounted(() => {
-  isViewActive = false;
   window.removeEventListener('click', handleGlobalClick);
-  if (telemetryTimer) {
-    clearTimeout(telemetryTimer);
-    telemetryTimer = null;
-  }
 });
 </script>
 
@@ -2419,7 +2402,7 @@ onUnmounted(() => {
     <CatalogQuestionWizard
       v-if="isQuestionWizardOpen && wizardCatalogApp"
       :app="wizardCatalogApp"
-      :apps-pool="nasState.systemConfig?.mainPool || (nasState.dockerConfig?.availablePools?.[0] || 'tank')"
+      :apps-pool="(nasState.systemConfig?.mainPool || (nasState.dockerConfig?.availablePools?.[0] || 'tank')).replace(/^zfsPools\//, '').trim()"
       :is-deploying="isDeployingApp"
       @close="isQuestionWizardOpen = false"
       @open-in-editor="handleWizardOpenInEditor"
@@ -2446,7 +2429,7 @@ onUnmounted(() => {
         </div>
 
         <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5">
-          Dataset on the main pool (<span class="mono" style="color: var(--accent-primary)">{{ nasState.systemConfig?.mainPool || 'tank' }}</span>) where container images and app volumes are stored.
+          Dataset on the main pool (<span class="mono" style="color: var(--accent-primary)">{{ (nasState.systemConfig?.mainPool || 'tank').replace(/^zfsPools\//, '').trim() }}</span>) where container images and app volumes are stored.
         </p>
 
         <!-- Dataset Selector Form -->
@@ -2461,14 +2444,14 @@ onUnmounted(() => {
           </select>
 
           <label style="display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase">
-            Or Custom Path ({{ nasState.systemConfig?.mainPool || 'tank' }}/dataset)
+            Or Custom Path ({{ (nasState.systemConfig?.mainPool || 'tank').replace(/^zfsPools\//, '').trim() }}/dataset)
           </label>
           <input
             v-model="selectedDatasetToSave"
             type="text"
             class="form-input"
             style="width: 100%"
-            :placeholder="`e.g. ${nasState.systemConfig?.mainPool || 'tank'}/apps`"
+            :placeholder="`e.g. ${(nasState.systemConfig?.mainPool || 'tank').replace(/^zfsPools\//, '').trim()}/apps`"
           />
         </div>
 
@@ -2480,19 +2463,19 @@ onUnmounted(() => {
           <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12.5px" class="mono">
             <div>
               <span style="color: var(--text-secondary)">ZFS Dataset:</span>
-              <span style="color: var(--accent-primary); margin-left: 6px">{{ selectedDatasetToSave }}</span>
+              <span style="color: var(--accent-primary); margin-left: 6px">{{ selectedDatasetToSave.replace(/^zfsPools\//, '') }}</span>
             </div>
             <div>
               <span style="color: var(--text-secondary)">Mountpoint:</span>
-              <span style="color: var(--accent-primary); margin-left: 6px">/mnt/{{ selectedDatasetToSave.replace(/^\//, '') }}</span>
+              <span style="color: var(--accent-primary); margin-left: 6px">/mnt/{{ selectedDatasetToSave.replace(/^zfsPools\//, '').replace(/^\//, '') }}</span>
             </div>
             <div>
               <span style="color: var(--text-secondary)">App Volumes:</span>
-              <span style="color: var(--accent-primary); margin-left: 6px">/mnt/{{ selectedDatasetToSave.replace(/^\//, '') }}/appdata</span>
+              <span style="color: var(--accent-primary); margin-left: 6px">/mnt/{{ selectedDatasetToSave.replace(/^zfsPools\//, '').replace(/^\//, '') }}/appdata</span>
             </div>
             <div>
               <span style="color: var(--text-secondary)">Docker Data Root:</span>
-              <span style="color: var(--accent-primary); margin-left: 6px">/mnt/{{ selectedDatasetToSave.replace(/^\//, '') }}/docker</span>
+              <span style="color: var(--accent-primary); margin-left: 6px">/mnt/{{ selectedDatasetToSave.replace(/^zfsPools\//, '').replace(/^\//, '') }}/docker</span>
             </div>
           </div>
         </div>

@@ -2,6 +2,7 @@ package grpcadapter
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -16,6 +17,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -53,6 +56,12 @@ type Server struct {
 	identity   *application.IdentityService
 	catalog    *application.CatalogService
 	registry   *application.DockerRegistryService
+	eventBus   *application.EventBus
+}
+
+// SetEventBus enables real-time gRPC streaming and reactive watch notifications.
+func (s *Server) SetEventBus(bus *application.EventBus) {
+	s.eventBus = bus
 }
 
 // SetRegistryService enables the container registry credential RPCs.
@@ -904,6 +913,10 @@ func (s *Server) CreateVirtualMachine(ctx context.Context, req *nasv1.CreateVirt
 			VendorProductID: u.GetVendorProductId(),
 		})
 	}
+	var cdroms []domain.VirtualMachineCdrom
+	for _, c := range in.GetCdroms() {
+		cdroms = append(cdroms, fromProtoVMCdrom(c))
+	}
 
 	created, err := s.kvm.CreateVM(ctx, domain.VirtualMachine{
 		ID:                  id,
@@ -913,6 +926,7 @@ func (s *Server) CreateVirtualMachine(ctx context.Context, req *nasv1.CreateVirt
 		DiskSizeGiB:         in.GetDiskSizeGib(),
 		ISOImage:            in.GetIsoImage(),
 		CdromIsoImage:       in.GetCdromIsoImage(),
+		Cdroms:              cdroms,
 		NetworkBridge:       in.GetNetworkBridge(),
 		Autostart:           in.GetAutostart(),
 		OSVariant:           in.GetOsVariant(),
@@ -945,7 +959,11 @@ func (s *Server) CreateVirtualMachine(ctx context.Context, req *nasv1.CreateVirt
 	if err != nil {
 		return nil, ToGRPCError(err)
 	}
-	return toProtoVM(*created), nil
+	out := toProtoVM(*created)
+	if s.eventBus != nil {
+		s.eventBus.Publish(domain.NewEvent("kvm", "CREATE", out.GetName(), "Virtual machine created"))
+	}
+	return out, nil
 }
 
 func (s *Server) UpdateVirtualMachine(ctx context.Context, req *nasv1.UpdateVirtualMachineRequest) (*nasv1.VirtualMachine, error) {
@@ -961,6 +979,10 @@ func (s *Server) UpdateVirtualMachine(ctx context.Context, req *nasv1.UpdateVirt
 	var disks []domain.VirtualMachineDisk
 	for _, d := range in.GetDisks() {
 		disks = append(disks, fromProtoVMDisk(d))
+	}
+	var cdroms []domain.VirtualMachineCdrom
+	for _, c := range in.GetCdroms() {
+		cdroms = append(cdroms, fromProtoVMCdrom(c))
 	}
 	var ifaces []domain.VirtualMachineNetworkInterface
 	for _, iface := range in.GetNetworkInterfaces() {
@@ -986,6 +1008,7 @@ func (s *Server) UpdateVirtualMachine(ctx context.Context, req *nasv1.UpdateVirt
 		SecureBoot:          in.GetSecureBoot(),
 		Disks:               disks,
 		CdromIsoImage:       in.GetCdromIsoImage(),
+		Cdroms:              cdroms,
 		NetworkIfaces:       ifaces,
 		CloudInit:           fromProtoVMCloudInit(in.GetCloudInit()),
 		BootOrder:           in.GetBootOrder(),
@@ -1010,6 +1033,9 @@ func (s *Server) DeleteVirtualMachine(ctx context.Context, req *nasv1.DeleteVirt
 	}
 	if err := s.kvm.DeleteVM(ctx, id); err != nil {
 		return nil, ToGRPCError(err)
+	}
+	if s.eventBus != nil {
+		s.eventBus.Publish(domain.NewEvent("kvm", "DELETE", req.GetName(), "Virtual machine deleted"))
 	}
 	return &emptypb.Empty{}, nil
 }
@@ -1592,6 +1618,9 @@ func (s *Server) CreateDockerApp(ctx context.Context, req *nasv1.CreateDockerApp
 	}
 	protoApp := dockerAppToProto(created)
 	s.enrichDockerAppsWithCatalog(ctx, []*nasv1.DockerApp{protoApp}, []domain.DockerApp{*created})
+	if s.eventBus != nil {
+		s.eventBus.Publish(domain.NewEvent("docker", "CREATE", protoApp.GetName(), "Docker app created"))
+	}
 	return protoApp, nil
 }
 
@@ -1634,6 +1663,9 @@ func (s *Server) DeleteDockerApp(ctx context.Context, req *nasv1.DeleteDockerApp
 	}
 	if err := s.dockerApp.DeleteApp(ctx, id, req.GetDeleteVolumes()); err != nil {
 		return nil, ToGRPCError(err)
+	}
+	if s.eventBus != nil {
+		s.eventBus.Publish(domain.NewEvent("docker", "DELETE", req.GetName(), "Docker app deleted"))
 	}
 	return &emptypb.Empty{}, nil
 }
@@ -2136,6 +2168,9 @@ func (s *Server) DeleteLxcContainer(ctx context.Context, req *nasv1.DeleteLxcCon
 	if err := s.lxc.DeleteContainer(ctx, id, req.GetForce()); err != nil {
 		return nil, ToGRPCError(err)
 	}
+	if s.eventBus != nil {
+		s.eventBus.Publish(domain.NewEvent("lxc", "DELETE", req.GetName(), "LXC container deleted"))
+	}
 	return &emptypb.Empty{}, nil
 }
 
@@ -2154,7 +2189,11 @@ func (s *Server) StartLxcContainer(ctx context.Context, req *nasv1.StartLxcConta
 		return nil, ToGRPCError(err)
 	}
 	slog.Info("[lxc] container started successfully", "container_id", id, "state", c.State, "ipv4", c.IPv4Address)
-	return toProtoLxc(*c), nil
+	out := toProtoLxc(*c)
+	if s.eventBus != nil {
+		s.eventBus.Publish(domain.NewEvent("lxc", "START", out.GetName(), "LXC container started"))
+	}
+	return out, nil
 }
 
 func (s *Server) StopLxcContainer(ctx context.Context, req *nasv1.StopLxcContainerRequest) (*nasv1.LxcContainer, error) {
@@ -2172,7 +2211,11 @@ func (s *Server) StopLxcContainer(ctx context.Context, req *nasv1.StopLxcContain
 		return nil, ToGRPCError(err)
 	}
 	slog.Info("[lxc] container stopped successfully", "container_id", id, "state", c.State)
-	return toProtoLxc(*c), nil
+	out := toProtoLxc(*c)
+	if s.eventBus != nil {
+		s.eventBus.Publish(domain.NewEvent("lxc", "STOP", out.GetName(), "LXC container stopped"))
+	}
+	return out, nil
 }
 
 func (s *Server) RestartLxcContainer(ctx context.Context, req *nasv1.RestartLxcContainerRequest) (*nasv1.LxcContainer, error) {
@@ -2190,7 +2233,11 @@ func (s *Server) RestartLxcContainer(ctx context.Context, req *nasv1.RestartLxcC
 		return nil, ToGRPCError(err)
 	}
 	slog.Info("[lxc] container restarted successfully", "container_id", id, "state", c.State)
-	return toProtoLxc(*c), nil
+	out := toProtoLxc(*c)
+	if s.eventBus != nil {
+		s.eventBus.Publish(domain.NewEvent("lxc", "RESTART", out.GetName(), "LXC container restarted"))
+	}
+	return out, nil
 }
 
 func (s *Server) FreezeLxcContainer(ctx context.Context, req *nasv1.FreezeLxcContainerRequest) (*nasv1.LxcContainer, error) {
@@ -2208,7 +2255,11 @@ func (s *Server) FreezeLxcContainer(ctx context.Context, req *nasv1.FreezeLxcCon
 		return nil, ToGRPCError(err)
 	}
 	slog.Info("[lxc] container frozen successfully", "container_id", id, "state", c.State)
-	return toProtoLxc(*c), nil
+	out := toProtoLxc(*c)
+	if s.eventBus != nil {
+		s.eventBus.Publish(domain.NewEvent("lxc", "FREEZE", out.GetName(), "LXC container frozen"))
+	}
+	return out, nil
 }
 
 func (s *Server) GetLxcContainerLogs(ctx context.Context, req *nasv1.GetLxcContainerLogsRequest) (*nasv1.GetLxcContainerLogsResponse, error) {
@@ -2757,7 +2808,7 @@ func toProtoSystemConfig(c *domain.SystemConfig) *nasv1.SystemConfig {
 		pools = append(pools, toProtoDiscoveredPool(p))
 	}
 	return &nasv1.SystemConfig{
-		MainPool:         c.MainPool,
+		MainPool:         strings.TrimPrefix(strings.TrimSpace(c.MainPool), "zfsPools/"),
 		SystemDataset:    c.SystemDataset,
 		SystemMountpoint: c.SystemMountpoint,
 		IsInitialized:    c.IsInitialized,
@@ -2769,14 +2820,19 @@ func toProtoSystemConfig(c *domain.SystemConfig) *nasv1.SystemConfig {
 }
 
 func toProtoDiscoveredPool(p domain.DiscoveredPool) *nasv1.DiscoveredPool {
+	mp := p.Mountpoint
+	if strings.Contains(mp, "zfsPools") {
+		mp = strings.ReplaceAll(mp, "zfsPools/", "")
+		mp = strings.ReplaceAll(mp, "/zfsPools", "")
+	}
 	return &nasv1.DiscoveredPool{
-		PoolName:      p.PoolName,
+		PoolName:      strings.TrimPrefix(strings.TrimSpace(p.PoolName), "zfsPools/"),
 		HasNasSystem:  p.HasNasSystem,
 		ConfigVersion: p.ConfigVersion,
 		LastModified:  p.LastModified,
 		IsImported:    p.IsImported,
-		DatasetPath:   p.DatasetPath,
-		Mountpoint:    p.Mountpoint,
+		DatasetPath:   strings.TrimPrefix(strings.TrimSpace(p.DatasetPath), "zfsPools/"),
+		Mountpoint:    mp,
 	}
 }
 
@@ -2809,8 +2865,9 @@ func toProtoSystemTelemetry(t *domain.SystemTelemetry) *nasv1.SystemTelemetry {
 			Load1:              t.Cpu.Load1,
 			Load5:              t.Cpu.Load5,
 			Load15:             t.Cpu.Load15,
-			TemperatureCelsius: t.Cpu.TemperatureCelsius,
-			CoreTemperatures:   t.Cpu.CoreTemperatures,
+			TemperatureCelsius:  t.Cpu.TemperatureCelsius,
+			CoreTemperatures:    t.Cpu.CoreTemperatures,
+			PackageTemperatures: t.Cpu.PackageTemperatures,
 		},
 		Memory: &nasv1.MemoryTelemetry{
 			TotalBytes:     t.Memory.TotalBytes,
@@ -2914,9 +2971,21 @@ func toProtoZfsPool(p domain.ZfsPool) *nasv1.ZfsPool {
 	for _, v := range p.Vdevs {
 		protoVdevs = append(protoVdevs, toProtoZfsVdev(v))
 	}
+	cleanID := strings.TrimPrefix(strings.TrimSpace(p.ID), "zfsPools/")
+	poolName := p.PoolName
+	if poolName == "" || strings.HasPrefix(poolName, "zfsPools/") {
+		poolName = cleanID
+	}
+	mountpoint := p.Mountpoint
+	if mountpoint == "" || mountpoint == "none" || mountpoint == "legacy" {
+		mountpoint = "/mnt/" + cleanID
+	} else if strings.Contains(mountpoint, "zfsPools") {
+		mountpoint = strings.ReplaceAll(mountpoint, "zfsPools/", "")
+		mountpoint = strings.ReplaceAll(mountpoint, "/zfsPools", "")
+	}
 	return &nasv1.ZfsPool{
-		Name:                 resourcename.Sprint(patternZfsPool, p.ID),
-		PoolName:             p.PoolName,
+		Name:                 resourcename.Sprint(patternZfsPool, cleanID),
+		PoolName:             poolName,
 		State:                p.State,
 		SizeBytes:            p.SizeBytes,
 		AllocatedBytes:       p.AllocatedBytes,
@@ -2926,7 +2995,7 @@ func toProtoZfsPool(p domain.ZfsPool) *nasv1.ZfsPool {
 		DedupRatio:           p.DedupRatio,
 		VdevLayout:           p.VdevLayout,
 		Devices:              p.Devices,
-		Mountpoint:           p.Mountpoint,
+		Mountpoint:           mountpoint,
 		Compression:          p.Compression,
 		LastScrubStatus:      p.LastScrubStatus,
 		HealthDetails:        p.HealthDetails,
@@ -2937,10 +3006,18 @@ func toProtoZfsPool(p domain.ZfsPool) *nasv1.ZfsPool {
 }
 
 func toProtoZfsDataset(d domain.ZfsDataset) *nasv1.ZfsDataset {
+	cleanPoolID := strings.TrimPrefix(strings.TrimSpace(d.PoolID), "zfsPools/")
+	cleanID := strings.TrimPrefix(strings.TrimSpace(d.ID), "zfsPools/")
+	datasetPath := strings.TrimPrefix(strings.TrimSpace(d.DatasetPath), "zfsPools/")
+	mountpoint := d.Mountpoint
+	if strings.Contains(mountpoint, "zfsPools") {
+		mountpoint = strings.ReplaceAll(mountpoint, "zfsPools/", "")
+		mountpoint = strings.ReplaceAll(mountpoint, "/zfsPools", "")
+	}
 	return &nasv1.ZfsDataset{
-		Name:             resourcename.Sprint(patternZfsDataset, d.PoolID, d.ID),
-		DatasetPath:      d.DatasetPath,
-		Mountpoint:       d.Mountpoint,
+		Name:             resourcename.Sprint(patternZfsDataset, cleanPoolID, cleanID),
+		DatasetPath:      datasetPath,
+		Mountpoint:       mountpoint,
 		UsedBytes:        d.UsedBytes,
 		AvailableBytes:   d.AvailableBytes,
 		ReferencedBytes:  d.ReferencedBytes,
@@ -2958,9 +3035,12 @@ func toProtoZfsDataset(d domain.ZfsDataset) *nasv1.ZfsDataset {
 }
 
 func toProtoZfsVolume(v domain.ZfsVolume) *nasv1.ZfsVolume {
+	cleanPoolID := strings.TrimPrefix(strings.TrimSpace(v.PoolID), "zfsPools/")
+	cleanID := strings.TrimPrefix(strings.TrimSpace(v.ID), "zfsPools/")
+	volumePath := strings.TrimPrefix(strings.TrimSpace(v.VolumePath), "zfsPools/")
 	return &nasv1.ZfsVolume{
-		Name:            resourcename.Sprint(patternZfsVolume, v.PoolID, v.ID),
-		VolumePath:      v.VolumePath,
+		Name:            resourcename.Sprint(patternZfsVolume, cleanPoolID, cleanID),
+		VolumePath:      volumePath,
 		DevicePath:      v.DevicePath,
 		SizeBytes:       v.SizeBytes,
 		UsedBytes:       v.UsedBytes,
@@ -2997,6 +3077,10 @@ func toProtoVM(vm domain.VirtualMachine) *nasv1.VirtualMachine {
 			VendorProductId: u.VendorProductID,
 		})
 	}
+	var protoCdroms []*nasv1.VirtualMachineCdrom
+	for _, c := range vm.Cdroms {
+		protoCdroms = append(protoCdroms, toProtoVMCdrom(c))
+	}
 
 	return &nasv1.VirtualMachine{
 		Name:                resourcename.Sprint(patternVirtualMachine, vm.ID),
@@ -3028,6 +3112,7 @@ func toProtoVM(vm domain.VirtualMachine) *nasv1.VirtualMachine {
 		TpmVersion:          vm.TPMVersion,
 		SecureBoot:          vm.SecureBoot,
 		Disks:               protoDisks,
+		Cdroms:              protoCdroms,
 		NetworkInterfaces:   protoIfaces,
 		CloudInit:           toProtoVMCloudInit(vm.CloudInit),
 		PciDevices:          protoPcis,
@@ -3065,6 +3150,27 @@ func toProtoVMDisk(d domain.VirtualMachineDisk) *nasv1.VirtualMachineDisk {
 		IopsLimitWrite: d.IOPSLimitWrite,
 		MbpsLimitRead:  d.MbpsLimitRead,
 		MbpsLimitWrite: d.MbpsLimitWrite,
+	}
+}
+
+func toProtoVMCdrom(c domain.VirtualMachineCdrom) *nasv1.VirtualMachineCdrom {
+	return &nasv1.VirtualMachineCdrom{
+		Id:       c.ID,
+		Bus:      c.Bus,
+		IsoPath:  c.IsoPath,
+		Bootable: c.Bootable,
+	}
+}
+
+func fromProtoVMCdrom(c *nasv1.VirtualMachineCdrom) domain.VirtualMachineCdrom {
+	if c == nil {
+		return domain.VirtualMachineCdrom{}
+	}
+	return domain.VirtualMachineCdrom{
+		ID:       c.GetId(),
+		Bus:      c.GetBus(),
+		IsoPath:  c.GetIsoPath(),
+		Bootable: c.GetBootable(),
 	}
 }
 
@@ -3539,3 +3645,492 @@ func toProtoLxcCatalogItem(it domain.LxcCatalogItem) *nasv1.LxcCatalogItem {
 		GpuRecommended:        it.GpuRecommended,
 	}
 }
+
+// =============================================================================
+// Reactive gRPC Server-Side Streaming (Initial Feed + Delta Events)
+// =============================================================================
+
+func (s *Server) WatchDockerApps(req *nasv1.WatchDockerAppsRequest, stream nasv1.NasService_WatchDockerAppsServer) error {
+	ctx := stream.Context()
+
+	// 1. Initial snapshot feed
+	listResp, err := s.ListDockerApps(ctx, &nasv1.ListDockerAppsRequest{})
+	if err == nil && listResp != nil {
+		if err := stream.Send(&nasv1.WatchDockerAppsResponse{
+			EventType: nasv1.WatchDockerAppsResponse_SNAPSHOT,
+			Snapshot:  listResp.GetDockerApps(),
+		}); err != nil {
+			return err
+		}
+	}
+
+	if s.eventBus == nil {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+
+	eventsCh := s.eventBus.Subscribe(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case evt, ok := <-eventsCh:
+			if !ok {
+				return nil
+			}
+			if evt.Topic != "docker" {
+				continue
+			}
+
+			if strings.HasPrefix(evt.Resource, "dockerApps/") {
+				action := strings.ToUpper(evt.Action)
+				if action == "DELETE" || action == "DESTROY" {
+					if err := stream.Send(&nasv1.WatchDockerAppsResponse{
+						EventType: nasv1.WatchDockerAppsResponse_DELETED,
+						DockerApp: &nasv1.DockerApp{Name: evt.Resource},
+					}); err != nil {
+						return err
+					}
+				} else {
+					app, err := s.GetDockerApp(ctx, &nasv1.GetDockerAppRequest{Name: evt.Resource})
+					if err == nil && app != nil {
+						evtType := nasv1.WatchDockerAppsResponse_MODIFIED
+						if action == "CREATE" {
+							evtType = nasv1.WatchDockerAppsResponse_ADDED
+						}
+						if err := stream.Send(&nasv1.WatchDockerAppsResponse{
+							EventType: evtType,
+							DockerApp: app,
+						}); err != nil {
+							return err
+						}
+					}
+				}
+			} else if evt.Payload != nil {
+				if appId, ok := evt.Payload["appId"].(string); ok && appId != "" {
+					appName := "dockerApps/" + appId
+					app, err := s.GetDockerApp(ctx, &nasv1.GetDockerAppRequest{Name: appName})
+					if err == nil && app != nil {
+						_ = stream.Send(&nasv1.WatchDockerAppsResponse{
+							EventType: nasv1.WatchDockerAppsResponse_MODIFIED,
+							DockerApp: app,
+						})
+					}
+				}
+			}
+		}
+	}
+}
+
+func (s *Server) WatchDockerContainers(req *nasv1.WatchDockerContainersRequest, stream nasv1.NasService_WatchDockerContainersServer) error {
+	ctx := stream.Context()
+
+	// 1. Initial snapshot feed
+	listResp, err := s.ListDockerContainers(ctx, &nasv1.ListDockerContainersRequest{})
+	if err == nil && listResp != nil {
+		if err := stream.Send(&nasv1.WatchDockerContainersResponse{
+			EventType: nasv1.WatchDockerContainersResponse_SNAPSHOT,
+			Snapshot:  listResp.GetDockerContainers(),
+		}); err != nil {
+			return err
+		}
+	}
+
+	if s.eventBus == nil {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+
+	eventsCh := s.eventBus.Subscribe(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case evt, ok := <-eventsCh:
+			if !ok {
+				return nil
+			}
+			if evt.Topic != "docker" {
+				continue
+			}
+
+			res := evt.Resource
+			if !strings.HasPrefix(res, "dockerContainers/") {
+				if cName, ok := evt.Payload["container"].(string); ok && cName != "" {
+					res = "dockerContainers/" + cName
+				} else {
+					continue
+				}
+			}
+
+			action := strings.ToUpper(evt.Action)
+			if action == "DELETE" || action == "DESTROY" || action == "DIE" {
+				_ = stream.Send(&nasv1.WatchDockerContainersResponse{
+					EventType:       nasv1.WatchDockerContainersResponse_DELETED,
+					DockerContainer: &nasv1.DockerContainer{Name: res},
+				})
+			} else {
+				c, err := s.GetDockerContainer(ctx, &nasv1.GetDockerContainerRequest{Name: res})
+				if err == nil && c != nil {
+					evtType := nasv1.WatchDockerContainersResponse_MODIFIED
+					if action == "CREATE" {
+						evtType = nasv1.WatchDockerContainersResponse_ADDED
+					}
+					_ = stream.Send(&nasv1.WatchDockerContainersResponse{
+						EventType:       evtType,
+						DockerContainer: c,
+					})
+				}
+			}
+		}
+	}
+}
+
+func (s *Server) WatchVirtualMachines(req *nasv1.WatchVirtualMachinesRequest, stream nasv1.NasService_WatchVirtualMachinesServer) error {
+	ctx := stream.Context()
+
+	// 1. Initial snapshot feed
+	listResp, err := s.ListVirtualMachines(ctx, &nasv1.ListVirtualMachinesRequest{})
+	if err == nil && listResp != nil {
+		if err := stream.Send(&nasv1.WatchVirtualMachinesResponse{
+			EventType: nasv1.WatchVirtualMachinesResponse_SNAPSHOT,
+			Snapshot:  listResp.GetVirtualMachines(),
+		}); err != nil {
+			return err
+		}
+	}
+
+	if s.eventBus == nil {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+
+	eventsCh := s.eventBus.Subscribe(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case evt, ok := <-eventsCh:
+			if !ok {
+				return nil
+			}
+			if evt.Topic != "kvm" || !strings.HasPrefix(evt.Resource, "virtualMachines/") {
+				continue
+			}
+
+			action := strings.ToUpper(evt.Action)
+			if action == "DELETE" || action == "UNDEFINED" {
+				_ = stream.Send(&nasv1.WatchVirtualMachinesResponse{
+					EventType:      nasv1.WatchVirtualMachinesResponse_DELETED,
+					VirtualMachine: &nasv1.VirtualMachine{Name: evt.Resource},
+				})
+			} else {
+				vm, err := s.GetVirtualMachine(ctx, &nasv1.GetVirtualMachineRequest{Name: evt.Resource})
+				if err == nil && vm != nil {
+					evtType := nasv1.WatchVirtualMachinesResponse_MODIFIED
+					if action == "CREATE" {
+						evtType = nasv1.WatchVirtualMachinesResponse_ADDED
+					}
+					_ = stream.Send(&nasv1.WatchVirtualMachinesResponse{
+						EventType:      evtType,
+						VirtualMachine: vm,
+					})
+				}
+			}
+		}
+	}
+}
+
+func (s *Server) WatchLxcContainers(req *nasv1.WatchLxcContainersRequest, stream nasv1.NasService_WatchLxcContainersServer) error {
+	ctx := stream.Context()
+
+	// 1. Initial snapshot feed
+	listResp, err := s.ListLxcContainers(ctx, &nasv1.ListLxcContainersRequest{})
+	if err == nil && listResp != nil {
+		if err := stream.Send(&nasv1.WatchLxcContainersResponse{
+			EventType: nasv1.WatchLxcContainersResponse_SNAPSHOT,
+			Snapshot:  listResp.GetLxcContainers(),
+		}); err != nil {
+			return err
+		}
+	}
+
+	if s.eventBus == nil {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+
+	eventsCh := s.eventBus.Subscribe(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case evt, ok := <-eventsCh:
+			if !ok {
+				return nil
+			}
+			if evt.Topic != "lxc" || !strings.HasPrefix(evt.Resource, "lxcContainers/") {
+				continue
+			}
+
+			action := strings.ToUpper(evt.Action)
+			if action == "DELETE" {
+				_ = stream.Send(&nasv1.WatchLxcContainersResponse{
+					EventType:    nasv1.WatchLxcContainersResponse_DELETED,
+					LxcContainer: &nasv1.LxcContainer{Name: evt.Resource},
+				})
+			} else {
+				c, err := s.GetLxcContainer(ctx, &nasv1.GetLxcContainerRequest{Name: evt.Resource})
+				if err == nil && c != nil {
+					evtType := nasv1.WatchLxcContainersResponse_MODIFIED
+					if action == "CREATE" {
+						evtType = nasv1.WatchLxcContainersResponse_ADDED
+					}
+					_ = stream.Send(&nasv1.WatchLxcContainersResponse{
+						EventType:    evtType,
+						LxcContainer: c,
+					})
+				}
+			}
+		}
+	}
+}
+
+func (s *Server) StreamSystemTelemetry(req *nasv1.StreamSystemTelemetryRequest, stream nasv1.NasService_StreamSystemTelemetryServer) error {
+	ctx := stream.Context()
+	interval := 2 * time.Second
+	if req != nil && req.GetIntervalSeconds() > 0 {
+		interval = time.Duration(req.GetIntervalSeconds()) * time.Second
+	}
+
+	// 1. Immediate initial sample
+	if telem, err := s.GetSystemTelemetry(ctx, &nasv1.GetSystemTelemetryRequest{}); err == nil && telem != nil {
+		if err := stream.Send(telem); err != nil {
+			return err
+		}
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if telem, err := s.GetSystemTelemetry(ctx, &nasv1.GetSystemTelemetryRequest{}); err == nil && telem != nil {
+				if err := stream.Send(telem); err != nil {
+					return err
+				}
+			}
+		}
+	}
+}
+
+func (s *Server) WatchResources(req *nasv1.WatchResourcesRequest, stream nasv1.NasService_WatchResourcesServer) error {
+	ctx := stream.Context()
+	filter := make(map[string]bool)
+	if req != nil {
+		for _, rt := range req.GetResourceTypes() {
+			filter[rt] = true
+		}
+	}
+	match := func(rt string) bool {
+		return len(filter) == 0 || filter[rt]
+	}
+
+	sendChange := func(rt string, evtType nasv1.WatchResourceChange_EventType, name string, entity any) error {
+		var payloadStr string
+		if pm, ok := entity.(proto.Message); ok {
+			b, err := protojson.Marshal(pm)
+			if err != nil {
+				return err
+			}
+			payloadStr = string(b)
+		} else {
+			switch items := entity.(type) {
+			case []*nasv1.DockerApp:
+				var parts []string
+				for _, it := range items {
+					b, err := protojson.Marshal(it)
+					if err == nil {
+						parts = append(parts, string(b))
+					}
+				}
+				payloadStr = "[" + strings.Join(parts, ",") + "]"
+			case []*nasv1.DockerContainer:
+				var parts []string
+				for _, it := range items {
+					b, err := protojson.Marshal(it)
+					if err == nil {
+						parts = append(parts, string(b))
+					}
+				}
+				payloadStr = "[" + strings.Join(parts, ",") + "]"
+			case []*nasv1.VirtualMachine:
+				var parts []string
+				for _, it := range items {
+					b, err := protojson.Marshal(it)
+					if err == nil {
+						parts = append(parts, string(b))
+					}
+				}
+				payloadStr = "[" + strings.Join(parts, ",") + "]"
+			case []*nasv1.LxcContainer:
+				var parts []string
+				for _, it := range items {
+					b, err := protojson.Marshal(it)
+					if err == nil {
+						parts = append(parts, string(b))
+					}
+				}
+				payloadStr = "[" + strings.Join(parts, ",") + "]"
+			default:
+				b, err := json.Marshal(entity)
+				if err != nil {
+					return err
+				}
+				payloadStr = string(b)
+			}
+		}
+		return stream.Send(&nasv1.WatchResourceChange{
+			ResourceType: rt,
+			EventType:    evtType,
+			ResourceName: name,
+			JsonPayload:  payloadStr,
+		})
+	}
+
+	// 1. Initial snapshot feed for requested resource types
+	if match("dockerApps") {
+		if resp, err := s.ListDockerApps(ctx, &nasv1.ListDockerAppsRequest{}); err == nil && resp != nil {
+			_ = sendChange("dockerApps", nasv1.WatchResourceChange_SNAPSHOT, "dockerApps", resp.GetDockerApps())
+		}
+	}
+	if match("dockerContainers") {
+		if resp, err := s.ListDockerContainers(ctx, &nasv1.ListDockerContainersRequest{}); err == nil && resp != nil {
+			_ = sendChange("dockerContainers", nasv1.WatchResourceChange_SNAPSHOT, "dockerContainers", resp.GetDockerContainers())
+		}
+	}
+	if match("virtualMachines") {
+		if resp, err := s.ListVirtualMachines(ctx, &nasv1.ListVirtualMachinesRequest{}); err == nil && resp != nil {
+			_ = sendChange("virtualMachines", nasv1.WatchResourceChange_SNAPSHOT, "virtualMachines", resp.GetVirtualMachines())
+		}
+	}
+	if match("lxcContainers") {
+		if resp, err := s.ListLxcContainers(ctx, &nasv1.ListLxcContainersRequest{}); err == nil && resp != nil {
+			_ = sendChange("lxcContainers", nasv1.WatchResourceChange_SNAPSHOT, "lxcContainers", resp.GetLxcContainers())
+		}
+	}
+	if match("telemetry") {
+		if telem, err := s.GetSystemTelemetry(ctx, &nasv1.GetSystemTelemetryRequest{}); err == nil && telem != nil {
+			_ = sendChange("telemetry", nasv1.WatchResourceChange_SNAPSHOT, "telemetry", telem)
+		}
+	}
+
+	if s.eventBus == nil {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+
+	eventsCh := s.eventBus.Subscribe(ctx)
+	var telemTicker *time.Ticker
+	var telemChan <-chan time.Time
+	if match("telemetry") {
+		telemTicker = time.NewTicker(2 * time.Second)
+		defer telemTicker.Stop()
+		telemChan = telemTicker.C
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-telemChan:
+			if telem, err := s.GetSystemTelemetry(ctx, &nasv1.GetSystemTelemetryRequest{}); err == nil && telem != nil {
+				_ = sendChange("telemetry", nasv1.WatchResourceChange_MODIFIED, "telemetry", telem)
+			}
+		case evt, ok := <-eventsCh:
+			if !ok {
+				return nil
+			}
+			switch evt.Topic {
+			case "docker":
+				if match("dockerApps") && strings.HasPrefix(evt.Resource, "dockerApps/") {
+					act := strings.ToUpper(evt.Action)
+					if act == "DELETE" || act == "DESTROY" {
+						_ = sendChange("dockerApps", nasv1.WatchResourceChange_DELETED, evt.Resource, map[string]string{"name": evt.Resource})
+					} else {
+						if app, err := s.GetDockerApp(ctx, &nasv1.GetDockerAppRequest{Name: evt.Resource}); err == nil && app != nil {
+							evtType := nasv1.WatchResourceChange_MODIFIED
+							if act == "CREATE" {
+								evtType = nasv1.WatchResourceChange_ADDED
+							}
+							_ = sendChange("dockerApps", evtType, evt.Resource, app)
+						}
+					}
+				} else if match("dockerApps") && evt.Payload != nil {
+					if appId, ok := evt.Payload["appId"].(string); ok && appId != "" {
+						appName := "dockerApps/" + appId
+						if app, err := s.GetDockerApp(ctx, &nasv1.GetDockerAppRequest{Name: appName}); err == nil && app != nil {
+							_ = sendChange("dockerApps", nasv1.WatchResourceChange_MODIFIED, appName, app)
+						}
+					}
+				}
+				if match("dockerContainers") {
+					res := evt.Resource
+					if !strings.HasPrefix(res, "dockerContainers/") && evt.Payload != nil {
+						if cName, ok := evt.Payload["container"].(string); ok && cName != "" {
+							res = "dockerContainers/" + cName
+						}
+					}
+					if strings.HasPrefix(res, "dockerContainers/") {
+						act := strings.ToUpper(evt.Action)
+						if act == "DELETE" || act == "DESTROY" || act == "DIE" {
+							_ = sendChange("dockerContainers", nasv1.WatchResourceChange_DELETED, res, map[string]string{"name": res})
+						} else {
+							if c, err := s.GetDockerContainer(ctx, &nasv1.GetDockerContainerRequest{Name: res}); err == nil && c != nil {
+								evtType := nasv1.WatchResourceChange_MODIFIED
+								if act == "CREATE" {
+									evtType = nasv1.WatchResourceChange_ADDED
+								}
+								_ = sendChange("dockerContainers", evtType, res, c)
+							}
+						}
+					}
+				}
+			case "kvm":
+				if match("virtualMachines") && strings.HasPrefix(evt.Resource, "virtualMachines/") {
+					act := strings.ToUpper(evt.Action)
+					if act == "DELETE" || act == "UNDEFINED" {
+						_ = sendChange("virtualMachines", nasv1.WatchResourceChange_DELETED, evt.Resource, map[string]string{"name": evt.Resource})
+					} else {
+						if vm, err := s.GetVirtualMachine(ctx, &nasv1.GetVirtualMachineRequest{Name: evt.Resource}); err == nil && vm != nil {
+							evtType := nasv1.WatchResourceChange_MODIFIED
+							if act == "CREATE" {
+								evtType = nasv1.WatchResourceChange_ADDED
+							}
+							_ = sendChange("virtualMachines", evtType, evt.Resource, vm)
+						}
+					}
+				}
+			case "lxc":
+				if match("lxcContainers") && strings.HasPrefix(evt.Resource, "lxcContainers/") {
+					act := strings.ToUpper(evt.Action)
+					if act == "DELETE" {
+						_ = sendChange("lxcContainers", nasv1.WatchResourceChange_DELETED, evt.Resource, map[string]string{"name": evt.Resource})
+					} else {
+						if c, err := s.GetLxcContainer(ctx, &nasv1.GetLxcContainerRequest{Name: evt.Resource}); err == nil && c != nil {
+							evtType := nasv1.WatchResourceChange_MODIFIED
+							if act == "CREATE" {
+								evtType = nasv1.WatchResourceChange_ADDED
+							}
+							_ = sendChange("lxcContainers", evtType, evt.Resource, c)
+						}
+					}
+				}
+			}
+		}
+	}
+}
+

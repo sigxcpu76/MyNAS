@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -17,7 +18,9 @@ import (
 	"github.com/sigxcpu/nas/internal/application"
 	nasv1 "github.com/sigxcpu/nas/internal/gen/nas/v1"
 	"golang.org/x/net/websocket"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 type Gateway struct {
@@ -55,6 +58,13 @@ func NewGateway(
 			},
 		}),
 	)
+
+	type eventBusSetter interface {
+		SetEventBus(bus *application.EventBus)
+	}
+	if setter, ok := grpcServer.(eventBusSetter); ok && eventBus != nil {
+		setter.SetEventBus(eventBus)
+	}
 	if err := nasv1.RegisterNasServiceHandlerServer(ctx, gwMux, grpcServer); err != nil {
 		return nil, err
 	}
@@ -84,6 +94,14 @@ func NewGateway(
 	// 2. Real-Time System Notification Stream (Server-Sent Events)
 	mux.HandleFunc("/v1/events", g.handleEventsSSE)
 	mux.HandleFunc("/events", g.handleEventsSSE)
+
+	// 2b. Reactive gRPC Server-Side Streaming / Watch Handlers over HTTP
+	mux.Handle("/v1/dockerApps:watch", corsMiddleware(http.HandlerFunc(g.handleWatchDockerApps)))
+	mux.Handle("/v1/dockerContainers:watch", corsMiddleware(http.HandlerFunc(g.handleWatchDockerContainers)))
+	mux.Handle("/v1/virtualMachines:watch", corsMiddleware(http.HandlerFunc(g.handleWatchVirtualMachines)))
+	mux.Handle("/v1/lxcContainers:watch", corsMiddleware(http.HandlerFunc(g.handleWatchLxcContainers)))
+	mux.Handle("/v1/system:telemetryStream", corsMiddleware(http.HandlerFunc(g.handleStreamSystemTelemetry)))
+	mux.Handle("/v1/resources:watch", corsMiddleware(http.HandlerFunc(g.handleWatchResources)))
 
 	// 3. Google AIP REST/JSON API via gRPC-Gateway
 	mux.Handle("/v1/", corsMiddleware(gwMux))
@@ -554,4 +572,263 @@ func corsMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// =============================================================================
+// HTTP Streaming Bridge for gRPC Server Streaming (AIP-162 / AIP-151)
+// =============================================================================
+
+type httpServerStream[T any] struct {
+	ctx     context.Context
+	w       http.ResponseWriter
+	flusher http.Flusher
+}
+
+func (s *httpServerStream[T]) Send(msg T) error {
+	var data []byte
+	var err error
+	if pm, ok := any(msg).(proto.Message); ok {
+		data, err = protojson.Marshal(pm)
+	} else {
+		data, err = json.Marshal(msg)
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(s.w, "{\"result\":%s}\n", data); err != nil {
+		return err
+	}
+	s.flusher.Flush()
+	return nil
+}
+
+func (s *httpServerStream[T]) Context() context.Context {
+	return s.ctx
+}
+
+func (s *httpServerStream[T]) SetHeader(metadata.MD) error  { return nil }
+func (s *httpServerStream[T]) SendHeader(metadata.MD) error { return nil }
+func (s *httpServerStream[T]) SetTrailer(metadata.MD)       {}
+func (s *httpServerStream[T]) SendMsg(m any) error          { return nil }
+func (s *httpServerStream[T]) RecvMsg(m any) error          { return nil }
+
+func (g *Gateway) handleWatchDockerApps(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Transfer-Encoding", "chunked")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	streamCtx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	go func() {
+		select {
+		case <-streamCtx.Done():
+		case <-g.shutdownCh:
+			cancel()
+		}
+	}()
+
+	stream := &httpServerStream[*nasv1.WatchDockerAppsResponse]{
+		ctx:     streamCtx,
+		w:       w,
+		flusher: flusher,
+	}
+	_ = g.grpcServer.WatchDockerApps(&nasv1.WatchDockerAppsRequest{}, stream)
+}
+
+func (g *Gateway) handleWatchDockerContainers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Transfer-Encoding", "chunked")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	streamCtx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	go func() {
+		select {
+		case <-streamCtx.Done():
+		case <-g.shutdownCh:
+			cancel()
+		}
+	}()
+
+	stream := &httpServerStream[*nasv1.WatchDockerContainersResponse]{
+		ctx:     streamCtx,
+		w:       w,
+		flusher: flusher,
+	}
+	_ = g.grpcServer.WatchDockerContainers(&nasv1.WatchDockerContainersRequest{}, stream)
+}
+
+func (g *Gateway) handleWatchVirtualMachines(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Transfer-Encoding", "chunked")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	streamCtx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	go func() {
+		select {
+		case <-streamCtx.Done():
+		case <-g.shutdownCh:
+			cancel()
+		}
+	}()
+
+	stream := &httpServerStream[*nasv1.WatchVirtualMachinesResponse]{
+		ctx:     streamCtx,
+		w:       w,
+		flusher: flusher,
+	}
+	_ = g.grpcServer.WatchVirtualMachines(&nasv1.WatchVirtualMachinesRequest{}, stream)
+}
+
+func (g *Gateway) handleWatchLxcContainers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Transfer-Encoding", "chunked")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	streamCtx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	go func() {
+		select {
+		case <-streamCtx.Done():
+		case <-g.shutdownCh:
+			cancel()
+		}
+	}()
+
+	stream := &httpServerStream[*nasv1.WatchLxcContainersResponse]{
+		ctx:     streamCtx,
+		w:       w,
+		flusher: flusher,
+	}
+	_ = g.grpcServer.WatchLxcContainers(&nasv1.WatchLxcContainersRequest{}, stream)
+}
+
+func (g *Gateway) handleStreamSystemTelemetry(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Transfer-Encoding", "chunked")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	var interval int32 = 2
+	if s := r.URL.Query().Get("intervalSeconds"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			interval = int32(n)
+		}
+	}
+
+	streamCtx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	go func() {
+		select {
+		case <-streamCtx.Done():
+		case <-g.shutdownCh:
+			cancel()
+		}
+	}()
+
+	stream := &httpServerStream[*nasv1.SystemTelemetry]{
+		ctx:     streamCtx,
+		w:       w,
+		flusher: flusher,
+	}
+	_ = g.grpcServer.StreamSystemTelemetry(&nasv1.StreamSystemTelemetryRequest{IntervalSeconds: interval}, stream)
+}
+
+func (g *Gateway) handleWatchResources(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Transfer-Encoding", "chunked")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	var rTypes []string
+	for _, raw := range r.URL.Query()["resourceTypes"] {
+		for _, part := range strings.Split(raw, ",") {
+			part = strings.TrimSpace(part)
+			if part != "" {
+				rTypes = append(rTypes, part)
+			}
+		}
+	}
+
+	streamCtx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	go func() {
+		select {
+		case <-streamCtx.Done():
+		case <-g.shutdownCh:
+			cancel()
+		}
+	}()
+
+	stream := &httpServerStream[*nasv1.WatchResourceChange]{
+		ctx:     streamCtx,
+		w:       w,
+		flusher: flusher,
+	}
+	_ = g.grpcServer.WatchResources(&nasv1.WatchResourcesRequest{ResourceTypes: rTypes}, stream)
 }

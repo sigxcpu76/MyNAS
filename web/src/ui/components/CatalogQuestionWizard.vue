@@ -56,9 +56,17 @@ const emit = defineEmits<{
   (e: 'skipWizard'): void;
 }>();
 
+const cleanAppsPool = computed(() => {
+  const p = props.appsPool || 'tank';
+  return p.replace(/^zfsPools\//, '').trim() || 'tank';
+});
+
 // Form answers state
 const answers = reactive<Record<string, string>>(
-  getQuestionsDefaultAnswers(props.app, props.appsPool)
+  getQuestionsDefaultAnswers(
+    props.app,
+    (props.appsPool || 'tank').replace(/^zfsPools\//, '').trim() || 'tank'
+  )
 );
 
 // Password visibility state per variable
@@ -71,6 +79,7 @@ const activeTab = ref<string>(groups.value[0]?.name || 'Network & Web Portal');
 // Split preview state
 const showLivePreview = ref(true);
 const isCopied = ref(false);
+const autoStartOnBoot = ref(true);
 
 // Active group questions
 const activeGroupQuestions = computed<CatalogQuestion[]>(() => {
@@ -82,7 +91,11 @@ const totalQuestionsCount = computed(() => getAllAppQuestions(props.app).length)
 
 // Live compiled Compose YAML
 const compiledComposeYaml = computed<string>(() => {
-  return generateComposeFromQuestions(props.app, answers, props.appsPool);
+  let yaml = generateComposeFromQuestions(props.app, answers, cleanAppsPool.value);
+  if (!autoStartOnBoot.value) {
+    yaml = yaml.replace(/restart:\s*(unless-stopped|always)/g, 'restart: no');
+  }
+  return yaml;
 });
 
 // Primary Web UI Port (if defined)
@@ -149,7 +162,7 @@ function resetStoragePath(variable: string) {
   if (leaf === 'host_path' || leaf === 'path') {
     leaf = parts.length > 1 ? parts[parts.length - 2] : 'data';
   }
-  answers[variable] = `/mnt/${props.appsPool}/apps/${cleanAppId.value}/${leaf}`;
+  answers[variable] = `/mnt/${cleanAppsPool.value}/apps/${cleanAppId.value}/${leaf}`;
 }
 
 async function copyYaml() {
@@ -356,8 +369,8 @@ watch(
                     <div style="flex: 1">
                       <PathSelector
                         v-model="answers[q.variable]"
-                        :placeholder="`/mnt/${appsPool}/apps/${cleanAppId}/...`"
-                        :root-hint="`/mnt/${appsPool}`"
+                        :placeholder="`/mnt/${cleanAppsPool}/apps/${cleanAppId}/...`"
+                        :root-hint="`/mnt/${cleanAppsPool}`"
                       />
                     </div>
                     <button
@@ -486,14 +499,21 @@ watch(
 
       <!-- Modal Footer Action Bar -->
       <div class="wizard-footer">
-        <button
-          class="btn btn-sm"
-          style="font-size: 12px; color: var(--text-secondary)"
-          title="Bypass configuration wizard and load raw Compose template directly"
-          @click="emit('skipWizard')"
-        >
-          Skip Wizard & Open Raw YAML
-        </button>
+        <div style="display: flex; align-items: center; gap: 16px">
+          <button
+            class="btn btn-sm"
+            style="font-size: 12px; color: var(--text-secondary)"
+            title="Bypass configuration wizard and load raw Compose template directly"
+            @click="emit('skipWizard')"
+          >
+            Skip Wizard & Open Raw YAML
+          </button>
+
+          <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; user-select: none; margin: 0">
+            <input v-model="autoStartOnBoot" type="checkbox" />
+            <span>Autostart on boot</span>
+          </label>
+        </div>
 
         <div style="display: flex; align-items: center; gap: 10px">
           <button class="btn btn-sm" @click="emit('close')">

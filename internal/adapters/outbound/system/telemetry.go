@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -145,14 +146,16 @@ func (c *TelemetryCollector) collectCPU() domain.CpuTelemetry {
 	}
 
 	// 4. CPU temperature
-	res.TemperatureCelsius, res.CoreTemperatures = readCPUTemperatures()
+	res.TemperatureCelsius, res.PackageTemperatures, res.CoreTemperatures = readCPUTemperatures()
 
 	return res
 }
 
-func readCPUTemperatures() (float64, []float64) {
+func readCPUTemperatures() (float64, []float64, []float64) {
 	var coreTemps []float64
 	var packageTemp float64
+	pkgMap := make(map[int]float64)
+	var fallbackPkgTemps []float64
 
 	// Check hwmon directory
 	matches, _ := filepath.Glob("/sys/class/hwmon/hwmon*")
@@ -173,23 +176,94 @@ func readCPUTemperatures() (float64, []float64) {
 
 		// Read temp*_input files
 		tempInputs, _ := filepath.Glob(filepath.Join(hwmon, "temp*_input"))
+		var hwmonPrimaryTemp float64
+		foundPkgInHwmon := false
+
 		for _, tf := range tempInputs {
-			if valBytes, err := os.ReadFile(tf); err == nil {
-				if millidegrees, err := strconv.ParseFloat(strings.TrimSpace(string(valBytes)), 64); err == nil {
-					deg := millidegrees / 1000.0
-					if deg > 0 && deg < 150 {
-						coreTemps = append(coreTemps, deg)
-						if packageTemp == 0 || deg > packageTemp {
-							packageTemp = deg
-						}
+			valBytes, err := os.ReadFile(tf)
+			if err != nil {
+				continue
+			}
+			millidegrees, err := strconv.ParseFloat(strings.TrimSpace(string(valBytes)), 64)
+			if err != nil {
+				continue
+			}
+			deg := millidegrees / 1000.0
+			if deg <= 0 || deg >= 150 {
+				continue
+			}
+
+			// Check corresponding label file, e.g. temp1_label for temp1_input
+			base := strings.TrimSuffix(tf, "_input")
+			labelBytes, _ := os.ReadFile(base + "_label")
+			label := strings.TrimSpace(string(labelBytes))
+			labelLower := strings.ToLower(label)
+
+			if strings.Contains(labelLower, "package") {
+				// e.g. "Package id 0", "Package id 1"
+				pkgIdx := len(pkgMap)
+				for _, part := range strings.Fields(label) {
+					if n, err := strconv.Atoi(part); err == nil && n >= 0 && n < 32 {
+						pkgIdx = n
+						break
 					}
+				}
+				pkgMap[pkgIdx] = deg
+				foundPkgInHwmon = true
+				if packageTemp == 0 || deg > packageTemp {
+					packageTemp = deg
+				}
+			} else if strings.Contains(labelLower, "tdie") || strings.Contains(labelLower, "tctl") {
+				if hwmonPrimaryTemp == 0 {
+					hwmonPrimaryTemp = deg
+				}
+				if packageTemp == 0 || deg > packageTemp {
+					packageTemp = deg
+				}
+			} else {
+				if strings.Contains(labelLower, "core") {
+					coreTemps = append(coreTemps, deg)
+				}
+				if hwmonPrimaryTemp == 0 {
+					hwmonPrimaryTemp = deg
 				}
 			}
 		}
 
-		if packageTemp > 0 {
-			break
+		if !foundPkgInHwmon && hwmonPrimaryTemp > 0 {
+			fallbackPkgTemps = append(fallbackPkgTemps, hwmonPrimaryTemp)
+			if packageTemp == 0 || hwmonPrimaryTemp > packageTemp {
+				packageTemp = hwmonPrimaryTemp
+			}
 		}
+	}
+
+	var packageTemps []float64
+	if len(pkgMap) > 0 {
+		maxID := -1
+		for id := range pkgMap {
+			if id > maxID {
+				maxID = id
+			}
+		}
+		for i := 0; i <= maxID; i++ {
+			if temp, ok := pkgMap[i]; ok {
+				packageTemps = append(packageTemps, temp)
+			}
+		}
+		if len(packageTemps) < len(pkgMap) {
+			packageTemps = nil
+			var keys []int
+			for k := range pkgMap {
+				keys = append(keys, k)
+			}
+			sort.Ints(keys)
+			for _, k := range keys {
+				packageTemps = append(packageTemps, pkgMap[k])
+			}
+		}
+	} else if len(fallbackPkgTemps) > 0 {
+		packageTemps = fallbackPkgTemps
 	}
 
 	// Fallback to /sys/class/thermal/thermal_zone*
@@ -202,6 +276,7 @@ func readCPUTemperatures() (float64, []float64) {
 					if deg > 0 && deg < 150 {
 						packageTemp = deg
 						coreTemps = append(coreTemps, deg)
+						packageTemps = append(packageTemps, deg)
 						break
 					}
 				}
@@ -209,7 +284,11 @@ func readCPUTemperatures() (float64, []float64) {
 		}
 	}
 
-	return packageTemp, coreTemps
+	if len(packageTemps) == 0 && packageTemp > 0 {
+		packageTemps = []float64{packageTemp}
+	}
+
+	return packageTemp, packageTemps, coreTemps
 }
 
 func (c *TelemetryCollector) collectMemory() domain.MemoryTelemetry {

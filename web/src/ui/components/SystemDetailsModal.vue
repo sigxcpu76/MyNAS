@@ -222,10 +222,23 @@ async function copySystemSummary() {
             </div>
             <div class="spec-row">
               <span class="spec-label">Usage & Thermal:</span>
-              <span class="spec-val" style="display: inline-flex; align-items: center; gap: 8px">
+              <span class="spec-val" style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap">
                 <span class="mono font-semibold">{{ (cpu?.usagePercent || 0).toFixed(1) }}% Active</span>
+                <template v-if="(cpu?.packageTemperatures || []).length > 1">
+                  <span
+                    v-for="(t, idx) in cpu?.packageTemperatures"
+                    :key="idx"
+                    class="badge"
+                    :class="getTempBadgeClass(t)"
+                    style="font-size: 11px"
+                    :title="`CPU Socket ${idx} Package Temperature`"
+                  >
+                    <MdiIcon :path="mdiThermometer" size="12" style="margin-right: 2px" />
+                    CPU{{ idx }}: {{ t.toFixed(1) }} °C
+                  </span>
+                </template>
                 <span
-                  v-if="(cpu?.temperatureCelsius || 0) > 0"
+                  v-else-if="(cpu?.temperatureCelsius || 0) > 0"
                   class="badge"
                   :class="getTempBadgeClass(cpu?.temperatureCelsius || 0)"
                   style="font-size: 11px"

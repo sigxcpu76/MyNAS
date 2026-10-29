@@ -80,6 +80,18 @@ service NasService {
     };
   }
 
+  rpc StreamSystemTelemetry(StreamSystemTelemetryRequest) returns (stream SystemTelemetry) {
+    option (google.api.http) = {
+      get: "/v1/system:telemetryStream"
+    };
+  }
+
+  rpc WatchResources(WatchResourcesRequest) returns (stream WatchResourceChange) {
+    option (google.api.http) = {
+      get: "/v1/resources:watch"
+    };
+  }
+
   // ---------------------------------------------------------------------------
   // Prerequisites (AIP-131 Get, AIP-132 List, AIP-136 Custom :check)
   // ---------------------------------------------------------------------------
@@ -425,6 +437,12 @@ service NasService {
     };
   }
 
+  rpc WatchVirtualMachines(WatchVirtualMachinesRequest) returns (stream WatchVirtualMachinesResponse) {
+    option (google.api.http) = {
+      get: "/v1/virtualMachines:watch"
+    };
+  }
+
   // ---------------------------------------------------------------------------
   // Docker Containers
   // ---------------------------------------------------------------------------
@@ -489,6 +507,12 @@ service NasService {
     option (google.api.http) = {
       post: "/v1/{name=dockerContainers/*}:restart"
       body: "*"
+    };
+  }
+
+  rpc WatchDockerContainers(WatchDockerContainersRequest) returns (stream WatchDockerContainersResponse) {
+    option (google.api.http) = {
+      get: "/v1/dockerContainers:watch"
     };
   }
 
@@ -563,6 +587,12 @@ service NasService {
   rpc GetDockerAppLogs(GetDockerAppLogsRequest) returns (GetDockerAppLogsResponse) {
     option (google.api.http) = {
       get: "/v1/{name=dockerApps/*}:logs"
+    };
+  }
+
+  rpc WatchDockerApps(WatchDockerAppsRequest) returns (stream WatchDockerAppsResponse) {
+    option (google.api.http) = {
+      get: "/v1/dockerApps:watch"
     };
   }
 
@@ -727,6 +757,12 @@ service NasService {
   rpc GetLxcContainerLogs(GetLxcContainerLogsRequest) returns (GetLxcContainerLogsResponse) {
     option (google.api.http) = {
       get: "/v1/{name=lxcContainers/*}:logs"
+    };
+  }
+
+  rpc WatchLxcContainers(WatchLxcContainersRequest) returns (stream WatchLxcContainersResponse) {
+    option (google.api.http) = {
+      get: "/v1/lxcContainers:watch"
     };
   }
 

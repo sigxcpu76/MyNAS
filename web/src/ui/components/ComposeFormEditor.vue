@@ -181,10 +181,17 @@ const zfsDatasetPaths = computed(() => {
   return paths;
 });
 
-const appsPoolName = computed(() => nasState.dockerConfig?.pool || nasState.systemConfig?.mainPool || 'tank');
-const appsPoolAppdataDir = computed(
-  () => nasState.dockerConfig?.appdataDataset || `/mnt/${appsPoolName.value}/apps`
+const appsPoolName = computed(() =>
+  (nasState.dockerConfig?.pool || nasState.systemConfig?.mainPool || 'tank').replace(/^zfsPools\//, '').trim()
 );
+const appsPoolAppdataDir = computed(() => {
+  const custom = nasState.dockerConfig?.appdataDataset;
+  if (custom) {
+    const cleaned = custom.replace(/^zfsPools\//, '').trim();
+    return cleaned.startsWith('/') ? cleaned : `/mnt/${cleaned}`;
+  }
+  return `/mnt/${appsPoolName.value}/apps`;
+});
 
 function defaultAppdataMount(appId: string, subfolder = 'data'): string {
   const cleanId = toZfsSafeSlug(appId.trim()) || 'app';

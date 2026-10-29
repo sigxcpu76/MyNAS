@@ -305,4 +305,71 @@ export class AipClient {
 
     return parsed as T;
   }
+
+  /**
+   * Connects to a gRPC-Gateway server-side streaming watch endpoint (e.g. `dockerApps:watch` or `resources:watch`).
+   * Reads chunked NDJSON, unwraps `{"result": ...}`, and invokes `onMessage` for each message.
+   */
+  async watchStream<T = any>(
+    resourcePath: string,
+    onMessage: (msg: T) => void,
+    signal?: AbortSignal
+  ): Promise<void> {
+    const cleanPath = resourcePath.replace(/^\/+/, '');
+    const url = `${this.baseUrl}/${cleanPath}`;
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'Cache-Control': 'no-cache',
+    };
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    const response = await this.fetchImpl(url, {
+      method: 'GET',
+      headers,
+      signal,
+    });
+
+    if (!response.ok) {
+      throw new AipHttpError(response.status, `Failed to connect to watch stream: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        if (signal?.aborted) break;
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const parsed = JSON.parse(trimmed);
+            const data = parsed.result !== undefined ? parsed.result : parsed;
+            onMessage(data as T);
+          } catch {
+            // ignore non-json chunk/heartbeat
+          }
+        }
+      }
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {
+        // ignore
+      }
+    }
+  }
 }

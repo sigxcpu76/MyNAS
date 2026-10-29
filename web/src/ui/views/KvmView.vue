@@ -13,6 +13,7 @@ import {
   type VirtualMachineDisk,
   type VirtualMachineNetworkInterface,
   type VirtualMachineSnapshot,
+  type VirtualMachineCdrom,
 } from '../../domain/models';
 import { askModal, confirmModal, nasState, notify, refreshIsos as storeRefreshIsos } from '../store';
 import { confirmDelete } from '../modal';
@@ -43,7 +44,9 @@ import {
   mdiPlay,
   mdiPlus,
   mdiPower,
+  mdiPowerCycle,
   mdiRefresh,
+  mdiRestart,
   mdiRestore,
   mdiServer,
   mdiShieldCheck,
@@ -122,9 +125,16 @@ watch(inspectingVm, (vm) => {
 const showMediaModal = ref(false);
 const mediaForm = reactive({
   isoPath: '',
+  deviceId: '',
 });
 
 // Add Hardware Modals
+const showAddCdromModal = ref(false);
+const cdromForm = reactive({
+  bus: 'sata',
+  isoPath: '',
+});
+
 const showAddDiskModal = ref(false);
 const diskForm = reactive({
   bus: 'scsi',
@@ -253,6 +263,8 @@ const wizardForm = reactive({
   tpmVersion: 'none',
   secureBoot: false,
   bootIso: '',
+  secondaryIso: '',
+  showSecondaryCdrom: false,
   bootOrder: 'hd,cdrom',
 
   sockets: 1,
@@ -325,6 +337,7 @@ const vmSort = useTableSort(filteredVms, {
   vcpus: (vm) => vm.vcpus,
   memory: (vm) => vm.memoryMib,
   ip: (vm) => visibleGuestIps(vm)[0],
+  autostart: (vm) => (vm.autostart ? 1 : 0),
 });
 
 const isoSort = useTableSort(() => nasState.isos, {
@@ -497,6 +510,8 @@ function openCreateWizard() {
   wizardForm.tpmVersion = 'none';
   wizardForm.secureBoot = false;
   wizardForm.bootIso = nasState.isos.length > 0 ? nasState.isos[0].path : '';
+  wizardForm.secondaryIso = '';
+  wizardForm.showSecondaryCdrom = false;
   wizardForm.sockets = 1;
   wizardForm.cores = 2;
   wizardForm.cpuType = 'host';
@@ -621,42 +636,24 @@ function openAddDiskModal() {
 }
 
 const transitioningVms = reactive<Record<string, 'starting' | 'stopping' | 'rebooting'>>({});
-let pollTimer: ReturnType<typeof setInterval> | null = null;
-let fastPollTimer: ReturnType<typeof setTimeout> | null = null;
 
-function triggerFastPolling(attempts = 20) {
-  if (fastPollTimer) {
-    clearTimeout(fastPollTimer);
-    fastPollTimer = null;
-  }
-  let count = 0;
-  const poll = async () => {
-    count++;
-    await refreshVms(true);
-    if (Object.keys(transitioningVms).length > 0 && count < attempts) {
-      fastPollTimer = setTimeout(poll, 1000);
+function setTransitionState(name: string, state: 'starting' | 'stopping' | 'rebooting') {
+  transitioningVms[name] = state;
+  const timeoutMs = state === 'rebooting' ? 4000 : 15000;
+  setTimeout(() => {
+    if (transitioningVms[name] === state) {
+      delete transitioningVms[name];
     }
-  };
-  fastPollTimer = setTimeout(poll, 1000);
+  }, timeoutMs);
+}
+
+function triggerFastPolling() {
+  refreshVms(true).catch(() => {});
 }
 
 // Lifecycle
 onMounted(async () => {
   await Promise.all([refreshVms(), refreshIsos()]);
-  pollTimer = setInterval(async () => {
-    await refreshVms(true);
-  }, 3000);
-});
-
-onUnmounted(() => {
-  if (pollTimer) {
-    clearInterval(pollTimer);
-    pollTimer = null;
-  }
-  if (fastPollTimer) {
-    clearTimeout(fastPollTimer);
-    fastPollTimer = null;
-  }
 });
 
 async function refreshVms(silent: boolean | Event = false) {
@@ -696,6 +693,16 @@ async function refreshVms(silent: boolean | Event = false) {
 watch(
   () => nasState.vms,
   (newVms) => {
+    for (const [name, target] of Object.entries(transitioningVms)) {
+      const found = newVms.find((v) => v.name === name);
+      if (!found) {
+        delete transitioningVms[name];
+      } else if (target === 'stopping' && found.state === 'STOPPED') {
+        delete transitioningVms[name];
+      } else if (target === 'starting' && found.state === 'RUNNING') {
+        delete transitioningVms[name];
+      }
+    }
     if (inspectingVm.value) {
       const updated = newVms.find((v) => v.name === inspectingVm.value?.name);
       if (updated) {
@@ -730,7 +737,7 @@ async function handlePowerAction(
 ) {
   try {
     if (action === 'start') {
-      transitioningVms[vm.name] = 'starting';
+      setTransitionState(vm.name, 'starting');
       triggerFastPolling();
       await services.kvm.startVirtualMachine(vm.name);
       notify('success', `Started VM ${vm.vmName}`);
@@ -754,39 +761,48 @@ async function handlePowerAction(
         if (!res.confirmed) return;
         force = Boolean(res.checkboxChecked);
       }
-      transitioningVms[vm.name] = 'stopping';
+      setTransitionState(vm.name, 'stopping');
       triggerFastPolling();
       await services.kvm.stopVirtualMachine(vm.name, force);
       notify('success', `${force ? 'Force stopped' : 'Shut down'} VM ${vm.vmName}`);
     } else if (action === 'reboot') {
-      let force = false;
-      if (event && (event.shiftKey || event.altKey)) {
-        force = true;
-      } else {
-        const res = await askModal({
-          title: `Reboot VM: ${vm.vmName}`,
-          message: `Are you sure you want to reboot "${vm.vmName}"?`,
-          details: 'ACPI reboot sends a restart signal to the guest operating system.',
-          confirmText: 'Reboot',
-          tone: 'warning',
-          checkbox: {
-            label: 'Force reset immediately (virsh reset)',
-            hint: 'Hard resets / power-cycles the virtual motherboard without waiting for guest OS response.',
-            checked: false,
-          },
-        });
-        if (!res.confirmed) return;
-        force = Boolean(res.checkboxChecked);
-      }
-      transitioningVms[vm.name] = 'rebooting';
+      const res = await askModal({
+        title: `Reboot VM: ${vm.vmName}`,
+        message: `Are you sure you want to reboot "${vm.vmName}"?`,
+        details: 'ACPI reboot sends a restart signal to the guest operating system.',
+        confirmText: 'Reboot',
+        tone: 'warning',
+        icon: mdiRestart,
+      });
+      if (!res.confirmed) return;
+      setTransitionState(vm.name, 'rebooting');
       triggerFastPolling();
-      await services.kvm.rebootVirtualMachine(vm.name, force);
-      notify('success', `${force ? 'Force reset' : 'Rebooted'} VM ${vm.vmName}`);
+      await services.kvm.rebootVirtualMachine(vm.name, false);
+      notify('success', `Rebooted VM ${vm.vmName}`);
+      setTimeout(() => {
+        if (transitioningVms[vm.name] === 'rebooting') {
+          delete transitioningVms[vm.name];
+        }
+      }, 2000);
     } else if (action === 'reset') {
-      transitioningVms[vm.name] = 'rebooting';
+      const res = await askModal({
+        title: `Hard Reset VM: ${vm.vmName}`,
+        message: `Are you sure you want to hard reset "${vm.vmName}"?`,
+        details: 'Power cycles virtual hardware instantly without waiting for guest OS response. Any unsaved data may be lost.',
+        confirmText: 'Hard Reset',
+        tone: 'danger',
+        icon: mdiPowerCycle,
+      });
+      if (!res.confirmed) return;
+      setTransitionState(vm.name, 'rebooting');
       triggerFastPolling();
       await services.kvm.resetVirtualMachine(vm.name);
       notify('success', `Hard reset VM ${vm.vmName}`);
+      setTimeout(() => {
+        if (transitioningVms[vm.name] === 'rebooting') {
+          delete transitioningVms[vm.name];
+        }
+      }, 2000);
     } else if (action === 'pause') {
       await services.kvm.pauseVirtualMachine(vm.name);
       notify('success', `Paused VM ${vm.vmName}`);
@@ -798,6 +814,30 @@ async function handlePowerAction(
   } catch (err: any) {
     delete transitioningVms[vm.name];
     notify('error', err?.message || `Failed to execute ${action} on VM`);
+  }
+}
+
+const isTogglingAutostart = ref(false);
+
+async function handleToggleAutostart(vm: VirtualMachine) {
+  if (isTogglingAutostart.value) return;
+  isTogglingAutostart.value = true;
+  const newAutostart = !vm.autostart;
+  try {
+    const updated = await services.kvm.updateVirtualMachine(
+      vm.name,
+      { autostart: newAutostart },
+      ['autostart']
+    );
+    vm.autostart = updated.autostart;
+    notify('success', `Autostart ${updated.autostart ? 'enabled' : 'disabled'} for ${vm.vmName}`);
+    if (inspectingVm.value && inspectingVm.value.name === vm.name) {
+      inspectingVm.value.autostart = updated.autostart;
+    }
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to update autostart setting');
+  } finally {
+    isTogglingAutostart.value = false;
   }
 }
 
@@ -897,25 +937,113 @@ async function handleCloneVm() {
   }
 }
 
+const effectiveCdroms = computed<VirtualMachineCdrom[]>(() => {
+  if (!inspectingVm.value) return [];
+  if (inspectingVm.value.cdroms && inspectingVm.value.cdroms.length > 0) {
+    return inspectingVm.value.cdroms;
+  }
+  const legacyIso = inspectingVm.value.cdromIsoImage || inspectingVm.value.isoImage || '';
+  return [{
+    id: 'sdz',
+    bus: 'sata',
+    isoPath: legacyIso,
+  }];
+});
+
+function getNextCdromTarget(existing: VirtualMachineCdrom[], bus: string): string {
+  if (bus === 'ide') {
+    const ideSlots = ['hdc', 'hdd', 'hdb', 'hda'];
+    for (const slot of ideSlots) {
+      if (!existing.some((c) => c.id === slot)) return slot;
+    }
+    return `hd${String.fromCharCode(99 + existing.length)}`;
+  }
+  const letters = ['z', 'y', 'x', 'w', 'v', 'u', 't', 's'];
+  for (const letter of letters) {
+    const dev = `sd${letter}`;
+    if (!existing.some((c) => c.id === dev)) return dev;
+  }
+  return `sdz${existing.length}`;
+}
+
+function openAddCdromModal() {
+  cdromForm.bus = 'sata';
+  cdromForm.isoPath = '';
+  showAddCdromModal.value = true;
+}
+
+async function handleAddCdrom() {
+  if (!inspectingVm.value) return;
+  const current = [...effectiveCdroms.value];
+  const nextTarget = getNextCdromTarget(current, cdromForm.bus);
+  const newCdrom: VirtualMachineCdrom = {
+    id: nextTarget,
+    bus: cdromForm.bus,
+    isoPath: cdromForm.isoPath.trim(),
+  };
+  current.push(newCdrom);
+  try {
+    await services.kvm.updateVirtualMachine(
+      inspectingVm.value.name,
+      { cdroms: current },
+      ['cdroms']
+    );
+    notify('success', `Added CD-ROM drive ${newCdrom.id} (${newCdrom.bus.toUpperCase()})`);
+    showAddCdromModal.value = false;
+    cdromForm.isoPath = '';
+    await refreshVms();
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to add CD-ROM drive');
+  }
+}
+
+async function handleRemoveCdrom(cd: VirtualMachineCdrom) {
+  if (!inspectingVm.value) return;
+  const ok = window.confirm(`Are you sure you want to detach CD-ROM drive ${cd.id} from ${inspectingVm.value.vmName}?`);
+  if (!ok) return;
+
+  const current = effectiveCdroms.value.filter((c) => c.id !== cd.id);
+  try {
+    await services.kvm.updateVirtualMachine(
+      inspectingVm.value.name,
+      { cdroms: current },
+      ['cdroms']
+    );
+    notify('success', `Removed CD-ROM drive ${cd.id}`);
+    await refreshVms();
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to remove CD-ROM drive');
+  }
+}
+
+function openChangeMediaModal(cd?: VirtualMachineCdrom) {
+  const target = cd || effectiveCdroms.value[0];
+  mediaForm.deviceId = target ? target.id : 'sdz';
+  mediaForm.isoPath = target ? (target.isoPath || '') : '';
+  showMediaModal.value = true;
+}
+
 // Media Actions
 async function handleAttachMedia() {
   if (!inspectingVm.value || !mediaForm.isoPath.trim()) return;
   try {
-    await services.kvm.attachMedia(inspectingVm.value.name, mediaForm.isoPath.trim());
+    await services.kvm.attachMedia(inspectingVm.value.name, mediaForm.isoPath.trim(), mediaForm.deviceId || undefined);
     notify('success', `Mounted ISO image ${mediaForm.isoPath}`);
     showMediaModal.value = false;
     mediaForm.isoPath = '';
+    mediaForm.deviceId = '';
     await refreshVms();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to mount media');
   }
 }
 
-async function handleEjectMedia() {
+async function handleEjectMedia(cd?: VirtualMachineCdrom) {
   if (!inspectingVm.value) return;
+  const devId = cd ? cd.id : (mediaForm.deviceId || undefined);
   try {
-    await services.kvm.ejectMedia(inspectingVm.value.name);
-    notify('info', 'Ejected CD/DVD media');
+    await services.kvm.ejectMedia(inspectingVm.value.name, devId);
+    notify('info', `Ejected media from ${devId || 'CD-ROM'}`);
     await refreshVms();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to eject media');
@@ -1529,6 +1657,22 @@ async function handleWizardSubmit() {
     .filter(Boolean);
 
   try {
+    const cdroms: VirtualMachineCdrom[] = [];
+    if (wizardForm.bootIso) {
+      cdroms.push({
+        id: 'sdz',
+        bus: 'sata',
+        isoPath: wizardForm.bootIso,
+      });
+    }
+    if (wizardForm.secondaryIso) {
+      cdroms.push({
+        id: 'sdy',
+        bus: 'sata',
+        isoPath: wizardForm.secondaryIso,
+      });
+    }
+
     const created = await services.kvm.createVirtualMachine(targetId, {
       vmName: wizardForm.vmName || targetId,
       description: wizardForm.description,
@@ -1548,6 +1692,7 @@ async function handleWizardSubmit() {
       tpmVersion: wizardForm.tpmVersion,
       secureBoot: wizardForm.secureBoot,
       cdromIsoImage: wizardForm.bootIso || undefined,
+      cdroms,
       bootOrder: wizardForm.bootOrder || 'hd,cdrom',
       displayType: wizardForm.displayType || 'virtio-gpu',
       disks,
@@ -1563,9 +1708,16 @@ async function handleWizardSubmit() {
     notify('success', `Created VM ${created.vmName}`);
     if (wizardForm.bootIso) {
       try {
-        await services.kvm.attachMedia(created.name, wizardForm.bootIso);
+        await services.kvm.attachMedia(created.name, wizardForm.bootIso, 'sdz');
       } catch (mediaErr: any) {
         console.warn('Failed to attach boot media:', mediaErr);
+      }
+    }
+    if (wizardForm.secondaryIso) {
+      try {
+        await services.kvm.attachMedia(created.name, wizardForm.secondaryIso, 'sdy');
+      } catch (mediaErr: any) {
+        console.warn('Failed to attach secondary boot media:', mediaErr);
       }
     }
     showCreateWizard.value = false;
@@ -1672,25 +1824,14 @@ async function handleWizardSubmit() {
           <h2 class="card-title" style="font-size: 17px">Virtual Machines</h2>
         </div>
 
-        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
-          <div class="search-input-wrap">
-            <MdiIcon :path="mdiMagnify" size="16" class="search-icon" />
-            <input
-              v-model="searchQuery"
-              class="input input-sm mono"
-              placeholder="Filter VMs..."
-              style="padding-left: 28px; width: 100%; max-width: 220px"
-            />
-          </div>
-
-          <button class="btn btn-sm" @click="refreshVms()">
-            <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" />
-            <span class="hide-mobile">Refresh</span>
-          </button>
-
-          <button class="btn btn-sm btn-primary" @click="openCreateWizard">
-            <MdiIcon :path="mdiPlus" size="15" style="margin-right: 4px" /> Create VM
-          </button>
+        <div class="search-input-wrap">
+          <MdiIcon :path="mdiMagnify" size="16" class="search-icon" />
+          <input
+            v-model="searchQuery"
+            class="input input-sm mono"
+            placeholder="Filter VMs..."
+            style="padding-left: 28px; width: 100%; max-width: 220px"
+          />
         </div>
       </div>
 
@@ -1703,6 +1844,7 @@ async function handleWizardSubmit() {
               <SortableTh :sort="vmSort" sort-key="vcpus" class="col-desktop-only">vCPUs</SortableTh>
               <SortableTh :sort="vmSort" sort-key="memory">Memory</SortableTh>
               <SortableTh :sort="vmSort" sort-key="ip" class="col-desktop-only">IP Addresses</SortableTh>
+              <SortableTh :sort="vmSort" sort-key="autostart" class="col-desktop-only" style="width: 100px; min-width: 100px">Autostart</SortableTh>
               <th style="text-align: right">Actions</th>
             </tr>
           </thead>
@@ -1714,6 +1856,7 @@ async function handleWizardSubmit() {
                 <td class="col-desktop-only"><SkeletonBox width="30px" height="14px" /></td>
                 <td><SkeletonBox width="60px" height="14px" /></td>
                 <td class="col-desktop-only"><SkeletonBox width="110px" height="14px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="60px" height="14px" /></td>
                 <td style="text-align: right">
                   <div style="display: inline-flex; gap: 6px; justify-content: flex-end">
                     <SkeletonBox width="26px" height="26px" rounded="4px" />
@@ -1725,7 +1868,7 @@ async function handleWizardSubmit() {
             </template>
 
             <tr v-else-if="filteredVms.length === 0">
-              <td colspan="5" style="text-align: center; color: var(--text-secondary); padding: 36px">
+              <td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 36px">
                 <div v-if="searchQuery">
                   No virtual machines match filter "<strong>{{ searchQuery }}</strong>".
                 </div>
@@ -1800,6 +1943,20 @@ async function handleWizardSubmit() {
                 </span>
               </td>
 
+              <!-- Autostart -->
+              <td class="col-desktop-only" style="vertical-align: middle">
+                <span
+                  class="badge"
+                  :class="vm.autostart ? 'badge-success' : 'badge-neutral'"
+                  :title="`Click to ${vm.autostart ? 'disable' : 'enable'} autostart on host boot`"
+                  style="cursor: pointer; user-select: none; font-size: 11px"
+                  @click.stop="handleToggleAutostart(vm)"
+                >
+                  <span class="status-dot" :style="{ background: vm.autostart ? 'var(--success)' : 'var(--text-muted)' }"></span>
+                  {{ vm.autostart ? 'On Boot' : 'Manual' }}
+                </span>
+              </td>
+
               <!-- Actions -->
               <td style="text-align: right">
                 <div style="display: inline-flex; gap: 6px; align-items: center">
@@ -1845,14 +2002,25 @@ async function handleWizardSubmit() {
                     class="btn btn-xs"
                     :class="{ 'btn-loading': transitioningVms[vm.name] === 'rebooting' }"
                     :disabled="Boolean(transitioningVms[vm.name])"
-                    :title="transitioningVms[vm.name] === 'rebooting' ? 'Rebooting VM...' : 'Reboot VM (Hold Shift to Force Reset)'"
-                    @click="handlePowerAction(vm, 'reboot', $event)"
+                    :title="transitioningVms[vm.name] === 'rebooting' ? 'Rebooting VM...' : 'Reboot VM (Clean ACPI Restart)'"
+                    @click="handlePowerAction(vm, 'reboot')"
                   >
                     <MdiIcon
-                      :path="transitioningVms[vm.name] === 'rebooting' ? mdiLoading : mdiRefresh"
+                      :path="transitioningVms[vm.name] === 'rebooting' ? mdiLoading : mdiRestart"
                       size="13"
                       :class="{ 'spin-icon': transitioningVms[vm.name] === 'rebooting' }"
                     />
+                  </button>
+
+                  <!-- Hard Reset -->
+                  <button
+                    v-if="vm.state === 'RUNNING'"
+                    class="btn btn-xs btn-danger"
+                    :disabled="Boolean(transitioningVms[vm.name])"
+                    title="Hard Reset VM (Power Cycle)"
+                    @click="handlePowerAction(vm, 'reset')"
+                  >
+                    <MdiIcon :path="mdiPowerCycle" size="13" />
                   </button>
 
                   <!-- Shutdown -->
@@ -1929,26 +2097,13 @@ async function handleWizardSubmit() {
             </span>
           </div>
 
-          <div style="display: flex; gap: 10px; align-items: center">
-            <input
-              ref="isoFileInput"
-              type="file"
-              accept=".iso,.img"
-              style="display: none"
-              @change="handleUploadIso"
-            />
-            <button class="btn btn-sm" @click="refreshIsos">
-              <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" /> Refresh
-            </button>
-            <button
-              class="btn btn-sm btn-primary"
-              :disabled="isUploadingIso"
-              @click="triggerIsoUpload"
-            >
-              <MdiIcon :path="mdiUpload" size="14" style="margin-right: 4px" />
-              {{ isUploadingIso && isoUploadProgress ? `Uploading ${isoUploadProgress.percent}%...` : 'Upload ISO' }}
-            </button>
-          </div>
+        <input
+          ref="isoFileInput"
+          type="file"
+          accept=".iso,.img"
+          style="display: none"
+          @change="handleUploadIso"
+        />
         </div>
 
         <!-- Drag & Drop ISO Dropzone -->
@@ -2076,6 +2231,16 @@ async function handleWizardSubmit() {
                 >
                   {{ inspectingVm.state }}
                 </span>
+                <span
+                  class="badge"
+                  :class="inspectingVm.autostart ? 'badge-success' : 'badge-neutral'"
+                  :title="`Click to ${inspectingVm.autostart ? 'disable' : 'enable'} autostart on host boot`"
+                  style="cursor: pointer; user-select: none; font-size: 11px"
+                  @click.stop="handleToggleAutostart(inspectingVm)"
+                >
+                  <span class="status-dot" :style="{ background: inspectingVm.autostart ? 'var(--success)' : 'var(--text-muted)' }"></span>
+                  {{ inspectingVm.autostart ? 'Autostart: On Boot' : 'Autostart: Manual' }}
+                </span>
               </div>
               <div class="mono text-muted" style="font-size: 11px">
                 {{ inspectingVm.name.replace('virtualMachines/', '') }} (UUID: {{ inspectingVm.uuid || 'N/A' }})
@@ -2105,16 +2270,29 @@ async function handleWizardSubmit() {
                 class="btn btn-sm"
                 :class="{ 'btn-loading': transitioningVms[inspectingVm.name] === 'rebooting' }"
                 :disabled="Boolean(transitioningVms[inspectingVm.name])"
-                title="Reboot VM (Hold Shift to Force Reset)"
-                @click="handlePowerAction(inspectingVm, 'reboot', $event)"
+                title="Reboot VM (Clean ACPI Restart)"
+                @click="handlePowerAction(inspectingVm, 'reboot')"
               >
                 <MdiIcon
-                  :path="transitioningVms[inspectingVm.name] === 'rebooting' ? mdiLoading : mdiRefresh"
+                  :path="transitioningVms[inspectingVm.name] === 'rebooting' ? mdiLoading : mdiRestart"
                   size="14"
                   :class="{ 'spin-icon': transitioningVms[inspectingVm.name] === 'rebooting' }"
                   style="margin-right: 4px"
                 />
                 {{ transitioningVms[inspectingVm.name] === 'rebooting' ? 'Rebooting...' : 'Reboot' }}
+              </button>
+              <button
+                class="btn btn-sm btn-danger"
+                :disabled="Boolean(transitioningVms[inspectingVm.name])"
+                title="Hard Reset VM (Power Cycle)"
+                @click="handlePowerAction(inspectingVm, 'reset')"
+              >
+                <MdiIcon
+                  :path="mdiPowerCycle"
+                  size="14"
+                  style="margin-right: 4px"
+                />
+                Reset
               </button>
               <button
                 class="btn btn-sm btn-warning"
@@ -2252,6 +2430,9 @@ async function handleWizardSubmit() {
                 <button class="btn btn-xs" @click="openAddDiskModal">
                   <MdiIcon :path="mdiPlus" size="13" /> Add Hard Disk
                 </button>
+                <button class="btn btn-xs" @click="openAddCdromModal">
+                  <MdiIcon :path="mdiPlus" size="13" /> Add CD-ROM Drive
+                </button>
                 <button class="btn btn-xs" @click="nicForm.bridge = defaultBridge; showAddNicModal = true">
                   <MdiIcon :path="mdiPlus" size="13" /> Add Network Device
                 </button>
@@ -2306,6 +2487,27 @@ async function handleWizardSubmit() {
                     <td style="text-align: right">
                       <button class="btn btn-xs" @click.stop="openEditPlatformModal">
                         <MdiIcon :path="mdiPencil" size="12" /> Edit
+                      </button>
+                    </td>
+                  </tr>
+
+                  <!-- Start at boot (Autostart) -->
+                  <tr @dblclick="handleToggleAutostart(inspectingVm)" style="cursor: pointer" title="Double click to toggle autostart">
+                    <td class="font-semibold">Start at boot</td>
+                    <td>
+                      <span
+                        class="badge"
+                        :class="inspectingVm.autostart ? 'badge-success' : 'badge-neutral'"
+                        style="cursor: pointer; user-select: none; font-size: 11px"
+                        @click.stop="handleToggleAutostart(inspectingVm)"
+                      >
+                        <span class="status-dot" :style="{ background: inspectingVm.autostart ? 'var(--success)' : 'var(--text-muted)' }"></span>
+                        {{ inspectingVm.autostart ? 'Enabled (starts on host boot)' : 'Disabled (manual start)' }}
+                      </span>
+                    </td>
+                    <td style="text-align: right">
+                      <button class="btn btn-xs" @click.stop="handleToggleAutostart(inspectingVm)">
+                        {{ inspectingVm.autostart ? 'Disable' : 'Enable' }}
                       </button>
                     </td>
                   </tr>
@@ -2365,30 +2567,52 @@ async function handleWizardSubmit() {
                     </td>
                   </tr>
 
-                  <!-- CD/DVD Drive -->
-                  <tr>
-                    <td class="font-semibold">CD/DVD Drive</td>
+                  <!-- CD/DVD Drives -->
+                  <tr v-for="(cd, cdIdx) in effectiveCdroms" :key="cd.id || cdIdx">
+                    <td class="font-semibold">
+                      CD/DVD Drive (<code class="mono">{{ cd.id }}</code>, {{ (cd.bus || 'sata').toUpperCase() }})
+                    </td>
                     <td class="mono" style="font-size: 12px">
-                      <span v-if="inspectingVm.cdromIsoImage || inspectingVm.isoImage">
-                        {{ inspectingVm.cdromIsoImage || inspectingVm.isoImage }}
+                      <span v-if="cd.isoPath">
+                        {{ cd.isoPath }}
                       </span>
                       <span v-else class="text-muted">Empty (No media inserted)</span>
                     </td>
                     <td style="text-align: right">
-                      <button
-                        v-if="inspectingVm.cdromIsoImage || inspectingVm.isoImage"
-                        class="btn btn-xs btn-warning"
-                        @click="handleEjectMedia"
-                      >
-                        Eject
-                      </button>
-                      <button
-                        v-else
-                        class="btn btn-xs btn-primary"
-                        @click="showMediaModal = true"
-                      >
-                        Insert Media
-                      </button>
+                      <div style="display: inline-flex; gap: 6px; align-items: center">
+                        <button
+                          v-if="cd.isoPath"
+                          class="btn btn-xs btn-secondary"
+                          title="Change or mount different ISO image"
+                          @click="openChangeMediaModal(cd)"
+                        >
+                          Change
+                        </button>
+                        <button
+                          v-if="cd.isoPath"
+                          class="btn btn-xs btn-warning"
+                          title="Eject CD/DVD media"
+                          @click="handleEjectMedia(cd)"
+                        >
+                          Eject
+                        </button>
+                        <button
+                          v-else
+                          class="btn btn-xs btn-primary"
+                          title="Insert ISO image"
+                          @click="openChangeMediaModal(cd)"
+                        >
+                          Insert Media
+                        </button>
+                        <button
+                          v-if="effectiveCdroms.length > 1 || !cd.isoPath"
+                          class="btn btn-xs btn-danger"
+                          title="Detach this CD-ROM drive"
+                          @click="handleRemoveCdrom(cd)"
+                        >
+                          <MdiIcon :path="mdiTrashCan" size="12" /> Detach
+                        </button>
+                      </div>
                     </td>
                   </tr>
 
@@ -2598,16 +2822,25 @@ async function handleWizardSubmit() {
     <div v-if="showMediaModal" class="modal-backdrop">
       <div class="modal-card" style="max-width: 480px">
         <div class="modal-header">
-          <h3 class="modal-title">Insert Media</h3>
+          <h3 class="modal-title">Insert Media {{ mediaForm.deviceId ? `(${mediaForm.deviceId})` : '' }}</h3>
           <button class="btn btn-sm" @click="showMediaModal = false">
             <MdiIcon :path="mdiClose" size="16" />
           </button>
         </div>
         <form @submit.prevent="handleAttachMedia" style="padding: 16px; display: flex; flex-direction: column; gap: 14px">
+          <div v-if="effectiveCdroms.length > 1" class="form-group">
+            <label>Target CD-ROM Drive</label>
+            <select v-model="mediaForm.deviceId" class="select mono">
+              <option v-for="cd in effectiveCdroms" :key="cd.id" :value="cd.id">
+                Drive {{ cd.id }} ({{ (cd.bus || 'sata').toUpperCase() }}) {{ cd.isoPath ? '[Loaded]' : '[Empty]' }}
+              </option>
+            </select>
+          </div>
+
           <div v-if="nasState.isos.length > 0" class="form-group">
-            <label>ISO</label>
+            <label>Uploaded ISOs</label>
             <select v-model="mediaForm.isoPath" class="select mono">
-              <option value="">-- Choose an ISO --</option>
+              <option value="">-- Choose from uploaded ISOs --</option>
               <option v-for="iso in nasState.isos" :key="iso.path" :value="iso.path">
                 {{ iso.name }} ({{ iso.sizeFormatted }})
               </option>
@@ -2617,17 +2850,76 @@ async function handleWizardSubmit() {
             <label>ISO Image Path</label>
             <PathSelector
               v-model="mediaForm.isoPath"
-              placeholder="/mnt/tank/isos/debian-12.iso"
-              root-hint="/mnt"
+              :placeholder="`/mnt/${mainPool}/isos/debian-12.iso`"
+              :root-hint="`/mnt/${mainPool}`"
+              :select-files="true"
+              :file-extensions="['.iso', '.img']"
+              modal-title="Select ISO / Installer Disk Image"
+              button-label="Browse NAS"
               required
             />
             <small style="color: var(--text-muted); font-size: 11px">
-              Or browse / enter a custom path on the host.
+              Select an uploaded ISO above or browse from anywhere on the host filesystem.
             </small>
           </div>
           <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px">
             <button type="button" class="btn" @click="showMediaModal = false">Cancel</button>
             <button type="submit" class="btn btn-primary" :disabled="!mediaForm.isoPath.trim()">Mount Media</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ======================================================================= -->
+    <!-- ADD CD-ROM DRIVE MODAL -->
+    <!-- ======================================================================= -->
+    <div v-if="showAddCdromModal" class="modal-backdrop">
+      <div class="modal-card" style="max-width: 500px">
+        <div class="modal-header">
+          <h3 class="modal-title">Add CD-ROM Drive</h3>
+          <button class="btn btn-sm" @click="showAddCdromModal = false">
+            <MdiIcon :path="mdiClose" size="16" />
+          </button>
+        </div>
+        <form @submit.prevent="handleAddCdrom" style="padding: 16px; display: flex; flex-direction: column; gap: 14px">
+          <div class="form-group">
+            <label>Bus Device</label>
+            <select v-model="cdromForm.bus" class="select mono">
+              <option value="sata">SATA (Recommended)</option>
+              <option value="scsi">VirtIO SCSI</option>
+              <option value="ide">IDE</option>
+            </select>
+          </div>
+
+          <div v-if="nasState.isos.length > 0" class="form-group">
+            <label>Uploaded ISOs (Optional)</label>
+            <select v-model="cdromForm.isoPath" class="select mono">
+              <option value="">-- No Media / Empty Drive --</option>
+              <option v-for="iso in nasState.isos" :key="iso.path" :value="iso.path">
+                {{ iso.name }} ({{ iso.sizeFormatted }})
+              </option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>ISO Image Path (Optional)</label>
+            <PathSelector
+              v-model="cdromForm.isoPath"
+              :placeholder="`/mnt/${mainPool}/isos/driver.iso`"
+              :root-hint="`/mnt/${mainPool}`"
+              :select-files="true"
+              :file-extensions="['.iso', '.img']"
+              modal-title="Select CD-ROM ISO Image"
+              button-label="Browse NAS"
+            />
+            <small style="color: var(--text-muted); font-size: 11px">
+              Leave empty to create an empty drive tray, or select an installer or driver ISO (e.g. virtio-win.iso).
+            </small>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px">
+            <button type="button" class="btn" @click="showAddCdromModal = false">Cancel</button>
+            <button type="submit" class="btn btn-primary">Add CD-ROM Drive</button>
           </div>
         </form>
       </div>
@@ -3412,16 +3704,41 @@ async function handleWizardSubmit() {
 
                   <!-- CD/DVD Drive (Select ISO image) -->
                   <tr>
-                    <td class="font-semibold">CD/DVD Drive</td>
+                    <td class="font-semibold" style="vertical-align: top; padding-top: 10px">CD/DVD Drive</td>
                     <td style="font-size: 12px">
-                      <select v-model="wizardForm.bootIso" class="select select-sm mono" style="width: 100%; max-width: 440px">
-                        <option value="">-- No Boot Media / PXE Network Boot --</option>
-                        <option v-for="iso in nasState.isos" :key="iso.path" :value="iso.path">
-                          {{ iso.name }} ({{ iso.sizeFormatted }})
-                        </option>
-                      </select>
+                      <div style="display: flex; flex-direction: column; gap: 8px">
+                        <!-- Quick select from uploaded ISOs repository -->
+                        <div v-if="nasState.isos.length > 0" style="display: flex; align-items: center; gap: 8px">
+                          <select
+                            v-model="wizardForm.bootIso"
+                            class="select select-sm mono"
+                            style="flex: 1; max-width: 440px"
+                          >
+                            <option value="">-- Choose from uploaded ISOs --</option>
+                            <option v-for="iso in nasState.isos" :key="iso.path" :value="iso.path">
+                              {{ iso.name }} ({{ iso.sizeFormatted }})
+                            </option>
+                          </select>
+                        </div>
+
+                        <!-- Or browse / select from anywhere on the NAS -->
+                        <div style="display: flex; flex-direction: column; gap: 4px; max-width: 440px">
+                          <PathSelector
+                            v-model="wizardForm.bootIso"
+                            :placeholder="`/mnt/${mainPool}/isos/installer.iso`"
+                            :root-hint="`/mnt/${mainPool}`"
+                            :select-files="true"
+                            :file-extensions="['.iso', '.img']"
+                            modal-title="Select ISO / Installer Disk Image"
+                            button-label="Browse NAS"
+                          />
+                          <span style="font-size: 11px; color: var(--text-muted)">
+                            Pick an uploaded ISO above or browse anywhere on the host filesystem.
+                          </span>
+                        </div>
+                      </div>
                     </td>
-                    <td style="text-align: right">
+                    <td style="text-align: right; vertical-align: top; padding-top: 10px">
                       <button
                         v-if="wizardForm.bootIso"
                         class="btn btn-xs"
@@ -3432,6 +3749,63 @@ async function handleWizardSubmit() {
                         <MdiIcon :path="mdiClose" size="12" /> Clear
                       </button>
                       <span v-else class="text-muted" style="font-size: 11px">No ISO</span>
+                    </td>
+                  </tr>
+
+                  <!-- Secondary CD/DVD Drive (e.g. VirtIO Drivers) -->
+                  <tr v-if="wizardForm.showSecondaryCdrom">
+                    <td class="font-semibold" style="vertical-align: top; padding-top: 10px">
+                      Secondary CD/DVD
+                      <div class="text-muted" style="font-size: 11px; font-weight: normal">e.g. VirtIO Win Drivers</div>
+                    </td>
+                    <td style="font-size: 12px">
+                      <div style="display: flex; flex-direction: column; gap: 8px">
+                        <div v-if="nasState.isos.length > 0" style="display: flex; align-items: center; gap: 8px">
+                          <select
+                            v-model="wizardForm.secondaryIso"
+                            class="select select-sm mono"
+                            style="flex: 1; max-width: 440px"
+                          >
+                            <option value="">-- Choose from uploaded ISOs --</option>
+                            <option v-for="iso in nasState.isos" :key="iso.path" :value="iso.path">
+                              {{ iso.name }} ({{ iso.sizeFormatted }})
+                            </option>
+                          </select>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 4px; max-width: 440px">
+                          <PathSelector
+                            v-model="wizardForm.secondaryIso"
+                            :placeholder="`/mnt/${mainPool}/isos/virtio-win.iso`"
+                            :root-hint="`/mnt/${mainPool}`"
+                            :select-files="true"
+                            :file-extensions="['.iso', '.img']"
+                            modal-title="Select Secondary ISO Image"
+                            button-label="Browse NAS"
+                          />
+                        </div>
+                      </div>
+                    </td>
+                    <td style="text-align: right; vertical-align: top; padding-top: 10px">
+                      <button
+                        class="btn btn-xs btn-danger"
+                        type="button"
+                        @click="wizardForm.showSecondaryCdrom = false; wizardForm.secondaryIso = ''"
+                      >
+                        <MdiIcon :path="mdiTrashCan" size="12" /> Remove
+                      </button>
+                    </td>
+                  </tr>
+                  <tr v-else>
+                    <td style="border-top: none; padding-top: 2px"></td>
+                    <td colspan="2" style="border-top: none; padding-top: 2px">
+                      <button
+                        type="button"
+                        class="btn btn-xs"
+                        style="display: inline-flex; align-items: center; gap: 4px"
+                        @click="wizardForm.showSecondaryCdrom = true"
+                      >
+                        <MdiIcon :path="mdiPlus" size="12" /> Add Secondary CD-ROM (e.g. VirtIO Win Drivers)
+                      </button>
                     </td>
                   </tr>
 

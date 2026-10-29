@@ -195,7 +195,7 @@ function getPoolFragChartOptions(fragPercent: number): echarts.EChartsOption {
         <div class="card-header" style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px; margin-bottom: 10px">
           <div style="display: flex; align-items: center; gap: 8px">
             <strong class="mono" style="font-size: 15px; color: var(--accent-primary)">
-              {{ pool.poolName || pool.name }}
+              {{ pool.poolName || pool.name.replace(/^zfsPools\//, '') }}
             </strong>
             <span class="badge badge-neutral" style="font-size: 10.5px; padding: 1px 6px">{{ pool.vdevLayout || 'stripe' }}</span>
             <span class="badge badge-info" style="font-size: 10.5px; padding: 1px 6px" v-if="pool.compression">{{ pool.compression }}</span>
@@ -243,8 +243,8 @@ function getPoolFragChartOptions(fragPercent: number): echarts.EChartsOption {
             </div>
             <div class="pool-stat-row">
               <span class="stat-label">Mount</span>
-              <span class="stat-value mono stat-truncate" :title="pool.mountpoint || `/mnt/${pool.poolName || pool.name}`">
-                {{ pool.mountpoint || `/mnt/${pool.poolName || pool.name}` }}
+              <span class="stat-value mono stat-truncate" :title="pool.mountpoint || `/mnt/${pool.poolName || pool.name.replace(/^zfsPools\//, '')}`">
+                {{ pool.mountpoint || `/mnt/${pool.poolName || pool.name.replace(/^zfsPools\//, '')}` }}
               </span>
             </div>
           </div>

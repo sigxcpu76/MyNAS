@@ -236,6 +236,62 @@ func local_request_NasService_GetSystemTelemetry_0(ctx context.Context, marshale
 	return msg, metadata, err
 }
 
+var filter_NasService_StreamSystemTelemetry_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
+
+func request_NasService_StreamSystemTelemetry_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (NasService_StreamSystemTelemetryClient, runtime.ServerMetadata, error) {
+	var (
+		protoReq StreamSystemTelemetryRequest
+		metadata runtime.ServerMetadata
+	)
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_NasService_StreamSystemTelemetry_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	stream, err := client.StreamSystemTelemetry(ctx, &protoReq)
+	if err != nil {
+		return nil, metadata, err
+	}
+	header, err := stream.Header()
+	if err != nil {
+		return nil, metadata, err
+	}
+	metadata.HeaderMD = header
+	return stream, metadata, nil
+}
+
+var filter_NasService_WatchResources_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
+
+func request_NasService_WatchResources_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (NasService_WatchResourcesClient, runtime.ServerMetadata, error) {
+	var (
+		protoReq WatchResourcesRequest
+		metadata runtime.ServerMetadata
+	)
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_NasService_WatchResources_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	stream, err := client.WatchResources(ctx, &protoReq)
+	if err != nil {
+		return nil, metadata, err
+	}
+	header, err := stream.Header()
+	if err != nil {
+		return nil, metadata, err
+	}
+	metadata.HeaderMD = header
+	return stream, metadata, nil
+}
+
 var filter_NasService_ListPrerequisites_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
 
 func request_NasService_ListPrerequisites_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -2349,6 +2405,26 @@ func local_request_NasService_OpenVirtualMachineConsole_0(ctx context.Context, m
 	return msg, metadata, err
 }
 
+func request_NasService_WatchVirtualMachines_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (NasService_WatchVirtualMachinesClient, runtime.ServerMetadata, error) {
+	var (
+		protoReq WatchVirtualMachinesRequest
+		metadata runtime.ServerMetadata
+	)
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	stream, err := client.WatchVirtualMachines(ctx, &protoReq)
+	if err != nil {
+		return nil, metadata, err
+	}
+	header, err := stream.Header()
+	if err != nil {
+		return nil, metadata, err
+	}
+	metadata.HeaderMD = header
+	return stream, metadata, nil
+}
+
 var filter_NasService_ListDockerContainers_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
 
 func request_NasService_ListDockerContainers_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -2784,6 +2860,26 @@ func local_request_NasService_RestartDockerContainer_0(ctx context.Context, mars
 	}
 	msg, err := server.RestartDockerContainer(ctx, &protoReq)
 	return msg, metadata, err
+}
+
+func request_NasService_WatchDockerContainers_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (NasService_WatchDockerContainersClient, runtime.ServerMetadata, error) {
+	var (
+		protoReq WatchDockerContainersRequest
+		metadata runtime.ServerMetadata
+	)
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	stream, err := client.WatchDockerContainers(ctx, &protoReq)
+	if err != nil {
+		return nil, metadata, err
+	}
+	header, err := stream.Header()
+	if err != nil {
+		return nil, metadata, err
+	}
+	metadata.HeaderMD = header
+	return stream, metadata, nil
 }
 
 var filter_NasService_ListDockerApps_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
@@ -3266,6 +3362,26 @@ func local_request_NasService_GetDockerAppLogs_0(ctx context.Context, marshaler 
 	}
 	msg, err := server.GetDockerAppLogs(ctx, &protoReq)
 	return msg, metadata, err
+}
+
+func request_NasService_WatchDockerApps_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (NasService_WatchDockerAppsClient, runtime.ServerMetadata, error) {
+	var (
+		protoReq WatchDockerAppsRequest
+		metadata runtime.ServerMetadata
+	)
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	stream, err := client.WatchDockerApps(ctx, &protoReq)
+	if err != nil {
+		return nil, metadata, err
+	}
+	header, err := stream.Header()
+	if err != nil {
+		return nil, metadata, err
+	}
+	metadata.HeaderMD = header
+	return stream, metadata, nil
 }
 
 func request_NasService_ListDockerNetworks_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -4171,6 +4287,26 @@ func local_request_NasService_GetLxcContainerLogs_0(ctx context.Context, marshal
 	}
 	msg, err := server.GetLxcContainerLogs(ctx, &protoReq)
 	return msg, metadata, err
+}
+
+func request_NasService_WatchLxcContainers_0(ctx context.Context, marshaler runtime.Marshaler, client NasServiceClient, req *http.Request, pathParams map[string]string) (NasService_WatchLxcContainersClient, runtime.ServerMetadata, error) {
+	var (
+		protoReq WatchLxcContainersRequest
+		metadata runtime.ServerMetadata
+	)
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	stream, err := client.WatchLxcContainers(ctx, &protoReq)
+	if err != nil {
+		return nil, metadata, err
+	}
+	header, err := stream.Header()
+	if err != nil {
+		return nil, metadata, err
+	}
+	metadata.HeaderMD = header
+	return stream, metadata, nil
 }
 
 var filter_NasService_ListLxcCatalogItems_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
@@ -5587,6 +5723,20 @@ func RegisterNasServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux,
 		}
 		forward_NasService_GetSystemTelemetry_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+
+	mux.Handle(http.MethodGet, pattern_NasService_StreamSystemTelemetry_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		err := status.Error(codes.Unimplemented, "streaming calls are not yet supported in the in-process transport")
+		_, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+		return
+	})
+
+	mux.Handle(http.MethodGet, pattern_NasService_WatchResources_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		err := status.Error(codes.Unimplemented, "streaming calls are not yet supported in the in-process transport")
+		_, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+		return
+	})
 	mux.Handle(http.MethodGet, pattern_NasService_ListPrerequisites_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
@@ -6487,6 +6637,13 @@ func RegisterNasServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux,
 		}
 		forward_NasService_OpenVirtualMachineConsole_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+
+	mux.Handle(http.MethodGet, pattern_NasService_WatchVirtualMachines_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		err := status.Error(codes.Unimplemented, "streaming calls are not yet supported in the in-process transport")
+		_, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+		return
+	})
 	mux.Handle(http.MethodGet, pattern_NasService_ListDockerContainers_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
@@ -6666,6 +6823,13 @@ func RegisterNasServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux,
 			return
 		}
 		forward_NasService_RestartDockerContainer_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+
+	mux.Handle(http.MethodGet, pattern_NasService_WatchDockerContainers_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		err := status.Error(codes.Unimplemented, "streaming calls are not yet supported in the in-process transport")
+		_, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+		return
 	})
 	mux.Handle(http.MethodGet, pattern_NasService_ListDockerApps_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
@@ -6866,6 +7030,13 @@ func RegisterNasServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux,
 			return
 		}
 		forward_NasService_GetDockerAppLogs_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+
+	mux.Handle(http.MethodGet, pattern_NasService_WatchDockerApps_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		err := status.Error(codes.Unimplemented, "streaming calls are not yet supported in the in-process transport")
+		_, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+		return
 	})
 	mux.Handle(http.MethodGet, pattern_NasService_ListDockerNetworks_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
@@ -7286,6 +7457,13 @@ func RegisterNasServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux,
 			return
 		}
 		forward_NasService_GetLxcContainerLogs_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+
+	mux.Handle(http.MethodGet, pattern_NasService_WatchLxcContainers_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		err := status.Error(codes.Unimplemented, "streaming calls are not yet supported in the in-process transport")
+		_, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+		return
 	})
 	mux.Handle(http.MethodGet, pattern_NasService_ListLxcCatalogItems_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
@@ -8005,6 +8183,40 @@ func RegisterNasServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux,
 			return
 		}
 		forward_NasService_GetSystemTelemetry_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodGet, pattern_NasService_StreamSystemTelemetry_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/nas.v1.NasService/StreamSystemTelemetry", runtime.WithHTTPPathPattern("/v1/system:telemetryStream"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_NasService_StreamSystemTelemetry_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_StreamSystemTelemetry_0(annotatedContext, mux, outboundMarshaler, w, req, func() (proto.Message, error) { return resp.Recv() }, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodGet, pattern_NasService_WatchResources_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/nas.v1.NasService/WatchResources", runtime.WithHTTPPathPattern("/v1/resources:watch"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_NasService_WatchResources_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_WatchResources_0(annotatedContext, mux, outboundMarshaler, w, req, func() (proto.Message, error) { return resp.Recv() }, mux.GetForwardResponseOptions()...)
 	})
 	mux.Handle(http.MethodGet, pattern_NasService_ListPrerequisites_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
@@ -8771,6 +8983,23 @@ func RegisterNasServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux,
 		}
 		forward_NasService_OpenVirtualMachineConsole_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+	mux.Handle(http.MethodGet, pattern_NasService_WatchVirtualMachines_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/nas.v1.NasService/WatchVirtualMachines", runtime.WithHTTPPathPattern("/v1/virtualMachines:watch"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_NasService_WatchVirtualMachines_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_WatchVirtualMachines_0(annotatedContext, mux, outboundMarshaler, w, req, func() (proto.Message, error) { return resp.Recv() }, mux.GetForwardResponseOptions()...)
+	})
 	mux.Handle(http.MethodGet, pattern_NasService_ListDockerContainers_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
@@ -8923,6 +9152,23 @@ func RegisterNasServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux,
 			return
 		}
 		forward_NasService_RestartDockerContainer_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodGet, pattern_NasService_WatchDockerContainers_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/nas.v1.NasService/WatchDockerContainers", runtime.WithHTTPPathPattern("/v1/dockerContainers:watch"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_NasService_WatchDockerContainers_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_WatchDockerContainers_0(annotatedContext, mux, outboundMarshaler, w, req, func() (proto.Message, error) { return resp.Recv() }, mux.GetForwardResponseOptions()...)
 	})
 	mux.Handle(http.MethodGet, pattern_NasService_ListDockerApps_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
@@ -9093,6 +9339,23 @@ func RegisterNasServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux,
 			return
 		}
 		forward_NasService_GetDockerAppLogs_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodGet, pattern_NasService_WatchDockerApps_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/nas.v1.NasService/WatchDockerApps", runtime.WithHTTPPathPattern("/v1/dockerApps:watch"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_NasService_WatchDockerApps_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_WatchDockerApps_0(annotatedContext, mux, outboundMarshaler, w, req, func() (proto.Message, error) { return resp.Recv() }, mux.GetForwardResponseOptions()...)
 	})
 	mux.Handle(http.MethodGet, pattern_NasService_ListDockerNetworks_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
@@ -9450,6 +9713,23 @@ func RegisterNasServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux,
 			return
 		}
 		forward_NasService_GetLxcContainerLogs_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodGet, pattern_NasService_WatchLxcContainers_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/nas.v1.NasService/WatchLxcContainers", runtime.WithHTTPPathPattern("/v1/lxcContainers:watch"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_NasService_WatchLxcContainers_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_NasService_WatchLxcContainers_0(annotatedContext, mux, outboundMarshaler, w, req, func() (proto.Message, error) { return resp.Recv() }, mux.GetForwardResponseOptions()...)
 	})
 	mux.Handle(http.MethodGet, pattern_NasService_ListLxcCatalogItems_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
@@ -9938,6 +10218,8 @@ var (
 	pattern_NasService_SelectMainPool_0                 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "systemConfig"}, "selectMainPool"))
 	pattern_NasService_DiscoverPools_0                  = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "systemConfig"}, "discoverPools"))
 	pattern_NasService_GetSystemTelemetry_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "system", "telemetry"}, ""))
+	pattern_NasService_StreamSystemTelemetry_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "system"}, "telemetryStream"))
+	pattern_NasService_WatchResources_0                 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "resources"}, "watch"))
 	pattern_NasService_ListPrerequisites_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "prerequisites"}, ""))
 	pattern_NasService_GetPrerequisite_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "prerequisites", "name"}, ""))
 	pattern_NasService_CheckPrerequisites_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "prerequisites"}, "check"))
@@ -9983,6 +10265,7 @@ var (
 	pattern_NasService_RollbackVirtualMachineSnapshot_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 2, 2, 1, 0, 4, 4, 5, 3}, []string{"v1", "virtualMachines", "snapshots", "name"}, "rollback"))
 	pattern_NasService_DeleteVirtualMachineSnapshot_0   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 2, 2, 1, 0, 4, 4, 5, 3}, []string{"v1", "virtualMachines", "snapshots", "name"}, ""))
 	pattern_NasService_OpenVirtualMachineConsole_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "virtualMachines", "name"}, "openConsole"))
+	pattern_NasService_WatchVirtualMachines_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "virtualMachines"}, "watch"))
 	pattern_NasService_ListDockerContainers_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerContainers"}, ""))
 	pattern_NasService_GetDockerContainer_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerContainers", "name"}, ""))
 	pattern_NasService_CreateDockerContainer_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerContainers"}, ""))
@@ -9992,6 +10275,7 @@ var (
 	pattern_NasService_StartDockerContainer_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerContainers", "name"}, "start"))
 	pattern_NasService_StopDockerContainer_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerContainers", "name"}, "stop"))
 	pattern_NasService_RestartDockerContainer_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerContainers", "name"}, "restart"))
+	pattern_NasService_WatchDockerContainers_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerContainers"}, "watch"))
 	pattern_NasService_ListDockerApps_0                 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerApps"}, ""))
 	pattern_NasService_GetDockerApp_0                   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerApps", "name"}, ""))
 	pattern_NasService_CreateDockerApp_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerApps"}, ""))
@@ -10002,6 +10286,7 @@ var (
 	pattern_NasService_RestartDockerApp_0               = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerApps", "name"}, "restart"))
 	pattern_NasService_UpgradeDockerApp_0               = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerApps", "name"}, "upgrade"))
 	pattern_NasService_GetDockerAppLogs_0               = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "dockerApps", "name"}, "logs"))
+	pattern_NasService_WatchDockerApps_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerApps"}, "watch"))
 	pattern_NasService_ListDockerNetworks_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerNetworks"}, ""))
 	pattern_NasService_GetDockerConfig_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerConfig"}, ""))
 	pattern_NasService_UpdateDockerConfig_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "dockerConfig"}, ""))
@@ -10023,6 +10308,7 @@ var (
 	pattern_NasService_RestartLxcContainer_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "lxcContainers", "name"}, "restart"))
 	pattern_NasService_FreezeLxcContainer_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "lxcContainers", "name"}, "freeze"))
 	pattern_NasService_GetLxcContainerLogs_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 2, 5, 2}, []string{"v1", "lxcContainers", "name"}, "logs"))
+	pattern_NasService_WatchLxcContainers_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "lxcContainers"}, "watch"))
 	pattern_NasService_ListLxcCatalogItems_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "lxcCatalog", "items"}, ""))
 	pattern_NasService_GetLxcCatalogItem_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"v1", "lxcCatalog", "items", "id"}, ""))
 	pattern_NasService_SyncLxcCatalog_0                 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "lxcCatalog"}, "sync"))
@@ -10061,6 +10347,8 @@ var (
 	forward_NasService_SelectMainPool_0                 = runtime.ForwardResponseMessage
 	forward_NasService_DiscoverPools_0                  = runtime.ForwardResponseMessage
 	forward_NasService_GetSystemTelemetry_0             = runtime.ForwardResponseMessage
+	forward_NasService_StreamSystemTelemetry_0          = runtime.ForwardResponseStream
+	forward_NasService_WatchResources_0                 = runtime.ForwardResponseStream
 	forward_NasService_ListPrerequisites_0              = runtime.ForwardResponseMessage
 	forward_NasService_GetPrerequisite_0                = runtime.ForwardResponseMessage
 	forward_NasService_CheckPrerequisites_0             = runtime.ForwardResponseMessage
@@ -10106,6 +10394,7 @@ var (
 	forward_NasService_RollbackVirtualMachineSnapshot_0 = runtime.ForwardResponseMessage
 	forward_NasService_DeleteVirtualMachineSnapshot_0   = runtime.ForwardResponseMessage
 	forward_NasService_OpenVirtualMachineConsole_0      = runtime.ForwardResponseMessage
+	forward_NasService_WatchVirtualMachines_0           = runtime.ForwardResponseStream
 	forward_NasService_ListDockerContainers_0           = runtime.ForwardResponseMessage
 	forward_NasService_GetDockerContainer_0             = runtime.ForwardResponseMessage
 	forward_NasService_CreateDockerContainer_0          = runtime.ForwardResponseMessage
@@ -10115,6 +10404,7 @@ var (
 	forward_NasService_StartDockerContainer_0           = runtime.ForwardResponseMessage
 	forward_NasService_StopDockerContainer_0            = runtime.ForwardResponseMessage
 	forward_NasService_RestartDockerContainer_0         = runtime.ForwardResponseMessage
+	forward_NasService_WatchDockerContainers_0          = runtime.ForwardResponseStream
 	forward_NasService_ListDockerApps_0                 = runtime.ForwardResponseMessage
 	forward_NasService_GetDockerApp_0                   = runtime.ForwardResponseMessage
 	forward_NasService_CreateDockerApp_0                = runtime.ForwardResponseMessage
@@ -10125,6 +10415,7 @@ var (
 	forward_NasService_RestartDockerApp_0               = runtime.ForwardResponseMessage
 	forward_NasService_UpgradeDockerApp_0               = runtime.ForwardResponseMessage
 	forward_NasService_GetDockerAppLogs_0               = runtime.ForwardResponseMessage
+	forward_NasService_WatchDockerApps_0                = runtime.ForwardResponseStream
 	forward_NasService_ListDockerNetworks_0             = runtime.ForwardResponseMessage
 	forward_NasService_GetDockerConfig_0                = runtime.ForwardResponseMessage
 	forward_NasService_UpdateDockerConfig_0             = runtime.ForwardResponseMessage
@@ -10146,6 +10437,7 @@ var (
 	forward_NasService_RestartLxcContainer_0            = runtime.ForwardResponseMessage
 	forward_NasService_FreezeLxcContainer_0             = runtime.ForwardResponseMessage
 	forward_NasService_GetLxcContainerLogs_0            = runtime.ForwardResponseMessage
+	forward_NasService_WatchLxcContainers_0             = runtime.ForwardResponseStream
 	forward_NasService_ListLxcCatalogItems_0            = runtime.ForwardResponseMessage
 	forward_NasService_GetLxcCatalogItem_0              = runtime.ForwardResponseMessage
 	forward_NasService_SyncLxcCatalog_0                 = runtime.ForwardResponseMessage

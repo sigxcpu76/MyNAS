@@ -1161,6 +1161,10 @@ select option {
   padding: 16px;
 }
 
+.confirm-modal-backdrop {
+  z-index: 100000 !important;
+}
+
 .modal-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-strong);

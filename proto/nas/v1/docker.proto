@@ -390,3 +390,37 @@ message ListDockerNetworksRequest {}
 message ListDockerNetworksResponse {
   repeated DockerNetwork networks = 1;
 }
+
+// =============================================================================
+// Docker Watch Streaming
+// =============================================================================
+
+message WatchDockerAppsRequest {}
+
+message WatchDockerAppsResponse {
+  enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    SNAPSHOT = 1;
+    ADDED = 2;
+    MODIFIED = 3;
+    DELETED = 4;
+  }
+  EventType event_type = 1;
+  DockerApp docker_app = 2;
+  repeated DockerApp snapshot = 3;
+}
+
+message WatchDockerContainersRequest {}
+
+message WatchDockerContainersResponse {
+  enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    SNAPSHOT = 1;
+    ADDED = 2;
+    MODIFIED = 3;
+    DELETED = 4;
+  }
+  EventType event_type = 1;
+  DockerContainer docker_container = 2;
+  repeated DockerContainer snapshot = 3;
+}

@@ -407,16 +407,17 @@ async function handleCreatePool() {
   const primaryDataVdev = dataVdevs[0];
 
   try {
-    const created = await services.zfs.createPool(poolForm.poolId.trim(), {
+    const cleanId = poolForm.poolId.replace(/^zfsPools\//, '').trim();
+    const created = await services.zfs.createPool(cleanId, {
       vdevLayout: primaryDataVdev?.layout || 'mirror',
       devices: allDevices,
       compression: poolForm.compression || 'lz4',
-      mountpoint: poolForm.mountpoint || `/mnt/${poolForm.poolId.trim()}`,
+      mountpoint: poolForm.mountpoint || `/mnt/${cleanId}`,
       vdevs,
     });
     notify(
       'success',
-      `Created ZFS pool "${created.poolName || created.name}" with ${vdevs.length} VDEV tier(s)`
+      `Created ZFS pool "${created.poolName || created.name.replace(/^zfsPools\//, '')}" with ${vdevs.length} VDEV tier(s)`
     );
     showCreatePool.value = false;
     resetPoolBuilder();

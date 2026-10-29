@@ -154,21 +154,31 @@ export function mapLinuxFlavor(raw: any): LinuxFlavor | undefined {
 }
 
 export function mapDiscoveredPool(raw: any): DiscoveredPool {
+  const poolName = String(raw?.poolName ?? raw?.pool_name ?? '').replace(/^zfsPools\//, '').trim();
+  let mountpoint = String(raw?.mountpoint ?? '').trim();
+  if (mountpoint) {
+    mountpoint = mountpoint.replace(/\/zfsPools\//g, '/').replace(/^\/zfsPools/, '');
+  }
+  let datasetPath = String(raw?.datasetPath ?? raw?.dataset_path ?? '').trim();
+  if (datasetPath) {
+    datasetPath = datasetPath.replace(/^zfsPools\//, '');
+  }
   return {
-    poolName: raw?.poolName ?? raw?.pool_name ?? '',
+    poolName,
     hasNasSystem: Boolean(raw?.hasNasSystem ?? raw?.has_nas_system ?? false),
     configVersion: raw?.configVersion ?? raw?.config_version ?? '1.0',
     lastModified: raw?.lastModified ?? raw?.last_modified ?? '',
     isImported: Boolean(raw?.isImported ?? raw?.is_imported ?? true),
-    datasetPath: raw?.datasetPath ?? raw?.dataset_path ?? '',
-    mountpoint: raw?.mountpoint ?? '',
+    datasetPath,
+    mountpoint,
   };
 }
 
 export function mapSystemConfig(raw: any): SystemConfig {
   const pools = (raw?.discoveredPools ?? raw?.discovered_pools ?? []).map(mapDiscoveredPool);
+  const rawMain = String(raw?.mainPool ?? raw?.main_pool ?? '').replace(/^zfsPools\//, '').trim();
   return {
-    mainPool: raw?.mainPool ?? raw?.main_pool ?? '',
+    mainPool: rawMain,
     systemDataset: raw?.systemDataset ?? raw?.system_dataset ?? '',
     systemMountpoint: raw?.systemMountpoint ?? raw?.system_mountpoint ?? '',
     isInitialized: Boolean(raw?.isInitialized ?? raw?.is_initialized ?? false),
@@ -199,6 +209,9 @@ export function mapSystemTelemetry(raw: any): SystemTelemetry {
       temperatureCelsius: Number(cpu.temperatureCelsius ?? cpu.temperature_celsius ?? 0),
       coreTemperatures: Array.isArray(cpu.coreTemperatures ?? cpu.core_temperatures)
         ? (cpu.coreTemperatures ?? cpu.core_temperatures).map(Number)
+        : [],
+      packageTemperatures: Array.isArray(cpu.packageTemperatures ?? cpu.package_temperatures)
+        ? (cpu.packageTemperatures ?? cpu.package_temperatures).map(Number)
         : [],
     },
     memory: {
@@ -360,9 +373,20 @@ export function mapZfsVdev(raw: any): ZfsVdev {
 }
 
 export function mapZfsPool(raw: any): ZfsPool {
+  const rawName = String(raw?.name ?? '');
+  const cleanId = rawName.replace(/^zfsPools\//, '').trim();
+  const rawPoolName = String(raw?.poolName ?? raw?.pool_name ?? '').replace(/^zfsPools\//, '').trim();
+  const poolName = rawPoolName || cleanId;
+  let mountpoint = String(raw?.mountpoint ?? '').trim();
+  if (!mountpoint || mountpoint === 'none' || mountpoint === 'legacy') {
+    mountpoint = poolName ? `/mnt/${poolName}` : '';
+  } else {
+    mountpoint = mountpoint.replace(/\/zfsPools\//g, '/').replace(/^\/zfsPools/, '');
+  }
+
   return {
-    name: raw?.name ?? '',
-    poolName: raw?.poolName ?? raw?.pool_name ?? '',
+    name: rawName || (poolName ? `zfsPools/${poolName}` : ''),
+    poolName,
     state: raw?.state ?? 'ONLINE',
     sizeBytes: normalizeInt64(raw?.sizeBytes ?? raw?.size_bytes),
     allocatedBytes: normalizeInt64(raw?.allocatedBytes ?? raw?.allocated_bytes),
@@ -372,7 +396,7 @@ export function mapZfsPool(raw: any): ZfsPool {
     dedupRatio: Number(raw?.dedupRatio ?? raw?.dedup_ratio ?? 1.0),
     vdevLayout: raw?.vdevLayout ?? raw?.vdev_layout ?? 'mirror',
     devices: Array.isArray(raw?.devices) ? raw.devices : [],
-    mountpoint: raw?.mountpoint ?? '',
+    mountpoint,
     compression: raw?.compression ?? 'lz4',
     lastScrubStatus: raw?.lastScrubStatus ?? raw?.last_scrub_status ?? '',
     healthDetails: raw?.healthDetails ?? raw?.health_details ?? '',
@@ -383,10 +407,18 @@ export function mapZfsPool(raw: any): ZfsPool {
 }
 
 export function mapZfsDataset(raw: any): ZfsDataset {
+  let mountpoint = String(raw?.mountpoint ?? '').trim();
+  if (mountpoint) {
+    mountpoint = mountpoint.replace(/\/zfsPools\//g, '/').replace(/^\/zfsPools/, '');
+  }
+  let datasetPath = String(raw?.datasetPath ?? raw?.dataset_path ?? '').trim();
+  if (datasetPath) {
+    datasetPath = datasetPath.replace(/^zfsPools\//, '');
+  }
   return {
     name: raw?.name ?? '',
-    datasetPath: raw?.datasetPath ?? raw?.dataset_path ?? '',
-    mountpoint: raw?.mountpoint ?? '',
+    datasetPath,
+    mountpoint,
     usedBytes: normalizeInt64(raw?.usedBytes ?? raw?.used_bytes),
     availableBytes: normalizeInt64(raw?.availableBytes ?? raw?.available_bytes),
     referencedBytes: normalizeInt64(raw?.referencedBytes ?? raw?.referenced_bytes),
@@ -515,6 +547,12 @@ export function mapVirtualMachine(raw: any): VirtualMachine {
     secureBoot: Boolean(raw?.secureBoot ?? raw?.secure_boot ?? false),
 
     disks,
+    cdroms: (raw?.cdroms ?? []).map((c: any) => ({
+      id: c.id ?? '',
+      bus: c.bus ?? 'sata',
+      isoPath: c.isoPath ?? c.iso_path ?? '',
+      bootable: Boolean(c.bootable ?? false),
+    })),
     networkInterfaces: ifaces,
     cloudInit: mapVirtualMachineCloudInit(raw?.cloudInit ?? raw?.cloud_init),
 
@@ -1107,6 +1145,7 @@ export class HttpKvmAdapter implements KvmPort {
       diskSizeGib: vm.diskSizeGib,
       isoImage: vm.isoImage,
       cdromIsoImage: vm.cdromIsoImage,
+      cdroms: vm.cdroms,
       networkBridge: vm.networkBridge,
       autostart: vm.autostart,
       osVariant: vm.osVariant,
@@ -1151,6 +1190,7 @@ export class HttpKvmAdapter implements KvmPort {
       description: vm.description,
       isoImage: vm.isoImage,
       cdromIsoImage: vm.cdromIsoImage,
+      cdroms: vm.cdroms,
       sockets: vm.sockets,
       cores: vm.cores,
       cpuType: vm.cpuType,

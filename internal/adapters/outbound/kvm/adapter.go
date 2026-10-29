@@ -498,7 +498,19 @@ func (a *Adapter) getDomainFromVirsh(ctx context.Context, name string) (*domain.
 			path = d.Source.Dev
 		}
 		if d.Device == "cdrom" {
-			vm.CdromIsoImage = path
+			bus := d.Target.Bus
+			if bus == "" {
+				bus = "sata"
+			}
+			cdrom := domain.VirtualMachineCdrom{
+				ID:      d.Target.Dev,
+				Bus:     bus,
+				IsoPath: path,
+			}
+			vm.Cdroms = append(vm.Cdroms, cdrom)
+			if vm.CdromIsoImage == "" && path != "" {
+				vm.CdromIsoImage = path
+			}
 			continue
 		}
 		disk := domain.VirtualMachineDisk{
@@ -824,9 +836,14 @@ func (a *Adapter) UpdateVM(ctx context.Context, vm domain.VirtualMachine, fields
 	}
 	hasDisksPath := false
 	hasNicsPath := false
+	hasCdromsPath := false
+	hasAutostartPath := false
 	for _, p := range fields {
 		if p == "boot_order" || p == "bootOrder" {
 			existing.BootOrder = vm.BootOrder
+		}
+		if p == "autostart" {
+			hasAutostartPath = true
 		}
 		if p == "disks" {
 			hasDisksPath = true
@@ -834,6 +851,28 @@ func (a *Adapter) UpdateVM(ctx context.Context, vm domain.VirtualMachine, fields
 		if p == "network_interfaces" || p == "networkInterfaces" {
 			hasNicsPath = true
 		}
+		if p == "cdroms" || p == "cdrom_drives" {
+			hasCdromsPath = true
+		}
+	}
+
+	if hasAutostartPath || len(fields) == 0 {
+		existing.Autostart = vm.Autostart
+		if a.hasVirsh() {
+			if existing.Autostart {
+				_ = exec.CommandContext(ctx, "virsh", "autostart", vm.ID).Run()
+			} else {
+				_ = exec.CommandContext(ctx, "virsh", "autostart", "--disable", vm.ID).Run()
+			}
+		}
+	}
+
+	if len(fields) == 1 && hasAutostartPath {
+		a.mu.Lock()
+		a.vms[vm.ID] = existing
+		a.mu.Unlock()
+		cp := existing
+		return &cp, nil
 	}
 
 	if hasDisksPath {
@@ -841,7 +880,17 @@ func (a *Adapter) UpdateVM(ctx context.Context, vm domain.VirtualMachine, fields
 	} else if len(vm.Disks) > 0 {
 		existing.Disks = vm.Disks
 	}
-	if vm.CdromIsoImage != "" {
+	if hasCdromsPath {
+		existing.Cdroms = vm.Cdroms
+		if len(vm.Cdroms) > 0 {
+			existing.CdromIsoImage = vm.Cdroms[0].IsoPath
+		} else {
+			existing.CdromIsoImage = ""
+		}
+	} else if len(vm.Cdroms) > 0 {
+		existing.Cdroms = vm.Cdroms
+		existing.CdromIsoImage = vm.Cdroms[0].IsoPath
+	} else if vm.CdromIsoImage != "" {
 		existing.CdromIsoImage = vm.CdromIsoImage
 	}
 	if hasNicsPath {
@@ -903,9 +952,23 @@ func (a *Adapter) DeleteVM(ctx context.Context, id string) error {
 	return nil
 }
 
+func (a *Adapter) ensureTabletInput(ctx context.Context, id string) {
+	out, err := exec.CommandContext(ctx, "virsh", "dumpxml", "--inactive", id).CombinedOutput()
+	if err != nil {
+		return
+	}
+	xml := string(out)
+	if !strings.Contains(xml, "type='tablet'") && !strings.Contains(xml, "type=\"tablet\"") {
+		cmd := exec.CommandContext(ctx, "virsh", "attach-device", id, "/dev/stdin", "--config")
+		cmd.Stdin = strings.NewReader("<input type='tablet' bus='usb'/>\n")
+		_ = cmd.Run()
+	}
+}
+
 func (a *Adapter) StartVM(ctx context.Context, id string) (*domain.VirtualMachine, error) {
 	if a.isRealDomain(ctx, id) {
 		go func() { _ = EnsureHostBridging() }()
+		a.ensureTabletInput(ctx, id)
 		out, err := exec.CommandContext(ctx, "virsh", "start", id).CombinedOutput()
 		if err != nil {
 			// Auto-heal if start failed (CPU mode unsupported, non-existent disk zvol bind error, macvtap unprivileged error, etc.)
@@ -1144,9 +1207,44 @@ func (a *Adapter) findCdromTarget(ctx context.Context, id string) string {
 	return ""
 }
 
-func (a *Adapter) updateDomainCdromBoot(ctx context.Context, id, isoPath string) {
+func defaultCdromTarget(index int, bus string) string {
+	if bus == "ide" {
+		ideTargets := []string{"hdc", "hdd", "hdb", "hda"}
+		if index < len(ideTargets) {
+			return ideTargets[index]
+		}
+		return fmt.Sprintf("hd%c", 'c'+byte(index))
+	}
+	// sata or scsi: allocate backwards from 'z' ('sdz', 'sdy', 'sdx', 'sdw', ...)
+	ch := 'z' - byte(index)
+	if ch < 'a' {
+		ch = 'z'
+	}
+	return fmt.Sprintf("sd%c", ch)
+}
+
+func (a *Adapter) updateDomainCdrom(ctx context.Context, id, dev, isoPath string) {
 	if vm, err := a.getDomainFromVirsh(ctx, id); err == nil && vm != nil {
-		vm.CdromIsoImage = isoPath
+		found := false
+		for i := range vm.Cdroms {
+			if vm.Cdroms[i].ID == dev || (dev == "" && i == 0) {
+				vm.Cdroms[i].IsoPath = isoPath
+				found = true
+				break
+			}
+		}
+		if !found && dev != "" {
+			vm.Cdroms = append(vm.Cdroms, domain.VirtualMachineCdrom{
+				ID:      dev,
+				Bus:     "sata",
+				IsoPath: isoPath,
+			})
+		}
+		if len(vm.Cdroms) > 0 {
+			vm.CdromIsoImage = vm.Cdroms[0].IsoPath
+		} else {
+			vm.CdromIsoImage = isoPath
+		}
 		xmlStr := buildDomainXML(*vm)
 		cmd := exec.CommandContext(ctx, "virsh", "define", "/dev/stdin")
 		cmd.Stdin = strings.NewReader(xmlStr)
@@ -1168,29 +1266,30 @@ func (a *Adapter) AttachMedia(ctx context.Context, id, deviceTarget, isoPath str
 		if err != nil {
 			// If tray is already occupied, try --update
 			if _, errUp := exec.CommandContext(ctx, "virsh", "change-media", id, dev, isoPath, "--update").CombinedOutput(); errUp == nil {
-				a.updateDomainCdromBoot(ctx, id, isoPath)
+				a.updateDomainCdrom(ctx, id, dev, isoPath)
 				return a.getDomainFromVirsh(ctx, id)
 			}
 			// If device was hdc/wrong and actual exists, try actual
-			if actual != "" && actual != dev {
+			if actual != "" && actual != dev && deviceTarget == "" {
 				if _, errAct := exec.CommandContext(ctx, "virsh", "change-media", id, actual, isoPath, "--insert").CombinedOutput(); errAct == nil {
-					a.updateDomainCdromBoot(ctx, id, isoPath)
+					a.updateDomainCdrom(ctx, id, actual, isoPath)
 					return a.getDomainFromVirsh(ctx, id)
 				}
 				if _, errActUp := exec.CommandContext(ctx, "virsh", "change-media", id, actual, isoPath, "--update").CombinedOutput(); errActUp == nil {
-					a.updateDomainCdromBoot(ctx, id, isoPath)
+					a.updateDomainCdrom(ctx, id, actual, isoPath)
 					return a.getDomainFromVirsh(ctx, id)
 				}
 			}
 			// If device doesn't exist, attach as new cdrom device
 			if _, errAtt := exec.CommandContext(ctx, "virsh", "attach-disk", id, isoPath, dev, "--type", "cdrom", "--mode", "readonly", "--config").CombinedOutput(); errAtt == nil {
-				a.updateDomainCdromBoot(ctx, id, isoPath)
+				_ = exec.CommandContext(ctx, "virsh", "attach-disk", id, isoPath, dev, "--type", "cdrom", "--mode", "readonly", "--live").Run()
+				a.updateDomainCdrom(ctx, id, dev, isoPath)
 				return a.getDomainFromVirsh(ctx, id)
 			}
 			a.logError("change_media_insert", id, err, out)
 			return nil, fmt.Errorf("virsh change-media failed: %s: %w", strings.TrimSpace(string(out)), err)
 		}
-		a.updateDomainCdromBoot(ctx, id, isoPath)
+		a.updateDomainCdrom(ctx, id, dev, isoPath)
 		return a.getDomainFromVirsh(ctx, id)
 	}
 
@@ -1200,7 +1299,30 @@ func (a *Adapter) AttachMedia(ctx context.Context, id, deviceTarget, isoPath str
 	if !ok {
 		return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, id)
 	}
-	vm.CdromIsoImage = isoPath
+	found := false
+	for i := range vm.Cdroms {
+		if vm.Cdroms[i].ID == deviceTarget || (deviceTarget == "" && i == 0) {
+			vm.Cdroms[i].IsoPath = isoPath
+			found = true
+			break
+		}
+	}
+	if !found {
+		target := deviceTarget
+		if target == "" {
+			target = defaultCdromTarget(len(vm.Cdroms), "sata")
+		}
+		vm.Cdroms = append(vm.Cdroms, domain.VirtualMachineCdrom{
+			ID:      target,
+			Bus:     "sata",
+			IsoPath: isoPath,
+		})
+	}
+	if len(vm.Cdroms) > 0 {
+		vm.CdromIsoImage = vm.Cdroms[0].IsoPath
+	} else {
+		vm.CdromIsoImage = isoPath
+	}
 	a.vms[id] = vm
 	cp := vm
 	return &cp, nil
@@ -1217,9 +1339,9 @@ func (a *Adapter) EjectMedia(ctx context.Context, id, deviceTarget string) (*dom
 			dev = "sdz"
 		}
 		out, err := exec.CommandContext(ctx, "virsh", "change-media", id, dev, "--eject").CombinedOutput()
-		if err != nil && actual != "" && actual != dev {
+		if err != nil && actual != "" && actual != dev && deviceTarget == "" {
 			if _, errAct := exec.CommandContext(ctx, "virsh", "change-media", id, actual, "--eject").CombinedOutput(); errAct == nil {
-				a.updateDomainCdromBoot(ctx, id, "")
+				a.updateDomainCdrom(ctx, id, actual, "")
 				return a.getDomainFromVirsh(ctx, id)
 			}
 		}
@@ -1227,7 +1349,7 @@ func (a *Adapter) EjectMedia(ctx context.Context, id, deviceTarget string) (*dom
 			a.logError("change_media_eject", id, err, out)
 			return nil, fmt.Errorf("virsh change-media eject failed: %s: %w", strings.TrimSpace(string(out)), err)
 		}
-		a.updateDomainCdromBoot(ctx, id, "")
+		a.updateDomainCdrom(ctx, id, dev, "")
 		return a.getDomainFromVirsh(ctx, id)
 	}
 
@@ -1237,7 +1359,17 @@ func (a *Adapter) EjectMedia(ctx context.Context, id, deviceTarget string) (*dom
 	if !ok {
 		return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, id)
 	}
-	vm.CdromIsoImage = ""
+	for i := range vm.Cdroms {
+		if vm.Cdroms[i].ID == deviceTarget || (deviceTarget == "" && i == 0) {
+			vm.Cdroms[i].IsoPath = ""
+			break
+		}
+	}
+	if len(vm.Cdroms) > 0 {
+		vm.CdromIsoImage = vm.Cdroms[0].IsoPath
+	} else {
+		vm.CdromIsoImage = ""
+	}
 	a.vms[id] = vm
 	cp := vm
 	return &cp, nil
@@ -1781,7 +1913,7 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 	sb.WriteString(">\n")
 	sb.WriteString(fmt.Sprintf(`    <type arch='x86_64' machine='%s'>hvm</type>
 `, mach))
-	bootDevs := parseBootOrder(vm.BootOrder, vm.CdromIsoImage != "")
+	bootDevs := parseBootOrder(vm.BootOrder, vm.CdromIsoImage != "" || len(vm.Cdroms) > 0)
 	for _, dev := range bootDevs {
 		sb.WriteString(fmt.Sprintf("    <boot dev='%s'/>\n", dev))
 	}
@@ -1844,7 +1976,34 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 		diskLetter++
 	}
 
-	if vm.CdromIsoImage != "" {
+	if len(vm.Cdroms) > 0 {
+		for i, cd := range vm.Cdroms {
+			targetDev := cd.ID
+			bus := cd.Bus
+			if bus == "" {
+				bus = "sata"
+			}
+			if targetDev == "" || strings.HasPrefix(targetDev, "cdrom") {
+				targetDev = defaultCdromTarget(i, bus)
+			}
+			if cd.IsoPath != "" {
+				sb.WriteString(fmt.Sprintf(`    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <source file='%s'/>
+      <target dev='%s' bus='%s'/>
+      <readonly/>
+    </disk>
+`, cd.IsoPath, targetDev, bus))
+			} else {
+				sb.WriteString(fmt.Sprintf(`    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <target dev='%s' bus='%s'/>
+      <readonly/>
+    </disk>
+`, targetDev, bus))
+			}
+		}
+	} else if vm.CdromIsoImage != "" {
 		sb.WriteString(fmt.Sprintf(`    <disk type='file' device='cdrom'>
       <driver name='qemu' type='raw'/>
       <source file='%s'/>
@@ -1939,6 +2098,9 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 	sb.WriteString(`    <channel type='unix'>
       <target type='virtio' name='org.qemu.guest_agent.0'/>
     </channel>
+    <input type='tablet' bus='usb'/>
+    <input type='mouse' bus='ps2'/>
+    <input type='keyboard' bus='ps2'/>
     <memballoon model='none'/>
     <graphics type='vnc' port='-1' autoport='yes' listen='127.0.0.1'>
       <listen type='address' address='127.0.0.1'/>

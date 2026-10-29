@@ -2611,17 +2611,19 @@ func (a *Adapter) ListDirectories(ctx context.Context, reqPath string) (*domain.
 	entries, err := os.ReadDir(cleanPath)
 	if err == nil {
 		for _, e := range entries {
-			if e.IsDir() {
-				res.Entries = append(res.Entries, domain.DirectoryEntry{
-					Name:  e.Name(),
-					Path:  filepath.Join(cleanPath, e.Name()),
-					IsDir: true,
-				})
-			}
+			res.Entries = append(res.Entries, domain.DirectoryEntry{
+				Name:  e.Name(),
+				Path:  filepath.Join(cleanPath, e.Name()),
+				IsDir: e.IsDir(),
+			})
 		}
 	}
 
 	sort.Slice(res.Entries, func(i, j int) bool {
+		// List directories first, then files alphabetically
+		if res.Entries[i].IsDir != res.Entries[j].IsDir {
+			return res.Entries[i].IsDir
+		}
 		return strings.ToLower(res.Entries[i].Name) < strings.ToLower(res.Entries[j].Name)
 	})
 

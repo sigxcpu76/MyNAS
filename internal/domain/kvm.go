@@ -24,6 +24,13 @@ type VirtualMachineDisk struct {
 	MbpsLimitWrite int64  `json:"mbps_limit_write"`
 }
 
+type VirtualMachineCdrom struct {
+	ID       string `json:"id"`
+	Bus      string `json:"bus"`
+	IsoPath  string `json:"iso_path"`
+	Bootable bool   `json:"bootable"`
+}
+
 type VirtualMachineNetworkInterface struct {
 	ID            string `json:"id"`              // "net0", "net1"
 	Model         string `json:"model"`           // "virtio", "e1000", "rtl8139", "vmxnet3"
@@ -100,6 +107,7 @@ type VirtualMachine struct {
 	// Multi-Disk & Media
 	Disks          []VirtualMachineDisk             `json:"disks"`
 	CdromIsoImage  string                           `json:"cdrom_iso_image"`
+	Cdroms         []VirtualMachineCdrom            `json:"cdroms"`
 	NetworkIfaces  []VirtualMachineNetworkInterface `json:"network_interfaces"`
 	CloudInit      VirtualMachineCloudInit          `json:"cloud_init"`
 	PciDevices     []VirtualMachinePciDevice        `json:"pci_devices"`

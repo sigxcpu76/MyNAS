@@ -185,3 +185,22 @@ message SyncLxcCatalogResponse {
   string last_sync_time = 4;
 }
 
+// =============================================================================
+// LXC Container Watch Streaming
+// =============================================================================
+
+message WatchLxcContainersRequest {}
+
+message WatchLxcContainersResponse {
+  enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    SNAPSHOT = 1;
+    ADDED = 2;
+    MODIFIED = 3;
+    DELETED = 4;
+  }
+  EventType event_type = 1;
+  LxcContainer lxc_container = 2;
+  repeated LxcContainer snapshot = 3;
+}
+

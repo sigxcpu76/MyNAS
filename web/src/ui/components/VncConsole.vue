@@ -110,36 +110,27 @@ async function handleVmPowerAction(
       notify('success', `${force ? 'Force stopped' : 'Shut down'} VM ${props.vmName}`);
       vmState.value = 'STOPPED';
     } else if (action === 'reboot') {
-      let force = false;
-      if (event && (event.shiftKey || event.altKey)) {
-        force = true;
-      } else {
-        const res = await askModal({
-          title: `Reboot VM: ${props.vmName}`,
-          message: `Are you sure you want to reboot "${props.vmName}"?`,
-          details: 'ACPI reboot sends a restart signal to the guest operating system.',
-          confirmText: 'Reboot',
-          tone: 'warning',
-          checkbox: {
-            label: 'Force reset immediately (virsh reset)',
-            hint: 'Hard resets / power-cycles the virtual motherboard without waiting for guest OS response.',
-            checked: false,
-          },
-        });
-        if (!res.confirmed) return;
-        force = Boolean(res.checkboxChecked);
-      }
-      await services.kvm.rebootVirtualMachine(props.vmName, force);
-      notify('success', `${force ? 'Force reset' : 'Rebooted'} VM ${props.vmName}`);
+      const res = await askModal({
+        title: `Reboot VM: ${props.vmName}`,
+        message: `Are you sure you want to reboot "${props.vmName}"?`,
+        details: 'ACPI reboot sends a restart signal to the guest operating system.',
+        confirmText: 'Reboot',
+        tone: 'warning',
+        icon: mdiRestart,
+      });
+      if (!res.confirmed) return;
+      await services.kvm.rebootVirtualMachine(props.vmName, false);
+      notify('success', `Rebooted VM ${props.vmName}`);
       vmState.value = 'RUNNING';
       setTimeout(() => handleReconnect(), 2000);
     } else if (action === 'reset') {
       const res = await askModal({
         title: `Hard Reset VM: ${props.vmName}`,
-        message: `Hard reset "${props.vmName}" immediately?`,
-        details: 'Power cycles virtual hardware instantly without clean OS shutdown.',
+        message: `Are you sure you want to hard reset "${props.vmName}"?`,
+        details: 'Power cycles virtual hardware instantly without waiting for guest OS response. Any unsaved data may be lost.',
         confirmText: 'Hard Reset',
         tone: 'danger',
+        icon: mdiPowerCycle,
       });
       if (!res.confirmed) return;
       await services.kvm.resetVirtualMachine(props.vmName);
@@ -329,30 +320,30 @@ onBeforeUnmount(() => {
           <button
             v-if="vmState === 'RUNNING'"
             class="btn btn-sm btn-icon btn-secondary"
-            title="Reboot VM (Hold Shift to Force Reset)"
-            @click="handleVmPowerAction('reboot', $event)"
+            title="Reboot VM (Clean ACPI Restart)"
+            @click="handleVmPowerAction('reboot')"
           >
             <MdiIcon :path="mdiRestart" size="16" />
-          </button>
-
-          <!-- Shutdown (if running) -->
-          <button
-            v-if="vmState === 'RUNNING'"
-            class="btn btn-sm btn-icon btn-warning"
-            title="Shutdown VM (Hold Shift to Force Stop)"
-            @click="handleVmPowerAction('stop', $event)"
-          >
-            <MdiIcon :path="mdiPower" size="16" />
           </button>
 
           <!-- Hard Reset (if running) -->
           <button
             v-if="vmState === 'RUNNING'"
             class="btn btn-sm btn-icon btn-danger"
-            title="Hard Reset (Power Cycle)"
+            title="Hard Reset VM (Power Cycle)"
             @click="handleVmPowerAction('reset')"
           >
             <MdiIcon :path="mdiPowerCycle" size="16" />
+          </button>
+
+          <!-- Shutdown (if running) -->
+          <button
+            v-if="vmState === 'RUNNING'"
+            class="btn btn-sm btn-icon btn-warning"
+            title="Shutdown VM"
+            @click="handleVmPowerAction('stop', $event)"
+          >
+            <MdiIcon :path="mdiPower" size="16" />
           </button>
         </div>
 

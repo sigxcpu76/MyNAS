@@ -8,6 +8,8 @@ import {
   mdiCheck,
   mdiRefresh,
   mdiFolderPlusOutline,
+  mdiDisc,
+  mdiFileDocumentOutline,
 } from '@mdi/js';
 import { services } from '../../container';
 import { nasState } from '../store';
@@ -24,6 +26,8 @@ const props = withDefaults(
     buttonLabel?: string;
     inputClass?: string;
     modalTitle?: string;
+    selectFiles?: boolean;
+    fileExtensions?: string[];
   }>(),
   {
     placeholder: '/mnt/tank/media',
@@ -33,6 +37,8 @@ const props = withDefaults(
     buttonLabel: 'Browse',
     inputClass: 'input mono',
     modalTitle: 'Select Host Folder',
+    selectFiles: false,
+    fileExtensions: () => [],
   }
 );
 
@@ -56,11 +62,33 @@ async function fetchSuggestions(path: string) {
   }
   try {
     const res = await services.apps.listDirectories(lookupDir);
-    autocompleteSuggestions.value = (res.entries || []).map((e) => e.path);
+    let entries = res.entries || [];
+    if (!props.selectFiles) {
+      entries = entries.filter((e) => e.isDir);
+    } else if (props.fileExtensions && props.fileExtensions.length > 0) {
+      const exts = props.fileExtensions.map((x) => x.toLowerCase());
+      entries = entries.filter((e) => e.isDir || exts.some((ext) => e.name.toLowerCase().endsWith(ext)));
+    }
+    autocompleteSuggestions.value = entries.map((e) => e.path);
   } catch {
     autocompleteSuggestions.value = [];
   }
 }
+
+const filteredEntries = computed(() => {
+  if (!props.selectFiles) {
+    return browseEntries.value.filter((e) => e.isDir);
+  }
+  if (props.fileExtensions && props.fileExtensions.length > 0) {
+    const exts = props.fileExtensions.map((x) => x.toLowerCase());
+    return browseEntries.value.filter((e) => {
+      if (e.isDir) return true;
+      const lower = e.name.toLowerCase();
+      return exts.some((ext) => lower.endsWith(ext));
+    });
+  }
+  return browseEntries.value;
+});
 
 function handleInput(e: Event) {
   const target = e.target as HTMLInputElement;
@@ -107,12 +135,23 @@ const quickShortcuts = computed(() => {
   const shortcuts: { label: string; path: string }[] = [{ label: '/mnt', path: '/mnt' }];
   const mainPool = nasState.systemConfig?.mainPool;
   if (mainPool) {
-    shortcuts.push({ label: `/mnt/${mainPool}`, path: `/mnt/${mainPool}` });
+    const cleanMain = mainPool.replace(/^zfsPools\//, '').trim();
+    if (cleanMain) {
+      const pPath = `/mnt/${cleanMain}`;
+      if (!shortcuts.some((s) => s.path === pPath)) {
+        shortcuts.push({ label: pPath, path: pPath });
+      }
+    }
   }
   if (nasState.pools && nasState.pools.length > 0) {
     for (const p of nasState.pools) {
-      const pPath = `/mnt/${p.name}`;
-      if (!shortcuts.some((s) => s.path === pPath)) {
+      const cleanName = (p.poolName || p.name.replace(/^zfsPools\//, '')).trim();
+      let pPath = (p.mountpoint || '').trim();
+      if (!pPath || pPath === 'none' || pPath === 'legacy') {
+        pPath = cleanName ? `/mnt/${cleanName}` : '';
+      }
+      pPath = pPath.replace(/\/zfsPools\//g, '/').replace(/^zfsPools\//, '').replace(/^\/zfsPools/, '');
+      if (pPath && pPath !== '/mnt' && !shortcuts.some((s) => s.path === pPath)) {
         shortcuts.push({ label: pPath, path: pPath });
       }
     }
@@ -131,11 +170,14 @@ async function openBrowser() {
     if (props.rootHint) {
       initial = props.rootHint;
     } else if (nasState.systemConfig?.mainPool) {
-      initial = `/mnt/${nasState.systemConfig.mainPool}`;
+      const cleanMain = nasState.systemConfig.mainPool.replace(/^zfsPools\//, '').trim();
+      initial = `/mnt/${cleanMain}`;
     } else {
       initial = '/mnt';
     }
   }
+  initial = initial.replace(/\/zfsPools\//g, '/').replace(/^zfsPools\//, '').replace(/^\/zfsPools/, '');
+  if (!initial.startsWith('/')) initial = '/' + initial;
   isBrowserOpen.value = true;
   await navigateTo(initial);
 }
@@ -143,8 +185,10 @@ async function openBrowser() {
 async function navigateTo(targetPath: string) {
   isLoadingBrowse.value = true;
   subfolderInput.value = '';
+  let cleanTarget = targetPath.replace(/\/zfsPools\//g, '/').replace(/^zfsPools\//, '').replace(/^\/zfsPools/, '');
+  if (!cleanTarget.startsWith('/')) cleanTarget = '/' + cleanTarget;
   try {
-    const res = await services.apps.listDirectories(targetPath);
+    const res = await services.apps.listDirectories(cleanTarget);
     currentBrowsePath.value = res.currentPath;
     browseEntries.value = res.entries || [];
   } catch {
@@ -295,46 +339,75 @@ function selectFolderEntry(entry: DirectoryEntry) {
           </div>
         </div>
 
-        <!-- Directory List -->
+        <!-- Directory / File List -->
         <div style="flex: 1; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: 6px; background: rgba(0,0,0,0.15); min-height: 220px; max-height: 360px">
           <div v-if="isLoadingBrowse" style="text-align: center; padding: 40px; color: var(--text-secondary)">
             <MdiIcon :path="mdiRefresh" size="24" class="spin-icon" style="margin-bottom: 8px" />
             <div>Loading directory contents...</div>
           </div>
 
-          <div v-else-if="browseEntries.length === 0" style="text-align: center; padding: 40px; color: var(--text-secondary); font-size: 13px">
-            No subdirectories found in this folder.
+          <div v-else-if="filteredEntries.length === 0" style="text-align: center; padding: 40px; color: var(--text-secondary); font-size: 13px">
+            {{ selectFiles ? 'No matching files or subdirectories found in this folder.' : 'No subdirectories found in this folder.' }}
           </div>
 
           <div v-else style="display: flex; flex-direction: column">
             <div
-              v-for="entry in browseEntries"
+              v-for="entry in filteredEntries"
               :key="entry.path"
               style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; transition: background 0.1s"
               class="folder-row"
-              @click="navigateTo(entry.path)"
+              @click="entry.isDir ? navigateTo(entry.path) : selectFolderEntry(entry)"
             >
               <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; text-overflow: ellipsis">
-                <MdiIcon :path="mdiFolderOutline" size="18" style="color: var(--warning-text); flex-shrink: 0" />
+                <MdiIcon
+                  v-if="entry.isDir"
+                  :path="mdiFolderOutline"
+                  size="18"
+                  style="color: var(--warning-text); flex-shrink: 0"
+                />
+                <MdiIcon
+                  v-else-if="entry.name.toLowerCase().endsWith('.iso') || entry.name.toLowerCase().endsWith('.img')"
+                  :path="mdiDisc"
+                  size="18"
+                  style="color: var(--accent-primary); flex-shrink: 0"
+                />
+                <MdiIcon
+                  v-else
+                  :path="mdiFileDocumentOutline"
+                  size="18"
+                  style="color: var(--text-secondary); flex-shrink: 0"
+                />
                 <span class="mono" style="font-size: 12.5px; color: var(--text-primary)">
                   {{ entry.name }}
                 </span>
               </div>
 
-              <button
-                type="button"
-                class="btn btn-sm"
-                style="padding: 2px 8px; font-size: 11px; opacity: 0.8"
-                @click.stop="selectFolderEntry(entry)"
-              >
-                Choose
-              </button>
+              <div style="display: flex; gap: 6px; align-items: center">
+                <button
+                  v-if="entry.isDir"
+                  type="button"
+                  class="btn btn-sm"
+                  style="padding: 2px 8px; font-size: 11px; opacity: 0.8"
+                  @click.stop="navigateTo(entry.path)"
+                >
+                  Open
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-sm"
+                  :class="{ 'btn-primary': !entry.isDir }"
+                  style="padding: 2px 8px; font-size: 11px"
+                  @click.stop="selectFolderEntry(entry)"
+                >
+                  {{ entry.isDir ? 'Choose' : 'Select' }}
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- Optional Subfolder or New Subfolder field -->
-        <div style="margin-top: 12px; display: flex; align-items: center; gap: 8px">
+        <!-- Optional Subfolder or New Subfolder field (only when selecting directories) -->
+        <div v-if="!selectFiles" style="margin-top: 12px; display: flex; align-items: center; gap: 8px">
           <MdiIcon :path="mdiFolderPlusOutline" size="18" style="color: var(--accent-primary); flex-shrink: 0" />
           <span style="font-size: 12px; color: var(--text-secondary); white-space: nowrap">Subfolder (optional):</span>
           <input
@@ -349,7 +422,12 @@ function selectFolderEntry(entry: DirectoryEntry) {
         <!-- Footer / Confirmation -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border-subtle); flex-shrink: 0">
           <div class="mono" style="font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; max-width: 380px">
-            Selected: <span style="color: var(--text-primary); font-weight: 600">{{ finalSelectedPath }}</span>
+            <span v-if="selectFiles" style="color: var(--text-muted); font-size: 11.5px">
+              Click any file row or "Select" to use it as boot / media image.
+            </span>
+            <span v-else>
+              Selected: <span style="color: var(--text-primary); font-weight: 600">{{ finalSelectedPath }}</span>
+            </span>
           </div>
 
           <div style="display: flex; gap: 8px">
@@ -357,6 +435,7 @@ function selectFolderEntry(entry: DirectoryEntry) {
               Cancel
             </button>
             <button
+              v-if="!selectFiles"
               type="button"
               class="btn btn-sm btn-primary"
               style="display: inline-flex; align-items: center; gap: 4px"

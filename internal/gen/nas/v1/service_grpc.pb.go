@@ -27,6 +27,8 @@ const (
 	NasService_SelectMainPool_FullMethodName                 = "/nas.v1.NasService/SelectMainPool"
 	NasService_DiscoverPools_FullMethodName                  = "/nas.v1.NasService/DiscoverPools"
 	NasService_GetSystemTelemetry_FullMethodName             = "/nas.v1.NasService/GetSystemTelemetry"
+	NasService_StreamSystemTelemetry_FullMethodName          = "/nas.v1.NasService/StreamSystemTelemetry"
+	NasService_WatchResources_FullMethodName                 = "/nas.v1.NasService/WatchResources"
 	NasService_ListPrerequisites_FullMethodName              = "/nas.v1.NasService/ListPrerequisites"
 	NasService_GetPrerequisite_FullMethodName                = "/nas.v1.NasService/GetPrerequisite"
 	NasService_CheckPrerequisites_FullMethodName             = "/nas.v1.NasService/CheckPrerequisites"
@@ -72,6 +74,7 @@ const (
 	NasService_RollbackVirtualMachineSnapshot_FullMethodName = "/nas.v1.NasService/RollbackVirtualMachineSnapshot"
 	NasService_DeleteVirtualMachineSnapshot_FullMethodName   = "/nas.v1.NasService/DeleteVirtualMachineSnapshot"
 	NasService_OpenVirtualMachineConsole_FullMethodName      = "/nas.v1.NasService/OpenVirtualMachineConsole"
+	NasService_WatchVirtualMachines_FullMethodName           = "/nas.v1.NasService/WatchVirtualMachines"
 	NasService_ListDockerContainers_FullMethodName           = "/nas.v1.NasService/ListDockerContainers"
 	NasService_GetDockerContainer_FullMethodName             = "/nas.v1.NasService/GetDockerContainer"
 	NasService_CreateDockerContainer_FullMethodName          = "/nas.v1.NasService/CreateDockerContainer"
@@ -81,6 +84,7 @@ const (
 	NasService_StartDockerContainer_FullMethodName           = "/nas.v1.NasService/StartDockerContainer"
 	NasService_StopDockerContainer_FullMethodName            = "/nas.v1.NasService/StopDockerContainer"
 	NasService_RestartDockerContainer_FullMethodName         = "/nas.v1.NasService/RestartDockerContainer"
+	NasService_WatchDockerContainers_FullMethodName          = "/nas.v1.NasService/WatchDockerContainers"
 	NasService_ListDockerApps_FullMethodName                 = "/nas.v1.NasService/ListDockerApps"
 	NasService_GetDockerApp_FullMethodName                   = "/nas.v1.NasService/GetDockerApp"
 	NasService_CreateDockerApp_FullMethodName                = "/nas.v1.NasService/CreateDockerApp"
@@ -91,6 +95,7 @@ const (
 	NasService_RestartDockerApp_FullMethodName               = "/nas.v1.NasService/RestartDockerApp"
 	NasService_UpgradeDockerApp_FullMethodName               = "/nas.v1.NasService/UpgradeDockerApp"
 	NasService_GetDockerAppLogs_FullMethodName               = "/nas.v1.NasService/GetDockerAppLogs"
+	NasService_WatchDockerApps_FullMethodName                = "/nas.v1.NasService/WatchDockerApps"
 	NasService_ListDockerNetworks_FullMethodName             = "/nas.v1.NasService/ListDockerNetworks"
 	NasService_GetDockerConfig_FullMethodName                = "/nas.v1.NasService/GetDockerConfig"
 	NasService_UpdateDockerConfig_FullMethodName             = "/nas.v1.NasService/UpdateDockerConfig"
@@ -112,6 +117,7 @@ const (
 	NasService_RestartLxcContainer_FullMethodName            = "/nas.v1.NasService/RestartLxcContainer"
 	NasService_FreezeLxcContainer_FullMethodName             = "/nas.v1.NasService/FreezeLxcContainer"
 	NasService_GetLxcContainerLogs_FullMethodName            = "/nas.v1.NasService/GetLxcContainerLogs"
+	NasService_WatchLxcContainers_FullMethodName             = "/nas.v1.NasService/WatchLxcContainers"
 	NasService_ListLxcCatalogItems_FullMethodName            = "/nas.v1.NasService/ListLxcCatalogItems"
 	NasService_GetLxcCatalogItem_FullMethodName              = "/nas.v1.NasService/GetLxcCatalogItem"
 	NasService_SyncLxcCatalog_FullMethodName                 = "/nas.v1.NasService/SyncLxcCatalog"
@@ -159,6 +165,8 @@ type NasServiceClient interface {
 	SelectMainPool(ctx context.Context, in *SelectMainPoolRequest, opts ...grpc.CallOption) (*SystemConfig, error)
 	DiscoverPools(ctx context.Context, in *DiscoverPoolsRequest, opts ...grpc.CallOption) (*DiscoverPoolsResponse, error)
 	GetSystemTelemetry(ctx context.Context, in *GetSystemTelemetryRequest, opts ...grpc.CallOption) (*SystemTelemetry, error)
+	StreamSystemTelemetry(ctx context.Context, in *StreamSystemTelemetryRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SystemTelemetry], error)
+	WatchResources(ctx context.Context, in *WatchResourcesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchResourceChange], error)
 	ListPrerequisites(ctx context.Context, in *ListPrerequisitesRequest, opts ...grpc.CallOption) (*ListPrerequisitesResponse, error)
 	GetPrerequisite(ctx context.Context, in *GetPrerequisiteRequest, opts ...grpc.CallOption) (*Prerequisite, error)
 	CheckPrerequisites(ctx context.Context, in *CheckPrerequisitesRequest, opts ...grpc.CallOption) (*CheckPrerequisitesResponse, error)
@@ -204,6 +212,7 @@ type NasServiceClient interface {
 	RollbackVirtualMachineSnapshot(ctx context.Context, in *RollbackVirtualMachineSnapshotRequest, opts ...grpc.CallOption) (*VirtualMachine, error)
 	DeleteVirtualMachineSnapshot(ctx context.Context, in *DeleteVirtualMachineSnapshotRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	OpenVirtualMachineConsole(ctx context.Context, in *OpenVirtualMachineConsoleRequest, opts ...grpc.CallOption) (*VirtualMachineConsoleSession, error)
+	WatchVirtualMachines(ctx context.Context, in *WatchVirtualMachinesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchVirtualMachinesResponse], error)
 	ListDockerContainers(ctx context.Context, in *ListDockerContainersRequest, opts ...grpc.CallOption) (*ListDockerContainersResponse, error)
 	GetDockerContainer(ctx context.Context, in *GetDockerContainerRequest, opts ...grpc.CallOption) (*DockerContainer, error)
 	CreateDockerContainer(ctx context.Context, in *CreateDockerContainerRequest, opts ...grpc.CallOption) (*DockerContainer, error)
@@ -213,6 +222,7 @@ type NasServiceClient interface {
 	StartDockerContainer(ctx context.Context, in *StartDockerContainerRequest, opts ...grpc.CallOption) (*DockerContainer, error)
 	StopDockerContainer(ctx context.Context, in *StopDockerContainerRequest, opts ...grpc.CallOption) (*DockerContainer, error)
 	RestartDockerContainer(ctx context.Context, in *RestartDockerContainerRequest, opts ...grpc.CallOption) (*DockerContainer, error)
+	WatchDockerContainers(ctx context.Context, in *WatchDockerContainersRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchDockerContainersResponse], error)
 	ListDockerApps(ctx context.Context, in *ListDockerAppsRequest, opts ...grpc.CallOption) (*ListDockerAppsResponse, error)
 	GetDockerApp(ctx context.Context, in *GetDockerAppRequest, opts ...grpc.CallOption) (*DockerApp, error)
 	CreateDockerApp(ctx context.Context, in *CreateDockerAppRequest, opts ...grpc.CallOption) (*DockerApp, error)
@@ -223,6 +233,7 @@ type NasServiceClient interface {
 	RestartDockerApp(ctx context.Context, in *RestartDockerAppRequest, opts ...grpc.CallOption) (*DockerApp, error)
 	UpgradeDockerApp(ctx context.Context, in *UpgradeDockerAppRequest, opts ...grpc.CallOption) (*DockerApp, error)
 	GetDockerAppLogs(ctx context.Context, in *GetDockerAppLogsRequest, opts ...grpc.CallOption) (*GetDockerAppLogsResponse, error)
+	WatchDockerApps(ctx context.Context, in *WatchDockerAppsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchDockerAppsResponse], error)
 	ListDockerNetworks(ctx context.Context, in *ListDockerNetworksRequest, opts ...grpc.CallOption) (*ListDockerNetworksResponse, error)
 	GetDockerConfig(ctx context.Context, in *GetDockerConfigRequest, opts ...grpc.CallOption) (*DockerConfig, error)
 	UpdateDockerConfig(ctx context.Context, in *UpdateDockerConfigRequest, opts ...grpc.CallOption) (*DockerConfig, error)
@@ -244,6 +255,7 @@ type NasServiceClient interface {
 	RestartLxcContainer(ctx context.Context, in *RestartLxcContainerRequest, opts ...grpc.CallOption) (*LxcContainer, error)
 	FreezeLxcContainer(ctx context.Context, in *FreezeLxcContainerRequest, opts ...grpc.CallOption) (*LxcContainer, error)
 	GetLxcContainerLogs(ctx context.Context, in *GetLxcContainerLogsRequest, opts ...grpc.CallOption) (*GetLxcContainerLogsResponse, error)
+	WatchLxcContainers(ctx context.Context, in *WatchLxcContainersRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchLxcContainersResponse], error)
 	ListLxcCatalogItems(ctx context.Context, in *ListLxcCatalogItemsRequest, opts ...grpc.CallOption) (*ListLxcCatalogItemsResponse, error)
 	GetLxcCatalogItem(ctx context.Context, in *GetLxcCatalogItemRequest, opts ...grpc.CallOption) (*LxcCatalogItem, error)
 	SyncLxcCatalog(ctx context.Context, in *SyncLxcCatalogRequest, opts ...grpc.CallOption) (*SyncLxcCatalogResponse, error)
@@ -351,6 +363,44 @@ func (c *nasServiceClient) GetSystemTelemetry(ctx context.Context, in *GetSystem
 	}
 	return out, nil
 }
+
+func (c *nasServiceClient) StreamSystemTelemetry(ctx context.Context, in *StreamSystemTelemetryRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SystemTelemetry], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &NasService_ServiceDesc.Streams[0], NasService_StreamSystemTelemetry_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[StreamSystemTelemetryRequest, SystemTelemetry]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type NasService_StreamSystemTelemetryClient = grpc.ServerStreamingClient[SystemTelemetry]
+
+func (c *nasServiceClient) WatchResources(ctx context.Context, in *WatchResourcesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchResourceChange], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &NasService_ServiceDesc.Streams[1], NasService_WatchResources_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchResourcesRequest, WatchResourceChange]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type NasService_WatchResourcesClient = grpc.ServerStreamingClient[WatchResourceChange]
 
 func (c *nasServiceClient) ListPrerequisites(ctx context.Context, in *ListPrerequisitesRequest, opts ...grpc.CallOption) (*ListPrerequisitesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -802,6 +852,25 @@ func (c *nasServiceClient) OpenVirtualMachineConsole(ctx context.Context, in *Op
 	return out, nil
 }
 
+func (c *nasServiceClient) WatchVirtualMachines(ctx context.Context, in *WatchVirtualMachinesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchVirtualMachinesResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &NasService_ServiceDesc.Streams[2], NasService_WatchVirtualMachines_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchVirtualMachinesRequest, WatchVirtualMachinesResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type NasService_WatchVirtualMachinesClient = grpc.ServerStreamingClient[WatchVirtualMachinesResponse]
+
 func (c *nasServiceClient) ListDockerContainers(ctx context.Context, in *ListDockerContainersRequest, opts ...grpc.CallOption) (*ListDockerContainersResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListDockerContainersResponse)
@@ -891,6 +960,25 @@ func (c *nasServiceClient) RestartDockerContainer(ctx context.Context, in *Resta
 	}
 	return out, nil
 }
+
+func (c *nasServiceClient) WatchDockerContainers(ctx context.Context, in *WatchDockerContainersRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchDockerContainersResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &NasService_ServiceDesc.Streams[3], NasService_WatchDockerContainers_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchDockerContainersRequest, WatchDockerContainersResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type NasService_WatchDockerContainersClient = grpc.ServerStreamingClient[WatchDockerContainersResponse]
 
 func (c *nasServiceClient) ListDockerApps(ctx context.Context, in *ListDockerAppsRequest, opts ...grpc.CallOption) (*ListDockerAppsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -991,6 +1079,25 @@ func (c *nasServiceClient) GetDockerAppLogs(ctx context.Context, in *GetDockerAp
 	}
 	return out, nil
 }
+
+func (c *nasServiceClient) WatchDockerApps(ctx context.Context, in *WatchDockerAppsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchDockerAppsResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &NasService_ServiceDesc.Streams[4], NasService_WatchDockerApps_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchDockerAppsRequest, WatchDockerAppsResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type NasService_WatchDockerAppsClient = grpc.ServerStreamingClient[WatchDockerAppsResponse]
 
 func (c *nasServiceClient) ListDockerNetworks(ctx context.Context, in *ListDockerNetworksRequest, opts ...grpc.CallOption) (*ListDockerNetworksResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -1201,6 +1308,25 @@ func (c *nasServiceClient) GetLxcContainerLogs(ctx context.Context, in *GetLxcCo
 	}
 	return out, nil
 }
+
+func (c *nasServiceClient) WatchLxcContainers(ctx context.Context, in *WatchLxcContainersRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchLxcContainersResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &NasService_ServiceDesc.Streams[5], NasService_WatchLxcContainers_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchLxcContainersRequest, WatchLxcContainersResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type NasService_WatchLxcContainersClient = grpc.ServerStreamingClient[WatchLxcContainersResponse]
 
 func (c *nasServiceClient) ListLxcCatalogItems(ctx context.Context, in *ListLxcCatalogItemsRequest, opts ...grpc.CallOption) (*ListLxcCatalogItemsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -1499,6 +1625,8 @@ type NasServiceServer interface {
 	SelectMainPool(context.Context, *SelectMainPoolRequest) (*SystemConfig, error)
 	DiscoverPools(context.Context, *DiscoverPoolsRequest) (*DiscoverPoolsResponse, error)
 	GetSystemTelemetry(context.Context, *GetSystemTelemetryRequest) (*SystemTelemetry, error)
+	StreamSystemTelemetry(*StreamSystemTelemetryRequest, grpc.ServerStreamingServer[SystemTelemetry]) error
+	WatchResources(*WatchResourcesRequest, grpc.ServerStreamingServer[WatchResourceChange]) error
 	ListPrerequisites(context.Context, *ListPrerequisitesRequest) (*ListPrerequisitesResponse, error)
 	GetPrerequisite(context.Context, *GetPrerequisiteRequest) (*Prerequisite, error)
 	CheckPrerequisites(context.Context, *CheckPrerequisitesRequest) (*CheckPrerequisitesResponse, error)
@@ -1544,6 +1672,7 @@ type NasServiceServer interface {
 	RollbackVirtualMachineSnapshot(context.Context, *RollbackVirtualMachineSnapshotRequest) (*VirtualMachine, error)
 	DeleteVirtualMachineSnapshot(context.Context, *DeleteVirtualMachineSnapshotRequest) (*emptypb.Empty, error)
 	OpenVirtualMachineConsole(context.Context, *OpenVirtualMachineConsoleRequest) (*VirtualMachineConsoleSession, error)
+	WatchVirtualMachines(*WatchVirtualMachinesRequest, grpc.ServerStreamingServer[WatchVirtualMachinesResponse]) error
 	ListDockerContainers(context.Context, *ListDockerContainersRequest) (*ListDockerContainersResponse, error)
 	GetDockerContainer(context.Context, *GetDockerContainerRequest) (*DockerContainer, error)
 	CreateDockerContainer(context.Context, *CreateDockerContainerRequest) (*DockerContainer, error)
@@ -1553,6 +1682,7 @@ type NasServiceServer interface {
 	StartDockerContainer(context.Context, *StartDockerContainerRequest) (*DockerContainer, error)
 	StopDockerContainer(context.Context, *StopDockerContainerRequest) (*DockerContainer, error)
 	RestartDockerContainer(context.Context, *RestartDockerContainerRequest) (*DockerContainer, error)
+	WatchDockerContainers(*WatchDockerContainersRequest, grpc.ServerStreamingServer[WatchDockerContainersResponse]) error
 	ListDockerApps(context.Context, *ListDockerAppsRequest) (*ListDockerAppsResponse, error)
 	GetDockerApp(context.Context, *GetDockerAppRequest) (*DockerApp, error)
 	CreateDockerApp(context.Context, *CreateDockerAppRequest) (*DockerApp, error)
@@ -1563,6 +1693,7 @@ type NasServiceServer interface {
 	RestartDockerApp(context.Context, *RestartDockerAppRequest) (*DockerApp, error)
 	UpgradeDockerApp(context.Context, *UpgradeDockerAppRequest) (*DockerApp, error)
 	GetDockerAppLogs(context.Context, *GetDockerAppLogsRequest) (*GetDockerAppLogsResponse, error)
+	WatchDockerApps(*WatchDockerAppsRequest, grpc.ServerStreamingServer[WatchDockerAppsResponse]) error
 	ListDockerNetworks(context.Context, *ListDockerNetworksRequest) (*ListDockerNetworksResponse, error)
 	GetDockerConfig(context.Context, *GetDockerConfigRequest) (*DockerConfig, error)
 	UpdateDockerConfig(context.Context, *UpdateDockerConfigRequest) (*DockerConfig, error)
@@ -1584,6 +1715,7 @@ type NasServiceServer interface {
 	RestartLxcContainer(context.Context, *RestartLxcContainerRequest) (*LxcContainer, error)
 	FreezeLxcContainer(context.Context, *FreezeLxcContainerRequest) (*LxcContainer, error)
 	GetLxcContainerLogs(context.Context, *GetLxcContainerLogsRequest) (*GetLxcContainerLogsResponse, error)
+	WatchLxcContainers(*WatchLxcContainersRequest, grpc.ServerStreamingServer[WatchLxcContainersResponse]) error
 	ListLxcCatalogItems(context.Context, *ListLxcCatalogItemsRequest) (*ListLxcCatalogItemsResponse, error)
 	GetLxcCatalogItem(context.Context, *GetLxcCatalogItemRequest) (*LxcCatalogItem, error)
 	SyncLxcCatalog(context.Context, *SyncLxcCatalogRequest) (*SyncLxcCatalogResponse, error)
@@ -1642,6 +1774,12 @@ func (UnimplementedNasServiceServer) DiscoverPools(context.Context, *DiscoverPoo
 }
 func (UnimplementedNasServiceServer) GetSystemTelemetry(context.Context, *GetSystemTelemetryRequest) (*SystemTelemetry, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSystemTelemetry not implemented")
+}
+func (UnimplementedNasServiceServer) StreamSystemTelemetry(*StreamSystemTelemetryRequest, grpc.ServerStreamingServer[SystemTelemetry]) error {
+	return status.Error(codes.Unimplemented, "method StreamSystemTelemetry not implemented")
+}
+func (UnimplementedNasServiceServer) WatchResources(*WatchResourcesRequest, grpc.ServerStreamingServer[WatchResourceChange]) error {
+	return status.Error(codes.Unimplemented, "method WatchResources not implemented")
 }
 func (UnimplementedNasServiceServer) ListPrerequisites(context.Context, *ListPrerequisitesRequest) (*ListPrerequisitesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListPrerequisites not implemented")
@@ -1778,6 +1916,9 @@ func (UnimplementedNasServiceServer) DeleteVirtualMachineSnapshot(context.Contex
 func (UnimplementedNasServiceServer) OpenVirtualMachineConsole(context.Context, *OpenVirtualMachineConsoleRequest) (*VirtualMachineConsoleSession, error) {
 	return nil, status.Error(codes.Unimplemented, "method OpenVirtualMachineConsole not implemented")
 }
+func (UnimplementedNasServiceServer) WatchVirtualMachines(*WatchVirtualMachinesRequest, grpc.ServerStreamingServer[WatchVirtualMachinesResponse]) error {
+	return status.Error(codes.Unimplemented, "method WatchVirtualMachines not implemented")
+}
 func (UnimplementedNasServiceServer) ListDockerContainers(context.Context, *ListDockerContainersRequest) (*ListDockerContainersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListDockerContainers not implemented")
 }
@@ -1804,6 +1945,9 @@ func (UnimplementedNasServiceServer) StopDockerContainer(context.Context, *StopD
 }
 func (UnimplementedNasServiceServer) RestartDockerContainer(context.Context, *RestartDockerContainerRequest) (*DockerContainer, error) {
 	return nil, status.Error(codes.Unimplemented, "method RestartDockerContainer not implemented")
+}
+func (UnimplementedNasServiceServer) WatchDockerContainers(*WatchDockerContainersRequest, grpc.ServerStreamingServer[WatchDockerContainersResponse]) error {
+	return status.Error(codes.Unimplemented, "method WatchDockerContainers not implemented")
 }
 func (UnimplementedNasServiceServer) ListDockerApps(context.Context, *ListDockerAppsRequest) (*ListDockerAppsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListDockerApps not implemented")
@@ -1834,6 +1978,9 @@ func (UnimplementedNasServiceServer) UpgradeDockerApp(context.Context, *UpgradeD
 }
 func (UnimplementedNasServiceServer) GetDockerAppLogs(context.Context, *GetDockerAppLogsRequest) (*GetDockerAppLogsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetDockerAppLogs not implemented")
+}
+func (UnimplementedNasServiceServer) WatchDockerApps(*WatchDockerAppsRequest, grpc.ServerStreamingServer[WatchDockerAppsResponse]) error {
+	return status.Error(codes.Unimplemented, "method WatchDockerApps not implemented")
 }
 func (UnimplementedNasServiceServer) ListDockerNetworks(context.Context, *ListDockerNetworksRequest) (*ListDockerNetworksResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListDockerNetworks not implemented")
@@ -1897,6 +2044,9 @@ func (UnimplementedNasServiceServer) FreezeLxcContainer(context.Context, *Freeze
 }
 func (UnimplementedNasServiceServer) GetLxcContainerLogs(context.Context, *GetLxcContainerLogsRequest) (*GetLxcContainerLogsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetLxcContainerLogs not implemented")
+}
+func (UnimplementedNasServiceServer) WatchLxcContainers(*WatchLxcContainersRequest, grpc.ServerStreamingServer[WatchLxcContainersResponse]) error {
+	return status.Error(codes.Unimplemented, "method WatchLxcContainers not implemented")
 }
 func (UnimplementedNasServiceServer) ListLxcCatalogItems(context.Context, *ListLxcCatalogItemsRequest) (*ListLxcCatalogItemsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListLxcCatalogItems not implemented")
@@ -2128,6 +2278,28 @@ func _NasService_GetSystemTelemetry_Handler(srv interface{}, ctx context.Context
 	}
 	return interceptor(ctx, in, info, handler)
 }
+
+func _NasService_StreamSystemTelemetry_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StreamSystemTelemetryRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(NasServiceServer).StreamSystemTelemetry(m, &grpc.GenericServerStream[StreamSystemTelemetryRequest, SystemTelemetry]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type NasService_StreamSystemTelemetryServer = grpc.ServerStreamingServer[SystemTelemetry]
+
+func _NasService_WatchResources_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchResourcesRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(NasServiceServer).WatchResources(m, &grpc.GenericServerStream[WatchResourcesRequest, WatchResourceChange]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type NasService_WatchResourcesServer = grpc.ServerStreamingServer[WatchResourceChange]
 
 func _NasService_ListPrerequisites_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListPrerequisitesRequest)
@@ -2939,6 +3111,17 @@ func _NasService_OpenVirtualMachineConsole_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NasService_WatchVirtualMachines_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchVirtualMachinesRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(NasServiceServer).WatchVirtualMachines(m, &grpc.GenericServerStream[WatchVirtualMachinesRequest, WatchVirtualMachinesResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type NasService_WatchVirtualMachinesServer = grpc.ServerStreamingServer[WatchVirtualMachinesResponse]
+
 func _NasService_ListDockerContainers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListDockerContainersRequest)
 	if err := dec(in); err != nil {
@@ -3100,6 +3283,17 @@ func _NasService_RestartDockerContainer_Handler(srv interface{}, ctx context.Con
 	}
 	return interceptor(ctx, in, info, handler)
 }
+
+func _NasService_WatchDockerContainers_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchDockerContainersRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(NasServiceServer).WatchDockerContainers(m, &grpc.GenericServerStream[WatchDockerContainersRequest, WatchDockerContainersResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type NasService_WatchDockerContainersServer = grpc.ServerStreamingServer[WatchDockerContainersResponse]
 
 func _NasService_ListDockerApps_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListDockerAppsRequest)
@@ -3280,6 +3474,17 @@ func _NasService_GetDockerAppLogs_Handler(srv interface{}, ctx context.Context, 
 	}
 	return interceptor(ctx, in, info, handler)
 }
+
+func _NasService_WatchDockerApps_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchDockerAppsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(NasServiceServer).WatchDockerApps(m, &grpc.GenericServerStream[WatchDockerAppsRequest, WatchDockerAppsResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type NasService_WatchDockerAppsServer = grpc.ServerStreamingServer[WatchDockerAppsResponse]
 
 func _NasService_ListDockerNetworks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListDockerNetworksRequest)
@@ -3658,6 +3863,17 @@ func _NasService_GetLxcContainerLogs_Handler(srv interface{}, ctx context.Contex
 	}
 	return interceptor(ctx, in, info, handler)
 }
+
+func _NasService_WatchLxcContainers_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchLxcContainersRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(NasServiceServer).WatchLxcContainers(m, &grpc.GenericServerStream[WatchLxcContainersRequest, WatchLxcContainersResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type NasService_WatchLxcContainersServer = grpc.ServerStreamingServer[WatchLxcContainersResponse]
 
 func _NasService_ListLxcCatalogItems_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListLxcCatalogItemsRequest)
@@ -4651,6 +4867,37 @@ var NasService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NasService_SyncCatalog_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "StreamSystemTelemetry",
+			Handler:       _NasService_StreamSystemTelemetry_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WatchResources",
+			Handler:       _NasService_WatchResources_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WatchVirtualMachines",
+			Handler:       _NasService_WatchVirtualMachines_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WatchDockerContainers",
+			Handler:       _NasService_WatchDockerContainers_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WatchDockerApps",
+			Handler:       _NasService_WatchDockerApps_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WatchLxcContainers",
+			Handler:       _NasService_WatchLxcContainers_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "nas/v1/service.proto",
 }

@@ -173,6 +173,21 @@ func (d *stubDockerPort) ListContainers(ctx context.Context) ([]domain.DockerCon
 	return res, nil
 }
 
+func (d *stubDockerPort) ListApps(ctx context.Context) ([]domain.DockerApp, error) {
+	var res []domain.DockerApp
+	for _, a := range d.apps {
+		res = append(res, a)
+	}
+	return res, nil
+}
+
+func (d *stubDockerPort) GetApp(ctx context.Context, id string) (*domain.DockerApp, error) {
+	if a, ok := d.apps[id]; ok {
+		return &a, nil
+	}
+	return nil, domain.ErrNotFound
+}
+
 func (d *stubDockerPort) CreateApp(ctx context.Context, app domain.DockerApp) (*domain.DockerApp, error) {
 	app.State = "RUNNING"
 	d.apps[app.ID] = app
@@ -408,6 +423,30 @@ func TestGoogleAIPGatewayEndToEnd(t *testing.T) {
 		t.Fatalf("expected SSE connected handshake, got %q", string(buf[:n]))
 	}
 
+	// 6c. Real-Time gRPC Server-Side Streaming Watch API (/v1/dockerApps:watch)
+	watchResp, err := client.Get(srv.URL + "/v1/dockerApps:watch")
+	if err != nil || watchResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /v1/dockerApps:watch failed: status=%v err=%v", watchResp.StatusCode, err)
+	}
+	watchBuf := make([]byte, 512)
+	wn, _ := watchResp.Body.Read(watchBuf)
+	_ = watchResp.Body.Close()
+	if !strings.Contains(string(watchBuf[:wn]), "SNAPSHOT") && !strings.Contains(string(watchBuf[:wn]), "result") {
+		t.Fatalf("expected initial SNAPSHOT chunk from watch stream, got: %s", string(watchBuf[:wn]))
+	}
+
+	// 6d. Real-Time Multiplexed Watch Stream (/v1/resources:watch)
+	resWatchResp, err := client.Get(srv.URL + "/v1/resources:watch?resourceTypes=dockerApps,virtualMachines,telemetry")
+	if err != nil || resWatchResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /v1/resources:watch failed: status=%v err=%v", resWatchResp.StatusCode, err)
+	}
+	resWatchBuf := make([]byte, 512)
+	rwn, _ := resWatchResp.Body.Read(resWatchBuf)
+	_ = resWatchResp.Body.Close()
+	if !strings.Contains(string(resWatchBuf[:rwn]), "SNAPSHOT") {
+		t.Fatalf("expected initial SNAPSHOT chunk from resources watch stream, got: %s", string(resWatchBuf[:rwn]))
+	}
+
 	// 7. Embedded Single-Binary Vue.js SPA served at /
 	spaResp, err := client.Get(srv.URL + "/")
 	if err != nil || spaResp.StatusCode != http.StatusOK {
@@ -557,4 +596,59 @@ func TestGoogleAIPGatewayEndToEnd(t *testing.T) {
 		t.Fatalf("DELETE /v1/storage/lxc-templates failed: status=%v err=%v", tDelResp.StatusCode, err)
 	}
 	_ = tDelResp.Body.Close()
+}
+
+func TestWatchStreamingWithDeltas(t *testing.T) {
+	srv := setupTestServer(t)
+	defer srv.Close()
+	client := srv.Client()
+
+	// 1. Open DockerApps watch stream
+	watchResp, err := client.Get(srv.URL + "/v1/dockerApps:watch")
+	if err != nil || watchResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /v1/dockerApps:watch failed: status=%v err=%v", watchResp.StatusCode, err)
+	}
+	defer watchResp.Body.Close()
+
+	dec := json.NewDecoder(watchResp.Body)
+
+	// Read initial SNAPSHOT message
+	var snapMsg struct {
+		Result struct {
+			EventType string `json:"eventType"`
+		} `json:"result"`
+	}
+	if err := dec.Decode(&snapMsg); err != nil {
+		t.Fatalf("failed to decode initial snapshot: %v", err)
+	}
+	if snapMsg.Result.EventType != "SNAPSHOT" {
+		t.Fatalf("expected SNAPSHOT eventType, got %q", snapMsg.Result.EventType)
+	}
+
+	// 2. Trigger creation of a new app in background
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		appBody := `{"title":"Stream Test","composeYaml":"services:\n  test:\n    image: alpine\n"}`
+		_, _ = client.Post(srv.URL+"/v1/dockerApps?dockerAppId=stream-test", "application/json", strings.NewReader(appBody))
+	}()
+
+	// 3. Read delta event from stream
+	var deltaMsg struct {
+		Result struct {
+			EventType string `json:"eventType"`
+			DockerApp struct {
+				Name  string `json:"name"`
+				Title string `json:"title"`
+			} `json:"dockerApp"`
+		} `json:"result"`
+	}
+	if err := dec.Decode(&deltaMsg); err != nil {
+		t.Fatalf("failed to decode delta event: %v", err)
+	}
+	if deltaMsg.Result.EventType != "ADDED" && deltaMsg.Result.EventType != "MODIFIED" {
+		t.Fatalf("expected ADDED/MODIFIED eventType, got %q", deltaMsg.Result.EventType)
+	}
+	if deltaMsg.Result.DockerApp.Name != "dockerApps/stream-test" {
+		t.Fatalf("expected dockerApps/stream-test, got %q", deltaMsg.Result.DockerApp.Name)
+	}
 }

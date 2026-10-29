@@ -11,6 +11,7 @@ export function getQuestionsDefaultAnswers(
   app: CatalogApp,
   appsPool = 'tank'
 ): Record<string, string> {
+  const cleanAppsPool = appsPool.replace(/^zfsPools\//, '').trim() || 'tank';
   const answers: Record<string, string> = {};
   const flatQs = getAllAppQuestions(app);
 
@@ -27,7 +28,7 @@ export function getQuestionsDefaultAnswers(
           leaf = parts.length > 1 ? parts[parts.length - 2] : 'data';
         }
         const cleanId = toZfsSafeSlug(app.appId) || 'app';
-        defVal = `/mnt/${appsPool}/apps/${cleanId}/${leaf}`;
+        defVal = `/mnt/${cleanAppsPool}/apps/${cleanId}/${leaf}`;
       }
     }
     answers[q.variable] = defVal;
@@ -258,6 +259,7 @@ export function applyAnswersToCompose(
       if (q.type === 'hostpath' || (q.mountPath && (vLower.includes('storage') || vLower.includes('volume')))) {
         let targetMount = (q.mountPath || '').replace(/^["']+|["']+$/g, '').trim();
         let newHostPath = val.replace(/^["']+|["']+$/g, '').trim();
+        newHostPath = newHostPath.replace(/\/zfsPools\//g, '/').replace(/^zfsPools\//, '').replace(/^\/zfsPools/, '');
         if (targetMount && !targetMount.startsWith('/')) {
           targetMount = '/' + targetMount;
         }
@@ -391,14 +393,15 @@ export function generateComposeFromQuestions(
   answers: Record<string, string>,
   appsPool = 'tank'
 ): string {
+  const cleanAppsPool = appsPool.replace(/^zfsPools\//, '').trim() || 'tank';
   if (app.composeYaml && app.composeYaml.includes('services:')) {
-    return applyAnswersToCompose(app.composeYaml, app, answers, appsPool);
+    return applyAnswersToCompose(app.composeYaml, app, answers, cleanAppsPool);
   }
 
   const rawId = app.appId?.includes('.') ? app.appId.split('.').pop()! : (app.appId || 'app');
   const serviceName = toZfsSafeSlug(rawId) || 'app';
   const image = app.containerImage || `${serviceName}:latest`;
-  const appdataPath = `/mnt/${appsPool}/apps`;
+  const appdataPath = `/mnt/${cleanAppsPool}/apps`;
 
   const flat = getAllAppQuestions(app);
   const ports: string[] = [];

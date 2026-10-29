@@ -64,6 +64,7 @@ message CpuTelemetry {
   double load15 = 7;
   double temperature_celsius = 8;
   repeated double core_temperatures = 9;
+  repeated double package_temperatures = 10;
 }
 
 message MemoryTelemetry {
@@ -115,4 +116,30 @@ message SystemTelemetry {
 }
 
 message GetSystemTelemetryRequest {}
+
+// =============================================================================
+// Telemetry & Multiplexed Resource Streaming
+// =============================================================================
+
+message StreamSystemTelemetryRequest {
+  int32 interval_seconds = 1;
+}
+
+message WatchResourcesRequest {
+  repeated string resource_types = 1; // e.g. ["dockerApps", "dockerContainers", "virtualMachines", "lxcContainers", "telemetry"]
+}
+
+message WatchResourceChange {
+  enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    SNAPSHOT = 1;
+    ADDED = 2;
+    MODIFIED = 3;
+    DELETED = 4;
+  }
+  string resource_type = 1; // "dockerApps", "dockerContainers", "virtualMachines", "lxcContainers", "telemetry"
+  EventType event_type = 2;
+  string resource_name = 3; // e.g. "dockerApps/nextcloud"
+  string json_payload = 4;   // JSON payload of the entity or initial array
+}
 

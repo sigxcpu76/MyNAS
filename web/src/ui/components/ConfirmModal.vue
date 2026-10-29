@@ -156,7 +156,7 @@ onUnmounted(() => {
 <template>
   <div
     v-if="activeModal && activeModal.isOpen"
-    class="modal-backdrop"
+    class="modal-backdrop confirm-modal-backdrop"
   >
     <div class="modal-card confirm-modal-card" role="dialog" aria-modal="true">
       <!-- Header -->
@@ -276,6 +276,10 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.confirm-modal-backdrop {
+  z-index: 100000 !important;
+}
+
 .confirm-modal-card {
   max-width: 480px;
   padding: 20px 22px;

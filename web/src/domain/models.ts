@@ -97,6 +97,7 @@ export interface CpuTelemetry {
   load15: number;
   temperatureCelsius: number;
   coreTemperatures?: number[];
+  packageTemperatures?: number[];
 }
 
 export interface MemoryTelemetry {
@@ -343,6 +344,13 @@ export interface VirtualMachineCloudInit {
   customUserData?: string;
 }
 
+export interface VirtualMachineCdrom {
+  id: string; // e.g. "sdz", "sdy", "ide2"
+  bus: string; // "sata", "ide", "scsi"
+  isoPath: string; // Path or empty
+  bootable?: boolean;
+}
+
 export interface VirtualMachineSnapshot {
   name: string; // virtualMachines/{vm}/snapshots/{snapshot}
   snapshotId: string;
@@ -387,6 +395,7 @@ export interface VirtualMachine {
   // Multi-Disk & Media
   disks?: VirtualMachineDisk[];
   cdromIsoImage?: string;
+  cdroms?: VirtualMachineCdrom[];
 
   // Networking & Cloud-Init
   networkInterfaces?: VirtualMachineNetworkInterface[];

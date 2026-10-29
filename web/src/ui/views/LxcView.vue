@@ -724,45 +724,10 @@ async function refreshLxc() {
   }
 }
 
-let isViewActive = false;
-let isPolling = false;
-let pollTimer: ReturnType<typeof setTimeout> | null = null;
-
-async function runContainerLoop() {
-  if (!isViewActive) return;
-  if (!document.hidden && activeMainTab.value === 'containers' && !isPolling && !isRefreshingContainers.value) {
-    isPolling = true;
-    try {
-      nasState.lxcContainers = await services.lxc.listContainers();
-      if (inspectedContainer.value) {
-        const found = nasState.lxcContainers.find((c) => c.name === inspectedContainer.value?.name);
-        if (found) inspectedContainer.value = found;
-      }
-    } catch {
-      // background polling error ignored
-    } finally {
-      isPolling = false;
-    }
-  }
-  if (isViewActive) {
-    pollTimer = setTimeout(runContainerLoop, 5000);
-  }
-}
-
 onMounted(async () => {
-  isViewActive = true;
   await refreshLxc();
   refreshTemplates().catch(() => {});
   loadCatalog().catch(() => {});
-  runContainerLoop();
-});
-
-onUnmounted(() => {
-  isViewActive = false;
-  if (pollTimer) {
-    clearTimeout(pollTimer);
-    pollTimer = null;
-  }
 });
 
 // =============================================================================

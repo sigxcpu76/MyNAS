@@ -8,6 +8,15 @@ import EChart from '../../components/EChart.vue';
 const telemetry = computed(() => nasState.systemTelemetry);
 const chartPalette = useChartPalette();
 
+const packageTemps = computed<number[]>(() => {
+  const temps = telemetry.value?.cpu?.packageTemperatures;
+  if (Array.isArray(temps) && temps.length > 0) {
+    return temps;
+  }
+  const t = telemetry.value?.cpu?.temperatureCelsius;
+  return t && t > 0 ? [t] : [];
+});
+
 function getTempClass(temp: number): string {
   if (temp <= 0) return 'badge-neutral';
   if (temp < 65) return 'badge-success';
@@ -106,8 +115,22 @@ const cpuUsageChartOptions = computed<echarts.EChartsOption>(() => {
   <div class="card cpu-widget-card">
     <div class="card-header">
       <h3 class="card-title">Processor</h3>
+      <!-- Multiple CPU package temperature badges -->
+      <div v-if="packageTemps.length > 1" style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap">
+        <span
+          v-for="(t, idx) in packageTemps"
+          :key="idx"
+          class="badge"
+          :class="getTempClass(t)"
+          style="font-size: 11.5px; font-weight: 600"
+          :title="`CPU Socket ${idx} Package Temperature`"
+        >
+          CPU{{ idx }}: {{ t.toFixed(1) }} °C
+        </span>
+      </div>
+      <!-- Single package fallback badge -->
       <span
-        v-if="(telemetry?.cpu?.temperatureCelsius || 0) > 0"
+        v-else-if="(telemetry?.cpu?.temperatureCelsius || 0) > 0"
         class="badge"
         :class="getTempClass(telemetry?.cpu?.temperatureCelsius || 0)"
         style="font-size: 13px; font-weight: 600"
@@ -132,7 +155,10 @@ const cpuUsageChartOptions = computed<echarts.EChartsOption>(() => {
     />
 
     <!-- Load Averages & Thermal Details -->
-    <div class="cpu-metrics-bar">
+    <div
+      class="cpu-metrics-bar"
+      :style="packageTemps.length > 1 ? { gridTemplateColumns: `repeat(${3 + packageTemps.length}, 1fr)` } : {}"
+    >
       <div class="metric-pill">
         <span class="pill-label">Load 1m</span>
         <strong class="mono pill-val">{{ telemetry?.cpu?.load1?.toFixed(2) || '0.00' }}</strong>
@@ -145,7 +171,18 @@ const cpuUsageChartOptions = computed<echarts.EChartsOption>(() => {
         <span class="pill-label">Load 15m</span>
         <strong class="mono pill-val">{{ telemetry?.cpu?.load15?.toFixed(2) || '0.00' }}</strong>
       </div>
-      <div class="metric-pill">
+      <template v-if="packageTemps.length > 1">
+        <div v-for="(t, idx) in packageTemps" :key="idx" class="metric-pill">
+          <span class="pill-label">CPU{{ idx }} Temp</span>
+          <strong
+            class="mono pill-val"
+            :style="{ color: t > 75 ? 'var(--danger)' : 'var(--text-primary)' }"
+          >
+            {{ t > 0 ? `${t.toFixed(1)}°C` : 'N/A' }}
+          </strong>
+        </div>
+      </template>
+      <div v-else class="metric-pill">
         <span class="pill-label">CPU Temp</span>
         <strong
           class="mono pill-val"

@@ -23,6 +23,61 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type WatchResourceChange_EventType int32
+
+const (
+	WatchResourceChange_EVENT_TYPE_UNSPECIFIED WatchResourceChange_EventType = 0
+	WatchResourceChange_SNAPSHOT               WatchResourceChange_EventType = 1
+	WatchResourceChange_ADDED                  WatchResourceChange_EventType = 2
+	WatchResourceChange_MODIFIED               WatchResourceChange_EventType = 3
+	WatchResourceChange_DELETED                WatchResourceChange_EventType = 4
+)
+
+// Enum value maps for WatchResourceChange_EventType.
+var (
+	WatchResourceChange_EventType_name = map[int32]string{
+		0: "EVENT_TYPE_UNSPECIFIED",
+		1: "SNAPSHOT",
+		2: "ADDED",
+		3: "MODIFIED",
+		4: "DELETED",
+	}
+	WatchResourceChange_EventType_value = map[string]int32{
+		"EVENT_TYPE_UNSPECIFIED": 0,
+		"SNAPSHOT":               1,
+		"ADDED":                  2,
+		"MODIFIED":               3,
+		"DELETED":                4,
+	}
+)
+
+func (x WatchResourceChange_EventType) Enum() *WatchResourceChange_EventType {
+	p := new(WatchResourceChange_EventType)
+	*p = x
+	return p
+}
+
+func (x WatchResourceChange_EventType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (WatchResourceChange_EventType) Descriptor() protoreflect.EnumDescriptor {
+	return file_nas_v1_system_proto_enumTypes[0].Descriptor()
+}
+
+func (WatchResourceChange_EventType) Type() protoreflect.EnumType {
+	return &file_nas_v1_system_proto_enumTypes[0]
+}
+
+func (x WatchResourceChange_EventType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use WatchResourceChange_EventType.Descriptor instead.
+func (WatchResourceChange_EventType) EnumDescriptor() ([]byte, []int) {
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{15, 0}
+}
+
 type DiscoveredPool struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PoolName      string                 `protobuf:"bytes,1,opt,name=pool_name,json=poolName,proto3" json:"pool_name,omitempty"`
@@ -436,18 +491,19 @@ func (x *DiscoverPoolsResponse) GetPools() []*DiscoveredPool {
 }
 
 type CpuTelemetry struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	Model              string                 `protobuf:"bytes,1,opt,name=model,proto3" json:"model,omitempty"`
-	PhysicalCores      int32                  `protobuf:"varint,2,opt,name=physical_cores,json=physicalCores,proto3" json:"physical_cores,omitempty"`
-	LogicalCores       int32                  `protobuf:"varint,3,opt,name=logical_cores,json=logicalCores,proto3" json:"logical_cores,omitempty"`
-	UsagePercent       float64                `protobuf:"fixed64,4,opt,name=usage_percent,json=usagePercent,proto3" json:"usage_percent,omitempty"`
-	Load1              float64                `protobuf:"fixed64,5,opt,name=load1,proto3" json:"load1,omitempty"`
-	Load5              float64                `protobuf:"fixed64,6,opt,name=load5,proto3" json:"load5,omitempty"`
-	Load15             float64                `protobuf:"fixed64,7,opt,name=load15,proto3" json:"load15,omitempty"`
-	TemperatureCelsius float64                `protobuf:"fixed64,8,opt,name=temperature_celsius,json=temperatureCelsius,proto3" json:"temperature_celsius,omitempty"`
-	CoreTemperatures   []float64              `protobuf:"fixed64,9,rep,packed,name=core_temperatures,json=coreTemperatures,proto3" json:"core_temperatures,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Model               string                 `protobuf:"bytes,1,opt,name=model,proto3" json:"model,omitempty"`
+	PhysicalCores       int32                  `protobuf:"varint,2,opt,name=physical_cores,json=physicalCores,proto3" json:"physical_cores,omitempty"`
+	LogicalCores        int32                  `protobuf:"varint,3,opt,name=logical_cores,json=logicalCores,proto3" json:"logical_cores,omitempty"`
+	UsagePercent        float64                `protobuf:"fixed64,4,opt,name=usage_percent,json=usagePercent,proto3" json:"usage_percent,omitempty"`
+	Load1               float64                `protobuf:"fixed64,5,opt,name=load1,proto3" json:"load1,omitempty"`
+	Load5               float64                `protobuf:"fixed64,6,opt,name=load5,proto3" json:"load5,omitempty"`
+	Load15              float64                `protobuf:"fixed64,7,opt,name=load15,proto3" json:"load15,omitempty"`
+	TemperatureCelsius  float64                `protobuf:"fixed64,8,opt,name=temperature_celsius,json=temperatureCelsius,proto3" json:"temperature_celsius,omitempty"`
+	CoreTemperatures    []float64              `protobuf:"fixed64,9,rep,packed,name=core_temperatures,json=coreTemperatures,proto3" json:"core_temperatures,omitempty"`
+	PackageTemperatures []float64              `protobuf:"fixed64,10,rep,packed,name=package_temperatures,json=packageTemperatures,proto3" json:"package_temperatures,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *CpuTelemetry) Reset() {
@@ -539,6 +595,13 @@ func (x *CpuTelemetry) GetTemperatureCelsius() float64 {
 func (x *CpuTelemetry) GetCoreTemperatures() []float64 {
 	if x != nil {
 		return x.CoreTemperatures
+	}
+	return nil
+}
+
+func (x *CpuTelemetry) GetPackageTemperatures() []float64 {
+	if x != nil {
+		return x.PackageTemperatures
 	}
 	return nil
 }
@@ -1011,6 +1074,162 @@ func (*GetSystemTelemetryRequest) Descriptor() ([]byte, []int) {
 	return file_nas_v1_system_proto_rawDescGZIP(), []int{12}
 }
 
+type StreamSystemTelemetryRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	IntervalSeconds int32                  `protobuf:"varint,1,opt,name=interval_seconds,json=intervalSeconds,proto3" json:"interval_seconds,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *StreamSystemTelemetryRequest) Reset() {
+	*x = StreamSystemTelemetryRequest{}
+	mi := &file_nas_v1_system_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamSystemTelemetryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamSystemTelemetryRequest) ProtoMessage() {}
+
+func (x *StreamSystemTelemetryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_system_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamSystemTelemetryRequest.ProtoReflect.Descriptor instead.
+func (*StreamSystemTelemetryRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *StreamSystemTelemetryRequest) GetIntervalSeconds() int32 {
+	if x != nil {
+		return x.IntervalSeconds
+	}
+	return 0
+}
+
+type WatchResourcesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ResourceTypes []string               `protobuf:"bytes,1,rep,name=resource_types,json=resourceTypes,proto3" json:"resource_types,omitempty"` // e.g. ["dockerApps", "dockerContainers", "virtualMachines", "lxcContainers", "telemetry"]
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchResourcesRequest) Reset() {
+	*x = WatchResourcesRequest{}
+	mi := &file_nas_v1_system_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchResourcesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchResourcesRequest) ProtoMessage() {}
+
+func (x *WatchResourcesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_system_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchResourcesRequest.ProtoReflect.Descriptor instead.
+func (*WatchResourcesRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *WatchResourcesRequest) GetResourceTypes() []string {
+	if x != nil {
+		return x.ResourceTypes
+	}
+	return nil
+}
+
+type WatchResourceChange struct {
+	state         protoimpl.MessageState        `protogen:"open.v1"`
+	ResourceType  string                        `protobuf:"bytes,1,opt,name=resource_type,json=resourceType,proto3" json:"resource_type,omitempty"` // "dockerApps", "dockerContainers", "virtualMachines", "lxcContainers", "telemetry"
+	EventType     WatchResourceChange_EventType `protobuf:"varint,2,opt,name=event_type,json=eventType,proto3,enum=nas.v1.WatchResourceChange_EventType" json:"event_type,omitempty"`
+	ResourceName  string                        `protobuf:"bytes,3,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"` // e.g. "dockerApps/nextcloud"
+	JsonPayload   string                        `protobuf:"bytes,4,opt,name=json_payload,json=jsonPayload,proto3" json:"json_payload,omitempty"`    // JSON payload of the entity or initial array
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchResourceChange) Reset() {
+	*x = WatchResourceChange{}
+	mi := &file_nas_v1_system_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchResourceChange) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchResourceChange) ProtoMessage() {}
+
+func (x *WatchResourceChange) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_system_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchResourceChange.ProtoReflect.Descriptor instead.
+func (*WatchResourceChange) Descriptor() ([]byte, []int) {
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *WatchResourceChange) GetResourceType() string {
+	if x != nil {
+		return x.ResourceType
+	}
+	return ""
+}
+
+func (x *WatchResourceChange) GetEventType() WatchResourceChange_EventType {
+	if x != nil {
+		return x.EventType
+	}
+	return WatchResourceChange_EVENT_TYPE_UNSPECIFIED
+}
+
+func (x *WatchResourceChange) GetResourceName() string {
+	if x != nil {
+		return x.ResourceName
+	}
+	return ""
+}
+
+func (x *WatchResourceChange) GetJsonPayload() string {
+	if x != nil {
+		return x.JsonPayload
+	}
+	return ""
+}
+
 var File_nas_v1_system_proto protoreflect.FileDescriptor
 
 const file_nas_v1_system_proto_rawDesc = "" +
@@ -1046,7 +1265,7 @@ const file_nas_v1_system_proto_rawDesc = "" +
 	"\x14auto_import_existing\x18\x02 \x01(\bR\x12autoImportExisting\"\x16\n" +
 	"\x14DiscoverPoolsRequest\"E\n" +
 	"\x15DiscoverPoolsResponse\x12,\n" +
-	"\x05pools\x18\x01 \x03(\v2\x16.nas.v1.DiscoveredPoolR\x05pools\"\xb7\x02\n" +
+	"\x05pools\x18\x01 \x03(\v2\x16.nas.v1.DiscoveredPoolR\x05pools\"\xea\x02\n" +
 	"\fCpuTelemetry\x12\x14\n" +
 	"\x05model\x18\x01 \x01(\tR\x05model\x12%\n" +
 	"\x0ephysical_cores\x18\x02 \x01(\x05R\rphysicalCores\x12#\n" +
@@ -1056,7 +1275,9 @@ const file_nas_v1_system_proto_rawDesc = "" +
 	"\x05load5\x18\x06 \x01(\x01R\x05load5\x12\x16\n" +
 	"\x06load15\x18\a \x01(\x01R\x06load15\x12/\n" +
 	"\x13temperature_celsius\x18\b \x01(\x01R\x12temperatureCelsius\x12+\n" +
-	"\x11core_temperatures\x18\t \x03(\x01R\x10coreTemperatures\"\xd7\x02\n" +
+	"\x11core_temperatures\x18\t \x03(\x01R\x10coreTemperatures\x121\n" +
+	"\x14package_temperatures\x18\n" +
+	" \x03(\x01R\x13packageTemperatures\"\xd7\x02\n" +
 	"\x0fMemoryTelemetry\x12\x1f\n" +
 	"\vtotal_bytes\x18\x01 \x01(\x03R\n" +
 	"totalBytes\x12\x1d\n" +
@@ -1107,7 +1328,23 @@ const file_nas_v1_system_proto_rawDesc = "" +
 	"\x06memory\x18\x02 \x01(\v2\x17.nas.v1.MemoryTelemetryR\x06memory\x12,\n" +
 	"\x04host\x18\x03 \x01(\v2\x18.nas.v1.HostHardwareInfoR\x04host\x12;\n" +
 	"\anetwork\x18\x04 \x03(\v2!.nas.v1.NetworkInterfaceTelemetryR\anetwork\"\x1b\n" +
-	"\x19GetSystemTelemetryRequestB2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
+	"\x19GetSystemTelemetryRequest\"I\n" +
+	"\x1cStreamSystemTelemetryRequest\x12)\n" +
+	"\x10interval_seconds\x18\x01 \x01(\x05R\x0fintervalSeconds\">\n" +
+	"\x15WatchResourcesRequest\x12%\n" +
+	"\x0eresource_types\x18\x01 \x03(\tR\rresourceTypes\"\xa5\x02\n" +
+	"\x13WatchResourceChange\x12#\n" +
+	"\rresource_type\x18\x01 \x01(\tR\fresourceType\x12D\n" +
+	"\n" +
+	"event_type\x18\x02 \x01(\x0e2%.nas.v1.WatchResourceChange.EventTypeR\teventType\x12#\n" +
+	"\rresource_name\x18\x03 \x01(\tR\fresourceName\x12!\n" +
+	"\fjson_payload\x18\x04 \x01(\tR\vjsonPayload\"[\n" +
+	"\tEventType\x12\x1a\n" +
+	"\x16EVENT_TYPE_UNSPECIFIED\x10\x00\x12\f\n" +
+	"\bSNAPSHOT\x10\x01\x12\t\n" +
+	"\x05ADDED\x10\x02\x12\f\n" +
+	"\bMODIFIED\x10\x03\x12\v\n" +
+	"\aDELETED\x10\x04B2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
 
 var (
 	file_nas_v1_system_proto_rawDescOnce sync.Once
@@ -1121,37 +1358,43 @@ func file_nas_v1_system_proto_rawDescGZIP() []byte {
 	return file_nas_v1_system_proto_rawDescData
 }
 
-var file_nas_v1_system_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_nas_v1_system_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_nas_v1_system_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_nas_v1_system_proto_goTypes = []any{
-	(*DiscoveredPool)(nil),            // 0: nas.v1.DiscoveredPool
-	(*SystemConfig)(nil),              // 1: nas.v1.SystemConfig
-	(*GetSystemConfigRequest)(nil),    // 2: nas.v1.GetSystemConfigRequest
-	(*UpdateSystemConfigRequest)(nil), // 3: nas.v1.UpdateSystemConfigRequest
-	(*SelectMainPoolRequest)(nil),     // 4: nas.v1.SelectMainPoolRequest
-	(*DiscoverPoolsRequest)(nil),      // 5: nas.v1.DiscoverPoolsRequest
-	(*DiscoverPoolsResponse)(nil),     // 6: nas.v1.DiscoverPoolsResponse
-	(*CpuTelemetry)(nil),              // 7: nas.v1.CpuTelemetry
-	(*MemoryTelemetry)(nil),           // 8: nas.v1.MemoryTelemetry
-	(*HostHardwareInfo)(nil),          // 9: nas.v1.HostHardwareInfo
-	(*NetworkInterfaceTelemetry)(nil), // 10: nas.v1.NetworkInterfaceTelemetry
-	(*SystemTelemetry)(nil),           // 11: nas.v1.SystemTelemetry
-	(*GetSystemTelemetryRequest)(nil), // 12: nas.v1.GetSystemTelemetryRequest
-	(*fieldmaskpb.FieldMask)(nil),     // 13: google.protobuf.FieldMask
+	(WatchResourceChange_EventType)(0),   // 0: nas.v1.WatchResourceChange.EventType
+	(*DiscoveredPool)(nil),               // 1: nas.v1.DiscoveredPool
+	(*SystemConfig)(nil),                 // 2: nas.v1.SystemConfig
+	(*GetSystemConfigRequest)(nil),       // 3: nas.v1.GetSystemConfigRequest
+	(*UpdateSystemConfigRequest)(nil),    // 4: nas.v1.UpdateSystemConfigRequest
+	(*SelectMainPoolRequest)(nil),        // 5: nas.v1.SelectMainPoolRequest
+	(*DiscoverPoolsRequest)(nil),         // 6: nas.v1.DiscoverPoolsRequest
+	(*DiscoverPoolsResponse)(nil),        // 7: nas.v1.DiscoverPoolsResponse
+	(*CpuTelemetry)(nil),                 // 8: nas.v1.CpuTelemetry
+	(*MemoryTelemetry)(nil),              // 9: nas.v1.MemoryTelemetry
+	(*HostHardwareInfo)(nil),             // 10: nas.v1.HostHardwareInfo
+	(*NetworkInterfaceTelemetry)(nil),    // 11: nas.v1.NetworkInterfaceTelemetry
+	(*SystemTelemetry)(nil),              // 12: nas.v1.SystemTelemetry
+	(*GetSystemTelemetryRequest)(nil),    // 13: nas.v1.GetSystemTelemetryRequest
+	(*StreamSystemTelemetryRequest)(nil), // 14: nas.v1.StreamSystemTelemetryRequest
+	(*WatchResourcesRequest)(nil),        // 15: nas.v1.WatchResourcesRequest
+	(*WatchResourceChange)(nil),          // 16: nas.v1.WatchResourceChange
+	(*fieldmaskpb.FieldMask)(nil),        // 17: google.protobuf.FieldMask
 }
 var file_nas_v1_system_proto_depIdxs = []int32{
-	0,  // 0: nas.v1.SystemConfig.discovered_pools:type_name -> nas.v1.DiscoveredPool
-	1,  // 1: nas.v1.UpdateSystemConfigRequest.system_config:type_name -> nas.v1.SystemConfig
-	13, // 2: nas.v1.UpdateSystemConfigRequest.update_mask:type_name -> google.protobuf.FieldMask
-	0,  // 3: nas.v1.DiscoverPoolsResponse.pools:type_name -> nas.v1.DiscoveredPool
-	7,  // 4: nas.v1.SystemTelemetry.cpu:type_name -> nas.v1.CpuTelemetry
-	8,  // 5: nas.v1.SystemTelemetry.memory:type_name -> nas.v1.MemoryTelemetry
-	9,  // 6: nas.v1.SystemTelemetry.host:type_name -> nas.v1.HostHardwareInfo
-	10, // 7: nas.v1.SystemTelemetry.network:type_name -> nas.v1.NetworkInterfaceTelemetry
-	8,  // [8:8] is the sub-list for method output_type
-	8,  // [8:8] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	1,  // 0: nas.v1.SystemConfig.discovered_pools:type_name -> nas.v1.DiscoveredPool
+	2,  // 1: nas.v1.UpdateSystemConfigRequest.system_config:type_name -> nas.v1.SystemConfig
+	17, // 2: nas.v1.UpdateSystemConfigRequest.update_mask:type_name -> google.protobuf.FieldMask
+	1,  // 3: nas.v1.DiscoverPoolsResponse.pools:type_name -> nas.v1.DiscoveredPool
+	8,  // 4: nas.v1.SystemTelemetry.cpu:type_name -> nas.v1.CpuTelemetry
+	9,  // 5: nas.v1.SystemTelemetry.memory:type_name -> nas.v1.MemoryTelemetry
+	10, // 6: nas.v1.SystemTelemetry.host:type_name -> nas.v1.HostHardwareInfo
+	11, // 7: nas.v1.SystemTelemetry.network:type_name -> nas.v1.NetworkInterfaceTelemetry
+	0,  // 8: nas.v1.WatchResourceChange.event_type:type_name -> nas.v1.WatchResourceChange.EventType
+	9,  // [9:9] is the sub-list for method output_type
+	9,  // [9:9] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_nas_v1_system_proto_init() }
@@ -1164,13 +1407,14 @@ func file_nas_v1_system_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nas_v1_system_proto_rawDesc), len(file_nas_v1_system_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   13,
+			NumEnums:      1,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_nas_v1_system_proto_goTypes,
 		DependencyIndexes: file_nas_v1_system_proto_depIdxs,
+		EnumInfos:         file_nas_v1_system_proto_enumTypes,
 		MessageInfos:      file_nas_v1_system_proto_msgTypes,
 	}.Build()
 	File_nas_v1_system_proto = out.File

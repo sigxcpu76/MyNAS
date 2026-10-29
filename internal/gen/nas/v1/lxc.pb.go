@@ -23,6 +23,61 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type WatchLxcContainersResponse_EventType int32
+
+const (
+	WatchLxcContainersResponse_EVENT_TYPE_UNSPECIFIED WatchLxcContainersResponse_EventType = 0
+	WatchLxcContainersResponse_SNAPSHOT               WatchLxcContainersResponse_EventType = 1
+	WatchLxcContainersResponse_ADDED                  WatchLxcContainersResponse_EventType = 2
+	WatchLxcContainersResponse_MODIFIED               WatchLxcContainersResponse_EventType = 3
+	WatchLxcContainersResponse_DELETED                WatchLxcContainersResponse_EventType = 4
+)
+
+// Enum value maps for WatchLxcContainersResponse_EventType.
+var (
+	WatchLxcContainersResponse_EventType_name = map[int32]string{
+		0: "EVENT_TYPE_UNSPECIFIED",
+		1: "SNAPSHOT",
+		2: "ADDED",
+		3: "MODIFIED",
+		4: "DELETED",
+	}
+	WatchLxcContainersResponse_EventType_value = map[string]int32{
+		"EVENT_TYPE_UNSPECIFIED": 0,
+		"SNAPSHOT":               1,
+		"ADDED":                  2,
+		"MODIFIED":               3,
+		"DELETED":                4,
+	}
+)
+
+func (x WatchLxcContainersResponse_EventType) Enum() *WatchLxcContainersResponse_EventType {
+	p := new(WatchLxcContainersResponse_EventType)
+	*p = x
+	return p
+}
+
+func (x WatchLxcContainersResponse_EventType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (WatchLxcContainersResponse_EventType) Descriptor() protoreflect.EnumDescriptor {
+	return file_nas_v1_lxc_proto_enumTypes[0].Descriptor()
+}
+
+func (WatchLxcContainersResponse_EventType) Type() protoreflect.EnumType {
+	return &file_nas_v1_lxc_proto_enumTypes[0]
+}
+
+func (x WatchLxcContainersResponse_EventType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use WatchLxcContainersResponse_EventType.Descriptor instead.
+func (WatchLxcContainersResponse_EventType) EnumDescriptor() ([]byte, []int) {
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{21, 0}
+}
+
 type LxcMountPoint struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	HostPath      string                 `protobuf:"bytes,1,opt,name=host_path,json=hostPath,proto3" json:"host_path,omitempty"`
@@ -1391,6 +1446,102 @@ func (x *SyncLxcCatalogResponse) GetLastSyncTime() string {
 	return ""
 }
 
+type WatchLxcContainersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchLxcContainersRequest) Reset() {
+	*x = WatchLxcContainersRequest{}
+	mi := &file_nas_v1_lxc_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchLxcContainersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchLxcContainersRequest) ProtoMessage() {}
+
+func (x *WatchLxcContainersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_lxc_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchLxcContainersRequest.ProtoReflect.Descriptor instead.
+func (*WatchLxcContainersRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{20}
+}
+
+type WatchLxcContainersResponse struct {
+	state         protoimpl.MessageState               `protogen:"open.v1"`
+	EventType     WatchLxcContainersResponse_EventType `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=nas.v1.WatchLxcContainersResponse_EventType" json:"event_type,omitempty"`
+	LxcContainer  *LxcContainer                        `protobuf:"bytes,2,opt,name=lxc_container,json=lxcContainer,proto3" json:"lxc_container,omitempty"`
+	Snapshot      []*LxcContainer                      `protobuf:"bytes,3,rep,name=snapshot,proto3" json:"snapshot,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchLxcContainersResponse) Reset() {
+	*x = WatchLxcContainersResponse{}
+	mi := &file_nas_v1_lxc_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchLxcContainersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchLxcContainersResponse) ProtoMessage() {}
+
+func (x *WatchLxcContainersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_lxc_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchLxcContainersResponse.ProtoReflect.Descriptor instead.
+func (*WatchLxcContainersResponse) Descriptor() ([]byte, []int) {
+	return file_nas_v1_lxc_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *WatchLxcContainersResponse) GetEventType() WatchLxcContainersResponse_EventType {
+	if x != nil {
+		return x.EventType
+	}
+	return WatchLxcContainersResponse_EVENT_TYPE_UNSPECIFIED
+}
+
+func (x *WatchLxcContainersResponse) GetLxcContainer() *LxcContainer {
+	if x != nil {
+		return x.LxcContainer
+	}
+	return nil
+}
+
+func (x *WatchLxcContainersResponse) GetSnapshot() []*LxcContainer {
+	if x != nil {
+		return x.Snapshot
+	}
+	return nil
+}
+
 var File_nas_v1_lxc_proto protoreflect.FileDescriptor
 
 const file_nas_v1_lxc_proto_rawDesc = "" +
@@ -1518,7 +1669,19 @@ const file_nas_v1_lxc_proto_rawDesc = "" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1f\n" +
 	"\vtotal_items\x18\x03 \x01(\x05R\n" +
 	"totalItems\x12$\n" +
-	"\x0elast_sync_time\x18\x04 \x01(\tR\flastSyncTimeB2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
+	"\x0elast_sync_time\x18\x04 \x01(\tR\flastSyncTime\"\x1b\n" +
+	"\x19WatchLxcContainersRequest\"\xb3\x02\n" +
+	"\x1aWatchLxcContainersResponse\x12K\n" +
+	"\n" +
+	"event_type\x18\x01 \x01(\x0e2,.nas.v1.WatchLxcContainersResponse.EventTypeR\teventType\x129\n" +
+	"\rlxc_container\x18\x02 \x01(\v2\x14.nas.v1.LxcContainerR\flxcContainer\x120\n" +
+	"\bsnapshot\x18\x03 \x03(\v2\x14.nas.v1.LxcContainerR\bsnapshot\"[\n" +
+	"\tEventType\x12\x1a\n" +
+	"\x16EVENT_TYPE_UNSPECIFIED\x10\x00\x12\f\n" +
+	"\bSNAPSHOT\x10\x01\x12\t\n" +
+	"\x05ADDED\x10\x02\x12\f\n" +
+	"\bMODIFIED\x10\x03\x12\v\n" +
+	"\aDELETED\x10\x04B2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
 
 var (
 	file_nas_v1_lxc_proto_rawDescOnce sync.Once
@@ -1532,42 +1695,49 @@ func file_nas_v1_lxc_proto_rawDescGZIP() []byte {
 	return file_nas_v1_lxc_proto_rawDescData
 }
 
-var file_nas_v1_lxc_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_nas_v1_lxc_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_nas_v1_lxc_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_nas_v1_lxc_proto_goTypes = []any{
-	(*LxcMountPoint)(nil),               // 0: nas.v1.LxcMountPoint
-	(*LxcContainer)(nil),                // 1: nas.v1.LxcContainer
-	(*ListLxcContainersRequest)(nil),    // 2: nas.v1.ListLxcContainersRequest
-	(*ListLxcContainersResponse)(nil),   // 3: nas.v1.ListLxcContainersResponse
-	(*GetLxcContainerRequest)(nil),      // 4: nas.v1.GetLxcContainerRequest
-	(*CreateLxcContainerRequest)(nil),   // 5: nas.v1.CreateLxcContainerRequest
-	(*DeleteLxcContainerRequest)(nil),   // 6: nas.v1.DeleteLxcContainerRequest
-	(*StartLxcContainerRequest)(nil),    // 7: nas.v1.StartLxcContainerRequest
-	(*StopLxcContainerRequest)(nil),     // 8: nas.v1.StopLxcContainerRequest
-	(*FreezeLxcContainerRequest)(nil),   // 9: nas.v1.FreezeLxcContainerRequest
-	(*RestartLxcContainerRequest)(nil),  // 10: nas.v1.RestartLxcContainerRequest
-	(*UpdateLxcContainerRequest)(nil),   // 11: nas.v1.UpdateLxcContainerRequest
-	(*GetLxcContainerLogsRequest)(nil),  // 12: nas.v1.GetLxcContainerLogsRequest
-	(*GetLxcContainerLogsResponse)(nil), // 13: nas.v1.GetLxcContainerLogsResponse
-	(*LxcCatalogItem)(nil),              // 14: nas.v1.LxcCatalogItem
-	(*ListLxcCatalogItemsRequest)(nil),  // 15: nas.v1.ListLxcCatalogItemsRequest
-	(*ListLxcCatalogItemsResponse)(nil), // 16: nas.v1.ListLxcCatalogItemsResponse
-	(*GetLxcCatalogItemRequest)(nil),    // 17: nas.v1.GetLxcCatalogItemRequest
-	(*SyncLxcCatalogRequest)(nil),       // 18: nas.v1.SyncLxcCatalogRequest
-	(*SyncLxcCatalogResponse)(nil),      // 19: nas.v1.SyncLxcCatalogResponse
-	(*fieldmaskpb.FieldMask)(nil),       // 20: google.protobuf.FieldMask
+	(WatchLxcContainersResponse_EventType)(0), // 0: nas.v1.WatchLxcContainersResponse.EventType
+	(*LxcMountPoint)(nil),                     // 1: nas.v1.LxcMountPoint
+	(*LxcContainer)(nil),                      // 2: nas.v1.LxcContainer
+	(*ListLxcContainersRequest)(nil),          // 3: nas.v1.ListLxcContainersRequest
+	(*ListLxcContainersResponse)(nil),         // 4: nas.v1.ListLxcContainersResponse
+	(*GetLxcContainerRequest)(nil),            // 5: nas.v1.GetLxcContainerRequest
+	(*CreateLxcContainerRequest)(nil),         // 6: nas.v1.CreateLxcContainerRequest
+	(*DeleteLxcContainerRequest)(nil),         // 7: nas.v1.DeleteLxcContainerRequest
+	(*StartLxcContainerRequest)(nil),          // 8: nas.v1.StartLxcContainerRequest
+	(*StopLxcContainerRequest)(nil),           // 9: nas.v1.StopLxcContainerRequest
+	(*FreezeLxcContainerRequest)(nil),         // 10: nas.v1.FreezeLxcContainerRequest
+	(*RestartLxcContainerRequest)(nil),        // 11: nas.v1.RestartLxcContainerRequest
+	(*UpdateLxcContainerRequest)(nil),         // 12: nas.v1.UpdateLxcContainerRequest
+	(*GetLxcContainerLogsRequest)(nil),        // 13: nas.v1.GetLxcContainerLogsRequest
+	(*GetLxcContainerLogsResponse)(nil),       // 14: nas.v1.GetLxcContainerLogsResponse
+	(*LxcCatalogItem)(nil),                    // 15: nas.v1.LxcCatalogItem
+	(*ListLxcCatalogItemsRequest)(nil),        // 16: nas.v1.ListLxcCatalogItemsRequest
+	(*ListLxcCatalogItemsResponse)(nil),       // 17: nas.v1.ListLxcCatalogItemsResponse
+	(*GetLxcCatalogItemRequest)(nil),          // 18: nas.v1.GetLxcCatalogItemRequest
+	(*SyncLxcCatalogRequest)(nil),             // 19: nas.v1.SyncLxcCatalogRequest
+	(*SyncLxcCatalogResponse)(nil),            // 20: nas.v1.SyncLxcCatalogResponse
+	(*WatchLxcContainersRequest)(nil),         // 21: nas.v1.WatchLxcContainersRequest
+	(*WatchLxcContainersResponse)(nil),        // 22: nas.v1.WatchLxcContainersResponse
+	(*fieldmaskpb.FieldMask)(nil),             // 23: google.protobuf.FieldMask
 }
 var file_nas_v1_lxc_proto_depIdxs = []int32{
-	0,  // 0: nas.v1.LxcContainer.mount_points:type_name -> nas.v1.LxcMountPoint
-	1,  // 1: nas.v1.ListLxcContainersResponse.lxc_containers:type_name -> nas.v1.LxcContainer
-	1,  // 2: nas.v1.CreateLxcContainerRequest.lxc_container:type_name -> nas.v1.LxcContainer
-	1,  // 3: nas.v1.UpdateLxcContainerRequest.lxc_container:type_name -> nas.v1.LxcContainer
-	20, // 4: nas.v1.UpdateLxcContainerRequest.update_mask:type_name -> google.protobuf.FieldMask
-	14, // 5: nas.v1.ListLxcCatalogItemsResponse.items:type_name -> nas.v1.LxcCatalogItem
-	6,  // [6:6] is the sub-list for method output_type
-	6,  // [6:6] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	1,  // 0: nas.v1.LxcContainer.mount_points:type_name -> nas.v1.LxcMountPoint
+	2,  // 1: nas.v1.ListLxcContainersResponse.lxc_containers:type_name -> nas.v1.LxcContainer
+	2,  // 2: nas.v1.CreateLxcContainerRequest.lxc_container:type_name -> nas.v1.LxcContainer
+	2,  // 3: nas.v1.UpdateLxcContainerRequest.lxc_container:type_name -> nas.v1.LxcContainer
+	23, // 4: nas.v1.UpdateLxcContainerRequest.update_mask:type_name -> google.protobuf.FieldMask
+	15, // 5: nas.v1.ListLxcCatalogItemsResponse.items:type_name -> nas.v1.LxcCatalogItem
+	0,  // 6: nas.v1.WatchLxcContainersResponse.event_type:type_name -> nas.v1.WatchLxcContainersResponse.EventType
+	2,  // 7: nas.v1.WatchLxcContainersResponse.lxc_container:type_name -> nas.v1.LxcContainer
+	2,  // 8: nas.v1.WatchLxcContainersResponse.snapshot:type_name -> nas.v1.LxcContainer
+	9,  // [9:9] is the sub-list for method output_type
+	9,  // [9:9] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_nas_v1_lxc_proto_init() }
@@ -1580,13 +1750,14 @@ func file_nas_v1_lxc_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nas_v1_lxc_proto_rawDesc), len(file_nas_v1_lxc_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   20,
+			NumEnums:      1,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_nas_v1_lxc_proto_goTypes,
 		DependencyIndexes: file_nas_v1_lxc_proto_depIdxs,
+		EnumInfos:         file_nas_v1_lxc_proto_enumTypes,
 		MessageInfos:      file_nas_v1_lxc_proto_msgTypes,
 	}.Build()
 	File_nas_v1_lxc_proto = out.File

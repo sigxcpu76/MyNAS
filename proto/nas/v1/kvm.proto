@@ -30,6 +30,13 @@ message VirtualMachineDisk {
   int64 mbps_limit_write = 14;
 }
 
+message VirtualMachineCdrom {
+  string id = 1;         // "sdz", "sdy", "ide2", etc.
+  string bus = 2;        // "sata", "ide", "scsi"
+  string iso_path = 3;   // Path to mounted ISO, or empty if tray is empty
+  bool bootable = 4;     // Included in boot sequence
+}
+
 message VirtualMachineNetworkInterface {
   string id = 1;                     // "net0", "net1"
   string model = 2;                  // "virtio", "e1000", "rtl8139", "vmxnet3"
@@ -120,6 +127,7 @@ message VirtualMachine {
   // Multi-Disk & Media
   repeated VirtualMachineDisk disks = 28;
   string cdrom_iso_image = 29;
+  repeated VirtualMachineCdrom cdroms = 48;
 
   // Networking & Cloud-Init
   repeated VirtualMachineNetworkInterface network_interfaces = 30;
@@ -308,4 +316,23 @@ message DeleteVirtualMachineSnapshotRequest {
     (google.api.field_behavior) = REQUIRED,
     (google.api.resource_reference) = {type: "nas.sigxcpu.io/VirtualMachineSnapshot"}
   ];
+}
+
+// =============================================================================
+// Virtual Machine Watch Streaming
+// =============================================================================
+
+message WatchVirtualMachinesRequest {}
+
+message WatchVirtualMachinesResponse {
+  enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    SNAPSHOT = 1;
+    ADDED = 2;
+    MODIFIED = 3;
+    DELETED = 4;
+  }
+  EventType event_type = 1;
+  VirtualMachine virtual_machine = 2;
+  repeated VirtualMachine snapshot = 3;
 }

@@ -132,6 +132,52 @@ func TestBuildDomainXML_BasicAndDisks(t *testing.T) {
 	if !strings.Contains(xmlStr, "type='qcow2'") {
 		t.Errorf("expected driver type qcow2 for data disk")
 	}
+	if !strings.Contains(xmlStr, "<input type='tablet' bus='usb'/>") {
+		t.Errorf("expected usb tablet input device for absolute cursor tracking in XML")
+	}
+}
+
+func TestBuildDomainXML_MultipleCdroms(t *testing.T) {
+	vm := domain.VirtualMachine{
+		ID:     "win-vm",
+		VMName: "Windows VM with VirtIO Driver CD",
+		VCPUs:  4,
+		Cdroms: []domain.VirtualMachineCdrom{
+			{
+				ID:      "sdz",
+				Bus:     "sata",
+				IsoPath: "/mnt/fast/isos/win10.iso",
+			},
+			{
+				ID:      "sdy",
+				Bus:     "sata",
+				IsoPath: "/mnt/fast/isos/virtio-win.iso",
+			},
+			{
+				ID:      "sdx",
+				Bus:     "sata",
+				IsoPath: "", // empty tray
+			},
+		},
+	}
+
+	xmlStr := buildDomainXML(vm)
+
+	if !strings.Contains(xmlStr, "<source file='/mnt/fast/isos/win10.iso'/>") {
+		t.Errorf("expected win10.iso in XML")
+	}
+	if !strings.Contains(xmlStr, "<target dev='sdz' bus='sata'/>") {
+		t.Errorf("expected sdz target in XML")
+	}
+	if !strings.Contains(xmlStr, "<source file='/mnt/fast/isos/virtio-win.iso'/>") {
+		t.Errorf("expected virtio-win.iso in XML")
+	}
+	if !strings.Contains(xmlStr, "<target dev='sdy' bus='sata'/>") {
+		t.Errorf("expected sdy target in XML")
+	}
+	if !strings.Contains(xmlStr, "<target dev='sdx' bus='sata'/>") {
+		t.Errorf("expected sdx target in XML")
+	}
 }
 
 func TestParseBootOrder(t *testing.T) {

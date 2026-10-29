@@ -252,6 +252,9 @@ export async function refreshAllData(): Promise<void> {
       services.system.getTelemetry().catch(() => null),
     ]);
     if (sysCfg) {
+      if (sysCfg.mainPool) {
+        sysCfg.mainPool = sysCfg.mainPool.replace(/^zfsPools\//, '').trim();
+      }
       nasState.systemConfig = sysCfg;
     }
     if (prereqs && prereqs.length > 0) {
@@ -293,7 +296,15 @@ export async function refreshAllData(): Promise<void> {
     ]);
 
     if (disks !== null) nasState.disks = disks;
-    if (pools !== null) nasState.pools = pools;
+    if (pools !== null) {
+      for (const p of pools) {
+        p.poolName = (p.poolName || p.name.replace(/^zfsPools\//, '')).trim();
+        if (!p.mountpoint || p.mountpoint === 'none' || p.mountpoint === 'legacy' || p.mountpoint.includes('zfsPools')) {
+          p.mountpoint = `/mnt/${p.poolName}`;
+        }
+      }
+      nasState.pools = pools;
+    }
     if (vms !== null) nasState.vms = vms;
     if (dockerContainers !== null) nasState.dockerContainers = dockerContainers;
     if (dockerApps !== null) nasState.dockerApps = dockerApps;
@@ -417,6 +428,160 @@ export async function refreshTelemetry(): Promise<void> {
 
 let eventSource: EventSource | null = null;
 let reconnectTimer: any = null;
+let watchAbortController: AbortController | null = null;
+let watchReconnectTimer: any = null;
+
+export function handleWatchResourceChange(msg: {
+  resourceType: string;
+  eventType: 'SNAPSHOT' | 'ADDED' | 'MODIFIED' | 'DELETED' | string;
+  resourceName: string;
+  jsonPayload: string;
+}): void {
+  if (!msg || !msg.resourceType) return;
+
+  let payload: any = null;
+  if (msg.jsonPayload) {
+    try {
+      payload = JSON.parse(msg.jsonPayload);
+    } catch {
+      payload = null;
+    }
+  }
+
+  const { resourceType, eventType } = msg;
+
+  if (eventType === 'SNAPSHOT' && payload) {
+    switch (resourceType) {
+      case 'dockerApps':
+        nasState.dockerApps = Array.isArray(payload) ? payload : [];
+        break;
+      case 'dockerContainers':
+        nasState.dockerContainers = Array.isArray(payload) ? payload : [];
+        break;
+      case 'virtualMachines':
+        nasState.vms = Array.isArray(payload) ? payload : [];
+        break;
+      case 'lxcContainers':
+        nasState.lxcContainers = Array.isArray(payload) ? payload : [];
+        break;
+      case 'telemetry':
+        nasState.systemTelemetry = payload;
+        recordNetworkTrafficSample(payload);
+        break;
+    }
+    nasState.lastRefreshed = new Date().toLocaleTimeString();
+    saveLocalCache();
+    return;
+  }
+
+  // Delta updates (ADDED, MODIFIED, DELETED)
+  switch (resourceType) {
+    case 'dockerApps': {
+      const app = payload as DockerApp;
+      const name = msg.resourceName || app?.name;
+      const idx = nasState.dockerApps.findIndex((a) => a.name === name);
+      if (eventType === 'DELETED') {
+        if (idx !== -1) nasState.dockerApps.splice(idx, 1);
+      } else if (app) {
+        if (idx !== -1) {
+          nasState.dockerApps[idx] = { ...nasState.dockerApps[idx], ...app };
+        } else {
+          nasState.dockerApps.push(app);
+        }
+      }
+      break;
+    }
+    case 'dockerContainers': {
+      const container = payload as DockerContainer;
+      const name = msg.resourceName || container?.name;
+      const idx = nasState.dockerContainers.findIndex((c) => c.name === name);
+      if (eventType === 'DELETED') {
+        if (idx !== -1) nasState.dockerContainers.splice(idx, 1);
+      } else if (container) {
+        if (idx !== -1) {
+          nasState.dockerContainers[idx] = { ...nasState.dockerContainers[idx], ...container };
+        } else {
+          nasState.dockerContainers.push(container);
+        }
+      }
+      break;
+    }
+    case 'virtualMachines': {
+      const vm = payload as VirtualMachine;
+      const name = msg.resourceName || vm?.name;
+      const idx = nasState.vms.findIndex((v) => v.name === name);
+      if (eventType === 'DELETED') {
+        if (idx !== -1) nasState.vms.splice(idx, 1);
+      } else if (vm) {
+        if (idx !== -1) {
+          nasState.vms[idx] = { ...nasState.vms[idx], ...vm };
+        } else {
+          nasState.vms.push(vm);
+        }
+      }
+      break;
+    }
+    case 'lxcContainers': {
+      const ct = payload as LxcContainer;
+      const name = msg.resourceName || ct?.name;
+      const idx = nasState.lxcContainers.findIndex((c) => c.name === name);
+      if (eventType === 'DELETED') {
+        if (idx !== -1) nasState.lxcContainers.splice(idx, 1);
+      } else if (ct) {
+        if (idx !== -1) {
+          nasState.lxcContainers[idx] = { ...nasState.lxcContainers[idx], ...ct };
+        } else {
+          nasState.lxcContainers.push(ct);
+        }
+      }
+      break;
+    }
+    case 'telemetry': {
+      if (payload) {
+        nasState.systemTelemetry = payload;
+        recordNetworkTrafficSample(payload);
+      }
+      break;
+    }
+  }
+
+  nasState.lastRefreshed = new Date().toLocaleTimeString();
+  saveLocalCache();
+}
+
+export function startWatchStream(): void {
+  if (typeof window === 'undefined') return;
+  if (watchAbortController) return;
+
+  watchAbortController = new AbortController();
+  const endpoint = 'resources:watch?resourceTypes=dockerApps,dockerContainers,virtualMachines,lxcContainers,telemetry';
+
+  nasState.liveSyncActive = true;
+  aipClient
+    .watchStream(endpoint, handleWatchResourceChange, watchAbortController.signal)
+    .catch((err) => {
+      console.warn('Watch stream disconnected:', err);
+    })
+    .finally(() => {
+      nasState.liveSyncActive = false;
+      watchAbortController = null;
+      clearTimeout(watchReconnectTimer);
+      watchReconnectTimer = setTimeout(() => {
+        if (nasState.authenticated) {
+          startWatchStream();
+        }
+      }, 3000);
+    });
+}
+
+export function stopWatchStream(): void {
+  nasState.liveSyncActive = false;
+  clearTimeout(watchReconnectTimer);
+  if (watchAbortController) {
+    watchAbortController.abort();
+    watchAbortController = null;
+  }
+}
 
 export function startEventStream(): void {
   if (typeof window === 'undefined' || !window.EventSource) return;
@@ -504,8 +669,9 @@ export async function initSession(): Promise<void> {
     try {
       nasState.currentUser = await services.auth.getCurrentUser();
       nasState.authenticated = true;
-      await refreshAllData();
+      startWatchStream();
       startEventStream();
+      await refreshAllData();
       return;
     } catch {
       services.auth.logout();

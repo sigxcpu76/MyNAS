@@ -33,10 +33,9 @@ import WidgetDisks from '../dashboard/widgets/WidgetDisks.vue';
 import WidgetWorkloads from '../dashboard/widgets/WidgetWorkloads.vue';
 
 // ---------------------------------------------------------------------------
-// Telemetry & Periodic Polling
+// Telemetry (Reactive Stream)
 // ---------------------------------------------------------------------------
 const telemetry = computed(() => nasState.systemTelemetry);
-let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 // ---------------------------------------------------------------------------
 // System Network Interface & Traffic History
@@ -75,16 +74,8 @@ const systemInterface = computed<NetworkInterfaceTelemetry | null>(() => {
 });
 
 onMounted(() => {
-  refreshTelemetry();
-  pollTimer = setInterval(() => {
+  if (!nasState.systemTelemetry) {
     refreshTelemetry();
-  }, 1000);
-});
-
-onBeforeUnmount(() => {
-  if (pollTimer) {
-    clearInterval(pollTimer);
-    pollTimer = null;
   }
 });
 

@@ -276,6 +276,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	// 3. Inbound Adapters (Driving Ports: gRPC + gRPC-Gateway + noVNC WS + WebDAV + Embedded Vue UI + SSE Events)
 	nasGRPC := grpcadapter.NewServer(systemSvc, prereqSvc, diskSvc, zfsSvc, kvmSvc, dockerSvc, dockerAppSvc, lxcSvc, shareSvc, identitySvc, catalogSvc)
 	nasGRPC.SetRegistryService(application.NewDockerRegistryService(dockerAdapter))
+	nasGRPC.SetEventBus(eventBus)
 
 	lxcCatalogCacheDir := filepath.Join(stateDir, "lxc-catalog")
 	lxcCatalogAdapter := lxc_catalog.NewAdapter(lxcCatalogCacheDir)

@@ -24,6 +24,61 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type WatchVirtualMachinesResponse_EventType int32
+
+const (
+	WatchVirtualMachinesResponse_EVENT_TYPE_UNSPECIFIED WatchVirtualMachinesResponse_EventType = 0
+	WatchVirtualMachinesResponse_SNAPSHOT               WatchVirtualMachinesResponse_EventType = 1
+	WatchVirtualMachinesResponse_ADDED                  WatchVirtualMachinesResponse_EventType = 2
+	WatchVirtualMachinesResponse_MODIFIED               WatchVirtualMachinesResponse_EventType = 3
+	WatchVirtualMachinesResponse_DELETED                WatchVirtualMachinesResponse_EventType = 4
+)
+
+// Enum value maps for WatchVirtualMachinesResponse_EventType.
+var (
+	WatchVirtualMachinesResponse_EventType_name = map[int32]string{
+		0: "EVENT_TYPE_UNSPECIFIED",
+		1: "SNAPSHOT",
+		2: "ADDED",
+		3: "MODIFIED",
+		4: "DELETED",
+	}
+	WatchVirtualMachinesResponse_EventType_value = map[string]int32{
+		"EVENT_TYPE_UNSPECIFIED": 0,
+		"SNAPSHOT":               1,
+		"ADDED":                  2,
+		"MODIFIED":               3,
+		"DELETED":                4,
+	}
+)
+
+func (x WatchVirtualMachinesResponse_EventType) Enum() *WatchVirtualMachinesResponse_EventType {
+	p := new(WatchVirtualMachinesResponse_EventType)
+	*p = x
+	return p
+}
+
+func (x WatchVirtualMachinesResponse_EventType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (WatchVirtualMachinesResponse_EventType) Descriptor() protoreflect.EnumDescriptor {
+	return file_nas_v1_kvm_proto_enumTypes[0].Descriptor()
+}
+
+func (WatchVirtualMachinesResponse_EventType) Type() protoreflect.EnumType {
+	return &file_nas_v1_kvm_proto_enumTypes[0]
+}
+
+func (x WatchVirtualMachinesResponse_EventType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use WatchVirtualMachinesResponse_EventType.Descriptor instead.
+func (WatchVirtualMachinesResponse_EventType) EnumDescriptor() ([]byte, []int) {
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{31, 0}
+}
+
 type VirtualMachineDisk struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                             // "scsi0", "virtio0", "sata1"
@@ -172,6 +227,74 @@ func (x *VirtualMachineDisk) GetMbpsLimitWrite() int64 {
 	return 0
 }
 
+type VirtualMachineCdrom struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                          // "sdz", "sdy", "ide2", etc.
+	Bus           string                 `protobuf:"bytes,2,opt,name=bus,proto3" json:"bus,omitempty"`                        // "sata", "ide", "scsi"
+	IsoPath       string                 `protobuf:"bytes,3,opt,name=iso_path,json=isoPath,proto3" json:"iso_path,omitempty"` // Path to mounted ISO, or empty if tray is empty
+	Bootable      bool                   `protobuf:"varint,4,opt,name=bootable,proto3" json:"bootable,omitempty"`             // Included in boot sequence
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VirtualMachineCdrom) Reset() {
+	*x = VirtualMachineCdrom{}
+	mi := &file_nas_v1_kvm_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VirtualMachineCdrom) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VirtualMachineCdrom) ProtoMessage() {}
+
+func (x *VirtualMachineCdrom) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_kvm_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VirtualMachineCdrom.ProtoReflect.Descriptor instead.
+func (*VirtualMachineCdrom) Descriptor() ([]byte, []int) {
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *VirtualMachineCdrom) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *VirtualMachineCdrom) GetBus() string {
+	if x != nil {
+		return x.Bus
+	}
+	return ""
+}
+
+func (x *VirtualMachineCdrom) GetIsoPath() string {
+	if x != nil {
+		return x.IsoPath
+	}
+	return ""
+}
+
+func (x *VirtualMachineCdrom) GetBootable() bool {
+	if x != nil {
+		return x.Bootable
+	}
+	return false
+}
+
 type VirtualMachineNetworkInterface struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                           // "net0", "net1"
@@ -188,7 +311,7 @@ type VirtualMachineNetworkInterface struct {
 
 func (x *VirtualMachineNetworkInterface) Reset() {
 	*x = VirtualMachineNetworkInterface{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[1]
+	mi := &file_nas_v1_kvm_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -200,7 +323,7 @@ func (x *VirtualMachineNetworkInterface) String() string {
 func (*VirtualMachineNetworkInterface) ProtoMessage() {}
 
 func (x *VirtualMachineNetworkInterface) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[1]
+	mi := &file_nas_v1_kvm_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -213,7 +336,7 @@ func (x *VirtualMachineNetworkInterface) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VirtualMachineNetworkInterface.ProtoReflect.Descriptor instead.
 func (*VirtualMachineNetworkInterface) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{1}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *VirtualMachineNetworkInterface) GetId() string {
@@ -287,7 +410,7 @@ type VirtualMachineCloudInit struct {
 
 func (x *VirtualMachineCloudInit) Reset() {
 	*x = VirtualMachineCloudInit{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[2]
+	mi := &file_nas_v1_kvm_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -299,7 +422,7 @@ func (x *VirtualMachineCloudInit) String() string {
 func (*VirtualMachineCloudInit) ProtoMessage() {}
 
 func (x *VirtualMachineCloudInit) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[2]
+	mi := &file_nas_v1_kvm_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -312,7 +435,7 @@ func (x *VirtualMachineCloudInit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VirtualMachineCloudInit.ProtoReflect.Descriptor instead.
 func (*VirtualMachineCloudInit) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{2}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *VirtualMachineCloudInit) GetUser() string {
@@ -375,7 +498,7 @@ type VirtualMachinePciDevice struct {
 
 func (x *VirtualMachinePciDevice) Reset() {
 	*x = VirtualMachinePciDevice{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[3]
+	mi := &file_nas_v1_kvm_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -387,7 +510,7 @@ func (x *VirtualMachinePciDevice) String() string {
 func (*VirtualMachinePciDevice) ProtoMessage() {}
 
 func (x *VirtualMachinePciDevice) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[3]
+	mi := &file_nas_v1_kvm_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -400,7 +523,7 @@ func (x *VirtualMachinePciDevice) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VirtualMachinePciDevice.ProtoReflect.Descriptor instead.
 func (*VirtualMachinePciDevice) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{3}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *VirtualMachinePciDevice) GetHostAddress() string {
@@ -434,7 +557,7 @@ type VirtualMachineUsbDevice struct {
 
 func (x *VirtualMachineUsbDevice) Reset() {
 	*x = VirtualMachineUsbDevice{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[4]
+	mi := &file_nas_v1_kvm_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -446,7 +569,7 @@ func (x *VirtualMachineUsbDevice) String() string {
 func (*VirtualMachineUsbDevice) ProtoMessage() {}
 
 func (x *VirtualMachineUsbDevice) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[4]
+	mi := &file_nas_v1_kvm_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -459,7 +582,7 @@ func (x *VirtualMachineUsbDevice) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VirtualMachineUsbDevice.ProtoReflect.Descriptor instead.
 func (*VirtualMachineUsbDevice) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{4}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *VirtualMachineUsbDevice) GetHostBusPort() string {
@@ -491,7 +614,7 @@ type VirtualMachineSnapshot struct {
 
 func (x *VirtualMachineSnapshot) Reset() {
 	*x = VirtualMachineSnapshot{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[5]
+	mi := &file_nas_v1_kvm_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -503,7 +626,7 @@ func (x *VirtualMachineSnapshot) String() string {
 func (*VirtualMachineSnapshot) ProtoMessage() {}
 
 func (x *VirtualMachineSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[5]
+	mi := &file_nas_v1_kvm_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -516,7 +639,7 @@ func (x *VirtualMachineSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VirtualMachineSnapshot.ProtoReflect.Descriptor instead.
 func (*VirtualMachineSnapshot) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{5}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *VirtualMachineSnapshot) GetName() string {
@@ -599,8 +722,9 @@ type VirtualMachine struct {
 	TpmVersion    string `protobuf:"bytes,26,opt,name=tpm_version,json=tpmVersion,proto3" json:"tpm_version,omitempty"`    // "none", "v2.0"
 	SecureBoot    bool   `protobuf:"varint,27,opt,name=secure_boot,json=secureBoot,proto3" json:"secure_boot,omitempty"`
 	// Multi-Disk & Media
-	Disks         []*VirtualMachineDisk `protobuf:"bytes,28,rep,name=disks,proto3" json:"disks,omitempty"`
-	CdromIsoImage string                `protobuf:"bytes,29,opt,name=cdrom_iso_image,json=cdromIsoImage,proto3" json:"cdrom_iso_image,omitempty"`
+	Disks         []*VirtualMachineDisk  `protobuf:"bytes,28,rep,name=disks,proto3" json:"disks,omitempty"`
+	CdromIsoImage string                 `protobuf:"bytes,29,opt,name=cdrom_iso_image,json=cdromIsoImage,proto3" json:"cdrom_iso_image,omitempty"`
+	Cdroms        []*VirtualMachineCdrom `protobuf:"bytes,48,rep,name=cdroms,proto3" json:"cdroms,omitempty"`
 	// Networking & Cloud-Init
 	NetworkInterfaces []*VirtualMachineNetworkInterface `protobuf:"bytes,30,rep,name=network_interfaces,json=networkInterfaces,proto3" json:"network_interfaces,omitempty"`
 	CloudInit         *VirtualMachineCloudInit          `protobuf:"bytes,31,opt,name=cloud_init,json=cloudInit,proto3" json:"cloud_init,omitempty"`
@@ -629,7 +753,7 @@ type VirtualMachine struct {
 
 func (x *VirtualMachine) Reset() {
 	*x = VirtualMachine{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[6]
+	mi := &file_nas_v1_kvm_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -641,7 +765,7 @@ func (x *VirtualMachine) String() string {
 func (*VirtualMachine) ProtoMessage() {}
 
 func (x *VirtualMachine) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[6]
+	mi := &file_nas_v1_kvm_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -654,7 +778,7 @@ func (x *VirtualMachine) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VirtualMachine.ProtoReflect.Descriptor instead.
 func (*VirtualMachine) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{6}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *VirtualMachine) GetName() string {
@@ -860,6 +984,13 @@ func (x *VirtualMachine) GetCdromIsoImage() string {
 	return ""
 }
 
+func (x *VirtualMachine) GetCdroms() []*VirtualMachineCdrom {
+	if x != nil {
+		return x.Cdroms
+	}
+	return nil
+}
+
 func (x *VirtualMachine) GetNetworkInterfaces() []*VirtualMachineNetworkInterface {
 	if x != nil {
 		return x.NetworkInterfaces
@@ -997,7 +1128,7 @@ type ListVirtualMachinesRequest struct {
 
 func (x *ListVirtualMachinesRequest) Reset() {
 	*x = ListVirtualMachinesRequest{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[7]
+	mi := &file_nas_v1_kvm_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1009,7 +1140,7 @@ func (x *ListVirtualMachinesRequest) String() string {
 func (*ListVirtualMachinesRequest) ProtoMessage() {}
 
 func (x *ListVirtualMachinesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[7]
+	mi := &file_nas_v1_kvm_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1022,7 +1153,7 @@ func (x *ListVirtualMachinesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListVirtualMachinesRequest.ProtoReflect.Descriptor instead.
 func (*ListVirtualMachinesRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{7}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListVirtualMachinesRequest) GetPageSize() int32 {
@@ -1057,7 +1188,7 @@ type ListVirtualMachinesResponse struct {
 
 func (x *ListVirtualMachinesResponse) Reset() {
 	*x = ListVirtualMachinesResponse{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[8]
+	mi := &file_nas_v1_kvm_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1069,7 +1200,7 @@ func (x *ListVirtualMachinesResponse) String() string {
 func (*ListVirtualMachinesResponse) ProtoMessage() {}
 
 func (x *ListVirtualMachinesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[8]
+	mi := &file_nas_v1_kvm_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1082,7 +1213,7 @@ func (x *ListVirtualMachinesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListVirtualMachinesResponse.ProtoReflect.Descriptor instead.
 func (*ListVirtualMachinesResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{8}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListVirtualMachinesResponse) GetVirtualMachines() []*VirtualMachine {
@@ -1115,7 +1246,7 @@ type GetVirtualMachineRequest struct {
 
 func (x *GetVirtualMachineRequest) Reset() {
 	*x = GetVirtualMachineRequest{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[9]
+	mi := &file_nas_v1_kvm_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1127,7 +1258,7 @@ func (x *GetVirtualMachineRequest) String() string {
 func (*GetVirtualMachineRequest) ProtoMessage() {}
 
 func (x *GetVirtualMachineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[9]
+	mi := &file_nas_v1_kvm_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1140,7 +1271,7 @@ func (x *GetVirtualMachineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetVirtualMachineRequest.ProtoReflect.Descriptor instead.
 func (*GetVirtualMachineRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{9}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetVirtualMachineRequest) GetName() string {
@@ -1160,7 +1291,7 @@ type CreateVirtualMachineRequest struct {
 
 func (x *CreateVirtualMachineRequest) Reset() {
 	*x = CreateVirtualMachineRequest{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[10]
+	mi := &file_nas_v1_kvm_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1172,7 +1303,7 @@ func (x *CreateVirtualMachineRequest) String() string {
 func (*CreateVirtualMachineRequest) ProtoMessage() {}
 
 func (x *CreateVirtualMachineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[10]
+	mi := &file_nas_v1_kvm_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1185,7 +1316,7 @@ func (x *CreateVirtualMachineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateVirtualMachineRequest.ProtoReflect.Descriptor instead.
 func (*CreateVirtualMachineRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{10}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CreateVirtualMachineRequest) GetVirtualMachineId() string {
@@ -1212,7 +1343,7 @@ type UpdateVirtualMachineRequest struct {
 
 func (x *UpdateVirtualMachineRequest) Reset() {
 	*x = UpdateVirtualMachineRequest{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[11]
+	mi := &file_nas_v1_kvm_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1224,7 +1355,7 @@ func (x *UpdateVirtualMachineRequest) String() string {
 func (*UpdateVirtualMachineRequest) ProtoMessage() {}
 
 func (x *UpdateVirtualMachineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[11]
+	mi := &file_nas_v1_kvm_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1237,7 +1368,7 @@ func (x *UpdateVirtualMachineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateVirtualMachineRequest.ProtoReflect.Descriptor instead.
 func (*UpdateVirtualMachineRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{11}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *UpdateVirtualMachineRequest) GetVirtualMachine() *VirtualMachine {
@@ -1263,7 +1394,7 @@ type DeleteVirtualMachineRequest struct {
 
 func (x *DeleteVirtualMachineRequest) Reset() {
 	*x = DeleteVirtualMachineRequest{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[12]
+	mi := &file_nas_v1_kvm_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1275,7 +1406,7 @@ func (x *DeleteVirtualMachineRequest) String() string {
 func (*DeleteVirtualMachineRequest) ProtoMessage() {}
 
 func (x *DeleteVirtualMachineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[12]
+	mi := &file_nas_v1_kvm_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1288,7 +1419,7 @@ func (x *DeleteVirtualMachineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteVirtualMachineRequest.ProtoReflect.Descriptor instead.
 func (*DeleteVirtualMachineRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{12}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DeleteVirtualMachineRequest) GetName() string {
@@ -1307,7 +1438,7 @@ type StartVirtualMachineRequest struct {
 
 func (x *StartVirtualMachineRequest) Reset() {
 	*x = StartVirtualMachineRequest{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[13]
+	mi := &file_nas_v1_kvm_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1319,7 +1450,7 @@ func (x *StartVirtualMachineRequest) String() string {
 func (*StartVirtualMachineRequest) ProtoMessage() {}
 
 func (x *StartVirtualMachineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[13]
+	mi := &file_nas_v1_kvm_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1332,7 +1463,7 @@ func (x *StartVirtualMachineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartVirtualMachineRequest.ProtoReflect.Descriptor instead.
 func (*StartVirtualMachineRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{13}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *StartVirtualMachineRequest) GetName() string {
@@ -1352,7 +1483,7 @@ type StopVirtualMachineRequest struct {
 
 func (x *StopVirtualMachineRequest) Reset() {
 	*x = StopVirtualMachineRequest{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[14]
+	mi := &file_nas_v1_kvm_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1364,7 +1495,7 @@ func (x *StopVirtualMachineRequest) String() string {
 func (*StopVirtualMachineRequest) ProtoMessage() {}
 
 func (x *StopVirtualMachineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[14]
+	mi := &file_nas_v1_kvm_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1377,7 +1508,7 @@ func (x *StopVirtualMachineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopVirtualMachineRequest.ProtoReflect.Descriptor instead.
 func (*StopVirtualMachineRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{14}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *StopVirtualMachineRequest) GetName() string {
@@ -1404,7 +1535,7 @@ type RebootVirtualMachineRequest struct {
 
 func (x *RebootVirtualMachineRequest) Reset() {
 	*x = RebootVirtualMachineRequest{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[15]
+	mi := &file_nas_v1_kvm_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1416,7 +1547,7 @@ func (x *RebootVirtualMachineRequest) String() string {
 func (*RebootVirtualMachineRequest) ProtoMessage() {}
 
 func (x *RebootVirtualMachineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[15]
+	mi := &file_nas_v1_kvm_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1429,7 +1560,7 @@ func (x *RebootVirtualMachineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RebootVirtualMachineRequest.ProtoReflect.Descriptor instead.
 func (*RebootVirtualMachineRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{15}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *RebootVirtualMachineRequest) GetName() string {
@@ -1455,7 +1586,7 @@ type OpenVirtualMachineConsoleRequest struct {
 
 func (x *OpenVirtualMachineConsoleRequest) Reset() {
 	*x = OpenVirtualMachineConsoleRequest{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[16]
+	mi := &file_nas_v1_kvm_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1467,7 +1598,7 @@ func (x *OpenVirtualMachineConsoleRequest) String() string {
 func (*OpenVirtualMachineConsoleRequest) ProtoMessage() {}
 
 func (x *OpenVirtualMachineConsoleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[16]
+	mi := &file_nas_v1_kvm_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1480,7 +1611,7 @@ func (x *OpenVirtualMachineConsoleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenVirtualMachineConsoleRequest.ProtoReflect.Descriptor instead.
 func (*OpenVirtualMachineConsoleRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{16}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *OpenVirtualMachineConsoleRequest) GetName() string {
@@ -1504,7 +1635,7 @@ type VirtualMachineConsoleSession struct {
 
 func (x *VirtualMachineConsoleSession) Reset() {
 	*x = VirtualMachineConsoleSession{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[17]
+	mi := &file_nas_v1_kvm_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1516,7 +1647,7 @@ func (x *VirtualMachineConsoleSession) String() string {
 func (*VirtualMachineConsoleSession) ProtoMessage() {}
 
 func (x *VirtualMachineConsoleSession) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[17]
+	mi := &file_nas_v1_kvm_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1529,7 +1660,7 @@ func (x *VirtualMachineConsoleSession) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VirtualMachineConsoleSession.ProtoReflect.Descriptor instead.
 func (*VirtualMachineConsoleSession) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{17}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *VirtualMachineConsoleSession) GetVmName() string {
@@ -1583,7 +1714,7 @@ type ResetVirtualMachineRequest struct {
 
 func (x *ResetVirtualMachineRequest) Reset() {
 	*x = ResetVirtualMachineRequest{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[18]
+	mi := &file_nas_v1_kvm_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1595,7 +1726,7 @@ func (x *ResetVirtualMachineRequest) String() string {
 func (*ResetVirtualMachineRequest) ProtoMessage() {}
 
 func (x *ResetVirtualMachineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[18]
+	mi := &file_nas_v1_kvm_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1608,7 +1739,7 @@ func (x *ResetVirtualMachineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetVirtualMachineRequest.ProtoReflect.Descriptor instead.
 func (*ResetVirtualMachineRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{18}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ResetVirtualMachineRequest) GetName() string {
@@ -1627,7 +1758,7 @@ type PauseVirtualMachineRequest struct {
 
 func (x *PauseVirtualMachineRequest) Reset() {
 	*x = PauseVirtualMachineRequest{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[19]
+	mi := &file_nas_v1_kvm_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1639,7 +1770,7 @@ func (x *PauseVirtualMachineRequest) String() string {
 func (*PauseVirtualMachineRequest) ProtoMessage() {}
 
 func (x *PauseVirtualMachineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[19]
+	mi := &file_nas_v1_kvm_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1652,7 +1783,7 @@ func (x *PauseVirtualMachineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseVirtualMachineRequest.ProtoReflect.Descriptor instead.
 func (*PauseVirtualMachineRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{19}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *PauseVirtualMachineRequest) GetName() string {
@@ -1671,7 +1802,7 @@ type ResumeVirtualMachineRequest struct {
 
 func (x *ResumeVirtualMachineRequest) Reset() {
 	*x = ResumeVirtualMachineRequest{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[20]
+	mi := &file_nas_v1_kvm_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1683,7 +1814,7 @@ func (x *ResumeVirtualMachineRequest) String() string {
 func (*ResumeVirtualMachineRequest) ProtoMessage() {}
 
 func (x *ResumeVirtualMachineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[20]
+	mi := &file_nas_v1_kvm_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1696,7 +1827,7 @@ func (x *ResumeVirtualMachineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeVirtualMachineRequest.ProtoReflect.Descriptor instead.
 func (*ResumeVirtualMachineRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{20}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ResumeVirtualMachineRequest) GetName() string {
@@ -1719,7 +1850,7 @@ type CloneVirtualMachineRequest struct {
 
 func (x *CloneVirtualMachineRequest) Reset() {
 	*x = CloneVirtualMachineRequest{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[21]
+	mi := &file_nas_v1_kvm_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1731,7 +1862,7 @@ func (x *CloneVirtualMachineRequest) String() string {
 func (*CloneVirtualMachineRequest) ProtoMessage() {}
 
 func (x *CloneVirtualMachineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[21]
+	mi := &file_nas_v1_kvm_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1744,7 +1875,7 @@ func (x *CloneVirtualMachineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloneVirtualMachineRequest.ProtoReflect.Descriptor instead.
 func (*CloneVirtualMachineRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{21}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *CloneVirtualMachineRequest) GetName() string {
@@ -1793,7 +1924,7 @@ type AttachVirtualMachineMediaRequest struct {
 
 func (x *AttachVirtualMachineMediaRequest) Reset() {
 	*x = AttachVirtualMachineMediaRequest{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[22]
+	mi := &file_nas_v1_kvm_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1805,7 +1936,7 @@ func (x *AttachVirtualMachineMediaRequest) String() string {
 func (*AttachVirtualMachineMediaRequest) ProtoMessage() {}
 
 func (x *AttachVirtualMachineMediaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[22]
+	mi := &file_nas_v1_kvm_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1818,7 +1949,7 @@ func (x *AttachVirtualMachineMediaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttachVirtualMachineMediaRequest.ProtoReflect.Descriptor instead.
 func (*AttachVirtualMachineMediaRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{22}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *AttachVirtualMachineMediaRequest) GetName() string {
@@ -1852,7 +1983,7 @@ type EjectVirtualMachineMediaRequest struct {
 
 func (x *EjectVirtualMachineMediaRequest) Reset() {
 	*x = EjectVirtualMachineMediaRequest{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[23]
+	mi := &file_nas_v1_kvm_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1864,7 +1995,7 @@ func (x *EjectVirtualMachineMediaRequest) String() string {
 func (*EjectVirtualMachineMediaRequest) ProtoMessage() {}
 
 func (x *EjectVirtualMachineMediaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[23]
+	mi := &file_nas_v1_kvm_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1877,7 +2008,7 @@ func (x *EjectVirtualMachineMediaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EjectVirtualMachineMediaRequest.ProtoReflect.Descriptor instead.
 func (*EjectVirtualMachineMediaRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{23}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *EjectVirtualMachineMediaRequest) GetName() string {
@@ -1905,7 +2036,7 @@ type ListVirtualMachineSnapshotsRequest struct {
 
 func (x *ListVirtualMachineSnapshotsRequest) Reset() {
 	*x = ListVirtualMachineSnapshotsRequest{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[24]
+	mi := &file_nas_v1_kvm_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1917,7 +2048,7 @@ func (x *ListVirtualMachineSnapshotsRequest) String() string {
 func (*ListVirtualMachineSnapshotsRequest) ProtoMessage() {}
 
 func (x *ListVirtualMachineSnapshotsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[24]
+	mi := &file_nas_v1_kvm_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1930,7 +2061,7 @@ func (x *ListVirtualMachineSnapshotsRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use ListVirtualMachineSnapshotsRequest.ProtoReflect.Descriptor instead.
 func (*ListVirtualMachineSnapshotsRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{24}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ListVirtualMachineSnapshotsRequest) GetParent() string {
@@ -1965,7 +2096,7 @@ type ListVirtualMachineSnapshotsResponse struct {
 
 func (x *ListVirtualMachineSnapshotsResponse) Reset() {
 	*x = ListVirtualMachineSnapshotsResponse{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[25]
+	mi := &file_nas_v1_kvm_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1977,7 +2108,7 @@ func (x *ListVirtualMachineSnapshotsResponse) String() string {
 func (*ListVirtualMachineSnapshotsResponse) ProtoMessage() {}
 
 func (x *ListVirtualMachineSnapshotsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[25]
+	mi := &file_nas_v1_kvm_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1990,7 +2121,7 @@ func (x *ListVirtualMachineSnapshotsResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use ListVirtualMachineSnapshotsResponse.ProtoReflect.Descriptor instead.
 func (*ListVirtualMachineSnapshotsResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{25}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListVirtualMachineSnapshotsResponse) GetSnapshots() []*VirtualMachineSnapshot {
@@ -2025,7 +2156,7 @@ type CreateVirtualMachineSnapshotRequest struct {
 
 func (x *CreateVirtualMachineSnapshotRequest) Reset() {
 	*x = CreateVirtualMachineSnapshotRequest{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[26]
+	mi := &file_nas_v1_kvm_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2037,7 +2168,7 @@ func (x *CreateVirtualMachineSnapshotRequest) String() string {
 func (*CreateVirtualMachineSnapshotRequest) ProtoMessage() {}
 
 func (x *CreateVirtualMachineSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[26]
+	mi := &file_nas_v1_kvm_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2050,7 +2181,7 @@ func (x *CreateVirtualMachineSnapshotRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use CreateVirtualMachineSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*CreateVirtualMachineSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{26}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *CreateVirtualMachineSnapshotRequest) GetParent() string {
@@ -2083,7 +2214,7 @@ type RollbackVirtualMachineSnapshotRequest struct {
 
 func (x *RollbackVirtualMachineSnapshotRequest) Reset() {
 	*x = RollbackVirtualMachineSnapshotRequest{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[27]
+	mi := &file_nas_v1_kvm_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2095,7 +2226,7 @@ func (x *RollbackVirtualMachineSnapshotRequest) String() string {
 func (*RollbackVirtualMachineSnapshotRequest) ProtoMessage() {}
 
 func (x *RollbackVirtualMachineSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[27]
+	mi := &file_nas_v1_kvm_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2108,7 +2239,7 @@ func (x *RollbackVirtualMachineSnapshotRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use RollbackVirtualMachineSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*RollbackVirtualMachineSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{27}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *RollbackVirtualMachineSnapshotRequest) GetName() string {
@@ -2127,7 +2258,7 @@ type DeleteVirtualMachineSnapshotRequest struct {
 
 func (x *DeleteVirtualMachineSnapshotRequest) Reset() {
 	*x = DeleteVirtualMachineSnapshotRequest{}
-	mi := &file_nas_v1_kvm_proto_msgTypes[28]
+	mi := &file_nas_v1_kvm_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2139,7 +2270,7 @@ func (x *DeleteVirtualMachineSnapshotRequest) String() string {
 func (*DeleteVirtualMachineSnapshotRequest) ProtoMessage() {}
 
 func (x *DeleteVirtualMachineSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_kvm_proto_msgTypes[28]
+	mi := &file_nas_v1_kvm_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2152,7 +2283,7 @@ func (x *DeleteVirtualMachineSnapshotRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use DeleteVirtualMachineSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*DeleteVirtualMachineSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{28}
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *DeleteVirtualMachineSnapshotRequest) GetName() string {
@@ -2160,6 +2291,102 @@ func (x *DeleteVirtualMachineSnapshotRequest) GetName() string {
 		return x.Name
 	}
 	return ""
+}
+
+type WatchVirtualMachinesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchVirtualMachinesRequest) Reset() {
+	*x = WatchVirtualMachinesRequest{}
+	mi := &file_nas_v1_kvm_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchVirtualMachinesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchVirtualMachinesRequest) ProtoMessage() {}
+
+func (x *WatchVirtualMachinesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_kvm_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchVirtualMachinesRequest.ProtoReflect.Descriptor instead.
+func (*WatchVirtualMachinesRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{30}
+}
+
+type WatchVirtualMachinesResponse struct {
+	state          protoimpl.MessageState                 `protogen:"open.v1"`
+	EventType      WatchVirtualMachinesResponse_EventType `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=nas.v1.WatchVirtualMachinesResponse_EventType" json:"event_type,omitempty"`
+	VirtualMachine *VirtualMachine                        `protobuf:"bytes,2,opt,name=virtual_machine,json=virtualMachine,proto3" json:"virtual_machine,omitempty"`
+	Snapshot       []*VirtualMachine                      `protobuf:"bytes,3,rep,name=snapshot,proto3" json:"snapshot,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *WatchVirtualMachinesResponse) Reset() {
+	*x = WatchVirtualMachinesResponse{}
+	mi := &file_nas_v1_kvm_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchVirtualMachinesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchVirtualMachinesResponse) ProtoMessage() {}
+
+func (x *WatchVirtualMachinesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_kvm_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchVirtualMachinesResponse.ProtoReflect.Descriptor instead.
+func (*WatchVirtualMachinesResponse) Descriptor() ([]byte, []int) {
+	return file_nas_v1_kvm_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *WatchVirtualMachinesResponse) GetEventType() WatchVirtualMachinesResponse_EventType {
+	if x != nil {
+		return x.EventType
+	}
+	return WatchVirtualMachinesResponse_EVENT_TYPE_UNSPECIFIED
+}
+
+func (x *WatchVirtualMachinesResponse) GetVirtualMachine() *VirtualMachine {
+	if x != nil {
+		return x.VirtualMachine
+	}
+	return nil
+}
+
+func (x *WatchVirtualMachinesResponse) GetSnapshot() []*VirtualMachine {
+	if x != nil {
+		return x.Snapshot
+	}
+	return nil
 }
 
 var File_nas_v1_kvm_proto protoreflect.FileDescriptor
@@ -2184,7 +2411,12 @@ const file_nas_v1_kvm_proto_rawDesc = "" +
 	"\x0fiops_limit_read\x18\v \x01(\x03R\riopsLimitRead\x12(\n" +
 	"\x10iops_limit_write\x18\f \x01(\x03R\x0eiopsLimitWrite\x12&\n" +
 	"\x0fmbps_limit_read\x18\r \x01(\x03R\rmbpsLimitRead\x12(\n" +
-	"\x10mbps_limit_write\x18\x0e \x01(\x03R\x0embpsLimitWrite\"\x82\x02\n" +
+	"\x10mbps_limit_write\x18\x0e \x01(\x03R\x0embpsLimitWrite\"n\n" +
+	"\x13VirtualMachineCdrom\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x10\n" +
+	"\x03bus\x18\x02 \x01(\tR\x03bus\x12\x19\n" +
+	"\biso_path\x18\x03 \x01(\tR\aisoPath\x12\x1a\n" +
+	"\bbootable\x18\x04 \x01(\bR\bbootable\"\x82\x02\n" +
 	"\x1eVirtualMachineNetworkInterface\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x16\n" +
@@ -2223,7 +2455,7 @@ const file_nas_v1_kvm_proto_rawDesc = "" +
 	"includeRam\x12'\n" +
 	"\x0fparent_snapshot\x18\x06 \x01(\tR\x0eparentSnapshot\x12\x19\n" +
 	"\bvm_state\x18\a \x01(\tR\avmState:w\xeaAt\n" +
-	"%nas.sigxcpu.io/VirtualMachineSnapshot\x126virtualMachines/{virtual_machine}/snapshots/{snapshot}*\tsnapshots2\bsnapshot\"\xe2\x0e\n" +
+	"%nas.sigxcpu.io/VirtualMachineSnapshot\x126virtualMachines/{virtual_machine}/snapshots/{snapshot}*\tsnapshots2\bsnapshot\"\x97\x0f\n" +
 	"\x0eVirtualMachine\x12\x18\n" +
 	"\x04name\x18\x01 \x01(\tB\x04\xe2A\x01\bR\x04name\x12\x1d\n" +
 	"\avm_name\x18\x02 \x01(\tB\x04\xe2A\x01\x03R\x06vmName\x12\x18\n" +
@@ -2259,7 +2491,8 @@ const file_nas_v1_kvm_proto_rawDesc = "" +
 	"\vsecure_boot\x18\x1b \x01(\bR\n" +
 	"secureBoot\x120\n" +
 	"\x05disks\x18\x1c \x03(\v2\x1a.nas.v1.VirtualMachineDiskR\x05disks\x12&\n" +
-	"\x0fcdrom_iso_image\x18\x1d \x01(\tR\rcdromIsoImage\x12U\n" +
+	"\x0fcdrom_iso_image\x18\x1d \x01(\tR\rcdromIsoImage\x123\n" +
+	"\x06cdroms\x180 \x03(\v2\x1b.nas.v1.VirtualMachineCdromR\x06cdroms\x12U\n" +
 	"\x12network_interfaces\x18\x1e \x03(\v2&.nas.v1.VirtualMachineNetworkInterfaceR\x11networkInterfaces\x12>\n" +
 	"\n" +
 	"cloud_init\x18\x1f \x01(\v2\x1f.nas.v1.VirtualMachineCloudInitR\tcloudInit\x12@\n" +
@@ -2379,7 +2612,19 @@ const file_nas_v1_kvm_proto_rawDesc = "" +
 	"%nas.sigxcpu.io/VirtualMachineSnapshotR\x04name\"i\n" +
 	"#DeleteVirtualMachineSnapshotRequest\x12B\n" +
 	"\x04name\x18\x01 \x01(\tB.\xe2A\x01\x02\xfaA'\n" +
-	"%nas.sigxcpu.io/VirtualMachineSnapshotR\x04nameB2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
+	"%nas.sigxcpu.io/VirtualMachineSnapshotR\x04name\"\x1d\n" +
+	"\x1bWatchVirtualMachinesRequest\"\xbf\x02\n" +
+	"\x1cWatchVirtualMachinesResponse\x12M\n" +
+	"\n" +
+	"event_type\x18\x01 \x01(\x0e2..nas.v1.WatchVirtualMachinesResponse.EventTypeR\teventType\x12?\n" +
+	"\x0fvirtual_machine\x18\x02 \x01(\v2\x16.nas.v1.VirtualMachineR\x0evirtualMachine\x122\n" +
+	"\bsnapshot\x18\x03 \x03(\v2\x16.nas.v1.VirtualMachineR\bsnapshot\"[\n" +
+	"\tEventType\x12\x1a\n" +
+	"\x16EVENT_TYPE_UNSPECIFIED\x10\x00\x12\f\n" +
+	"\bSNAPSHOT\x10\x01\x12\t\n" +
+	"\x05ADDED\x10\x02\x12\f\n" +
+	"\bMODIFIED\x10\x03\x12\v\n" +
+	"\aDELETED\x10\x04B2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
 
 var (
 	file_nas_v1_kvm_proto_rawDescOnce sync.Once
@@ -2393,58 +2638,67 @@ func file_nas_v1_kvm_proto_rawDescGZIP() []byte {
 	return file_nas_v1_kvm_proto_rawDescData
 }
 
-var file_nas_v1_kvm_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_nas_v1_kvm_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_nas_v1_kvm_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_nas_v1_kvm_proto_goTypes = []any{
-	(*VirtualMachineDisk)(nil),                    // 0: nas.v1.VirtualMachineDisk
-	(*VirtualMachineNetworkInterface)(nil),        // 1: nas.v1.VirtualMachineNetworkInterface
-	(*VirtualMachineCloudInit)(nil),               // 2: nas.v1.VirtualMachineCloudInit
-	(*VirtualMachinePciDevice)(nil),               // 3: nas.v1.VirtualMachinePciDevice
-	(*VirtualMachineUsbDevice)(nil),               // 4: nas.v1.VirtualMachineUsbDevice
-	(*VirtualMachineSnapshot)(nil),                // 5: nas.v1.VirtualMachineSnapshot
-	(*VirtualMachine)(nil),                        // 6: nas.v1.VirtualMachine
-	(*ListVirtualMachinesRequest)(nil),            // 7: nas.v1.ListVirtualMachinesRequest
-	(*ListVirtualMachinesResponse)(nil),           // 8: nas.v1.ListVirtualMachinesResponse
-	(*GetVirtualMachineRequest)(nil),              // 9: nas.v1.GetVirtualMachineRequest
-	(*CreateVirtualMachineRequest)(nil),           // 10: nas.v1.CreateVirtualMachineRequest
-	(*UpdateVirtualMachineRequest)(nil),           // 11: nas.v1.UpdateVirtualMachineRequest
-	(*DeleteVirtualMachineRequest)(nil),           // 12: nas.v1.DeleteVirtualMachineRequest
-	(*StartVirtualMachineRequest)(nil),            // 13: nas.v1.StartVirtualMachineRequest
-	(*StopVirtualMachineRequest)(nil),             // 14: nas.v1.StopVirtualMachineRequest
-	(*RebootVirtualMachineRequest)(nil),           // 15: nas.v1.RebootVirtualMachineRequest
-	(*OpenVirtualMachineConsoleRequest)(nil),      // 16: nas.v1.OpenVirtualMachineConsoleRequest
-	(*VirtualMachineConsoleSession)(nil),          // 17: nas.v1.VirtualMachineConsoleSession
-	(*ResetVirtualMachineRequest)(nil),            // 18: nas.v1.ResetVirtualMachineRequest
-	(*PauseVirtualMachineRequest)(nil),            // 19: nas.v1.PauseVirtualMachineRequest
-	(*ResumeVirtualMachineRequest)(nil),           // 20: nas.v1.ResumeVirtualMachineRequest
-	(*CloneVirtualMachineRequest)(nil),            // 21: nas.v1.CloneVirtualMachineRequest
-	(*AttachVirtualMachineMediaRequest)(nil),      // 22: nas.v1.AttachVirtualMachineMediaRequest
-	(*EjectVirtualMachineMediaRequest)(nil),       // 23: nas.v1.EjectVirtualMachineMediaRequest
-	(*ListVirtualMachineSnapshotsRequest)(nil),    // 24: nas.v1.ListVirtualMachineSnapshotsRequest
-	(*ListVirtualMachineSnapshotsResponse)(nil),   // 25: nas.v1.ListVirtualMachineSnapshotsResponse
-	(*CreateVirtualMachineSnapshotRequest)(nil),   // 26: nas.v1.CreateVirtualMachineSnapshotRequest
-	(*RollbackVirtualMachineSnapshotRequest)(nil), // 27: nas.v1.RollbackVirtualMachineSnapshotRequest
-	(*DeleteVirtualMachineSnapshotRequest)(nil),   // 28: nas.v1.DeleteVirtualMachineSnapshotRequest
-	(*timestamppb.Timestamp)(nil),                 // 29: google.protobuf.Timestamp
-	(*fieldmaskpb.FieldMask)(nil),                 // 30: google.protobuf.FieldMask
+	(WatchVirtualMachinesResponse_EventType)(0),   // 0: nas.v1.WatchVirtualMachinesResponse.EventType
+	(*VirtualMachineDisk)(nil),                    // 1: nas.v1.VirtualMachineDisk
+	(*VirtualMachineCdrom)(nil),                   // 2: nas.v1.VirtualMachineCdrom
+	(*VirtualMachineNetworkInterface)(nil),        // 3: nas.v1.VirtualMachineNetworkInterface
+	(*VirtualMachineCloudInit)(nil),               // 4: nas.v1.VirtualMachineCloudInit
+	(*VirtualMachinePciDevice)(nil),               // 5: nas.v1.VirtualMachinePciDevice
+	(*VirtualMachineUsbDevice)(nil),               // 6: nas.v1.VirtualMachineUsbDevice
+	(*VirtualMachineSnapshot)(nil),                // 7: nas.v1.VirtualMachineSnapshot
+	(*VirtualMachine)(nil),                        // 8: nas.v1.VirtualMachine
+	(*ListVirtualMachinesRequest)(nil),            // 9: nas.v1.ListVirtualMachinesRequest
+	(*ListVirtualMachinesResponse)(nil),           // 10: nas.v1.ListVirtualMachinesResponse
+	(*GetVirtualMachineRequest)(nil),              // 11: nas.v1.GetVirtualMachineRequest
+	(*CreateVirtualMachineRequest)(nil),           // 12: nas.v1.CreateVirtualMachineRequest
+	(*UpdateVirtualMachineRequest)(nil),           // 13: nas.v1.UpdateVirtualMachineRequest
+	(*DeleteVirtualMachineRequest)(nil),           // 14: nas.v1.DeleteVirtualMachineRequest
+	(*StartVirtualMachineRequest)(nil),            // 15: nas.v1.StartVirtualMachineRequest
+	(*StopVirtualMachineRequest)(nil),             // 16: nas.v1.StopVirtualMachineRequest
+	(*RebootVirtualMachineRequest)(nil),           // 17: nas.v1.RebootVirtualMachineRequest
+	(*OpenVirtualMachineConsoleRequest)(nil),      // 18: nas.v1.OpenVirtualMachineConsoleRequest
+	(*VirtualMachineConsoleSession)(nil),          // 19: nas.v1.VirtualMachineConsoleSession
+	(*ResetVirtualMachineRequest)(nil),            // 20: nas.v1.ResetVirtualMachineRequest
+	(*PauseVirtualMachineRequest)(nil),            // 21: nas.v1.PauseVirtualMachineRequest
+	(*ResumeVirtualMachineRequest)(nil),           // 22: nas.v1.ResumeVirtualMachineRequest
+	(*CloneVirtualMachineRequest)(nil),            // 23: nas.v1.CloneVirtualMachineRequest
+	(*AttachVirtualMachineMediaRequest)(nil),      // 24: nas.v1.AttachVirtualMachineMediaRequest
+	(*EjectVirtualMachineMediaRequest)(nil),       // 25: nas.v1.EjectVirtualMachineMediaRequest
+	(*ListVirtualMachineSnapshotsRequest)(nil),    // 26: nas.v1.ListVirtualMachineSnapshotsRequest
+	(*ListVirtualMachineSnapshotsResponse)(nil),   // 27: nas.v1.ListVirtualMachineSnapshotsResponse
+	(*CreateVirtualMachineSnapshotRequest)(nil),   // 28: nas.v1.CreateVirtualMachineSnapshotRequest
+	(*RollbackVirtualMachineSnapshotRequest)(nil), // 29: nas.v1.RollbackVirtualMachineSnapshotRequest
+	(*DeleteVirtualMachineSnapshotRequest)(nil),   // 30: nas.v1.DeleteVirtualMachineSnapshotRequest
+	(*WatchVirtualMachinesRequest)(nil),           // 31: nas.v1.WatchVirtualMachinesRequest
+	(*WatchVirtualMachinesResponse)(nil),          // 32: nas.v1.WatchVirtualMachinesResponse
+	(*timestamppb.Timestamp)(nil),                 // 33: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil),                 // 34: google.protobuf.FieldMask
 }
 var file_nas_v1_kvm_proto_depIdxs = []int32{
-	29, // 0: nas.v1.VirtualMachineSnapshot.create_time:type_name -> google.protobuf.Timestamp
-	0,  // 1: nas.v1.VirtualMachine.disks:type_name -> nas.v1.VirtualMachineDisk
-	1,  // 2: nas.v1.VirtualMachine.network_interfaces:type_name -> nas.v1.VirtualMachineNetworkInterface
-	2,  // 3: nas.v1.VirtualMachine.cloud_init:type_name -> nas.v1.VirtualMachineCloudInit
-	3,  // 4: nas.v1.VirtualMachine.pci_devices:type_name -> nas.v1.VirtualMachinePciDevice
-	4,  // 5: nas.v1.VirtualMachine.usb_devices:type_name -> nas.v1.VirtualMachineUsbDevice
-	6,  // 6: nas.v1.ListVirtualMachinesResponse.virtual_machines:type_name -> nas.v1.VirtualMachine
-	6,  // 7: nas.v1.CreateVirtualMachineRequest.virtual_machine:type_name -> nas.v1.VirtualMachine
-	6,  // 8: nas.v1.UpdateVirtualMachineRequest.virtual_machine:type_name -> nas.v1.VirtualMachine
-	30, // 9: nas.v1.UpdateVirtualMachineRequest.update_mask:type_name -> google.protobuf.FieldMask
-	5,  // 10: nas.v1.ListVirtualMachineSnapshotsResponse.snapshots:type_name -> nas.v1.VirtualMachineSnapshot
-	5,  // 11: nas.v1.CreateVirtualMachineSnapshotRequest.snapshot:type_name -> nas.v1.VirtualMachineSnapshot
-	12, // [12:12] is the sub-list for method output_type
-	12, // [12:12] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	33, // 0: nas.v1.VirtualMachineSnapshot.create_time:type_name -> google.protobuf.Timestamp
+	1,  // 1: nas.v1.VirtualMachine.disks:type_name -> nas.v1.VirtualMachineDisk
+	2,  // 2: nas.v1.VirtualMachine.cdroms:type_name -> nas.v1.VirtualMachineCdrom
+	3,  // 3: nas.v1.VirtualMachine.network_interfaces:type_name -> nas.v1.VirtualMachineNetworkInterface
+	4,  // 4: nas.v1.VirtualMachine.cloud_init:type_name -> nas.v1.VirtualMachineCloudInit
+	5,  // 5: nas.v1.VirtualMachine.pci_devices:type_name -> nas.v1.VirtualMachinePciDevice
+	6,  // 6: nas.v1.VirtualMachine.usb_devices:type_name -> nas.v1.VirtualMachineUsbDevice
+	8,  // 7: nas.v1.ListVirtualMachinesResponse.virtual_machines:type_name -> nas.v1.VirtualMachine
+	8,  // 8: nas.v1.CreateVirtualMachineRequest.virtual_machine:type_name -> nas.v1.VirtualMachine
+	8,  // 9: nas.v1.UpdateVirtualMachineRequest.virtual_machine:type_name -> nas.v1.VirtualMachine
+	34, // 10: nas.v1.UpdateVirtualMachineRequest.update_mask:type_name -> google.protobuf.FieldMask
+	7,  // 11: nas.v1.ListVirtualMachineSnapshotsResponse.snapshots:type_name -> nas.v1.VirtualMachineSnapshot
+	7,  // 12: nas.v1.CreateVirtualMachineSnapshotRequest.snapshot:type_name -> nas.v1.VirtualMachineSnapshot
+	0,  // 13: nas.v1.WatchVirtualMachinesResponse.event_type:type_name -> nas.v1.WatchVirtualMachinesResponse.EventType
+	8,  // 14: nas.v1.WatchVirtualMachinesResponse.virtual_machine:type_name -> nas.v1.VirtualMachine
+	8,  // 15: nas.v1.WatchVirtualMachinesResponse.snapshot:type_name -> nas.v1.VirtualMachine
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_nas_v1_kvm_proto_init() }
@@ -2457,13 +2711,14 @@ func file_nas_v1_kvm_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nas_v1_kvm_proto_rawDesc), len(file_nas_v1_kvm_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   29,
+			NumEnums:      1,
+			NumMessages:   32,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_nas_v1_kvm_proto_goTypes,
 		DependencyIndexes: file_nas_v1_kvm_proto_depIdxs,
+		EnumInfos:         file_nas_v1_kvm_proto_enumTypes,
 		MessageInfos:      file_nas_v1_kvm_proto_msgTypes,
 	}.Build()
 	File_nas_v1_kvm_proto = out.File
