@@ -234,6 +234,7 @@ func (a *Adapter) runCompose(ctx context.Context, unitDir string, projectName st
 	composeFile := filepath.Join(unitDir, "compose.yaml")
 	if len(args) > 0 && args[0] == "up" {
 		if data, err := os.ReadFile(composeFile); err == nil {
+			EnsureVolumeHostPaths(string(data))
 			a.ensureExternalNetworks(ctx, string(data))
 		}
 	}
@@ -1389,6 +1390,7 @@ func (a *Adapter) CreateApp(ctx context.Context, app domain.DockerApp) (*domain.
 	// When no host is specified in mapping, pick a random high port in 32000+ range
 	app.ComposeYAML = a.NormalizeComposePorts(ctx, app.ComposeYAML)
 	app.ComposeYAML = NormalizeComposeEnvironment(app.ComposeYAML)
+	app.ComposeYAML = a.NormalizeComposeVolumes(app.ID, app.ComposeYAML)
 
 	// Preemptively check if all published host ports are available
 	if err := a.checkComposeHostPortsAvailable(ctx, app.ComposeYAML, app.ID); err != nil {
@@ -1433,6 +1435,7 @@ func (a *Adapter) UpdateApp(ctx context.Context, app domain.DockerApp, fields []
 	// When no host is specified in mapping, pick a random high port in 32000+ range
 	app.ComposeYAML = a.NormalizeComposePorts(ctx, app.ComposeYAML)
 	app.ComposeYAML = NormalizeComposeEnvironment(app.ComposeYAML)
+	app.ComposeYAML = a.NormalizeComposeVolumes(app.ID, app.ComposeYAML)
 
 	// Preemptively check if all published host ports are available
 	if err := a.checkComposeHostPortsAvailable(ctx, app.ComposeYAML, app.ID); err != nil {
@@ -1528,6 +1531,13 @@ func (a *Adapter) StartApp(ctx context.Context, id string) (*domain.DockerApp, e
 	if _, err := os.Stat(composePath); err == nil {
 		if _, busy := a.deployingApps[id]; !busy {
 			if content, err := os.ReadFile(composePath); err == nil {
+				// Normalize compose volumes, environment, and ports to auto-heal any legacy or corrupted files on disk
+				normalized := a.NormalizeComposeVolumes(id, string(content))
+				normalized = NormalizeComposeEnvironment(normalized)
+				if normalized != string(content) {
+					_ = os.WriteFile(composePath, []byte(normalized), 0644)
+					content = []byte(normalized)
+				}
 				if err := a.checkComposeHostPortsAvailable(ctx, string(content), id); err != nil {
 					return nil, err
 				}
@@ -2900,6 +2910,19 @@ func (a *Adapter) pickRandomHighPort(ctx context.Context, proto string, usedPort
 	return cand
 }
 
+// NormalizeComposeVolumes rewrites TrueNAS volume descriptors, filters out settings,
+// and normalizes volume mounts to the NAS apps pool.
+func (a *Adapter) NormalizeComposeVolumes(appID, composeYAML string) string {
+	pool := a.mainPool
+	if pool == "" {
+		pool = config.GetGlobal().System.MainPool
+	}
+	if pool == "" {
+		pool = "tank"
+	}
+	return NormalizeComposeVolumes(appID, pool, composeYAML)
+}
+
 // NormalizeComposePorts inspects the Compose YAML and assigns a random high host port (32000-65000)
 // to any published port mapping that omits an explicit host port.
 func (a *Adapter) NormalizeComposePorts(ctx context.Context, composeYAML string) string {
@@ -3104,6 +3127,14 @@ func (a *Adapter) startDeploymentLocked(dir, id, msg string) {
 
 	go func() {
 		defer cancel()
+		composeFile := filepath.Join(dir, "compose.yaml")
+		if content, err := os.ReadFile(composeFile); err == nil {
+			normalized := a.NormalizeComposeVolumes(id, string(content))
+			normalized = NormalizeComposeEnvironment(normalized)
+			if normalized != string(content) {
+				_ = os.WriteFile(composeFile, []byte(normalized), 0644)
+			}
+		}
 		runErr := a.runCompose(bgCtx, dir, id, "up", "-d", "--remove-orphans")
 		a.mu.Lock()
 		defer a.mu.Unlock()

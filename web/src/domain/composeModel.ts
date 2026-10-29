@@ -218,6 +218,31 @@ export function unescapeComposeEnvValue(val: string): string {
   return val.replace(/\$\$/g, '$');
 }
 
+/**
+ * Detects whether a volume entry is actually an internal TrueNAS setting / descriptor
+ * mistakenly serialized as a volume mapping (e.g. ix_volume:/type or false:/acl_enable).
+ */
+export function isTrueNASSettingVolume(source: string, target: string): boolean {
+  if (source === 'true' || source === 'false') {
+    return true;
+  }
+  const cleanTarget = target.replace(/^\/+/, '').toLowerCase();
+  switch (cleanTarget) {
+    case 'type':
+    case 'acl_enable':
+    case 'dataset_name':
+    case 'acl_entries':
+    case 'cifs_config':
+    case 'nfs_config':
+    case 'read_only':
+    case 'host_path_config':
+    case 'ix_volume_config':
+      return true;
+    default:
+      return false;
+  }
+}
+
 // =============================================================================
 // YAML <-> Form Bi-directional Converters
 // =============================================================================
@@ -348,23 +373,24 @@ export function composeYamlToForm(
     if (Array.isArray(svc.ports)) {
       for (const p of svc.ports) {
         if (typeof p === 'string' || typeof p === 'number') {
-          const str = String(p);
+          const str = String(p).trim().replace(/^["']+|["']+$/g, '');
           const parts = str.split(':');
           if (parts.length >= 2) {
-            let hostP = parts[0];
+            let hostP = parts[0].replace(/^["']+|["']+$/g, '').trim();
             let containerPart = parts[1];
             if (parts.length === 3) {
-              hostP = parts[1];
+              hostP = parts[1].replace(/^["']+|["']+$/g, '').trim();
               containerPart = parts[2];
             }
             const [contP, proto] = containerPart.split('/');
-            let cleanHostP = hostP.trim();
+            let cleanHostP = hostP.replace(/^["']+|["']+$/g, '').trim();
             if (!cleanHostP) {
               cleanHostP = String(generateRandomHighPort());
             }
+            const cleanContP = (contP || '').replace(/^["']+|["']+$/g, '').trim();
             serviceModel.ports.push({
               hostPort: cleanHostP,
-              containerPort: contP.trim(),
+              containerPort: cleanContP,
               protocol: (proto?.toLowerCase() === 'udp' ? 'udp' : 'tcp') as 'tcp' | 'udp',
               publishToHost: true,
             });
@@ -373,19 +399,21 @@ export function composeYamlToForm(
             // Pick a random high port in 32000+ range
             const [contP, proto] = str.split('/');
             const randHost = generateRandomHighPort();
+            const cleanContP = (contP || '').replace(/^["']+|["']+$/g, '').trim();
             serviceModel.ports.push({
               hostPort: String(randHost),
-              containerPort: contP.trim(),
+              containerPort: cleanContP,
               protocol: (proto?.toLowerCase() === 'udp' ? 'udp' : 'tcp') as 'tcp' | 'udp',
               publishToHost: true,
             });
           }
         } else if (p && typeof p === 'object') {
           const hasHost = p.published !== undefined && p.published !== null && String(p.published).trim() !== '';
-          const hostP = hasHost ? String(p.published).trim() : String(generateRandomHighPort());
+          const hostP = hasHost ? String(p.published).replace(/^["']+|["']+$/g, '').trim() : String(generateRandomHighPort());
+          const contP = String(p.target || '').replace(/^["']+|["']+$/g, '').trim();
           serviceModel.ports.push({
             hostPort: hostP,
-            containerPort: String(p.target || '').trim(),
+            containerPort: contP,
             protocol: (p.protocol?.toLowerCase() === 'udp' ? 'udp' : 'tcp') as 'tcp' | 'udp',
             publishToHost: true,
           });
@@ -445,19 +473,43 @@ export function composeYamlToForm(
     if (Array.isArray(svc.volumes)) {
       for (const v of svc.volumes) {
         if (typeof v === 'string') {
-          const parts = v.split(':');
+          const cleanV = v.trim().replace(/^["']+|["']+$/g, '').trim();
+          const parts = cleanV.split(':');
           if (parts.length >= 2) {
-            const source = parts[0].trim();
-            const target = parts[1].trim();
-            const mode = (parts[2]?.trim().toLowerCase() === 'ro' ? 'ro' : 'rw') as 'rw' | 'ro';
+            let source = parts[0].replace(/^["']+|["']+$/g, '').trim();
+            let target = parts[1].replace(/^["']+|["']+$/g, '').trim();
+            const mode = (parts[2]?.replace(/^["']+|["']+$/g, '').trim().toLowerCase() === 'ro' ? 'ro' : 'rw') as 'rw' | 'ro';
+
+            // Filter out TrueNAS settings mistakenly serialized as volume lines
+            if (isTrueNASSettingVolume(source, target)) {
+              continue;
+            }
+
+            // Rewrite TrueNAS ix_volume reference
+            if (source === 'ix_volume' || source === 'ix-volume' || source.startsWith('ix_volume')) {
+              const leaf = target ? target.replace(/^\/+/, '').split('/').pop() || 'data' : 'data';
+              source = `/mnt/tank/apps/${serviceModel.name}/${leaf}`;
+            }
+
+            // Fix /path target
+            if (target === '/path' && source.endsWith('/path')) {
+              target = serviceModel.name.includes('elastic') ? '/usr/share/elasticsearch/data' : '/data';
+              source = source.replace(/\/path$/, '/data');
+            }
+
             serviceModel.volumes.push({ source, target, mode });
           } else {
-            serviceModel.volumes.push({ source: '', target: v.trim(), mode: 'rw' });
+            serviceModel.volumes.push({ source: '', target: cleanV, mode: 'rw' });
           }
         } else if (v && typeof v === 'object') {
+          const source = String(v.source || '').replace(/^["']+|["']+$/g, '').trim();
+          const target = String(v.target || '').replace(/^["']+|["']+$/g, '').trim();
+          if (isTrueNASSettingVolume(source, target)) {
+            continue;
+          }
           serviceModel.volumes.push({
-            source: v.source || '',
-            target: v.target || '',
+            source,
+            target,
             mode: v.read_only ? 'ro' : 'rw',
           });
         }
@@ -674,13 +726,14 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
 
     if (publishedPorts.length > 0) {
       svcObj.ports = publishedPorts.map((p) => {
-        let hostP = p.hostPort.trim();
+        let hostP = p.hostPort.replace(/^["']+|["']+$/g, '').trim();
         if (!hostP) {
           hostP = String(generateRandomHighPort());
           p.hostPort = hostP;
         }
+        const cleanContP = p.containerPort.replace(/^["']+|["']+$/g, '').trim();
         const protoSuffix = p.protocol === 'udp' ? '/udp' : '';
-        const portStr = `${hostP}:${p.containerPort.trim()}${protoSuffix}`;
+        const portStr = `${hostP}:${cleanContP}${protoSuffix}`;
         const s = new YAML.Scalar(portStr);
         s.type = 'QUOTE_DOUBLE';
         return s;
@@ -690,7 +743,8 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
     if (internalPorts.length > 0) {
       svcObj.expose = internalPorts.map((p) => {
         const protoSuffix = p.protocol === 'udp' ? '/udp' : '';
-        const portStr = `${p.containerPort.trim()}${protoSuffix}`;
+        const cleanContP = p.containerPort.replace(/^["']+|["']+$/g, '').trim();
+        const portStr = `${cleanContP}${protoSuffix}`;
         const s = new YAML.Scalar(portStr);
         s.type = 'QUOTE_DOUBLE';
         return s;
@@ -708,10 +762,12 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
     if (activeVols.length > 0) {
       svcObj.volumes = activeVols.map((v) => {
         const modeSuffix = v.mode === 'ro' ? ':ro' : '';
-        if (v.source.trim()) {
-          return `${v.source.trim()}:${v.target.trim()}${modeSuffix}`;
+        const cleanSrc = v.source.replace(/^["']+|["']+$/g, '').trim();
+        const cleanTgt = v.target.replace(/^["']+|["']+$/g, '').trim();
+        if (cleanSrc) {
+          return `${cleanSrc}:${cleanTgt}${modeSuffix}`;
         }
-        return `${v.target.trim()}${modeSuffix}`;
+        return `${cleanTgt}${modeSuffix}`;
       });
     }
 

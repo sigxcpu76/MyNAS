@@ -341,4 +341,26 @@ services:
     expect(envs.find((e) => e.key === 'BCRYPT_HASH')?.value).toBe('$2y$10$abcdef');
     expect(envs.find((e) => e.key === 'COMPOSE_VAR')?.value).toBe('${PUID:-1000}');
   });
+
+  it('cleans ports and volumes with surrounding quotes without escaping them to backslash-quotes', () => {
+    // Simulating input where ports or volumes had escaped or surrounding quotes
+    const yamlWithQuotes = `services:
+  esphome:
+    image: ghcr.io/esphome/esphome:2026.10.0
+    ports:
+      - "\\\"36052:80\\\""
+    volumes:
+      - "\\\"/mnt/tank/apps/esphome:/data\\\""
+`;
+    const form = composeYamlToForm(yamlWithQuotes, 'esphome', 'ESPHome');
+    expect(form.services[0].ports[0].hostPort).toBe('36052');
+    expect(form.services[0].ports[0].containerPort).toBe('80');
+    expect(form.services[0].volumes[0].source).toBe('/mnt/tank/apps/esphome');
+    expect(form.services[0].volumes[0].target).toBe('/data');
+
+    const generatedYaml = formToComposeYaml(form);
+    expect(generatedYaml).not.toContain('\\"');
+    expect(generatedYaml).toContain('"36052:80"');
+    expect(generatedYaml).toContain('/mnt/tank/apps/esphome:/data');
+  });
 });
