@@ -892,9 +892,9 @@ async function handleDeleteWebdav(share: WebdavShare) {
             <tr>
               <SortableTh :sort="cifsSort" sort-key="share">SMB Share</SortableTh>
               <SortableTh :sort="cifsSort" sort-key="path">Filesystem Path & Description</SortableTh>
-              <SortableTh :sort="cifsSort" sort-key="acl">Access Control</SortableTh>
-              <SortableTh :sort="cifsSort" sort-key="mode">Permissions</SortableTh>
-              <SortableTh :sort="cifsSort" sort-key="features">VFS Features & Masks</SortableTh>
+              <SortableTh :sort="cifsSort" sort-key="acl" class="col-desktop-only">Access Control</SortableTh>
+              <SortableTh :sort="cifsSort" sort-key="mode" class="col-desktop-only">Permissions</SortableTh>
+              <SortableTh :sort="cifsSort" sort-key="features" class="col-desktop-only">VFS Features & Masks</SortableTh>
               <th style="width: 90px; text-align: right">Actions</th>
             </tr>
           </thead>
@@ -913,19 +913,19 @@ async function handleDeleteWebdav(share: WebdavShare) {
                     <SkeletonBox width="120px" height="11px" />
                   </div>
                 </td>
-                <td>
+                <td class="col-desktop-only">
                   <div style="display: flex; flex-direction: column; gap: 4px">
                     <SkeletonBox width="110px" height="13px" />
                     <SkeletonBox width="90px" height="13px" />
                   </div>
                 </td>
-                <td>
+                <td class="col-desktop-only">
                   <div style="display: flex; gap: 6px">
                     <SkeletonBox width="45px" height="20px" rounded="10px" />
                     <SkeletonBox width="45px" height="20px" rounded="10px" />
                   </div>
                 </td>
-                <td>
+                <td class="col-desktop-only">
                   <SkeletonBox width="120px" height="16px" />
                 </td>
                 <td style="text-align: right">
@@ -958,7 +958,7 @@ async function handleDeleteWebdav(share: WebdavShare) {
                   {{ s.comment }}
                 </div>
               </td>
-              <td class="mono" style="font-size: 11.5px">
+              <td class="mono col-desktop-only" style="font-size: 11.5px">
                 <div>
                   <span style="color: var(--text-secondary)">Users:</span>
                   <strong>{{ (s.validUsers || []).join(', ') || 'all valid' }}</strong>
@@ -971,7 +971,7 @@ async function handleDeleteWebdav(share: WebdavShare) {
                   Force: {{ s.forceUser || '—' }} / {{ s.forceGroup || '—' }}
                 </div>
               </td>
-              <td>
+              <td class="col-desktop-only">
                 <div style="display: flex; gap: 4px; flex-wrap: wrap">
                   <span class="badge" :class="s.readOnly ? 'badge-warning' : 'badge-success'">
                     {{ s.readOnly ? 'RO' : 'RW' }}
@@ -981,7 +981,7 @@ async function handleDeleteWebdav(share: WebdavShare) {
                   </span>
                 </div>
               </td>
-              <td>
+              <td class="col-desktop-only">
                 <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 3px">
                   <span v-if="s.shadowCopy" class="badge badge-purple" title="ZFS Snapshots (Windows Previous Versions)">
                     Snapshots
@@ -1215,8 +1215,8 @@ async function handleDeleteWebdav(share: WebdavShare) {
             <tr>
               <SortableTh :sort="webdavSort" sort-key="endpoint">WebDAV Endpoint</SortableTh>
               <SortableTh :sort="webdavSort" sort-key="path">Target Path & Description</SortableTh>
-              <SortableTh :sort="webdavSort" sort-key="identity">Allowed Identity</SortableTh>
-              <SortableTh :sort="webdavSort" sort-key="access">Permissions</SortableTh>
+              <SortableTh :sort="webdavSort" sort-key="identity" class="col-desktop-only">Allowed Identity</SortableTh>
+              <SortableTh :sort="webdavSort" sort-key="access" class="col-desktop-only">Permissions</SortableTh>
               <SortableTh :sort="webdavSort" sort-key="status">Status</SortableTh>
               <th style="width: 90px; text-align: right">Actions</th>
             </tr>
@@ -1236,13 +1236,13 @@ async function handleDeleteWebdav(share: WebdavShare) {
                     <SkeletonBox width="120px" height="11px" />
                   </div>
                 </td>
-                <td>
+                <td class="col-desktop-only">
                   <div style="display: flex; flex-direction: column; gap: 4px">
                     <SkeletonBox width="110px" height="13px" />
                     <SkeletonBox width="80px" height="13px" />
                   </div>
                 </td>
-                <td><SkeletonBox width="45px" height="20px" rounded="10px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="45px" height="20px" rounded="10px" /></td>
                 <td><SkeletonBox width="55px" height="20px" rounded="10px" /></td>
                 <td style="text-align: right">
                   <div style="display: inline-flex; gap: 6px; justify-content: flex-end">
@@ -1315,7 +1315,7 @@ async function handleDeleteWebdav(share: WebdavShare) {
                   {{ w.description }}
                 </div>
               </td>
-              <td class="mono" style="font-size: 11.5px">
+              <td class="mono col-desktop-only" style="font-size: 11.5px">
                 <div>
                   <span style="color: var(--text-secondary)">Users:</span>
                   <strong>{{ (w.allowedUsers || []).join(', ') || 'All Authenticated' }}</strong>
@@ -1325,7 +1325,7 @@ async function handleDeleteWebdav(share: WebdavShare) {
                   {{ (w.allowedGroups || []).join(', ') || '—' }}
                 </div>
               </td>
-              <td>
+              <td class="col-desktop-only">
                 <span class="badge" :class="w.readOnly ? 'badge-warning' : 'badge-success'">
                   {{ w.readOnly ? 'Read-Only' : 'Read-Write' }}
                 </span>

@@ -1110,10 +1110,10 @@ function copyTemplatePath(path: string) {
             <tr>
               <SortableTh :sort="lxcSort" sort-key="name">Name</SortableTh>
               <SortableTh :sort="lxcSort" sort-key="state">State</SortableTh>
-              <SortableTh :sort="lxcSort" sort-key="autostart">Autostart</SortableTh>
-              <SortableTh :sort="lxcSort" sort-key="distro">Distro / Release / Arch</SortableTh>
+              <SortableTh :sort="lxcSort" sort-key="autostart" class="col-desktop-only">Autostart</SortableTh>
+              <SortableTh :sort="lxcSort" sort-key="distro" class="col-desktop-only">Distro / Release / Arch</SortableTh>
               <SortableTh :sort="lxcSort" sort-key="ipv4">IPv4 Address</SortableTh>
-              <SortableTh :sort="lxcSort" sort-key="resources">Resources</SortableTh>
+              <SortableTh :sort="lxcSort" sort-key="resources" class="col-desktop-only">Resources</SortableTh>
               <th style="text-align: right">Actions</th>
             </tr>
           </thead>
@@ -1128,10 +1128,10 @@ function copyTemplatePath(path: string) {
                   </div>
                 </td>
                 <td><SkeletonBox width="65px" height="20px" rounded="10px" /></td>
-                <td><SkeletonBox width="60px" height="20px" rounded="10px" /></td>
-                <td><SkeletonBox width="100px" height="14px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="60px" height="20px" rounded="10px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="100px" height="14px" /></td>
                 <td><SkeletonBox width="95px" height="14px" /></td>
-                <td><SkeletonBox width="110px" height="14px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="110px" height="14px" /></td>
                 <td style="text-align: right">
                   <div style="display: inline-flex; gap: 6px">
                     <SkeletonBox width="26px" height="26px" rounded="4px" />
@@ -1198,7 +1198,7 @@ function copyTemplatePath(path: string) {
               </td>
 
               <!-- Autostart Toggle Badge -->
-              <td>
+              <td class="col-desktop-only">
                 <button
                   type="button"
                   class="badge"
@@ -1217,7 +1217,7 @@ function copyTemplatePath(path: string) {
               </td>
 
               <!-- Distro / Release / Arch -->
-              <td class="mono">
+              <td class="mono col-desktop-only">
                 {{ lx.distribution }} / {{ lx.release }} ({{ lx.architecture }})
               </td>
 
@@ -1227,7 +1227,7 @@ function copyTemplatePath(path: string) {
               </td>
 
               <!-- Resources -->
-              <td class="mono" style="font-size: 12px">
+              <td class="mono col-desktop-only" style="font-size: 12px">
                 <div>{{ lx.cpuCores }} Cores · {{ lx.memoryLimitMib }} MiB</div>
                 <div v-if="lx.mountPoints && lx.mountPoints.length > 0" style="font-size: 11px; color: var(--text-muted)">
                   {{ lx.mountPoints.length }} bind mount{{ lx.mountPoints.length > 1 ? 's' : '' }}

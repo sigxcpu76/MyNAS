@@ -888,18 +888,18 @@ function viewPoolDatasets(poolName: string) {
           </div>
         </div>
 
-        <div style="display: flex; align-items: center; gap: 10px">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
           <button class="btn btn-sm" :disabled="nasState.loading" @click="refreshAllData">
-            <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" />
-            Refresh
+            <MdiIcon :path="mdiRefresh" size="14" :class="{ 'spin-icon': nasState.loading }" />
+            <span class="hide-mobile" style="margin-left: 4px">Refresh</span>
           </button>
           <button class="btn btn-sm" @click="openImportPoolModal">
-            <MdiIcon :path="mdiDatabaseImportOutline" size="15" style="margin-right: 4px" />
-            Import Pool
+            <MdiIcon :path="mdiDatabaseImportOutline" size="15" />
+            <span style="margin-left: 4px">Import</span>
           </button>
           <button class="btn btn-primary btn-sm" @click="openCreatePoolModal">
-            <MdiIcon :path="mdiPlus" size="16" style="margin-right: 4px" />
-            New Pool
+            <MdiIcon :path="mdiPlus" size="16" />
+            <span style="margin-left: 4px">New Pool</span>
           </button>
         </div>
       </div>
@@ -2407,6 +2407,12 @@ function viewPoolDatasets(poolName: string) {
   grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 18px;
   width: 100%;
+}
+
+@media (max-width: 640px) {
+  .pools-grid {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 .pool-card {

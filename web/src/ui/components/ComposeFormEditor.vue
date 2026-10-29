@@ -695,8 +695,8 @@ function copyYaml() {
     <!-- Top Metadata Bar -->
     <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px; margin-bottom: 16px">
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px">
-        <div style="display: flex; gap: 14px; flex: 1; min-width: 320px">
-          <div style="flex: 1">
+        <div style="display: flex; gap: 12px; flex: 1; min-width: 0; flex-wrap: wrap">
+          <div style="flex: 1; min-width: 140px">
             <label class="form-label" style="margin-bottom: 4px; font-size: 12px">
               App ID *
             </label>
@@ -709,7 +709,7 @@ function copyYaml() {
               style="padding: 6px 10px; font-size: 13px"
             />
           </div>
-          <div style="flex: 1">
+          <div style="flex: 1; min-width: 140px">
             <label class="form-label" style="margin-bottom: 4px; font-size: 12px">
               Display Title
             </label>
@@ -1870,7 +1870,7 @@ function copyYaml() {
     </div>
 
     <!-- Action Buttons -->
-    <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; border-top: 1px solid var(--border-subtle); padding-top: 14px">
+    <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; border-top: 1px solid var(--border-subtle); padding-top: 14px; flex-wrap: wrap">
       <button class="btn" :disabled="props.isSaving || isSubmitting" @click="emit('cancel')">Cancel</button>
       <button
         class="btn btn-primary"
@@ -1883,7 +1883,7 @@ function copyYaml() {
         <span>
           {{
             (props.isSaving || isSubmitting)
-              ? (props.isEditMode ? 'Saving & Redeploying...' : 'Deploying Application (pulling & starting)...')
+              ? (props.isEditMode ? 'Saving & Redeploying...' : 'Deploying Application...')
               : (props.isEditMode ? 'Save & Redeploy Stack' : 'Deploy Application')
           }}
         </span>

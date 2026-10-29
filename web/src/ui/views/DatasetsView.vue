@@ -564,12 +564,12 @@ onMounted(async () => {
         <table class="data-table">
           <thead>
             <tr>
-              <SortableTh :sort="datasetSort" sort-key="name" style="min-width: 260px">Name</SortableTh>
-              <SortableTh :sort="datasetSort" sort-key="pool" style="min-width: 100px">Pool</SortableTh>
-              <SortableTh :sort="datasetSort" sort-key="usage" style="min-width: 150px">Space Usage</SortableTh>
-              <th style="min-width: 210px">Properties</th>
-              <SortableTh :sort="datasetSort" sort-key="snapshots" style="min-width: 110px">Snapshots</SortableTh>
-              <th style="min-width: 150px; text-align: right">Actions</th>
+              <SortableTh :sort="datasetSort" sort-key="name" style="min-width: 200px">Name</SortableTh>
+              <SortableTh :sort="datasetSort" sort-key="pool" style="min-width: 80px">Pool</SortableTh>
+              <SortableTh :sort="datasetSort" sort-key="usage" style="min-width: 130px">Space Usage</SortableTh>
+              <th class="col-desktop-only" style="min-width: 210px">Properties</th>
+              <SortableTh :sort="datasetSort" sort-key="snapshots" class="col-desktop-only" style="min-width: 110px">Snapshots</SortableTh>
+              <th style="min-width: 110px; text-align: right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -584,8 +584,8 @@ onMounted(async () => {
                 </td>
                 <td><SkeletonBox width="60px" height="20px" rounded="10px" /></td>
                 <td><SkeletonBox width="90px" height="14px" /></td>
-                <td><SkeletonBox width="110px" height="14px" /></td>
-                <td><SkeletonBox width="45px" height="20px" rounded="10px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="110px" height="14px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="45px" height="20px" rounded="10px" /></td>
                 <td style="text-align: right">
                   <div style="display: inline-flex; gap: 6px; justify-content: flex-end">
                     <SkeletonBox width="26px" height="26px" rounded="4px" />
@@ -669,7 +669,7 @@ onMounted(async () => {
               </td>
 
               <!-- Properties -->
-              <td>
+              <td class="col-desktop-only">
                 <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap">
                   <span class="badge badge-info mono" style="font-size: 10px">{{ node.compression }}</span>
                   <span class="badge badge-neutral mono" style="font-size: 10px">{{ node.recordsize }}</span>
@@ -690,7 +690,7 @@ onMounted(async () => {
               </td>
 
               <!-- Snapshots -->
-              <td>
+              <td class="col-desktop-only">
                 <div class="mono" style="font-size: 12px">{{ node.snapshotsCount || 0 }} snap{{ node.snapshotsCount === 1 ? '' : 's' }}</div>
                 <div v-if="node.lastSnapshot" class="mono" style="font-size: 10.5px; color: var(--success-text); margin-top: 2px" :title="node.lastSnapshot">
                   {{ node.lastSnapshot.split('@')[1] || node.lastSnapshot }}

@@ -1577,19 +1577,20 @@ async function handleWizardSubmit() {
           <h2 class="card-title" style="font-size: 17px">Virtual Machines</h2>
         </div>
 
-        <div style="display: flex; gap: 10px; align-items: center">
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
           <div class="search-input-wrap">
             <MdiIcon :path="mdiMagnify" size="16" class="search-icon" />
             <input
               v-model="searchQuery"
               class="input input-sm mono"
-              placeholder="Filter VMs, IPs, OS..."
-              style="padding-left: 28px; width: 220px"
+              placeholder="Filter VMs..."
+              style="padding-left: 28px; width: 100%; max-width: 220px"
             />
           </div>
 
           <button class="btn btn-sm" @click="refreshVms()">
-            <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" /> Refresh
+            <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" />
+            <span class="hide-mobile">Refresh</span>
           </button>
 
           <button class="btn btn-sm btn-primary" @click="openCreateWizard">
@@ -1604,9 +1605,9 @@ async function handleWizardSubmit() {
           <thead>
             <tr>
               <SortableTh :sort="vmSort" sort-key="name">Name</SortableTh>
-              <SortableTh :sort="vmSort" sort-key="vcpus">vCPUs</SortableTh>
+              <SortableTh :sort="vmSort" sort-key="vcpus" class="col-desktop-only">vCPUs</SortableTh>
               <SortableTh :sort="vmSort" sort-key="memory">Memory</SortableTh>
-              <SortableTh :sort="vmSort" sort-key="ip">IP Addresses</SortableTh>
+              <SortableTh :sort="vmSort" sort-key="ip" class="col-desktop-only">IP Addresses</SortableTh>
               <th style="text-align: right">Actions</th>
             </tr>
           </thead>
@@ -1615,9 +1616,9 @@ async function handleWizardSubmit() {
             <template v-if="nasState.loading && nasState.vms.length === 0">
               <tr v-for="r in 4" :key="r">
                 <td><SkeletonBox width="140px" height="15px" /></td>
-                <td><SkeletonBox width="30px" height="14px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="30px" height="14px" /></td>
                 <td><SkeletonBox width="60px" height="14px" /></td>
-                <td><SkeletonBox width="110px" height="14px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="110px" height="14px" /></td>
                 <td style="text-align: right">
                   <div style="display: inline-flex; gap: 6px; justify-content: flex-end">
                     <SkeletonBox width="26px" height="26px" rounded="4px" />
@@ -1677,7 +1678,7 @@ async function handleWizardSubmit() {
               </td>
 
               <!-- vCPUs (total threads) -->
-              <td class="mono" style="font-size: 12px">{{ vm.vcpus }}</td>
+              <td class="mono col-desktop-only" style="font-size: 12px">{{ vm.vcpus }}</td>
 
               <!-- Memory -->
               <td class="mono" style="font-size: 12px; white-space: nowrap">
@@ -1685,7 +1686,7 @@ async function handleWizardSubmit() {
               </td>
 
               <!-- IP Addresses -->
-              <td>
+              <td class="col-desktop-only">
                 <div v-if="visibleGuestIps(vm).length > 0" style="display: flex; flex-direction: column; gap: 2px">
                   <span
                     v-for="ip in visibleGuestIps(vm).slice(0, 2)"

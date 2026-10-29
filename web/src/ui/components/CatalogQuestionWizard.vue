@@ -137,11 +137,18 @@ function generateRandomPassword(variable: string) {
   notify('info', 'Generated secure random password');
 }
 
-const cleanAppId = computed(() => toZfsSafeSlug(props.app.appId || props.app.title) || 'app');
+const cleanAppId = computed(() => {
+  const raw = props.app.title || props.app.appId || 'app';
+  const lastPart = raw.includes('.') ? raw.split('.').pop()! : raw;
+  return toZfsSafeSlug(props.app.title || lastPart) || 'app';
+});
 
 function resetStoragePath(variable: string) {
   const parts = variable.split('.');
-  const leaf = parts[parts.length - 1] || 'data';
+  let leaf = parts[parts.length - 1] || 'data';
+  if (leaf === 'host_path' || leaf === 'path') {
+    leaf = parts.length > 1 ? parts[parts.length - 2] : 'data';
+  }
   answers[variable] = `/mnt/${props.appsPool}/apps/${cleanAppId.value}/${leaf}`;
 }
 
@@ -231,7 +238,8 @@ watch(
             @click="showLivePreview = !showLivePreview"
           >
             <MdiIcon :path="mdiCodeBraces" size="16" />
-            <span>{{ showLivePreview ? 'Hide YAML Preview' : 'Show YAML Preview' }}</span>
+            <span class="hide-mobile">{{ showLivePreview ? 'Hide YAML Preview' : 'Show YAML Preview' }}</span>
+            <span class="show-mobile-only">{{ showLivePreview ? 'Form' : 'YAML' }}</span>
           </button>
           <button class="btn btn-sm btn-icon" style="padding: 4px" @click="emit('close')">
             <MdiIcon :path="mdiClose" size="18" />
@@ -259,7 +267,7 @@ watch(
       </div>
 
       <!-- Main Layout Body (Tabs + Split Preview) -->
-      <div class="wizard-content-area">
+      <div class="wizard-content-area" :class="{ 'show-preview-mobile': showLivePreview }">
         <!-- Left Side: Wizard Form Tabs & Fields -->
         <div class="wizard-form-pane">
           <!-- Top Horizontal Category Navigation Bar -->
@@ -795,5 +803,42 @@ input:checked + .switch-slider {
 
 input:checked + .switch-slider:before {
   transform: translateX(16px);
+}
+
+@media (max-width: 768px) {
+  .wizard-content-area {
+    flex-direction: column !important;
+  }
+
+  .wizard-content-area.show-preview-mobile .wizard-form-pane {
+    display: none !important;
+  }
+
+  .wizard-content-area.show-preview-mobile .wizard-preview-pane {
+    display: flex !important;
+    height: 100% !important;
+    flex: 1 !important;
+  }
+
+  .wizard-desc-banner {
+    flex-wrap: wrap !important;
+  }
+
+  .group-info-bar {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+  }
+
+  .wizard-footer {
+    flex-direction: column-reverse !important;
+    gap: 10px !important;
+  }
+
+  .wizard-footer > div {
+    width: 100% !important;
+    display: flex !important;
+    justify-content: space-between !important;
+  }
 }
 </style>

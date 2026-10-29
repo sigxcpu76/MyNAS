@@ -220,7 +220,7 @@ const catalogApps = ref<CatalogApp[]>(nasState.catalogApps || []);
 const isLoadingCatalog = ref(false);
 const isSyncingCatalog = ref(false);
 const catalogSearchQuery = ref('');
-const catalogSelectedTrain = ref<'ALL' | 'stable' | 'community'>('ALL');
+const catalogSelectedTrain = ref<'ALL' | 'stable' | 'community' | 'casaos' | 'dokploy'>('ALL');
 const catalogSelectedCategory = ref<string>('ALL');
 const catalogLastSyncTime = ref<string>(nasState.catalogLastSync || '');
 const catalogTotalCount = ref<number>(nasState.catalogApps?.length || 0);
@@ -341,11 +341,12 @@ async function importFromCatalog(app: CatalogApp) {
       notify('info', `Opened Setup Wizard for "${detailed.title || detailed.appId}"`);
     } else {
       installTitle.value = detailed.title || detailed.appId;
-      installAppId.value = toZfsSafeSlug(installTitle.value);
-      const resolvedImg = detailed.containerImage || `${detailed.appId}:latest`;
+      const rawSlug = detailed.appId && detailed.appId.includes('.') ? detailed.appId.split('.').pop()! : (detailed.title || detailed.appId);
+      installAppId.value = toZfsSafeSlug(detailed.title || rawSlug);
+      const resolvedImg = detailed.containerImage || `${toZfsSafeSlug(rawSlug)}:latest`;
       installComposeYaml.value =
         detailed.composeYaml ||
-        `services:\n  ${detailed.appId}:\n    image: ${resolvedImg}\n`;
+        `services:\n  ${installAppId.value}:\n    image: ${resolvedImg}\n`;
       activeInstallTemplate.value = null;
       installEditorKey.value++;
       isCatalogModalOpen.value = false;
@@ -379,11 +380,12 @@ function handleWizardSkip() {
   if (!wizardCatalogApp.value) return;
   const app = wizardCatalogApp.value;
   installTitle.value = app.title || app.appId;
-  installAppId.value = toZfsSafeSlug(installTitle.value);
-  const resolvedImg = app.containerImage || `${app.appId}:latest`;
+  const rawSlug = app.appId && app.appId.includes('.') ? app.appId.split('.').pop()! : (app.title || app.appId);
+  installAppId.value = toZfsSafeSlug(app.title || rawSlug);
+  const resolvedImg = app.containerImage || `${toZfsSafeSlug(rawSlug)}:latest`;
   installComposeYaml.value =
     app.composeYaml ||
-    `services:\n  ${app.appId}:\n    image: ${resolvedImg}\n`;
+    `services:\n  ${installAppId.value}:\n    image: ${resolvedImg}\n`;
   activeInstallTemplate.value = null;
   installEditorKey.value++;
   isQuestionWizardOpen.value = false;
@@ -892,17 +894,17 @@ onUnmounted(() => {
 <template>
   <div class="apps-container">
     <!-- Header & Action Bar -->
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px">
       <div>
-        <h2 style="font-size: 24px; font-weight: 700; color: var(--text-primary)">
+        <h2 style="font-size: 22px; font-weight: 700; color: var(--text-primary); margin: 0">
           Apps
         </h2>
       </div>
 
-      <div style="display: flex; gap: 10px; align-items: center">
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
         <button class="btn btn-sm" :disabled="isRefreshing" @click="refreshApps">
-          <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" />
-          {{ isRefreshing ? 'Refreshing...' : 'Refresh' }}
+          <MdiIcon :path="mdiRefresh" size="14" :class="{ 'spin-icon': isRefreshing }" />
+          <span class="hide-mobile" style="margin-left: 4px">{{ isRefreshing ? 'Refreshing...' : 'Refresh' }}</span>
         </button>
 
         <button
@@ -913,7 +915,8 @@ onUnmounted(() => {
           @click="openDatasetModal"
         >
           <MdiIcon :path="mdiFolderOutline" size="16" style="color: var(--accent-primary)" />
-          <span>Dataset: {{ nasState.dockerConfig?.dataset || nasState.dockerConfig?.pool || 'None' }}</span>
+          <span class="hide-mobile">Dataset: {{ nasState.dockerConfig?.dataset || nasState.dockerConfig?.pool || 'None' }}</span>
+          <span class="show-mobile-only">Storage</span>
         </button>
 
         <button
@@ -923,17 +926,17 @@ onUnmounted(() => {
           @click="isRegistriesModalOpen = true"
         >
           <MdiIcon :path="mdiKeyVariant" size="16" style="color: var(--accent-primary)" />
-          Registries
+          <span class="hide-mobile">Registries</span>
         </button>
 
         <button class="btn btn-sm" style="display: flex; align-items: center; gap: 6px" @click="openCatalogModal">
           <MdiIcon :path="mdiStorefrontOutline" size="16" style="color: var(--accent-primary)" />
-          Catalog
+          <span>Catalog</span>
         </button>
 
-        <button class="btn btn-primary" @click="openInstallModal">
+        <button class="btn btn-primary btn-sm" @click="openInstallModal">
           <MdiIcon :path="mdiPlus" size="16" style="margin-right: 4px" />
-          Launch App
+          <span>Launch App</span>
         </button>
       </div>
     </div>
@@ -1072,10 +1075,10 @@ onUnmounted(() => {
           <tr style="border-bottom: 1px solid var(--border-subtle); text-align: left; font-size: 11.5px; color: var(--text-secondary); text-transform: uppercase">
             <th style="padding: 10px 14px; width: 280px">Application</th>
             <th style="padding: 10px 14px; width: 130px">Web UI</th>
-            <th style="padding: 10px 14px; width: 100px">Autostart</th>
-            <th style="padding: 10px 14px; width: 85px">CPU</th>
-            <th style="padding: 10px 14px; width: 105px">Memory</th>
-            <th style="padding: 10px 14px; width: 210px">Network (1s)</th>
+            <th class="col-desktop-only" style="padding: 10px 14px; width: 100px">Autostart</th>
+            <th class="col-desktop-only" style="padding: 10px 14px; width: 85px">CPU</th>
+            <th class="col-desktop-only" style="padding: 10px 14px; width: 105px">Memory</th>
+            <th class="col-desktop-only" style="padding: 10px 14px; width: 210px">Network (1s)</th>
             <th style="padding: 10px 14px; min-width: 240px; text-align: right">Actions</th>
           </tr>
         </thead>
@@ -1091,10 +1094,10 @@ onUnmounted(() => {
               </div>
             </td>
             <td style="padding: 10px 14px"><SkeletonBox width="75px" height="20px" rounded="10px" /></td>
-            <td style="padding: 10px 14px"><SkeletonBox width="60px" height="20px" rounded="10px" /></td>
-            <td style="padding: 10px 14px"><SkeletonBox width="45px" height="14px" /></td>
-            <td style="padding: 10px 14px"><SkeletonBox width="60px" height="14px" /></td>
-            <td style="padding: 10px 14px"><SkeletonBox width="110px" height="14px" /></td>
+            <td class="col-desktop-only" style="padding: 10px 14px"><SkeletonBox width="60px" height="20px" rounded="10px" /></td>
+            <td class="col-desktop-only" style="padding: 10px 14px"><SkeletonBox width="45px" height="14px" /></td>
+            <td class="col-desktop-only" style="padding: 10px 14px"><SkeletonBox width="60px" height="14px" /></td>
+            <td class="col-desktop-only" style="padding: 10px 14px"><SkeletonBox width="110px" height="14px" /></td>
             <td style="padding: 10px 14px; text-align: right">
               <div style="display: flex; gap: 6px; justify-content: flex-end">
                 <SkeletonBox width="28px" height="28px" rounded="6px" />
@@ -1138,10 +1141,10 @@ onUnmounted(() => {
           <tr style="border-bottom: 1px solid var(--border-subtle); text-align: left; font-size: 11px; color: var(--text-secondary); text-transform: uppercase">
             <SortableTh :sort="appSort" sort-key="name" style="padding: 8px 10px; width: 280px; min-width: 220px; max-width: 340px">Application</SortableTh>
             <SortableTh :sort="appSort" sort-key="webui" style="padding: 8px 10px; width: 130px; min-width: 130px">Web UI</SortableTh>
-            <SortableTh :sort="appSort" sort-key="autostart" style="padding: 8px 10px; width: 100px; min-width: 100px; max-width: 110px">Autostart</SortableTh>
-            <SortableTh :sort="appSort" sort-key="cpu" style="padding: 8px 10px; width: 85px; min-width: 85px; max-width: 85px">CPU</SortableTh>
-            <SortableTh :sort="appSort" sort-key="memory" style="padding: 8px 10px; width: 105px; min-width: 105px; max-width: 105px">Memory</SortableTh>
-            <SortableTh :sort="appSort" sort-key="network" style="padding: 8px 10px; width: 210px; min-width: 210px; max-width: 210px">Network (1s)</SortableTh>
+            <SortableTh :sort="appSort" sort-key="autostart" class="col-desktop-only" style="padding: 8px 10px; width: 100px; min-width: 100px; max-width: 110px">Autostart</SortableTh>
+            <SortableTh :sort="appSort" sort-key="cpu" class="col-desktop-only" style="padding: 8px 10px; width: 85px; min-width: 85px; max-width: 85px">CPU</SortableTh>
+            <SortableTh :sort="appSort" sort-key="memory" class="col-desktop-only" style="padding: 8px 10px; width: 105px; min-width: 105px; max-width: 105px">Memory</SortableTh>
+            <SortableTh :sort="appSort" sort-key="network" class="col-desktop-only" style="padding: 8px 10px; width: 210px; min-width: 210px; max-width: 210px">Network (1s)</SortableTh>
             <th style="padding: 8px 10px; min-width: 240px; text-align: right">Actions</th>
           </tr>
         </thead>
@@ -1330,7 +1333,7 @@ onUnmounted(() => {
             </td>
 
             <!-- Autostart -->
-            <td style="padding: 10px 14px; width: 100px; min-width: 100px; max-width: 110px; white-space: nowrap">
+            <td class="col-desktop-only" style="padding: 10px 14px; width: 100px; min-width: 100px; max-width: 110px; white-space: nowrap">
               <button
                 type="button"
                 class="badge"
@@ -1349,21 +1352,21 @@ onUnmounted(() => {
             </td>
 
             <!-- CPU -->
-            <td style="padding: 10px 14px; width: 85px; min-width: 85px; max-width: 85px; box-sizing: border-box; white-space: nowrap">
+            <td class="col-desktop-only" style="padding: 10px 14px; width: 85px; min-width: 85px; max-width: 85px; box-sizing: border-box; white-space: nowrap">
               <div class="mono" style="font-size: 12.5px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums">
                 {{ app.totalCpuPercent.toFixed(1) }}%
               </div>
             </td>
 
             <!-- Memory -->
-            <td style="padding: 10px 14px; width: 105px; min-width: 105px; max-width: 105px; box-sizing: border-box; white-space: nowrap">
+            <td class="col-desktop-only" style="padding: 10px 14px; width: 105px; min-width: 105px; max-width: 105px; box-sizing: border-box; white-space: nowrap">
               <div class="mono" style="font-size: 12.5px; color: var(--text-primary); font-variant-numeric: tabular-nums">
                 {{ app.totalMemoryMib }} MiB
               </div>
             </td>
 
             <!-- Network (1s Live) -->
-            <td style="padding: 10px 14px; width: 210px; min-width: 210px; max-width: 210px; box-sizing: border-box; white-space: nowrap">
+            <td class="col-desktop-only" style="padding: 10px 14px; width: 210px; min-width: 210px; max-width: 210px; box-sizing: border-box; white-space: nowrap">
               <div class="mono" style="font-size: 11.5px; font-variant-numeric: tabular-nums">
                 <div style="color: var(--text-primary); font-weight: 500">
                   {{ formatNetworkRate(app) }}
@@ -1956,7 +1959,7 @@ onUnmounted(() => {
               style="padding: 4px 10px; font-size: 12px"
               @click="catalogSelectedTrain = 'ALL'"
             >
-              All Trains
+              All Catalogs
             </button>
             <button
               class="btn btn-sm"
@@ -1964,7 +1967,23 @@ onUnmounted(() => {
               style="padding: 4px 10px; font-size: 12px"
               @click="catalogSelectedTrain = 'stable'"
             >
-              Stable
+              TrueNAS
+            </button>
+            <button
+              class="btn btn-sm"
+              :class="catalogSelectedTrain === 'casaos' ? 'btn-primary' : ''"
+              style="padding: 4px 10px; font-size: 12px"
+              @click="catalogSelectedTrain = 'casaos'"
+            >
+              CasaOS
+            </button>
+            <button
+              class="btn btn-sm"
+              :class="catalogSelectedTrain === 'dokploy' ? 'btn-primary' : ''"
+              style="padding: 4px 10px; font-size: 12px"
+              @click="catalogSelectedTrain = 'dokploy'"
+            >
+              Dokploy
             </button>
             <button
               class="btn btn-sm"
@@ -2115,7 +2134,12 @@ onUnmounted(() => {
                       </div>
                       <span
                         class="badge"
-                        :class="app.train === 'stable' ? 'badge-success' : 'badge-info'"
+                        :class="{
+                          'badge-success': app.train === 'stable',
+                          'badge-info': app.train === 'community',
+                          'badge-warning': app.train === 'casaos',
+                          'badge-primary': app.train === 'dokploy',
+                        }"
                         style="font-size: 10.5px; text-transform: uppercase; padding: 2px 6px"
                       >
                         {{ app.train }}

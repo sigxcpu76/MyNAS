@@ -590,8 +590,8 @@ async function handleDeleteGroup(g: Group) {
           <thead>
             <tr>
               <SortableTh :sort="userSort" sort-key="username">Username / UID</SortableTh>
-              <SortableTh :sort="userSort" sort-key="groups">Groups</SortableTh>
-              <SortableTh :sort="userSort" sort-key="ssh">SSH Access & Keys</SortableTh>
+              <SortableTh :sort="userSort" sort-key="groups" class="col-desktop-only">Groups</SortableTh>
+              <SortableTh :sort="userSort" sort-key="ssh" class="col-desktop-only">SSH Access & Keys</SortableTh>
               <SortableTh :sort="userSort" sort-key="status">Status</SortableTh>
               <th>Actions</th>
             </tr>
@@ -606,13 +606,13 @@ async function handleDeleteGroup(g: Group) {
                     <SkeletonBox width="130px" height="11px" />
                   </div>
                 </td>
-                <td>
+                <td class="col-desktop-only">
                   <div style="display: flex; flex-direction: column; gap: 4px">
                     <SkeletonBox width="120px" height="13px" />
                     <SkeletonBox width="160px" height="11px" />
                   </div>
                 </td>
-                <td><SkeletonBox width="90px" height="20px" rounded="10px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="90px" height="20px" rounded="10px" /></td>
                 <td><SkeletonBox width="65px" height="20px" rounded="10px" /></td>
                 <td>
                   <div style="display: inline-flex; gap: 6px">
@@ -641,13 +641,13 @@ async function handleDeleteGroup(g: Group) {
                   UID {{ u.uid }} · {{ u.fullName || u.name }}
                 </div>
               </td>
-              <td class="mono" style="font-size: 12px">
+              <td class="mono col-desktop-only" style="font-size: 12px">
                 <div>Primary: {{ u.primaryGroup }} ({{ u.primaryGid }})</div>
                 <div style="font-size: 11px; color: var(--text-secondary)">
                   Groups: {{ (u.supplementaryGroups || []).join(', ') || '—' }}
                 </div>
               </td>
-              <td>
+              <td class="col-desktop-only">
                 <span class="badge" :class="u.sshEnabled ? 'badge-success' : 'badge-neutral'">
                   SSH: {{ u.sshEnabled ? 'ENABLED' : 'DISABLED' }}
                 </span>

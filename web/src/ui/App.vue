@@ -6,6 +6,7 @@ import {
   mdiCheckCircle,
   mdiChevronDown,
   mdiChevronRight,
+  mdiClose,
   mdiCubeOutline,
   mdiDatabase,
   mdiDatabaseCheck,
@@ -14,6 +15,7 @@ import {
   mdiHarddisk,
   mdiLayers,
   mdiLogout,
+  mdiMenu,
   mdiMenuDown,
   mdiMonitor,
   mdiRefresh,
@@ -65,6 +67,20 @@ const storageExpanded = ref(true);
 const showPoolModal = ref(false);
 const showPrerequisitesModal = ref(false);
 const showSystemDetailsModal = ref(false);
+const isMobileDrawerOpen = ref(false);
+
+function toggleMobileDrawer() {
+  isMobileDrawerOpen.value = !isMobileDrawerOpen.value;
+}
+
+function closeMobileDrawer() {
+  isMobileDrawerOpen.value = false;
+}
+
+function handleNav(id: NavTab) {
+  navigateTo(id);
+  closeMobileDrawer();
+}
 
 watch(
   () => nasState.activeTab,
@@ -356,10 +372,25 @@ onMounted(() => {
   </div>
 
   <div v-else class="app-shell">
+    <!-- Mobile Drawer Overlay Backdrop -->
+    <div
+      v-if="isMobileDrawerOpen"
+      class="mobile-drawer-backdrop"
+      @click="closeMobileDrawer"
+    ></div>
+
     <!-- Sidebar Navigation -->
-    <aside class="sidebar">
-      <div class="brand-box">
+    <aside class="sidebar" :class="{ 'mobile-open': isMobileDrawerOpen }">
+      <div class="brand-box" style="display: flex; justify-content: space-between; align-items: center">
         <NanLogo :size="38" subtitle="Not Another NAS" />
+        <button
+          class="btn btn-sm btn-icon show-mobile-only"
+          style="border: none; background: transparent; color: var(--text-secondary); cursor: pointer"
+          aria-label="Close menu"
+          @click="closeMobileDrawer"
+        >
+          <MdiIcon :path="mdiClose" size="20" />
+        </button>
       </div>
 
       <nav class="nav-list">
@@ -405,7 +436,7 @@ onMounted(() => {
                     (child.id === 'storage-pools' && nasState.activeTab === 'zfs') ||
                     (child.id === 'shares-cifs' && nasState.activeTab === 'shares'),
                 }"
-                @click.prevent="navigateTo(child.id)"
+                @click.prevent="handleNav(child.id)"
               >
                 <div style="display: flex; align-items: center; gap: 9px">
                   <MdiIcon :path="child.icon" size="16" />
@@ -425,7 +456,7 @@ onMounted(() => {
             class="nav-item"
             :class="{ active: nasState.activeTab === item.id }"
             :style="item.disabled ? 'opacity: 0.65; pointer-events: none' : ''"
-            @click.prevent="!item.disabled && navigateTo(item.id)"
+            @click.prevent="!item.disabled && handleNav(item.id)"
           >
             <div style="display: flex; align-items: center; gap: 10px">
               <MdiIcon :path="item.icon" size="18" />
@@ -441,19 +472,53 @@ onMounted(() => {
           </a>
         </template>
       </nav>
+
+      <!-- Mobile Drawer Footer (Quick Theme, Details & Sign Out on phone) -->
+      <div class="mobile-drawer-footer show-mobile-only" style="margin-top: auto; border-top: 1px solid var(--border-subtle); padding: 12px 14px; background: var(--bg-surface)">
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+            <ThemeSelector />
+            <button
+              class="btn btn-sm"
+              style="padding: 4px 8px; font-size: 11.5px"
+              @click="showSystemDetailsModal = true; closeMobileDrawer()"
+            >
+              Host Specs
+            </button>
+          </div>
+          <div v-if="nasState.authenticated && nasState.currentUser" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 6px; border-top: 1px solid var(--border-subtle)">
+            <span class="badge badge-info" style="font-size: 11px">
+              {{ nasState.currentUser.username }}
+            </span>
+            <button class="btn btn-sm" @click="handleLogout(); closeMobileDrawer()">
+              <MdiIcon :path="mdiLogout" size="14" style="margin-right: 4px" />
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
     </aside>
 
     <!-- Main Content Area -->
     <div class="main-area">
       <header class="top-header">
-        <div style="display: flex; align-items: center; gap: 12px">
-          <span style="font-weight: 600; font-size: 15px">
+        <div style="display: flex; align-items: center; gap: 10px; min-width: 0">
+          <!-- Mobile Hamburger Toggle Button -->
+          <button
+            class="mobile-nav-toggle"
+            aria-label="Toggle navigation menu"
+            @click="toggleMobileDrawer"
+          >
+            <MdiIcon :path="mdiMenu" size="20" />
+          </button>
+
+          <span style="font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">
             {{ currentTabLabel }}
           </span>
-          <span v-if="hasFallbackPrereqs" class="badge badge-warning">
+          <span v-if="hasFallbackPrereqs" class="badge badge-warning hide-mobile">
             Fallback Mode
           </span>
-          <span v-if="nasState.lastRefreshed" class="card-subtitle mono">
+          <span v-if="nasState.lastRefreshed" class="card-subtitle mono hide-mobile">
             Synced {{ nasState.lastRefreshed }}
           </span>
 
@@ -464,7 +529,8 @@ onMounted(() => {
             @click="showPoolModal = true"
           >
             <MdiIcon :path="mdiDatabaseCheck" size="14" style="color: var(--accent-primary)" />
-            <span>MAIN POOL: {{ nasState.systemConfig.mainPool }}</span>
+            <span class="hide-mobile">MAIN POOL: {{ nasState.systemConfig.mainPool }}</span>
+            <span class="show-mobile-only">{{ nasState.systemConfig.mainPool }}</span>
             <MdiIcon :path="mdiMenuDown" size="13" style="opacity: 0.75" />
           </button>
           <button
@@ -475,7 +541,8 @@ onMounted(() => {
             @click="showPoolModal = true"
           >
             <MdiIcon :path="mdiAlertCircle" size="14" />
-            No Main Pool (Setup Required)
+            <span class="hide-mobile">No Main Pool (Setup Required)</span>
+            <span class="show-mobile-only">No Pool</span>
           </button>
           <span
             v-else-if="!nasState.initialLoaded"
@@ -483,29 +550,30 @@ onMounted(() => {
             style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; opacity: 0.8"
           >
             <span class="spinner" style="width: 10px; height: 10px; border-width: 2px"></span>
-            Syncing System...
+            <span class="hide-mobile">Syncing System...</span>
           </span>
         </div>
 
-        <div style="display: flex; align-items: center; gap: 10px">
-          <SystemDetailsTopBarButton @click="showSystemDetailsModal = true" />
-          <PrerequisitesTopBarButton @click="showPrerequisitesModal = true" />
-          <ThemeSelector />
+        <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0">
+          <SystemDetailsTopBarButton class="hide-mobile" @click="showSystemDetailsModal = true" />
+          <PrerequisitesTopBarButton class="hide-mobile" @click="showPrerequisitesModal = true" />
+          <ThemeSelector class="hide-mobile" />
 
           <button
-            class="btn btn-sm"
+            class="btn btn-sm btn-icon-mobile"
             :disabled="nasState.loading"
+            title="Refresh All Telemetry & Data"
             @click="refreshAllData"
           >
-            <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" />
-            {{ nasState.loading ? 'Refreshing...' : 'Refresh' }}
+            <MdiIcon :path="mdiRefresh" size="14" :class="{ 'spin-icon': nasState.loading }" />
+            <span class="hide-mobile" style="margin-left: 4px">{{ nasState.loading ? 'Refreshing...' : 'Refresh' }}</span>
           </button>
 
           <template v-if="nasState.authenticated && nasState.currentUser">
-            <span class="badge badge-info">
+            <span class="badge badge-info hide-mobile">
               {{ nasState.currentUser.username }}
             </span>
-            <button class="btn btn-sm" @click="handleLogout">
+            <button class="btn btn-sm btn-icon-mobile hide-mobile" title="Sign Out" @click="handleLogout">
               <MdiIcon :path="mdiLogout" size="14" style="margin-right: 4px" />
               Sign Out
             </button>
@@ -609,6 +677,59 @@ onMounted(() => {
         </template>
       </main>
     </div>
+
+    <!-- Mobile Bottom Navigation Bar (Visible on <= 768px) -->
+    <nav class="mobile-bottom-nav" aria-label="Mobile Navigation">
+      <button
+        class="mobile-bottom-nav-item"
+        :class="{ active: nasState.activeTab === 'overview' }"
+        aria-label="Dashboard"
+        @click="handleNav('overview')"
+      >
+        <MdiIcon :path="mdiViewDashboard" size="20" />
+        <span>Dashboard</span>
+      </button>
+
+      <button
+        class="mobile-bottom-nav-item"
+        :class="{ active: isStorageActive }"
+        aria-label="Storage"
+        @click="handleNav('storage-pools')"
+      >
+        <MdiIcon :path="mdiDatabase" size="20" />
+        <span>Storage</span>
+      </button>
+
+      <button
+        class="mobile-bottom-nav-item"
+        :class="{ active: nasState.activeTab === 'docker' }"
+        aria-label="Apps"
+        @click="handleNav('docker')"
+      >
+        <MdiIcon :path="mdiLayers" size="20" />
+        <span>Apps</span>
+      </button>
+
+      <button
+        class="mobile-bottom-nav-item"
+        :class="{ active: nasState.activeTab === 'kvm' || nasState.activeTab === 'lxc' }"
+        aria-label="Virtual Machines & Containers"
+        @click="handleNav('kvm')"
+      >
+        <MdiIcon :path="mdiMonitor" size="20" />
+        <span>Virtual</span>
+      </button>
+
+      <button
+        class="mobile-bottom-nav-item"
+        :class="{ active: isMobileDrawerOpen }"
+        aria-label="More Menu"
+        @click="toggleMobileDrawer"
+      >
+        <MdiIcon :path="mdiMenu" size="20" />
+        <span>Menu</span>
+      </button>
+    </nav>
 
     <!-- Login Modal if not authenticated -->
     <LoginModal v-if="!nasState.authenticated" />

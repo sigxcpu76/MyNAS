@@ -179,15 +179,15 @@ function goToPool(poolName: string) {
         <table class="data-table">
           <thead>
             <tr>
-              <SortableTh :sort="diskSort" sort-key="device" style="min-width: 140px">Device</SortableTh>
-              <SortableTh :sort="diskSort" sort-key="model" style="min-width: 220px">Model / Vendor</SortableTh>
-              <SortableTh :sort="diskSort" sort-key="type" style="min-width: 90px">Type</SortableTh>
-              <SortableTh :sort="diskSort" sort-key="capacity" style="min-width: 100px">Capacity</SortableTh>
-              <SortableTh :sort="diskSort" sort-key="temp" style="min-width: 100px">Temp</SortableTh>
-              <SortableTh :sort="diskSort" sort-key="smart" style="min-width: 110px">S.M.A.R.T.</SortableTh>
-              <SortableTh :sort="diskSort" sort-key="pool" style="min-width: 140px">Pool</SortableTh>
-              <SortableTh :sort="diskSort" sort-key="partitions" style="min-width: 160px">Partitions</SortableTh>
-              <th style="min-width: 90px; text-align: right">Actions</th>
+              <SortableTh :sort="diskSort" sort-key="device" style="min-width: 120px">Device</SortableTh>
+              <SortableTh :sort="diskSort" sort-key="model" style="min-width: 160px">Model / Vendor</SortableTh>
+              <SortableTh :sort="diskSort" sort-key="type" class="col-desktop-only" style="min-width: 90px">Type</SortableTh>
+              <SortableTh :sort="diskSort" sort-key="capacity" style="min-width: 90px">Capacity</SortableTh>
+              <SortableTh :sort="diskSort" sort-key="temp" class="col-desktop-only" style="min-width: 90px">Temp</SortableTh>
+              <SortableTh :sort="diskSort" sort-key="smart" class="col-desktop-only" style="min-width: 100px">S.M.A.R.T.</SortableTh>
+              <SortableTh :sort="diskSort" sort-key="pool" style="min-width: 110px">Pool</SortableTh>
+              <SortableTh :sort="diskSort" sort-key="partitions" class="col-desktop-only" style="min-width: 140px">Partitions</SortableTh>
+              <th style="min-width: 80px; text-align: right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -206,12 +206,12 @@ function goToPool(poolName: string) {
                     <SkeletonBox width="100px" height="11px" />
                   </div>
                 </td>
-                <td><SkeletonBox width="50px" height="20px" rounded="10px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="50px" height="20px" rounded="10px" /></td>
                 <td><SkeletonBox width="70px" height="15px" /></td>
-                <td><SkeletonBox width="55px" height="20px" rounded="10px" /></td>
-                <td><SkeletonBox width="65px" height="20px" rounded="10px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="55px" height="20px" rounded="10px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="65px" height="20px" rounded="10px" /></td>
                 <td><SkeletonBox width="80px" height="15px" /></td>
-                <td><SkeletonBox width="95px" height="15px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="95px" height="15px" /></td>
                 <td style="text-align: right"><SkeletonBox width="60px" height="26px" rounded="6px" /></td>
               </tr>
             </template>
@@ -255,7 +255,7 @@ function goToPool(poolName: string) {
               </td>
 
               <!-- Type / Transport -->
-              <td>
+              <td class="col-desktop-only">
                 <div style="display: flex; flex-direction: column; gap: 3px; align-items: flex-start">
                   <span class="badge" :class="getTypeBadgeClass(d.type)" style="font-size: 10.5px">
                     {{ d.type }}
@@ -277,7 +277,7 @@ function goToPool(poolName: string) {
               </td>
 
               <!-- Temperature -->
-              <td>
+              <td class="col-desktop-only">
                 <div v-if="d.temperatureCelsius > 0" style="display: flex; align-items: center; gap: 4px">
                   <MdiIcon :path="mdiThermometer" size="14" style="color: var(--accent-primary)" />
                   <span class="badge mono" :class="getTempBadgeClass(d.temperatureCelsius)" style="font-size: 11px">
@@ -288,7 +288,7 @@ function goToPool(poolName: string) {
               </td>
 
               <!-- S.M.A.R.T. Health -->
-              <td>
+              <td class="col-desktop-only">
                 <div style="display: flex; flex-direction: column; gap: 2px">
                   <span class="badge mono" :class="getSmartBadgeClass(d.smartStatus)" style="font-size: 10.5px">
                     {{ d.smartStatus }}
@@ -317,7 +317,7 @@ function goToPool(poolName: string) {
               </td>
 
               <!-- Partitions -->
-              <td>
+              <td class="col-desktop-only">
                 <div v-if="d.partitions && d.partitions.length > 0" style="display: flex; flex-wrap: wrap; gap: 4px">
                   <span
                     v-for="p in d.partitions"

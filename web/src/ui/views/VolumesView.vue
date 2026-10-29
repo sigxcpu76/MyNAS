@@ -252,12 +252,12 @@ onMounted(async () => {
         <table class="data-table">
           <thead>
             <tr>
-              <SortableTh :sort="volumeSort" sort-key="name" style="min-width: 180px">Volume Name</SortableTh>
+              <SortableTh :sort="volumeSort" sort-key="name" style="min-width: 160px">Volume Name</SortableTh>
               <SortableTh :sort="volumeSort" sort-key="pool">Pool</SortableTh>
               <SortableTh :sort="volumeSort" sort-key="capacity">Capacity & Usage</SortableTh>
-              <SortableTh :sort="volumeSort" sort-key="blockSize">Block Size</SortableTh>
-              <SortableTh :sort="volumeSort" sort-key="provisioning">Provisioning</SortableTh>
-              <th>Properties</th>
+              <SortableTh :sort="volumeSort" sort-key="blockSize" class="col-desktop-only">Block Size</SortableTh>
+              <SortableTh :sort="volumeSort" sort-key="provisioning" class="col-desktop-only">Provisioning</SortableTh>
+              <th class="col-desktop-only">Properties</th>
               <th style="text-align: right">Actions</th>
             </tr>
           </thead>
@@ -273,9 +273,9 @@ onMounted(async () => {
                 </td>
                 <td><SkeletonBox width="60px" height="20px" rounded="10px" /></td>
                 <td><SkeletonBox width="90px" height="14px" /></td>
-                <td><SkeletonBox width="60px" height="14px" /></td>
-                <td><SkeletonBox width="70px" height="20px" rounded="10px" /></td>
-                <td><SkeletonBox width="100px" height="14px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="60px" height="14px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="70px" height="20px" rounded="10px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="100px" height="14px" /></td>
                 <td style="text-align: right">
                   <div style="display: inline-flex; gap: 6px; justify-content: flex-end">
                     <SkeletonBox width="26px" height="26px" rounded="4px" />
@@ -329,14 +329,14 @@ onMounted(async () => {
               </td>
 
               <!-- Block Size -->
-              <td>
+              <td class="col-desktop-only">
                 <span class="badge mono badge-neutral" style="font-size: 10.5px">
                   {{ v.volblocksize || '16k' }}
                 </span>
               </td>
 
               <!-- Provisioning -->
-              <td>
+              <td class="col-desktop-only">
                 <span
                   class="badge mono"
                   :class="v.thinProvisioned ? 'badge-success' : 'badge-neutral'"
@@ -347,7 +347,7 @@ onMounted(async () => {
               </td>
 
               <!-- Properties -->
-              <td>
+              <td class="col-desktop-only">
                 <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap">
                   <span class="badge badge-info mono" style="font-size: 10px">{{ v.compression || 'lz4' }}</span>
                   <span
