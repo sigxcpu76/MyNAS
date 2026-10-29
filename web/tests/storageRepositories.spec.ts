@@ -47,6 +47,9 @@ describe('Storage Repositories: ISOs and LXC Templates', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    try {
+      window.localStorage?.clear();
+    } catch {}
     nasState.isos = [];
     nasState.lxcTemplates = [];
     nasState.vms = [];
@@ -234,6 +237,12 @@ describe('Storage Repositories: ISOs and LXC Templates', () => {
       });
 
       expect(wrapper.text()).toContain('ISOs');
+      // Switch to the ISOs tab
+      const isosTab = wrapper.findAll('button').find((b) => b.text().includes('ISOs'));
+      expect(isosTab).toBeDefined();
+      await isosTab!.trigger('click');
+      await nextTick();
+
       expect(wrapper.text()).toContain('debian-12.iso');
       expect(wrapper.text()).toContain('ubuntu-24.04.iso');
       expect(wrapper.text()).toContain('624.0 MiB');

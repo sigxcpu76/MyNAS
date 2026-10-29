@@ -61,6 +61,32 @@ const inspectorTab = ref<'summary' | 'hardware' | 'cloudinit' | 'snapshots'>('su
 const cloningVm = ref<VirtualMachine | null>(null);
 const showCreateWizard = ref(false);
 
+// =============================================================================
+// Top Navigation Subtabs
+// =============================================================================
+function getInitialKvmTab(): 'vms' | 'isos' {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const saved = window.localStorage.getItem('kvm_active_tab');
+      if (saved === 'isos' || saved === 'vms') {
+        return saved;
+      }
+    }
+  } catch {}
+  return 'vms';
+}
+
+const activeMainTab = ref<'vms' | 'isos'>(getInitialKvmTab());
+
+function switchTab(tab: 'vms' | 'isos') {
+  activeMainTab.value = tab;
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem('kvm_active_tab', tab);
+    }
+  } catch {}
+}
+
 // Snapshot state
 const snapshotsList = ref<VirtualMachineSnapshot[]>([]);
 const showTakeSnapshotModal = ref(false);
@@ -333,7 +359,22 @@ const availablePools = computed(() => {
   return nasState.pools.map((p) => p.poolName || p.name.split('/').pop() || 'tank');
 });
 
-const mainPool = computed(() => nasState.systemConfig?.mainPool || 'tank');
+function cleanPoolName(name: string | undefined | null): string {
+  if (!name) return '';
+  return name.replace(/^zfsPools\//, '').trim();
+}
+
+const mainPool = computed(() => {
+  const p =
+    cleanPoolName(nasState.systemConfig?.mainPool) ||
+    cleanPoolName(nasState.selectedPoolName) ||
+    cleanPoolName(nasState.pools?.[0]?.poolName) ||
+    cleanPoolName(nasState.pools?.[0]?.name) ||
+    'tank';
+  return p || 'tank';
+});
+
+const isosDir = computed(() => `/mnt/${mainPool.value}/isos`);
 
 const suggestedDiskName = computed(() => {
   return generateVMDiskName(wizardForm.vmId || wizardForm.vmName || 'vm', 0);
@@ -1537,7 +1578,61 @@ async function handleWizardSubmit() {
 
 <template>
   <div style="display: flex; flex-direction: column; gap: 20px">
-    <!-- Top Summary Banner -->
+    <!-- Subtabs Navigation -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 12px">
+      <div style="display: flex; gap: 6px; background: var(--bg-surface); padding: 4px; border-radius: 8px; border: 1px solid var(--border-subtle)">
+        <button
+          class="btn btn-sm"
+          :class="activeMainTab === 'vms' ? 'btn-primary' : 'btn-ghost'"
+          style="padding: 5px 14px; font-weight: 600"
+          @click="switchTab('vms')"
+        >
+          <MdiIcon :path="mdiServer" size="14" style="margin-right: 6px" />
+          Virtual Machines ({{ nasState.vms.length }})
+        </button>
+
+        <button
+          class="btn btn-sm"
+          :class="activeMainTab === 'isos' ? 'btn-primary' : 'btn-ghost'"
+          style="padding: 5px 14px; font-weight: 600"
+          @click="switchTab('isos')"
+        >
+          <MdiIcon :path="mdiDisc" size="14" style="margin-right: 6px" />
+          ISOs ({{ nasState.isos.length }})
+        </button>
+      </div>
+
+      <div v-if="activeMainTab === 'vms'" style="display: flex; gap: 8px">
+        <button class="btn btn-sm" @click="refreshVms()">
+          <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" />
+          <span class="hide-mobile">Refresh</span>
+        </button>
+        <button class="btn btn-primary" @click="openCreateWizard">
+          <MdiIcon :path="mdiPlus" size="15" style="margin-right: 4px" /> Create VM
+        </button>
+      </div>
+
+      <div v-else-if="activeMainTab === 'isos'" style="display: flex; gap: 8px">
+        <button class="btn btn-sm" @click="refreshIsos">
+          <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" />
+          <span class="hide-mobile">Refresh</span>
+        </button>
+        <button
+          class="btn btn-primary"
+          :disabled="isUploadingIso"
+          @click="triggerIsoUpload"
+        >
+          <MdiIcon :path="mdiUpload" size="14" style="margin-right: 4px" />
+          {{ isUploadingIso && isoUploadProgress ? `Uploading ${isoUploadProgress.percent}%...` : 'Upload ISO' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- ======================================================================= -->
+    <!-- TAB 1: Virtual Machines Management View                                 -->
+    <!-- ======================================================================= -->
+    <div v-if="activeMainTab === 'vms'" style="display: flex; flex-direction: column; gap: 20px">
+      <!-- Top Summary Banner -->
     <div class="grid-3">
       <div class="card">
         <div class="card-header" style="margin-bottom: 6px">
@@ -1819,130 +1914,136 @@ async function handleWizardSubmit() {
         </table>
       </div>
     </div>
+  </div>
 
     <!-- ======================================================================= -->
-    <!-- ISOS REPOSITORY CARD -->
+    <!-- TAB 2: Local ISOs Repository View                                       -->
     <!-- ======================================================================= -->
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <h2 class="card-title" style="font-size: 17px">ISOs</h2>
+    <div v-else-if="activeMainTab === 'isos'" style="display: flex; flex-direction: column; gap: 20px">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title" style="font-size: 17px">ISO Images</h2>
+            <span style="font-size: 12px; color: var(--text-secondary)">
+              Local installer images stored on main pool ZFS dataset: {{ isosDir }}
+            </span>
+          </div>
+
+          <div style="display: flex; gap: 10px; align-items: center">
+            <input
+              ref="isoFileInput"
+              type="file"
+              accept=".iso,.img"
+              style="display: none"
+              @change="handleUploadIso"
+            />
+            <button class="btn btn-sm" @click="refreshIsos">
+              <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" /> Refresh
+            </button>
+            <button
+              class="btn btn-sm btn-primary"
+              :disabled="isUploadingIso"
+              @click="triggerIsoUpload"
+            >
+              <MdiIcon :path="mdiUpload" size="14" style="margin-right: 4px" />
+              {{ isUploadingIso && isoUploadProgress ? `Uploading ${isoUploadProgress.percent}%...` : 'Upload ISO' }}
+            </button>
+          </div>
         </div>
 
-        <div style="display: flex; gap: 10px; align-items: center">
-          <input
-            ref="isoFileInput"
-            type="file"
+        <!-- Drag & Drop ISO Dropzone -->
+        <div style="margin: 0 16px 16px 16px">
+          <FileDropzone
+            ref="isoDropzoneRef"
             accept=".iso,.img"
-            style="display: none"
-            @change="handleUploadIso"
+            label="Drag & drop ISO file here, or click to browse"
+            sublabel="Supports .iso and .img installer images"
+            :icon="mdiDisc"
+            :is-uploading="isUploadingIso"
+            :progress="isoUploadProgress"
+            @file-selected="uploadIsoFile"
+            @invalid-file="handleInvalidIsoFile"
           />
-          <button class="btn btn-sm" @click="refreshIsos">
-            <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" /> Refresh
-          </button>
-          <button
-            class="btn btn-sm btn-primary"
-            :disabled="isUploadingIso"
-            @click="triggerIsoUpload"
-          >
-            <MdiIcon :path="mdiUpload" size="14" style="margin-right: 4px" />
-            {{ isUploadingIso && isoUploadProgress ? `Uploading ${isoUploadProgress.percent}%...` : 'Upload ISO' }}
-          </button>
         </div>
-      </div>
 
-      <!-- Drag & Drop ISO Dropzone -->
-      <div style="margin: 0 16px 16px 16px">
-        <FileDropzone
-          ref="isoDropzoneRef"
-          accept=".iso,.img"
-          label="Drag & drop ISO file here, or click to browse"
-          sublabel="Supports .iso and .img installer images"
-          :icon="mdiDisc"
-          :is-uploading="isUploadingIso"
-          :progress="isoUploadProgress"
-          @file-selected="uploadIsoFile"
-          @invalid-file="handleInvalidIsoFile"
-        />
-      </div>
-
-      <!-- ISO Table -->
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <SortableTh :sort="isoSort" sort-key="name">ISO Image Name</SortableTh>
-              <SortableTh :sort="isoSort" sort-key="size">File Size</SortableTh>
-              <SortableTh :sort="isoSort" sort-key="modTime">Last Modified</SortableTh>
-              <th style="text-align: right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Active Upload Row -->
-            <tr v-if="isUploadingIso && isoUploadProgress">
-              <td colspan="4" style="padding: 14px 16px; background: rgba(59, 130, 246, 0.04)">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 12px">
-                  <span class="mono" style="font-weight: 600">{{ isoUploadProgress.filename }} (Uploading)</span>
-                  <span class="mono">{{ formatBytes(isoUploadProgress.loaded) }} / {{ formatBytes(isoUploadProgress.total) }} ({{ isoUploadProgress.percent }}%)</span>
-                </div>
-                <div class="progress-bar" style="height: 6px">
-                  <div class="progress-fill" :style="{ width: `${isoUploadProgress.percent}%` }"></div>
-                </div>
-              </td>
-            </tr>
-
-            <!-- Skeleton Placeholders when Loading -->
-            <template v-if="nasState.loading && nasState.isos.length === 0">
-              <tr v-for="r in 2" :key="r">
-                <td><SkeletonBox width="160px" height="15px" /></td>
-                <td><SkeletonBox width="70px" height="15px" /></td>
-                <td><SkeletonBox width="120px" height="15px" /></td>
-                <td style="text-align: right"><SkeletonBox width="60px" height="24px" rounded="4px" /></td>
+        <!-- ISO Table -->
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <SortableTh :sort="isoSort" sort-key="name">ISO Image Name</SortableTh>
+                <SortableTh :sort="isoSort" sort-key="size">File Size</SortableTh>
+                <SortableTh :sort="isoSort" sort-key="modTime">Last Modified</SortableTh>
+                <th style="text-align: right">Actions</th>
               </tr>
-            </template>
+            </thead>
+            <tbody>
+              <!-- Active Upload Row -->
+              <tr v-if="isUploadingIso && isoUploadProgress">
+                <td colspan="4" style="padding: 14px 16px; background: rgba(59, 130, 246, 0.04)">
+                  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 12px">
+                    <span class="mono" style="font-weight: 600">{{ isoUploadProgress.filename }} (Uploading)</span>
+                    <span class="mono">{{ formatBytes(isoUploadProgress.loaded) }} / {{ formatBytes(isoUploadProgress.total) }} ({{ isoUploadProgress.percent }}%)</span>
+                  </div>
+                  <div class="progress-bar" style="height: 6px">
+                    <div class="progress-fill" :style="{ width: `${isoUploadProgress.percent}%` }"></div>
+                  </div>
+                </td>
+              </tr>
 
-            <tr v-else-if="nasState.isos.length === 0">
-              <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 36px">
-                No ISO images found in repository. Click <strong>"Upload ISO"</strong> to upload an installer image (.iso, .img).
-              </td>
-            </tr>
+              <!-- Skeleton Placeholders when Loading -->
+              <template v-if="nasState.loading && nasState.isos.length === 0">
+                <tr v-for="r in 2" :key="r">
+                  <td><SkeletonBox width="160px" height="15px" /></td>
+                  <td><SkeletonBox width="70px" height="15px" /></td>
+                  <td><SkeletonBox width="120px" height="15px" /></td>
+                  <td style="text-align: right"><SkeletonBox width="60px" height="24px" rounded="4px" /></td>
+                </tr>
+              </template>
 
-            <tr v-for="iso in isoSort.sorted.value" :key="iso.name">
-              <td style="font-weight: 600">
-                <div style="display: flex; align-items: center; gap: 8px">
-                  <MdiIcon :path="mdiDisc" size="16" style="color: var(--accent-primary)" />
-                  <span class="mono" :title="iso.path">{{ iso.name }}</span>
-                </div>
-              </td>
-              <td class="mono">{{ iso.sizeFormatted }}</td>
-              <td
-                class="mono"
-                style="font-size: 11px; color: var(--text-muted); white-space: nowrap"
-                :title="formatAbsoluteTime(iso.modTime)"
-              >
-                {{ formatRelativeTime(iso.modTime) }}
-              </td>
-              <td style="text-align: right">
-                <div style="display: inline-flex; gap: 6px">
-                  <button
-                    class="btn btn-xs"
-                    title="Copy absolute path"
-                    @click="copyIsoPath(iso.path)"
-                  >
-                    <MdiIcon :path="mdiContentCopy" size="13" />
-                  </button>
-                  <button
-                    class="btn btn-xs btn-danger"
-                    title="Delete ISO"
-                    @click="handleDeleteIso(iso)"
-                  >
-                    <MdiIcon :path="mdiTrashCan" size="13" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+              <tr v-else-if="nasState.isos.length === 0">
+                <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 36px">
+                  No ISO images found in repository. Click <strong>"Upload ISO"</strong> to upload an installer image (.iso, .img).
+                </td>
+              </tr>
+
+              <tr v-for="iso in isoSort.sorted.value" :key="iso.name">
+                <td style="font-weight: 600">
+                  <div style="display: flex; align-items: center; gap: 8px">
+                    <MdiIcon :path="mdiDisc" size="16" style="color: var(--accent-primary)" />
+                    <span class="mono" :title="iso.path">{{ iso.name }}</span>
+                  </div>
+                </td>
+                <td class="mono">{{ iso.sizeFormatted }}</td>
+                <td
+                  class="mono"
+                  style="font-size: 11px; color: var(--text-muted); white-space: nowrap"
+                  :title="formatAbsoluteTime(iso.modTime)"
+                >
+                  {{ formatRelativeTime(iso.modTime) }}
+                </td>
+                <td style="text-align: right">
+                  <div style="display: inline-flex; gap: 6px">
+                    <button
+                      class="btn btn-xs"
+                      title="Copy absolute path"
+                      @click="copyIsoPath(iso.path)"
+                    >
+                      <MdiIcon :path="mdiContentCopy" size="13" />
+                    </button>
+                    <button
+                      class="btn btn-xs btn-danger"
+                      title="Delete ISO"
+                      @click="handleDeleteIso(iso)"
+                    >
+                      <MdiIcon :path="mdiTrashCan" size="13" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
