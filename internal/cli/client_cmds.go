@@ -1387,6 +1387,15 @@ func newAppCmd(rootOpts *RootOptions) *cobra.Command {
 			fmt.Fprintf(rootOpts.Out, "Memory Usage:  %d MiB\n", a.GetTotalMemoryMib())
 			fmt.Fprintf(rootOpts.Out, "Services:      %s\n", strings.Join(a.GetServices(), ", "))
 			fmt.Fprintf(rootOpts.Out, "Compose Path:  %s\n", a.GetComposeFilePath())
+			if a.GetCatalogAppId() != "" {
+				fmt.Fprintf(rootOpts.Out, "Catalog App:   %s (%s)\n", a.GetCatalogAppId(), a.GetCatalogSource())
+				if a.GetCatalogVersion() != "" {
+					fmt.Fprintf(rootOpts.Out, "Version:       %s\n", a.GetCatalogVersion())
+				}
+			}
+			if a.GetUpdateAvailable() {
+				fmt.Fprintf(rootOpts.Out, "Update:        Available (Latest: %s, Image: %s)\n", a.GetLatestVersion(), a.GetLatestImage())
+			}
 
 			if len(a.GetContainers()) > 0 {
 				fmt.Fprintln(rootOpts.Out, "\nContainers:")
@@ -1484,6 +1493,32 @@ func newAppCmd(rootOpts *RootOptions) *cobra.Command {
 	}
 	updateCmd.Flags().StringVar(&appCompose, "compose", "", "Path to compose.yaml file or inline Compose YAML (required)")
 	updateCmd.Flags().StringVar(&appTitle, "title", "", "Display title for the App")
+
+	var takeSnapshot bool
+	upgradeCmd := &cobra.Command{
+		Use:   "upgrade <app-id>",
+		Short: "Pull latest images and redeploy a Docker Compose Application stack",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			name := ensurePrefix(args[0], "dockerApps/")
+			a, err := client.UpgradeDockerApp(cmd.Context(), &nasv1.UpgradeDockerAppRequest{
+				Name:         name,
+				TakeSnapshot: takeSnapshot,
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(rootOpts.Out, "Triggered upgrade for Docker App %s (%s)\n", a.GetAppId(), a.GetStatusText())
+			return nil
+		},
+	}
+	upgradeCmd.Flags().BoolVar(&takeSnapshot, "snapshot", true, "Take pre-upgrade ZFS snapshot of app storage datasets")
 
 	startCmd := &cobra.Command{
 		Use:   "start <app-id>",
@@ -1656,7 +1691,7 @@ func newAppCmd(rootOpts *RootOptions) *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(listCmd, getCmd, createCmd, updateCmd, startCmd, stopCmd, restartCmd, logsCmd, deleteCmd, datasetCmd)
+	cmd.AddCommand(listCmd, getCmd, createCmd, updateCmd, upgradeCmd, startCmd, stopCmd, restartCmd, logsCmd, deleteCmd, datasetCmd)
 	return cmd
 }
 

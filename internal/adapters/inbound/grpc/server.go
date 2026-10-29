@@ -1517,6 +1517,12 @@ func dockerAppToProto(a *domain.DockerApp) *nasv1.DockerApp {
 		TotalNetRxRate:  a.TotalNetRxRate,
 		TotalNetTxRate:  a.TotalNetTxRate,
 		AutoStart:       a.AutoStart,
+		CatalogAppId:    a.CatalogAppID,
+		CatalogSource:   a.CatalogSource,
+		CatalogVersion:  a.CatalogVersion,
+		UpdateAvailable: a.UpdateAvailable,
+		LatestVersion:   a.LatestVersion,
+		LatestImage:     a.LatestImage,
 	}
 }
 
@@ -1536,6 +1542,7 @@ func (s *Server) ListDockerApps(ctx context.Context, req *nasv1.ListDockerAppsRe
 	for _, a := range paged {
 		out = append(out, dockerAppToProto(&a))
 	}
+	s.enrichDockerAppsWithCatalog(ctx, out, paged)
 	return &nasv1.ListDockerAppsResponse{
 		DockerApps:    out,
 		NextPageToken: nextToken,
@@ -1555,7 +1562,9 @@ func (s *Server) GetDockerApp(ctx context.Context, req *nasv1.GetDockerAppReques
 	if err != nil {
 		return nil, ToGRPCError(err)
 	}
-	return dockerAppToProto(app), nil
+	protoApp := dockerAppToProto(app)
+	s.enrichDockerAppsWithCatalog(ctx, []*nasv1.DockerApp{protoApp}, []domain.DockerApp{*app})
+	return protoApp, nil
 }
 
 func (s *Server) CreateDockerApp(ctx context.Context, req *nasv1.CreateDockerAppRequest) (*nasv1.DockerApp, error) {
@@ -1581,7 +1590,9 @@ func (s *Server) CreateDockerApp(ctx context.Context, req *nasv1.CreateDockerApp
 	if err != nil {
 		return nil, ToGRPCError(err)
 	}
-	return dockerAppToProto(created), nil
+	protoApp := dockerAppToProto(created)
+	s.enrichDockerAppsWithCatalog(ctx, []*nasv1.DockerApp{protoApp}, []domain.DockerApp{*created})
+	return protoApp, nil
 }
 
 func (s *Server) UpdateDockerApp(ctx context.Context, req *nasv1.UpdateDockerAppRequest) (*nasv1.DockerApp, error) {
@@ -1608,7 +1619,9 @@ func (s *Server) UpdateDockerApp(ctx context.Context, req *nasv1.UpdateDockerApp
 	if err != nil {
 		return nil, ToGRPCError(err)
 	}
-	return dockerAppToProto(updated), nil
+	protoApp := dockerAppToProto(updated)
+	s.enrichDockerAppsWithCatalog(ctx, []*nasv1.DockerApp{protoApp}, []domain.DockerApp{*updated})
+	return protoApp, nil
 }
 
 func (s *Server) DeleteDockerApp(ctx context.Context, req *nasv1.DeleteDockerAppRequest) (*emptypb.Empty, error) {
@@ -1640,7 +1653,9 @@ func (s *Server) StartDockerApp(ctx context.Context, req *nasv1.StartDockerAppRe
 		return nil, ToGRPCError(err)
 	}
 	slog.Info("[app] started successfully", "app_id", id, "state", app.State)
-	return dockerAppToProto(app), nil
+	protoApp := dockerAppToProto(app)
+	s.enrichDockerAppsWithCatalog(ctx, []*nasv1.DockerApp{protoApp}, []domain.DockerApp{*app})
+	return protoApp, nil
 }
 
 func (s *Server) StopDockerApp(ctx context.Context, req *nasv1.StopDockerAppRequest) (*nasv1.DockerApp, error) {
@@ -1658,7 +1673,9 @@ func (s *Server) StopDockerApp(ctx context.Context, req *nasv1.StopDockerAppRequ
 		return nil, ToGRPCError(err)
 	}
 	slog.Info("[app] stopped successfully", "app_id", id, "state", app.State)
-	return dockerAppToProto(app), nil
+	protoApp := dockerAppToProto(app)
+	s.enrichDockerAppsWithCatalog(ctx, []*nasv1.DockerApp{protoApp}, []domain.DockerApp{*app})
+	return protoApp, nil
 }
 
 func (s *Server) RestartDockerApp(ctx context.Context, req *nasv1.RestartDockerAppRequest) (*nasv1.DockerApp, error) {
@@ -1676,7 +1693,120 @@ func (s *Server) RestartDockerApp(ctx context.Context, req *nasv1.RestartDockerA
 		return nil, ToGRPCError(err)
 	}
 	slog.Info("[app] restarted successfully", "app_id", id, "state", app.State)
-	return dockerAppToProto(app), nil
+	protoApp := dockerAppToProto(app)
+	s.enrichDockerAppsWithCatalog(ctx, []*nasv1.DockerApp{protoApp}, []domain.DockerApp{*app})
+	return protoApp, nil
+}
+
+func (s *Server) UpgradeDockerApp(ctx context.Context, req *nasv1.UpgradeDockerAppRequest) (*nasv1.DockerApp, error) {
+	if err := s.prereq.RequireModule("docker"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	id, err := ParseSingleResourceID(patternDockerApp, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	slog.Info("[app] upgrade requested", "app_id", id, "take_snapshot", req.GetTakeSnapshot())
+	app, err := s.dockerApp.UpgradeApp(ctx, id, req.GetTakeSnapshot())
+	if err != nil {
+		slog.Error("[app] upgrade failed", "app_id", id, "error", err)
+		return nil, ToGRPCError(err)
+	}
+	slog.Info("[app] upgrade initiated successfully", "app_id", id, "state", app.State)
+	protoApp := dockerAppToProto(app)
+	s.enrichDockerAppsWithCatalog(ctx, []*nasv1.DockerApp{protoApp}, []domain.DockerApp{*app})
+	return protoApp, nil
+}
+
+func parseImageRepoTag(image string) (repo, tag string) {
+	image = strings.TrimSpace(image)
+	if idx := strings.LastIndex(image, ":"); idx != -1 {
+		return image[:idx], image[idx+1:]
+	}
+	return image, "latest"
+}
+
+func (s *Server) enrichDockerAppsWithCatalog(ctx context.Context, protoApps []*nasv1.DockerApp, domainApps []domain.DockerApp) {
+	if s.catalog == nil || len(protoApps) == 0 {
+		return
+	}
+	catApps, err := s.catalog.ListApps(ctx, "", "", "")
+	if err != nil || len(catApps) == 0 {
+		return
+	}
+	byID := make(map[string]domain.CatalogApp, len(catApps))
+	byTitle := make(map[string]domain.CatalogApp, len(catApps))
+	for _, ca := range catApps {
+		if ca.AppID != "" {
+			byID[strings.ToLower(ca.AppID)] = ca
+			if idx := strings.LastIndex(ca.AppID, "."); idx != -1 {
+				byID[strings.ToLower(ca.AppID[idx+1:])] = ca
+			}
+		}
+		if ca.Title != "" {
+			byTitle[strings.ToLower(ca.Title)] = ca
+		}
+	}
+
+	for i, pa := range protoApps {
+		var da *domain.DockerApp
+		if i < len(domainApps) {
+			da = &domainApps[i]
+		}
+		s.enrichSingleDockerApp(pa, da, byID, byTitle)
+	}
+}
+
+func (s *Server) enrichSingleDockerApp(pa *nasv1.DockerApp, da *domain.DockerApp, byID, byTitle map[string]domain.CatalogApp) {
+	if pa == nil {
+		return
+	}
+	var ca domain.CatalogApp
+	var ok bool
+	if pa.CatalogAppId != "" {
+		ca, ok = byID[strings.ToLower(pa.CatalogAppId)]
+	}
+	if !ok {
+		ca, ok = byID[strings.ToLower(pa.AppId)]
+	}
+	if !ok {
+		ca, ok = byTitle[strings.ToLower(pa.Title)]
+	}
+	if !ok {
+		return
+	}
+
+	if pa.CatalogAppId == "" {
+		pa.CatalogAppId = ca.AppID
+	}
+	if pa.CatalogSource == "" {
+		pa.CatalogSource = ca.Train
+	}
+	catVer := ca.Version
+	if catVer == "" {
+		catVer = ca.AppVersion
+	}
+	if catVer != "" {
+		pa.LatestVersion = catVer
+	}
+	if ca.ContainerImage != "" {
+		pa.LatestImage = ca.ContainerImage
+	}
+
+	if pa.CatalogVersion != "" && catVer != "" && pa.CatalogVersion != catVer {
+		pa.UpdateAvailable = true
+	} else if ca.ContainerImage != "" && da != nil {
+		for _, c := range da.Containers {
+			if c.Image != "" && ca.ContainerImage != "" {
+				cRepo, cTag := parseImageRepoTag(c.Image)
+				catRepo, catTag := parseImageRepoTag(ca.ContainerImage)
+				if cRepo == catRepo && cTag != "" && catTag != "" && cTag != catTag && catTag != "latest" {
+					pa.UpdateAvailable = true
+					break
+				}
+			}
+		}
+	}
 }
 
 func (s *Server) GetDockerAppLogs(ctx context.Context, req *nasv1.GetDockerAppLogsRequest) (*nasv1.GetDockerAppLogsResponse, error) {

@@ -758,3 +758,56 @@ func TestAdapterListNetworks(t *testing.T) {
 		t.Errorf("expected bridge network to be present in %v", nets)
 	}
 }
+
+func TestDockerAppUpgradeAndCatalogMetadata(t *testing.T) {
+	ctx := context.Background()
+	tempUnitsDir := t.TempDir()
+
+	adapter := docker.NewAdapterWithStateDir(tempUnitsDir)
+
+	appDir := filepath.Join(tempUnitsDir, "esphome-test")
+	if err := os.MkdirAll(appDir, 0755); err != nil {
+		t.Fatalf("failed to create app dir: %v", err)
+	}
+
+	catalogYAML := `x-nas-catalog-id: esphome
+x-nas-catalog-source: stable
+x-nas-catalog-version: 2026.10.0
+services:
+  esphome:
+    image: ghcr.io/esphome/esphome:2026.10.0
+    restart: unless-stopped
+    ports:
+      - "36052:80"
+`
+	if err := os.WriteFile(filepath.Join(appDir, "compose.yaml"), []byte(catalogYAML), 0644); err != nil {
+		t.Fatalf("failed to write compose.yaml: %v", err)
+	}
+
+	app, err := adapter.GetApp(ctx, "esphome-test")
+	if err != nil {
+		t.Fatalf("GetApp failed: %v", err)
+	}
+
+	if app.CatalogAppID != "esphome" {
+		t.Errorf("expected CatalogAppID 'esphome', got %q", app.CatalogAppID)
+	}
+	if app.CatalogSource != "stable" {
+		t.Errorf("expected CatalogSource 'stable', got %q", app.CatalogSource)
+	}
+	if app.CatalogVersion != "2026.10.0" {
+		t.Errorf("expected CatalogVersion '2026.10.0', got %q", app.CatalogVersion)
+	}
+
+	// Test UpgradeApp
+	upgraded, err := adapter.UpgradeApp(ctx, "esphome-test", true)
+	defer func() {
+		_, _ = adapter.StopApp(ctx, "esphome-test")
+	}()
+	if err != nil {
+		t.Fatalf("UpgradeApp failed: %v", err)
+	}
+	if upgraded.ID != "esphome-test" {
+		t.Errorf("unexpected upgraded app ID: %+v", upgraded)
+	}
+}

@@ -602,6 +602,12 @@ export function mapDockerApp(raw: any): DockerApp {
       protocol: p?.protocol || 'http',
       path: p?.path || '/',
     })),
+    catalogAppId: raw?.catalogAppId ?? raw?.catalog_app_id ?? '',
+    catalogSource: raw?.catalogSource ?? raw?.catalog_source ?? '',
+    catalogVersion: raw?.catalogVersion ?? raw?.catalog_version ?? '',
+    updateAvailable: Boolean(raw?.updateAvailable ?? raw?.update_available ?? false),
+    latestVersion: raw?.latestVersion ?? raw?.latest_version ?? '',
+    latestImage: raw?.latestImage ?? raw?.latest_image ?? '',
     totalCpuPercent: Number(raw?.totalCpuPercent ?? raw?.total_cpu_percent ?? 0),
     totalMemoryMib: normalizeInt64(raw?.totalMemoryMib ?? raw?.total_memory_mib ?? 0),
     totalNetRxBytes: normalizeInt64(raw?.totalNetRxBytes ?? raw?.total_net_rx_bytes ?? 0),
@@ -1452,6 +1458,13 @@ export class HttpDockerAppAdapter implements DockerAppPort {
 
   async restartApp(name: string): Promise<DockerApp> {
     const raw = await this.client.customMethod<any>(name, 'restart', {});
+    return mapDockerApp(raw);
+  }
+
+  async upgradeApp(name: string, takeSnapshot = true): Promise<DockerApp> {
+    const raw = await this.client.customMethod<any>(name, 'upgrade', {
+      take_snapshot: takeSnapshot,
+    });
     return mapDockerApp(raw);
   }
 

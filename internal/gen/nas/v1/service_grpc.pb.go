@@ -89,6 +89,7 @@ const (
 	NasService_StartDockerApp_FullMethodName                 = "/nas.v1.NasService/StartDockerApp"
 	NasService_StopDockerApp_FullMethodName                  = "/nas.v1.NasService/StopDockerApp"
 	NasService_RestartDockerApp_FullMethodName               = "/nas.v1.NasService/RestartDockerApp"
+	NasService_UpgradeDockerApp_FullMethodName               = "/nas.v1.NasService/UpgradeDockerApp"
 	NasService_GetDockerAppLogs_FullMethodName               = "/nas.v1.NasService/GetDockerAppLogs"
 	NasService_ListDockerNetworks_FullMethodName             = "/nas.v1.NasService/ListDockerNetworks"
 	NasService_GetDockerConfig_FullMethodName                = "/nas.v1.NasService/GetDockerConfig"
@@ -220,6 +221,7 @@ type NasServiceClient interface {
 	StartDockerApp(ctx context.Context, in *StartDockerAppRequest, opts ...grpc.CallOption) (*DockerApp, error)
 	StopDockerApp(ctx context.Context, in *StopDockerAppRequest, opts ...grpc.CallOption) (*DockerApp, error)
 	RestartDockerApp(ctx context.Context, in *RestartDockerAppRequest, opts ...grpc.CallOption) (*DockerApp, error)
+	UpgradeDockerApp(ctx context.Context, in *UpgradeDockerAppRequest, opts ...grpc.CallOption) (*DockerApp, error)
 	GetDockerAppLogs(ctx context.Context, in *GetDockerAppLogsRequest, opts ...grpc.CallOption) (*GetDockerAppLogsResponse, error)
 	ListDockerNetworks(ctx context.Context, in *ListDockerNetworksRequest, opts ...grpc.CallOption) (*ListDockerNetworksResponse, error)
 	GetDockerConfig(ctx context.Context, in *GetDockerConfigRequest, opts ...grpc.CallOption) (*DockerConfig, error)
@@ -970,6 +972,16 @@ func (c *nasServiceClient) RestartDockerApp(ctx context.Context, in *RestartDock
 	return out, nil
 }
 
+func (c *nasServiceClient) UpgradeDockerApp(ctx context.Context, in *UpgradeDockerAppRequest, opts ...grpc.CallOption) (*DockerApp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DockerApp)
+	err := c.cc.Invoke(ctx, NasService_UpgradeDockerApp_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nasServiceClient) GetDockerAppLogs(ctx context.Context, in *GetDockerAppLogsRequest, opts ...grpc.CallOption) (*GetDockerAppLogsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetDockerAppLogsResponse)
@@ -1549,6 +1561,7 @@ type NasServiceServer interface {
 	StartDockerApp(context.Context, *StartDockerAppRequest) (*DockerApp, error)
 	StopDockerApp(context.Context, *StopDockerAppRequest) (*DockerApp, error)
 	RestartDockerApp(context.Context, *RestartDockerAppRequest) (*DockerApp, error)
+	UpgradeDockerApp(context.Context, *UpgradeDockerAppRequest) (*DockerApp, error)
 	GetDockerAppLogs(context.Context, *GetDockerAppLogsRequest) (*GetDockerAppLogsResponse, error)
 	ListDockerNetworks(context.Context, *ListDockerNetworksRequest) (*ListDockerNetworksResponse, error)
 	GetDockerConfig(context.Context, *GetDockerConfigRequest) (*DockerConfig, error)
@@ -1815,6 +1828,9 @@ func (UnimplementedNasServiceServer) StopDockerApp(context.Context, *StopDockerA
 }
 func (UnimplementedNasServiceServer) RestartDockerApp(context.Context, *RestartDockerAppRequest) (*DockerApp, error) {
 	return nil, status.Error(codes.Unimplemented, "method RestartDockerApp not implemented")
+}
+func (UnimplementedNasServiceServer) UpgradeDockerApp(context.Context, *UpgradeDockerAppRequest) (*DockerApp, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpgradeDockerApp not implemented")
 }
 func (UnimplementedNasServiceServer) GetDockerAppLogs(context.Context, *GetDockerAppLogsRequest) (*GetDockerAppLogsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetDockerAppLogs not implemented")
@@ -3229,6 +3245,24 @@ func _NasService_RestartDockerApp_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NasService_UpgradeDockerApp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpgradeDockerAppRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).UpgradeDockerApp(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_UpgradeDockerApp_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).UpgradeDockerApp(ctx, req.(*UpgradeDockerAppRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NasService_GetDockerAppLogs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetDockerAppLogsRequest)
 	if err := dec(in); err != nil {
@@ -4411,6 +4445,10 @@ var NasService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RestartDockerApp",
 			Handler:    _NasService_RestartDockerApp_Handler,
+		},
+		{
+			MethodName: "UpgradeDockerApp",
+			Handler:    _NasService_UpgradeDockerApp_Handler,
 		},
 		{
 			MethodName: "GetDockerAppLogs",

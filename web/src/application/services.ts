@@ -606,6 +606,10 @@ export class DockerAppService {
     return this.appPort.restartApp(ResourceNames.dockerApp(idOrName));
   }
 
+  async upgradeApp(idOrName: string, takeSnapshot = true): Promise<DockerApp> {
+    return this.appPort.upgradeApp(ResourceNames.dockerApp(idOrName), takeSnapshot);
+  }
+
   async getAppLogs(idOrName: string, tail = 100, serviceName?: string): Promise<{ logs: string; lineCount: number }> {
     return this.appPort.getAppLogs(ResourceNames.dockerApp(idOrName), tail, serviceName);
   }

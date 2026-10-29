@@ -58,6 +58,12 @@ type DockerApp struct {
 	Volumes         []string             `json:"volumes"`
 	WebUIURL        string               `json:"webUiUrl"`
 	Portals         []DockerAppPortal    `json:"portals"`
+	CatalogAppID    string               `json:"catalogAppId,omitempty"`
+	CatalogSource   string               `json:"catalogSource,omitempty"`
+	CatalogVersion  string               `json:"catalogVersion,omitempty"`
+	UpdateAvailable bool                 `json:"updateAvailable,omitempty"`
+	LatestVersion   string               `json:"latestVersion,omitempty"`
+	LatestImage     string               `json:"latestImage,omitempty"`
 	TotalCPUPercent float64              `json:"totalCpuPercent"`
 	TotalMemoryMiB  int64                `json:"totalMemoryMib"`
 	TotalNetRxBytes int64                `json:"totalNetRxBytes"`

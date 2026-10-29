@@ -144,6 +144,12 @@ message DockerApp {
   int64 total_net_tx_rate = 20 [(google.api.field_behavior) = OUTPUT_ONLY];
   repeated DockerAppPortal portals = 21 [(google.api.field_behavior) = OUTPUT_ONLY];
   bool auto_start = 22 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string catalog_app_id = 23 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string catalog_source = 24 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string catalog_version = 25 [(google.api.field_behavior) = OUTPUT_ONLY];
+  bool update_available = 26 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string latest_version = 27 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string latest_image = 28 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message DockerAppPortal {
@@ -227,6 +233,14 @@ message RestartDockerAppRequest {
     (google.api.field_behavior) = REQUIRED,
     (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerApp"}
   ];
+}
+
+message UpgradeDockerAppRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "nas.sigxcpu.io/DockerApp"}
+  ];
+  bool take_snapshot = 2;
 }
 
 message GetDockerAppLogsRequest {

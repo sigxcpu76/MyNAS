@@ -510,6 +510,12 @@ export interface DockerApp {
   volumes: string[];
   webUiUrl: string;
   portals?: DockerAppPortal[];
+  catalogAppId?: string;
+  catalogSource?: string;
+  catalogVersion?: string;
+  updateAvailable?: boolean;
+  latestVersion?: string;
+  latestImage?: string;
   totalCpuPercent: number;
   totalMemoryMib: number;
   totalNetRxBytes?: number;

@@ -139,6 +139,7 @@ export interface DockerAppPort {
   startApp(name: string): Promise<DockerApp>;
   stopApp(name: string): Promise<DockerApp>;
   restartApp(name: string): Promise<DockerApp>;
+  upgradeApp(name: string, takeSnapshot?: boolean): Promise<DockerApp>;
   getAppLogs(name: string, tail?: number, serviceName?: string): Promise<{ logs: string; lineCount: number }>;
   getDockerConfig(): Promise<DockerConfig>;
   updateDockerConfig(dataset: string, pool?: string): Promise<DockerConfig>;

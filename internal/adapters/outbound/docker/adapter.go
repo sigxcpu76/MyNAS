@@ -1600,6 +1600,56 @@ func (a *Adapter) RestartApp(ctx context.Context, id string) (*domain.DockerApp,
 	return a.buildApp(ctx, id, liveContainers)
 }
 
+// UpgradeApp pulls latest images for all services in the compose stack and redeploys with --remove-orphans in the background.
+// If takeSnapshot is true and a ZFS engine port is configured, it automatically takes a ZFS snapshot of any matching app datasets before upgrading.
+func (a *Adapter) UpgradeApp(ctx context.Context, id string, takeSnapshot bool) (*domain.DockerApp, error) {
+	a.mu.Lock()
+
+	appDir := filepath.Join(a.unitsDir, id)
+	composePath := filepath.Join(appDir, "compose.yaml")
+	if _, err := os.Stat(composePath); err != nil {
+		a.mu.Unlock()
+		return nil, fmt.Errorf("app %q not found or has no compose.yaml", id)
+	}
+
+	if !a.hasSocket {
+		a.mu.Unlock()
+		return nil, fmt.Errorf("docker daemon socket %s is not available", a.socketPath)
+	}
+	if !a.hasCompose {
+		a.mu.Unlock()
+		return nil, fmt.Errorf("docker compose CLI is not available on host")
+	}
+
+	content, err := os.ReadFile(composePath)
+	if err != nil {
+		a.mu.Unlock()
+		return nil, fmt.Errorf("failed to read compose.yaml: %w", err)
+	}
+
+	// Normalize compose volumes & environment to ensure health before upgrade
+	normalized := a.NormalizeComposeVolumes(id, string(content))
+	normalized = NormalizeComposeEnvironment(normalized)
+	if normalized != string(content) {
+		_ = os.WriteFile(composePath, []byte(normalized), 0644)
+		content = []byte(normalized)
+	}
+
+	_, _, vols, _, _, _, _, _, _, _ := parseComposeYAML(string(content))
+
+	if takeSnapshot {
+		a.snapshotAppVolumes(ctx, id, vols)
+	}
+
+	a.startUpgradeLocked(appDir, id, "Upgrading stack (pulling latest images & restarting containers)...")
+
+	liveContainers := a.fetchLiveContainers(ctx)
+	built, err := a.buildApp(ctx, id, liveContainers)
+	a.mu.Unlock()
+
+	return built, err
+}
+
 // GetAppLogs retrieves aggregated logs for a Docker Compose Application.
 func (a *Adapter) GetAppLogs(ctx context.Context, id string, tail int, serviceName string) (string, error) {
 	appDir := filepath.Join(a.unitsDir, id)
@@ -1652,9 +1702,12 @@ type rawPortalEntry struct {
 }
 
 type composeDescriptor struct {
-	ManagementPort any `yaml:"x-nas-management-port"`
-	XPortals       any `yaml:"x-portals"`
-	Portals        any `yaml:"portals"`
+	ManagementPort any    `yaml:"x-nas-management-port"`
+	CatalogID      string `yaml:"x-nas-catalog-id"`
+	CatalogSource  string `yaml:"x-nas-catalog-source"`
+	CatalogVersion string `yaml:"x-nas-catalog-version"`
+	XPortals       any    `yaml:"x-portals"`
+	Portals        any    `yaml:"portals"`
 	Services       map[string]struct {
 		Image         string `yaml:"image"`
 		ContainerName string `yaml:"container_name"`
@@ -1780,15 +1833,18 @@ func parsePortMapping(p string) (hostPort, containerPort string) {
 	return "", ""
 }
 
-func parseComposeYAML(content string) (services []string, ports []string, volumes []string, managementPort string, rawPortals []rawPortalEntry, autoStart bool, err error) {
+func parseComposeYAML(content string) (services []string, ports []string, volumes []string, managementPort string, rawPortals []rawPortalEntry, autoStart bool, catalogID, catalogSource, catalogVersion string, err error) {
 	var c composeDescriptor
 	if err := yaml.Unmarshal([]byte(content), &c); err != nil {
-		return nil, nil, nil, "", nil, false, err
+		return nil, nil, nil, "", nil, false, "", "", "", err
 	}
 	var mgmtPort string
 	if c.ManagementPort != nil {
 		mgmtPort = strings.TrimSpace(fmt.Sprintf("%v", c.ManagementPort))
 	}
+	catalogID = strings.TrimSpace(c.CatalogID)
+	catalogSource = strings.TrimSpace(c.CatalogSource)
+	catalogVersion = strings.TrimSpace(c.CatalogVersion)
 	rawPortals = parseRawPortals(c.XPortals)
 	if len(rawPortals) == 0 {
 		rawPortals = parseRawPortals(c.Portals)
@@ -1839,7 +1895,7 @@ func parseComposeYAML(content string) (services []string, ports []string, volume
 	sort.Strings(services)
 	sort.Strings(ports)
 	sort.Strings(volumes)
-	return services, ports, volumes, mgmtPort, rawPortals, autoStart, nil
+	return services, ports, volumes, mgmtPort, rawPortals, autoStart, catalogID, catalogSource, catalogVersion, nil
 }
 
 func deriveWebUIURL(ports []string, preferredContainerPort string) string {
@@ -1873,7 +1929,7 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 		composeYAML = prettifyComposeYAML(string(data))
 	}
 
-	services, parsedPorts, parsedVols, mgmtPort, rawPortals, autoStart, _ := parseComposeYAML(composeYAML)
+	services, parsedPorts, parsedVols, mgmtPort, rawPortals, autoStart, catID, catSrc, catVer, _ := parseComposeYAML(composeYAML)
 
 	var appContainers []domain.DockerAppContainer
 	var totalCPU float64
@@ -2137,6 +2193,9 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 		State:           state,
 		StatusText:      statusText,
 		AutoStart:       autoStart,
+		CatalogAppID:    catID,
+		CatalogSource:   catSrc,
+		CatalogVersion:  catVer,
 		ComposeYAML:     composeYAML,
 		ComposeFilePath: composePath,
 		Services:        services,
@@ -3139,6 +3198,87 @@ func (a *Adapter) startDeploymentLocked(dir, id, msg string) {
 			a.deployingErrors[id] = fmt.Sprintf("Deployment failed: %v", runErr)
 		}
 	}()
+}
+
+// startUpgradeLocked marks the app as deploying, pulls latest images with `docker compose pull`,
+// and runs `docker compose up -d --remove-orphans` in the background.
+// Caller must hold a.mu.
+func (a *Adapter) startUpgradeLocked(dir, id, msg string) {
+	if _, busy := a.deployingApps[id]; busy {
+		return
+	}
+	if a.deployCancel == nil {
+		a.deployCancel = make(map[string]context.CancelFunc)
+	}
+	bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	a.deployingApps[id] = msg
+	a.deployCancel[id] = cancel
+	delete(a.deployingErrors, id)
+
+	go func() {
+		defer cancel()
+		_ = a.runCompose(bgCtx, dir, id, "pull")
+		runErr := a.runCompose(bgCtx, dir, id, "up", "-d", "--remove-orphans")
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		delete(a.deployCancel, id)
+		if _, stillDeploying := a.deployingApps[id]; !stillDeploying {
+			return
+		}
+		delete(a.deployingApps, id)
+		if runErr != nil && !isComposeCanceled(runErr, "") {
+			a.deployingErrors[id] = fmt.Sprintf("Upgrade failed: %v", runErr)
+		}
+	}()
+}
+
+func (a *Adapter) snapshotAppVolumes(ctx context.Context, id string, volumes []string) {
+	if a.zfsPort == nil {
+		return
+	}
+	snapSuffix := fmt.Sprintf("pre-upgrade-%s", time.Now().UTC().Format("20060102-150405"))
+	snapshotted := make(map[string]bool)
+
+	pools, err := a.zfsPort.ListPools(ctx)
+	if err != nil || len(pools) == 0 {
+		return
+	}
+
+	for _, pool := range pools {
+		poolName := pool.PoolName
+		datasets, err := a.zfsPort.ListDatasets(ctx, poolName)
+		if err != nil {
+			continue
+		}
+		for _, d := range datasets {
+			dsPath := d.DatasetPath
+			cleanID := strings.TrimSpace(id)
+			if cleanID != "" && (strings.HasSuffix(dsPath, "/"+cleanID) || strings.HasSuffix(dsPath, "/apps/"+cleanID) || strings.HasSuffix(dsPath, "/appdata/"+cleanID)) {
+				if !snapshotted[dsPath] {
+					if _, err := a.zfsPort.SnapshotDataset(ctx, poolName, dsPath, snapSuffix); err == nil {
+						slog.Info("[docker] created pre-upgrade zfs snapshot for app dataset", "app", cleanID, "dataset", dsPath, "snapshot", snapSuffix)
+						snapshotted[dsPath] = true
+					}
+				}
+			}
+			for _, v := range volumes {
+				hostPath, _ := parsePortMapping(v)
+				if hostPath == "" {
+					parts := strings.Split(v, ":")
+					hostPath = parts[0]
+				}
+				cleanHost := filepath.Clean(hostPath)
+				if d.Mountpoint != "" && (cleanHost == d.Mountpoint || strings.HasPrefix(cleanHost, d.Mountpoint+"/")) {
+					if !snapshotted[dsPath] {
+						if _, err := a.zfsPort.SnapshotDataset(ctx, poolName, dsPath, snapSuffix); err == nil {
+							slog.Info("[docker] created pre-upgrade zfs snapshot for mounted dataset", "app", cleanID, "dataset", dsPath, "snapshot", snapSuffix)
+							snapshotted[dsPath] = true
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 // cancelDeployment aborts an in-flight background deployment (if any) and waits for it to exit.

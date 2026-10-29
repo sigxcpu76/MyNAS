@@ -151,6 +151,15 @@ func (s *DockerAppService) RestartApp(ctx context.Context, name string) (*domain
 	return s.port.RestartApp(ctx, appID)
 }
 
+// UpgradeApp triggers an update and redeploy of the application stack, optionally taking a pre-upgrade ZFS snapshot.
+func (s *DockerAppService) UpgradeApp(ctx context.Context, name string, takeSnapshot bool) (*domain.DockerApp, error) {
+	appID := strings.TrimPrefix(name, "dockerApps/")
+	if appID == "" {
+		return nil, fmt.Errorf("invalid app name %q: empty app ID", name)
+	}
+	return s.port.UpgradeApp(ctx, appID, takeSnapshot)
+}
+
 // GetAppLogs retrieves aggregated logs for a Docker Compose Application.
 func (s *DockerAppService) GetAppLogs(ctx context.Context, name string, tail int, serviceName string) (string, error) {
 	appID := strings.TrimPrefix(name, "dockerApps/")

@@ -2,6 +2,7 @@ package grpcadapter_test
 
 import (
 	"context"
+	"os"
 	osuser "os/user"
 	"path/filepath"
 	"strings"
@@ -243,6 +244,8 @@ func TestModuleAvailabilityEnforcement(t *testing.T) {
 func TestDockerConfigAndFilesystemGRPC(t *testing.T) {
 	ctx := context.Background()
 	checker := prereq.NewSystemChecker()
+	checker.SetAllModulesInstalledForTest()
+	checker.SetMainPool("tank")
 	unitsDir := t.TempDir()
 	dockerAdapter := docker.NewAdapterFull("/nonexistent/docker.sock", unitsDir)
 	zfsAdapter := newStubZfsServerPort(t.TempDir())
@@ -293,6 +296,37 @@ func TestDockerConfigAndFilesystemGRPC(t *testing.T) {
 		t.Fatalf("ListFileSystemDirectories failed: %v", err)
 	}
 	_ = fsRes
+
+	// 4. Test Create, Get, and Upgrade DockerApp with catalog metadata
+	appDir := filepath.Join(unitsDir, "esphome-app")
+	_ = os.MkdirAll(appDir, 0755)
+	_ = os.WriteFile(filepath.Join(appDir, "compose.yaml"), []byte(`x-nas-catalog-id: esphome
+x-nas-catalog-source: stable
+x-nas-catalog-version: 2026.10.0
+services:
+  esphome:
+    image: ghcr.io/esphome/esphome:2026.10.0
+`), 0644)
+
+	app, err := srv.GetDockerApp(ctx, &nasv1.GetDockerAppRequest{Name: "dockerApps/esphome-app"})
+	if err != nil {
+		t.Fatalf("GetDockerApp failed: %v", err)
+	}
+	if app.GetCatalogAppId() != "esphome" {
+		t.Errorf("expected CatalogAppId 'esphome', got %q", app.GetCatalogAppId())
+	}
+	if app.GetCatalogVersion() != "2026.10.0" {
+		t.Errorf("expected CatalogVersion '2026.10.0', got %q", app.GetCatalogVersion())
+	}
+
+	// 5. Test UpgradeDockerApp (fails gracefully when docker socket is unavailable)
+	_, err = srv.UpgradeDockerApp(ctx, &nasv1.UpgradeDockerAppRequest{
+		Name:         "dockerApps/esphome-app",
+		TakeSnapshot: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "docker daemon socket") {
+		t.Fatalf("expected docker daemon socket unavailable error, got: %v", err)
+	}
 }
 
 func TestSystemConfigAndPoolSelection(t *testing.T) {

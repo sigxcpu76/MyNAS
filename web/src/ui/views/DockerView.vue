@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import {
   mdiAlertCircleOutline,
+  mdiArrowUpBoldCircleOutline,
   mdiCheck,
   mdiChevronDown,
   mdiClose,
@@ -27,6 +28,7 @@ import {
   mdiRestart,
   mdiStop,
   mdiStorefrontOutline,
+  mdiUpdate,
 } from '@mdi/js';
 import { services } from '../../container';
 import { generateNanosecondId, toZfsSafeSlug } from '../../domain/id';
@@ -326,6 +328,16 @@ function openCatalogModal() {
 const isQuestionWizardOpen = ref(false);
 const wizardCatalogApp = ref<CatalogApp | null>(null);
 
+function injectCatalogMetadata(yaml: string, catApp: CatalogApp): string {
+  if (!catApp || !yaml) return yaml;
+  let res = yaml;
+  if (!res.includes('x-nas-catalog-id:')) {
+    const meta = `x-nas-catalog-id: "${catApp.appId}"\nx-nas-catalog-source: "${catApp.train || 'stable'}"\nx-nas-catalog-version: "${catApp.version || catApp.appVersion || ''}"\n`;
+    res = meta + res;
+  }
+  return res;
+}
+
 async function importFromCatalog(app: CatalogApp) {
   importingAppId.value = app.appId;
   try {
@@ -344,9 +356,10 @@ async function importFromCatalog(app: CatalogApp) {
       const rawSlug = detailed.appId && detailed.appId.includes('.') ? detailed.appId.split('.').pop()! : (detailed.title || detailed.appId);
       installAppId.value = toZfsSafeSlug(detailed.title || rawSlug);
       const resolvedImg = detailed.containerImage || `${toZfsSafeSlug(rawSlug)}:latest`;
-      installComposeYaml.value =
+      const rawYaml =
         detailed.composeYaml ||
         `services:\n  ${installAppId.value}:\n    image: ${resolvedImg}\n`;
+      installComposeYaml.value = injectCatalogMetadata(rawYaml, detailed);
       activeInstallTemplate.value = null;
       installEditorKey.value++;
       isCatalogModalOpen.value = false;
@@ -363,7 +376,9 @@ async function importFromCatalog(app: CatalogApp) {
 function handleWizardOpenInEditor(data: { appId: string; title: string; composeYaml: string }) {
   installTitle.value = data.title;
   installAppId.value = toZfsSafeSlug(data.appId || data.title);
-  installComposeYaml.value = data.composeYaml;
+  installComposeYaml.value = wizardCatalogApp.value
+    ? injectCatalogMetadata(data.composeYaml, wizardCatalogApp.value)
+    : data.composeYaml;
   activeInstallTemplate.value = null;
   installEditorKey.value++;
   isQuestionWizardOpen.value = false;
@@ -373,6 +388,9 @@ function handleWizardOpenInEditor(data: { appId: string; title: string; composeY
 
 function handleWizardDeploy(data: { appId: string; title: string; composeYaml: string }) {
   isQuestionWizardOpen.value = false;
+  if (wizardCatalogApp.value) {
+    data.composeYaml = injectCatalogMetadata(data.composeYaml, wizardCatalogApp.value);
+  }
   handleDeployApp(data);
 }
 
@@ -383,9 +401,10 @@ function handleWizardSkip() {
   const rawSlug = app.appId && app.appId.includes('.') ? app.appId.split('.').pop()! : (app.title || app.appId);
   installAppId.value = toZfsSafeSlug(app.title || rawSlug);
   const resolvedImg = app.containerImage || `${toZfsSafeSlug(rawSlug)}:latest`;
-  installComposeYaml.value =
+  const rawYaml =
     app.composeYaml ||
     `services:\n  ${installAppId.value}:\n    image: ${resolvedImg}\n`;
+  installComposeYaml.value = injectCatalogMetadata(rawYaml, app);
   activeInstallTemplate.value = null;
   installEditorKey.value++;
   isQuestionWizardOpen.value = false;
@@ -534,6 +553,48 @@ async function handleSaveAppEdit(data: { appId: string; title: string; composeYa
     notify('error', err?.message || 'Failed to update Docker App');
   } finally {
     isUpdatingApp.value = false;
+  }
+}
+
+function applyLatestImageInEditor() {
+  if (!editingApp.value || !editingApp.value.latestImage) return;
+  let yaml = editingApp.value.composeYaml;
+  const latestImg = editingApp.value.latestImage;
+  yaml = yaml.replace(/(image:\s*)["']?[^"'\s\n]+["']?/i, `$1${latestImg}`);
+  editingApp.value.composeYaml = yaml;
+  notify('success', `Applied latest image: ${latestImg}`);
+}
+
+// =============================================================================
+// Upgrade App Modal
+// =============================================================================
+const isUpgradeModalOpen = ref(false);
+const upgradingApp = ref<DockerApp | null>(null);
+const upgradeTakeSnapshot = ref(true);
+const isUpgradingApp = ref(false);
+
+function openUpgradeModal(app: DockerApp) {
+  upgradingApp.value = app;
+  upgradeTakeSnapshot.value = true;
+  isUpgradeModalOpen.value = true;
+}
+
+async function handleConfirmUpgrade() {
+  if (!upgradingApp.value || isUpgradingApp.value) return;
+  isUpgradingApp.value = true;
+  const app = upgradingApp.value;
+  try {
+    await services.apps.upgradeApp(app.name, upgradeTakeSnapshot.value);
+    notify(
+      'info',
+      `Upgrade initiated for "${app.title || app.appId}". Pulling latest images & recreating containers...`
+    );
+    isUpgradeModalOpen.value = false;
+    await refreshApps();
+  } catch (err: any) {
+    notify('error', err?.message || `Failed to upgrade ${app.title || app.appId}`);
+  } finally {
+    isUpgradingApp.value = false;
   }
 }
 
@@ -1188,9 +1249,19 @@ onUnmounted(() => {
                 </div>
 
                 <div>
-                  <div style="display: flex; align-items: center; gap: 6px">
+                  <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
                     <span style="font-weight: 600; font-size: 12px; color: var(--text-primary)">
                       {{ app.title || app.appId }}
+                    </span>
+                    <span
+                      v-if="app.updateAvailable"
+                      class="badge badge-warning"
+                      style="font-size: 10px; padding: 1px 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px"
+                      :title="`Catalog Update Available: ${app.catalogVersion || 'installed'} → ${app.latestVersion || 'latest'}. Click to upgrade.`"
+                      @click.stop="openUpgradeModal(app)"
+                    >
+                      <MdiIcon :path="mdiUpdate" size="11" />
+                      Update: {{ app.latestVersion || 'Available' }}
                     </span>
                     <span
                       v-if="transitioningApps[app.name]"
@@ -1450,6 +1521,18 @@ onUnmounted(() => {
 
                 <button
                   class="btn btn-sm btn-icon"
+                  :class="app.updateAvailable ? 'btn-primary' : ''"
+                  :disabled="app.state === 'DEPLOYING' || Boolean(transitioningApps[app.name])"
+                  style="flex-shrink: 0"
+                  :title="app.updateAvailable ? `Upgrade available (${app.latestVersion}) - pull & redeploy` : 'Pull latest images & redeploy stack'"
+                  :aria-label="`Upgrade ${app.title || app.appId}`"
+                  @click="openUpgradeModal(app)"
+                >
+                  <MdiIcon :path="mdiArrowUpBoldCircleOutline" size="16" />
+                </button>
+
+                <button
+                  class="btn btn-sm btn-icon"
                   style="flex-shrink: 0"
                   title="View Application Logs"
                   aria-label="View Application Logs"
@@ -1575,6 +1658,29 @@ onUnmounted(() => {
 
         <!-- Scrollable Body with Reusable Form-Based Compose Editor Component in Edit Mode -->
         <div class="modal-scroll-body">
+          <!-- Catalog Update Available Banner -->
+          <div
+            v-if="editingApp.updateAvailable"
+            style="background: var(--warning-bg, rgba(234, 179, 8, 0.1)); border: 1px solid var(--warning-border, rgba(234, 179, 8, 0.3)); border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap"
+          >
+            <div style="font-size: 12.5px; color: var(--text-primary)">
+              <strong>Catalog Update Available:</strong>
+              <span v-if="editingApp.latestVersion" style="margin-left: 4px">Version {{ editingApp.latestVersion }}</span>
+              <span v-if="editingApp.latestImage" style="color: var(--text-secondary); margin-left: 8px">
+                Recommended Image: <code class="mono" style="font-size: 11px">{{ editingApp.latestImage }}</code>
+              </span>
+            </div>
+            <button
+              v-if="editingApp.latestImage"
+              type="button"
+              class="btn btn-sm btn-primary"
+              style="font-size: 11.5px; padding: 3px 8px; flex-shrink: 0"
+              @click="applyLatestImageInEditor"
+            >
+              Apply Latest Image
+            </button>
+          </div>
+
           <ComposeFormEditor
             :initial-app-id="editingApp.appId"
             :initial-title="editingApp.title"
@@ -1584,6 +1690,69 @@ onUnmounted(() => {
             @save="handleSaveAppEdit"
             @cancel="isEditModalOpen = false"
           />
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- MODAL 2.5: Upgrade App Modal                                          -->
+    <!-- ===================================================================== -->
+    <div v-if="isUpgradeModalOpen && upgradingApp" class="modal-backdrop">
+      <div class="modal-card" style="max-width: 520px">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <MdiIcon :path="mdiArrowUpBoldCircleOutline" size="22" style="color: var(--accent-primary)" />
+            <h3 style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin: 0">
+              Upgrade: {{ upgradingApp.title || upgradingApp.appId }}
+            </h3>
+          </div>
+          <button class="btn btn-sm btn-icon" @click="isUpgradeModalOpen = false">
+            <MdiIcon :path="mdiClose" size="18" />
+          </button>
+        </div>
+
+        <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 16px">
+          This will pull the latest container images for the stack from the registry and restart the application with zero orphaned containers.
+          <div v-if="upgradingApp.updateAvailable" style="margin-top: 10px; padding: 8px 12px; background: var(--bg-surface-elevated, var(--bg-hover)); border-radius: 6px; border: 1px solid var(--border-subtle)">
+            <div style="font-size: 12px; font-weight: 600; color: var(--text-primary)">
+              Catalog Version Information
+            </div>
+            <div style="font-size: 12px; margin-top: 2px">
+              Installed: <span class="mono">{{ upgradingApp.catalogVersion || 'unspecified' }}</span> →
+              Latest: <span class="mono" style="color: var(--accent-primary); font-weight: 600">{{ upgradingApp.latestVersion }}</span>
+            </div>
+            <div v-if="upgradingApp.latestImage" style="font-size: 11px; color: var(--text-muted); margin-top: 2px">
+              Image: <span class="mono">{{ upgradingApp.latestImage }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Snapshot Checkbox -->
+        <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin-bottom: 20px; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--bg-surface)">
+          <input type="checkbox" v-model="upgradeTakeSnapshot" style="margin-top: 2px" />
+          <div style="font-size: 12.5px">
+            <span style="font-weight: 600; color: var(--text-primary)">Create pre-upgrade ZFS snapshot</span>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px">
+              Automatically snapshots app storage datasets on ZFS before pulling and restarting, allowing instant rollback if needed.
+            </div>
+          </div>
+        </label>
+
+        <!-- Actions -->
+        <div style="display: flex; justify-content: flex-end; gap: 8px">
+          <button class="btn btn-secondary" :disabled="isUpgradingApp" @click="isUpgradeModalOpen = false">
+            Cancel
+          </button>
+          <button
+            class="btn btn-primary"
+            :disabled="isUpgradingApp"
+            style="display: flex; align-items: center; gap: 6px"
+            @click="handleConfirmUpgrade"
+          >
+            <MdiIcon v-if="isUpgradingApp" :path="mdiLoading" size="16" class="spin-icon" />
+            <MdiIcon v-else :path="mdiArrowUpBoldCircleOutline" size="16" />
+            <span>{{ isUpgradingApp ? 'Upgrading...' : 'Confirm Upgrade' }}</span>
+          </button>
         </div>
       </div>
     </div>
