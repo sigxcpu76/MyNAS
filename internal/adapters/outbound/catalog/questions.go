@@ -1,7 +1,10 @@
 package catalog
 
 import (
+	"bytes"
 	"fmt"
+	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -45,8 +48,165 @@ type rawEnumItem struct {
 	Description string `yaml:"description"`
 }
 
+// ExtractStorageMountPaths parses a TrueNAS SCALE docker-compose.yaml template
+// and returns a map of storage target names (e.g. "data", "config") to their container mount paths.
+func ExtractStorageMountPaths(tplContent string, valuesContent ...string) map[string]string {
+	result := make(map[string]string)
+	if strings.TrimSpace(tplContent) == "" {
+		return result
+	}
+
+	ixValues := ""
+	if len(valuesContent) > 0 {
+		ixValues = valuesContent[0]
+	}
+
+	consts := make(map[string]string)
+	consts["config_path"] = "/config"
+	consts["data_path"] = "/data"
+	consts["pio_path"] = "/config/.esphome/.platformio"
+	consts["pio_globallib_path"] = "/config/.esphome/piolibs"
+
+	if ixValues != "" {
+		reConst := regexp.MustCompile(`(?m)^\s*([a-zA-Z0-9_]+_path):\s*["']?(/[^"'\n\r]+)["']?`)
+		for _, m := range reConst.FindAllStringSubmatch(ixValues, -1) {
+			if len(m) > 2 {
+				consts[m[1]] = strings.TrimSpace(m[2])
+			}
+		}
+	}
+
+	// 1. Match: add_storage("/usr/share/elasticsearch/data", values.storage.data)
+	// Must require leading slash '/' to guarantee absolute mount path
+	reAddStorage := regexp.MustCompile(`add_storage\(\s*["'](/[^"']+)["']\s*,\s*values\.storage\.([a-zA-Z0-9_]+)`)
+	for _, m := range reAddStorage.FindAllStringSubmatch(tplContent, -1) {
+		if len(m) > 2 {
+			result[m[2]] = m[1]
+		}
+	}
+
+	// 2. Match: add_storage(values.consts.config_path, values.storage.config)
+	reAddStorageConst := regexp.MustCompile(`add_storage\(\s*(?:values\.)?consts\.([a-zA-Z0-9_]+)\s*,\s*values\.storage\.([a-zA-Z0-9_]+)`)
+	for _, m := range reAddStorageConst.FindAllStringSubmatch(tplContent, -1) {
+		if len(m) > 2 {
+			constKey := m[1]
+			storageKey := m[2]
+			if p, ok := consts[constKey]; ok && p != "" {
+				result[storageKey] = p
+			} else if strings.Contains(constKey, "config") {
+				result[storageKey] = "/config"
+			} else if strings.Contains(constKey, "data") {
+				result[storageKey] = "/data"
+			}
+		}
+	}
+
+	// 3. Match: nc_storage.x.append(("/var/www/html", values.storage.html))
+	// NOTE: Must require leading slash '/' so it does NOT match ("config", values.storage.config)
+	reAppendStorage := regexp.MustCompile(`\(\s*["'](/[^"']+)["']\s*,\s*values\.storage\.([a-zA-Z0-9_]+)`)
+	for _, m := range reAppendStorage.FindAllStringSubmatch(tplContent, -1) {
+		if len(m) > 2 {
+			if _, exists := result[m[2]]; !exists {
+				result[m[2]] = m[1]
+			}
+		}
+	}
+
+	// 4. Match: "volume": values.storage.postgres_data
+	reVolumeStorage := regexp.MustCompile(`["']volume["']\s*:\s*values\.storage\.([a-zA-Z0-9_]+)`)
+	for _, m := range reVolumeStorage.FindAllStringSubmatch(tplContent, -1) {
+		if len(m) > 1 {
+			target := m[1]
+			if _, exists := result[target]; !exists {
+				if strings.Contains(target, "postgres") || strings.Contains(target, "pg") {
+					result[target] = "/var/lib/postgresql/data"
+				} else if strings.Contains(target, "mysql") || strings.Contains(target, "mariadb") {
+					result[target] = "/var/lib/mysql"
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+func isTrueNASStorageDict(q rawQuestion) bool {
+	if q.Schema == nil || q.Schema.Type != "dict" {
+		return false
+	}
+	hasType := false
+	hasConfig := false
+	for _, attr := range q.Schema.Attrs {
+		if attr.Variable == "type" {
+			hasType = true
+		}
+		if attr.Variable == "ix_volume_config" || attr.Variable == "host_path_config" || attr.Variable == "cifs_config" || attr.Variable == "nfs_config" {
+			hasConfig = true
+		}
+	}
+	return hasType || hasConfig
+}
+
+func resolveContainerMountPath(appID, storageTarget string, schema *rawSchema, mountPaths map[string]string) string {
+	ensureAbs := func(p string) string {
+		clean := strings.TrimSpace(p)
+		if clean == "" {
+			return clean
+		}
+		if !strings.HasPrefix(clean, "/") {
+			clean = "/" + clean
+		}
+		return clean
+	}
+
+	if mountPaths != nil {
+		if mp, ok := mountPaths[storageTarget]; ok && mp != "" {
+			return ensureAbs(mp)
+		}
+	}
+	if schema != nil {
+		if schema.MountPath != "" {
+			return ensureAbs(schema.MountPath)
+		}
+		if schema.Subpath != "" {
+			return ensureAbs(schema.Subpath)
+		}
+	}
+	// Well-known container mount paths for popular apps
+	cleanApp := strings.ToLower(appID)
+	cleanTarget := strings.ToLower(storageTarget)
+	if strings.Contains(cleanApp, "elastic") && (cleanTarget == "data" || cleanTarget == "storage.data") {
+		return "/usr/share/elasticsearch/data"
+	}
+	switch cleanTarget {
+	case "config":
+		return "/config"
+	case "data":
+		return "/data"
+	case "media":
+		return "/media"
+	case "cache":
+		return "/cache"
+	case "html":
+		return "/var/www/html"
+	case "postgres_data", "pg_data":
+		return "/var/lib/postgresql/data"
+	case "mysql_data":
+		return "/var/lib/mysql"
+	case "transcodes":
+		return "/config/transcodes"
+	default:
+		return ensureAbs(cleanTarget)
+	}
+}
+
 // ParseQuestionsYAML parses TrueNAS SCALE questions.yaml into structured domain question groups.
 func ParseQuestionsYAML(data []byte, appID, appsPool, appdataPath string) ([]domain.CatalogQuestionGroup, []domain.CatalogQuestion) {
+	return ParseQuestionsYAMLWithTemplate(data, appID, appsPool, appdataPath, "")
+}
+
+// ParseQuestionsYAMLWithTemplate parses questions.yaml taking into account the docker-compose template to extract real mount paths.
+func ParseQuestionsYAMLWithTemplate(data []byte, appID, appsPool, appdataPath, tplContent string, valuesContent ...string) ([]domain.CatalogQuestionGroup, []domain.CatalogQuestion) {
 	if len(data) == 0 {
 		return nil, nil
 	}
@@ -63,8 +223,10 @@ func ParseQuestionsYAML(data []byte, appID, appsPool, appdataPath string) ([]dom
 		appdataPath = fmt.Sprintf("/mnt/%s/apps", appsPool)
 	}
 
+	mountPaths := ExtractStorageMountPaths(tplContent, valuesContent...)
+
 	var flatList []domain.CatalogQuestion
-	flattenQuestions("", raw.Questions, raw.Groups, appID, appdataPath, &flatList)
+	flattenQuestions("", raw.Questions, raw.Groups, appID, appdataPath, mountPaths, &flatList)
 
 	// Filter out internal TrueNAS noise (certificates, ix internal perms, etc.)
 	var filtered []domain.CatalogQuestion
@@ -122,7 +284,7 @@ func ParseQuestionsYAML(data []byte, appID, appsPool, appdataPath string) ([]dom
 	return resultGroups, filtered
 }
 
-func flattenQuestions(prefix string, questions []rawQuestion, groups []rawGroup, appID, appdataPath string, out *[]domain.CatalogQuestion) {
+func flattenQuestions(prefix string, questions []rawQuestion, groups []rawGroup, appID, appdataPath string, mountPaths map[string]string, out *[]domain.CatalogQuestion) {
 	for _, q := range questions {
 		varPath := q.Variable
 		if prefix != "" {
@@ -134,9 +296,39 @@ func flattenQuestions(prefix string, questions []rawQuestion, groups []rawGroup,
 			continue
 		}
 
+		// Check if this is a TrueNAS storage descriptor dict (e.g. storage.data with type/ix_volume_config/host_path_config)
+		if (prefix == "storage" || strings.HasPrefix(prefix, "storage.")) && isTrueNASStorageDict(q) {
+			storageTarget := q.Variable
+			label := q.Label
+			if label == "" {
+				label = humanizeVariable(storageTarget) + " Storage"
+			}
+			desc := q.Description
+			if desc == "" {
+				desc = fmt.Sprintf("Persistent storage dataset path for %s", storageTarget)
+			}
+			defVal := fmt.Sprintf("%s/%s/%s", appdataPath, appID, storageTarget)
+			if storageTarget == "media" {
+				defVal = strings.Replace(appdataPath, "/apps", "/media", 1)
+			}
+			mountPath := resolveContainerMountPath(appID, storageTarget, schema, mountPaths)
+
+			*out = append(*out, domain.CatalogQuestion{
+				Variable:     varPath,
+				Label:        label,
+				Description:  desc,
+				Type:         "hostpath",
+				DefaultValue: defVal,
+				Required:     true,
+				Group:        "Persistent Storage & Datasets",
+				MountPath:    mountPath,
+			})
+			continue
+		}
+
 		// Recurse into dict attrs
 		if schema.Type == "dict" && len(schema.Attrs) > 0 {
-			flattenQuestions(varPath, schema.Attrs, groups, appID, appdataPath, out)
+			flattenQuestions(varPath, schema.Attrs, groups, appID, appdataPath, mountPaths, out)
 			continue
 		}
 
@@ -159,7 +351,14 @@ func flattenQuestions(prefix string, questions []rawQuestion, groups []rawGroup,
 				mountPath = schema.Subpath
 			} else {
 				parts := strings.Split(varPath, ".")
-				mountPath = "/" + parts[len(parts)-1]
+				leaf := parts[len(parts)-1]
+				if leaf != "type" && leaf != "acl_enable" && leaf != "dataset_name" && leaf != "host_path" && leaf != "path" {
+					mountPath = "/" + leaf
+				} else if len(parts) > 1 {
+					mountPath = "/" + parts[len(parts)-2]
+				} else {
+					mountPath = "/data"
+				}
 			}
 		}
 
@@ -251,6 +450,19 @@ func isIgnoredQuestion(varPath string) bool {
 			return true
 		}
 	}
+	// TrueNAS storage plumbing / settings that are not real volume mounts
+	if strings.Contains(lower, "storage.") || strings.HasPrefix(lower, "storage") {
+		if strings.HasSuffix(lower, ".type") ||
+			strings.Contains(lower, "ix_volume") ||
+			strings.Contains(lower, "acl_enable") ||
+			strings.Contains(lower, "dataset_name") ||
+			strings.Contains(lower, "acl_entries") ||
+			strings.Contains(lower, "cifs_config") ||
+			strings.Contains(lower, "nfs_config") ||
+			strings.HasSuffix(lower, ".read_only") {
+			return true
+		}
+	}
 	return false
 }
 
@@ -295,6 +507,236 @@ func humanizeVariable(v string) string {
 	return strings.Join(words, " ")
 }
 
+func applyAnswersToCompose(rawCompose string, app domain.CatalogApp, answers map[string]string, appsPool, appdataPath string) string {
+	var root yaml.Node
+	if err := yaml.Unmarshal([]byte(rawCompose), &root); err != nil || root.Kind != yaml.DocumentNode || len(root.Content) == 0 {
+		return rawCompose
+	}
+	docMap := root.Content[0]
+	if docMap.Kind != yaml.MappingNode {
+		return rawCompose
+	}
+
+	for _, q := range app.Questions {
+		val := q.DefaultValue
+		if userVal, ok := answers[q.Variable]; ok && userVal != "" {
+			val = userVal
+		}
+		if val == "" {
+			continue
+		}
+		vLower := strings.ToLower(q.Variable)
+
+		// 1. Ports
+		if strings.Contains(vLower, "port") && q.Type == "int" {
+			if newP, err := strconv.Atoi(val); err == nil && newP > 0 {
+				// Update x-portals
+				for i := 0; i < len(docMap.Content); i += 2 {
+					if docMap.Content[i].Value == "x-portals" && docMap.Content[i+1].Kind == yaml.SequenceNode {
+						for _, pNode := range docMap.Content[i+1].Content {
+							if pNode.Kind == yaml.MappingNode {
+								for pk := 0; pk < len(pNode.Content); pk += 2 {
+									if pNode.Content[pk].Value == "port" {
+										pNode.Content[pk+1].Value = strconv.Itoa(newP)
+									}
+								}
+							}
+						}
+					}
+				}
+
+				// Update ports in services
+				for i := 0; i < len(docMap.Content); i += 2 {
+					if docMap.Content[i].Value == "services" && docMap.Content[i+1].Kind == yaml.MappingNode {
+						servicesNode := docMap.Content[i+1]
+						for j := 1; j < len(servicesNode.Content); j += 2 {
+							svcMap := servicesNode.Content[j]
+							for k := 0; k < len(svcMap.Content); k += 2 {
+								if svcMap.Content[k].Value == "ports" && svcMap.Content[k+1].Kind == yaml.SequenceNode {
+									for _, portNode := range svcMap.Content[k+1].Content {
+										if portNode.Kind == yaml.ScalarNode {
+											cleanVal := strings.Trim(portNode.Value, `"' `)
+											parts := strings.Split(cleanVal, ":")
+											if len(parts) >= 2 {
+												cleanCont := strings.Trim(parts[1], `"' `)
+												portNode.Value = fmt.Sprintf("%d:%s", newP, cleanCont)
+												break
+											}
+										} else if portNode.Kind == yaml.MappingNode {
+											for mpk := 0; mpk < len(portNode.Content); mpk += 2 {
+												if portNode.Content[mpk].Value == "published" {
+													portNode.Content[mpk+1].Value = strconv.Itoa(newP)
+													break
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// 2. Storage / Volumes
+		if q.Type == "hostpath" || (q.MountPath != "" && strings.Contains(vLower, "storage")) {
+			targetMount := strings.Trim(q.MountPath, `"' `)
+			newHostPath := strings.Trim(val, `"' `)
+			if targetMount != "" && !strings.HasPrefix(targetMount, "/") {
+				targetMount = "/" + targetMount
+			}
+			if newHostPath != "" && !strings.HasPrefix(newHostPath, "/") {
+				newHostPath = "/" + newHostPath
+			}
+			if targetMount != "" && newHostPath != "" {
+				for i := 0; i < len(docMap.Content); i += 2 {
+					if docMap.Content[i].Value == "services" && docMap.Content[i+1].Kind == yaml.MappingNode {
+						servicesNode := docMap.Content[i+1]
+						for j := 1; j < len(servicesNode.Content); j += 2 {
+							svcMap := servicesNode.Content[j]
+							for k := 0; k < len(svcMap.Content); k += 2 {
+								if svcMap.Content[k].Value == "volumes" && svcMap.Content[k+1].Kind == yaml.SequenceNode {
+									volsSeq := svcMap.Content[k+1]
+									updated := false
+									for _, vNode := range volsSeq.Content {
+										if vNode.Kind == yaml.ScalarNode {
+											cleanV := strings.Trim(vNode.Value, `"' `)
+											parts := strings.Split(cleanV, ":")
+											if len(parts) >= 2 {
+												currTarget := strings.Trim(parts[1], `"' `)
+												if !strings.HasPrefix(currTarget, "/") {
+													currTarget = "/" + currTarget
+												}
+												if currTarget == targetMount {
+													mode := ""
+													if len(parts) > 2 {
+														mode = ":" + strings.Trim(parts[2], `"' `)
+													}
+													vNode.Value = fmt.Sprintf("%s:%s%s", newHostPath, targetMount, mode)
+													updated = true
+													break
+												}
+											}
+										} else if vNode.Kind == yaml.MappingNode {
+											targetMatch := false
+											for vk := 0; vk < len(vNode.Content); vk += 2 {
+												curT := strings.Trim(vNode.Content[vk+1].Value, `"' `)
+												if !strings.HasPrefix(curT, "/") {
+													curT = "/" + curT
+												}
+												if vNode.Content[vk].Value == "target" && curT == targetMount {
+													targetMatch = true
+													break
+												}
+											}
+											if targetMatch {
+												for vk := 0; vk < len(vNode.Content); vk += 2 {
+													if vNode.Content[vk].Value == "source" {
+														vNode.Content[vk+1].Value = newHostPath
+														updated = true
+														break
+													}
+												}
+											}
+										}
+									}
+
+									// If not updated and the only volume is a generic fallback /data, replace it
+									if !updated && len(volsSeq.Content) == 1 && volsSeq.Content[0].Kind == yaml.ScalarNode {
+										firstVal := strings.Trim(volsSeq.Content[0].Value, `"' `)
+										parts := strings.Split(firstVal, ":")
+										if len(parts) >= 2 {
+											firstTgt := strings.Trim(parts[1], `"' `)
+											if firstTgt == "/data" && targetMount != "/data" {
+												volsSeq.Content[0].Value = fmt.Sprintf("%s:%s", newHostPath, targetMount)
+												updated = true
+											}
+										}
+									}
+
+									if !updated {
+										volsSeq.Content = append(volsSeq.Content, &yaml.Node{
+											Kind:  yaml.ScalarNode,
+											Value: fmt.Sprintf("%s:%s", newHostPath, targetMount),
+										})
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// 3. User / Group & Env
+		if strings.Contains(vLower, "puid") || strings.Contains(vLower, "pgid") || categorizeQuestion(q) == "Application Configuration & Credentials" {
+			parts := strings.Split(q.Variable, ".")
+			key := strings.ToUpper(parts[len(parts)-1])
+			if strings.Contains(vLower, "puid") {
+				key = "PUID"
+			} else if strings.Contains(vLower, "pgid") {
+				key = "PGID"
+			}
+			for i := 0; i < len(docMap.Content); i += 2 {
+				if docMap.Content[i].Value == "services" && docMap.Content[i+1].Kind == yaml.MappingNode {
+					servicesNode := docMap.Content[i+1]
+					for j := 1; j < len(servicesNode.Content); j += 2 {
+						svcMap := servicesNode.Content[j]
+						for k := 0; k < len(svcMap.Content); k += 2 {
+							if svcMap.Content[k].Value == "environment" {
+								envNode := svcMap.Content[k+1]
+								if envNode.Kind == yaml.SequenceNode {
+									found := false
+									for _, e := range envNode.Content {
+										if strings.HasPrefix(e.Value, key+"=") {
+											e.Value = fmt.Sprintf("%s=%s", key, val)
+											found = true
+											break
+										}
+									}
+									if !found {
+										envNode.Content = append(envNode.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: fmt.Sprintf("%s=%s", key, val)})
+									}
+								} else if envNode.Kind == yaml.MappingNode {
+									found := false
+									for ek := 0; ek < len(envNode.Content); ek += 2 {
+										if envNode.Content[ek].Value == key {
+											envNode.Content[ek+1].Value = val
+											found = true
+											break
+										}
+									}
+									if !found {
+										envNode.Content = append(envNode.Content,
+											&yaml.Node{Kind: yaml.ScalarNode, Value: key},
+											&yaml.Node{Kind: yaml.ScalarNode, Value: val},
+										)
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	_ = enc.Encode(&root)
+	_ = enc.Close()
+
+	out := strings.TrimPrefix(buf.String(), "---\n")
+	for k, v := range answers {
+		if v != "" && strings.Contains(out, fmt.Sprintf("${%s}", k)) {
+			out = strings.ReplaceAll(out, fmt.Sprintf("${%s}", k), v)
+		}
+	}
+	return out
+}
+
 // GenerateComposeFromQuestions builds a clean Docker Compose YAML descriptor from answered questions.
 func GenerateComposeFromQuestions(app domain.CatalogApp, answers map[string]string, appsPool, appdataPath string) string {
 	if appsPool == "" {
@@ -304,14 +746,22 @@ func GenerateComposeFromQuestions(app domain.CatalogApp, answers map[string]stri
 		appdataPath = fmt.Sprintf("/mnt/%s/apps", appsPool)
 	}
 
-	serviceName := app.AppID
+	if app.ComposeYAML != "" && strings.Contains(app.ComposeYAML, "services:") {
+		return applyAnswersToCompose(app.ComposeYAML, app, answers, appsPool, appdataPath)
+	}
+
+	cleanID := app.AppID
+	if parts := strings.Split(cleanID, "."); len(parts) > 1 {
+		cleanID = parts[len(parts)-1]
+	}
+	serviceName := cleanID
 	if serviceName == "" {
 		serviceName = "app"
 	}
 
 	image := app.ContainerImage
 	if image == "" {
-		image = fmt.Sprintf("%s:latest", serviceName)
+		image = fmt.Sprintf("%s:latest", cleanID)
 	}
 
 	var ports []string
@@ -339,6 +789,9 @@ func GenerateComposeFromQuestions(app domain.CatalogApp, answers map[string]stri
 				if isPortal && app.DefaultPort > 0 && app.DefaultPort != p {
 					containerPort = app.DefaultPort
 				}
+				if app.AppID == "elastic-search" || strings.Contains(app.AppID, "elasticsearch") {
+					containerPort = 9200
+				}
 				ports = append(ports, fmt.Sprintf("%d:%d", p, containerPort))
 				if isPortal {
 					portalName := q.Label
@@ -351,16 +804,55 @@ func GenerateComposeFromQuestions(app domain.CatalogApp, answers map[string]stri
 		}
 
 		// 2. Storage / Volumes
-		if q.Type == "hostpath" || strings.Contains(vLower, "storage") {
+		if q.Type == "hostpath" || (q.MountPath != "" && strings.Contains(vLower, "storage")) {
+			// Disallow TrueNAS volume settings
+			if strings.HasSuffix(vLower, ".type") ||
+				strings.Contains(vLower, "ix_volume") ||
+				strings.Contains(vLower, "acl_enable") ||
+				strings.Contains(vLower, "dataset_name") ||
+				strings.Contains(vLower, "acl_entries") ||
+				strings.Contains(vLower, "cifs_config") ||
+				strings.Contains(vLower, "nfs_config") ||
+				strings.HasSuffix(vLower, ".read_only") ||
+				val == "ix_volume" ||
+				val == "host_path" ||
+				val == "true" ||
+				val == "false" {
+				continue
+			}
+
 			mountPath := q.MountPath
-			if mountPath == "" {
-				mountPath = "/data"
+			if mountPath == "" || mountPath == "/type" || mountPath == "/acl_enable" || mountPath == "/dataset_name" || mountPath == "/path" {
+				parts := strings.Split(q.Variable, ".")
+				leaf := parts[len(parts)-1]
+				if leaf == "path" || leaf == "host_path" {
+					if len(parts) > 1 {
+						leaf = parts[len(parts)-2]
+					} else {
+						leaf = "data"
+					}
+				}
+				mountPath = resolveContainerMountPath(serviceName, leaf, nil, nil)
 			}
+
 			hostPath := val
-			if hostPath == "" {
-				hostPath = fmt.Sprintf("%s/%s/data", appdataPath, serviceName)
+			if hostPath == "" || !strings.HasPrefix(hostPath, "/") {
+				parts := strings.Split(q.Variable, ".")
+				leaf := parts[len(parts)-1]
+				if leaf == "path" || leaf == "host_path" {
+					if len(parts) > 1 {
+						leaf = parts[len(parts)-2]
+					} else {
+						leaf = "data"
+					}
+				}
+				hostPath = fmt.Sprintf("%s/%s/%s", appdataPath, serviceName, leaf)
 			}
-			volumes = append(volumes, fmt.Sprintf("%s:%s", hostPath, mountPath))
+
+			mapping := fmt.Sprintf("%s:%s", hostPath, mountPath)
+			if !slices.Contains(volumes, mapping) {
+				volumes = append(volumes, mapping)
+			}
 		}
 
 		// 3. User / Group
@@ -383,6 +875,37 @@ func GenerateComposeFromQuestions(app domain.CatalogApp, answers map[string]stri
 		}
 	}
 
+	// Standalone Elasticsearch defaults
+	if app.AppID == "elastic-search" || strings.Contains(app.AppID, "elasticsearch") {
+		hasDiscovery := false
+		hasXpack := false
+		hasJavaOpts := false
+		heapVal := "512m"
+		for _, e := range envs {
+			if strings.HasPrefix(e, "DISCOVERY_TYPE=") || strings.HasPrefix(e, "discovery.type=") {
+				hasDiscovery = true
+			}
+			if strings.HasPrefix(e, "XPACK_SECURITY_ENABLED=") || strings.HasPrefix(e, "xpack.security.enabled=") {
+				hasXpack = true
+			}
+			if strings.HasPrefix(e, "ES_JAVA_OPTS=") {
+				hasJavaOpts = true
+			}
+			if strings.HasPrefix(e, "HEAP_SIZE=") {
+				heapVal = strings.TrimPrefix(e, "HEAP_SIZE=")
+			}
+		}
+		if !hasDiscovery {
+			envs = append(envs, "discovery.type=single-node")
+		}
+		if !hasXpack {
+			envs = append(envs, "xpack.security.enabled=false")
+		}
+		if !hasJavaOpts {
+			envs = append(envs, fmt.Sprintf("ES_JAVA_OPTS=-Xms%s -Xmx%s", heapVal, heapVal))
+		}
+	}
+
 	// Fallbacks if no portals identified
 	if len(portals) == 0 && app.DefaultPort > 0 {
 		portals = append(portals, fmt.Sprintf("  - name: \"Web UI\"\n    port: %d\n    scheme: \"http\"\n    path: \"/\"", app.DefaultPort))
@@ -393,7 +916,8 @@ func GenerateComposeFromQuestions(app domain.CatalogApp, answers map[string]stri
 		}
 	}
 	if len(volumes) == 0 {
-		volumes = append(volumes, fmt.Sprintf("%s/%s/data:/data", appdataPath, serviceName))
+		defaultMount := resolveContainerMountPath(serviceName, "data", nil, nil)
+		volumes = append(volumes, fmt.Sprintf("%s/%s/data:%s", appdataPath, serviceName, defaultMount))
 	}
 
 	var sb strings.Builder

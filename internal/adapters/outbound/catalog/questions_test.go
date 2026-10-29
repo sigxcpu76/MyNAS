@@ -194,3 +194,193 @@ func TestGenerateComposeFromQuestions_OnlyPortalsInWebUICandidates(t *testing.T)
 		t.Errorf("BT Port must NOT be exposed as a Web UI candidate portal, got:\n%s", compose)
 	}
 }
+
+const sampleTrueNASElasticsearchQuestionsYAML = `
+groups:
+  - name: Elastic Search Configuration
+  - name: Network Configuration
+  - name: Storage Configuration
+
+questions:
+  - variable: storage
+    group: Storage Configuration
+    schema:
+      type: dict
+      attrs:
+        - variable: data
+          label: Elastic Search Data Storage
+          description: The path to store Elastic Search Data.
+          schema:
+            type: dict
+            attrs:
+              - variable: type
+                label: Type
+                schema:
+                  type: string
+                  default: "ix_volume"
+                  enum:
+                    - value: "host_path"
+                    - value: "ix_volume"
+              - variable: ix_volume_config
+                schema:
+                  type: dict
+                  attrs:
+                    - variable: acl_enable
+                      schema:
+                        type: boolean
+                        default: false
+                    - variable: dataset_name
+                      schema:
+                        type: string
+                        default: "data"
+              - variable: host_path_config
+                schema:
+                  type: dict
+                  attrs:
+                    - variable: host_path
+                      schema:
+                        type: hostpath
+`
+
+const sampleElasticsearchComposeTemplate = `
+{% do c1.add_storage("/usr/share/elasticsearch/data", values.storage.data) %}
+{% do c1.add_storage("/usr/share/elasticsearch/config/certs", {"type": "anonymous"}) %}
+`
+
+func TestParseQuestionsYAML_TrueNASStorageCollapsesToSingleHostPath(t *testing.T) {
+	groups, flat := ParseQuestionsYAMLWithTemplate(
+		[]byte(sampleTrueNASElasticsearchQuestionsYAML),
+		"elastic-search",
+		"fast",
+		"/mnt/fast/apps",
+		sampleElasticsearchComposeTemplate,
+	)
+
+	if len(flat) == 0 {
+		t.Fatalf("expected parsed questions, got none")
+	}
+
+	// Ensure internal TrueNAS settings (type, ix_volume_config, dataset_name) are NOT exposed as questions!
+	for _, q := range flat {
+		if strings.Contains(q.Variable, "type") || strings.Contains(q.Variable, "acl_enable") || strings.Contains(q.Variable, "dataset_name") {
+			t.Errorf("internal TrueNAS plumbing variable %q should not be exposed as a question", q.Variable)
+		}
+	}
+
+	// Find the collapsed storage question
+	var storageQ *domain.CatalogQuestion
+	for _, q := range flat {
+		if q.Variable == "storage.data" {
+			storageQ = &q
+			break
+		}
+	}
+
+	if storageQ == nil {
+		t.Fatalf("expected storage.data question to be present, got questions: %+v", flat)
+	}
+
+	if storageQ.Type != "hostpath" {
+		t.Errorf("expected type hostpath, got %s", storageQ.Type)
+	}
+	if storageQ.DefaultValue != "/mnt/fast/apps/elastic-search/data" {
+		t.Errorf("expected default /mnt/fast/apps/elastic-search/data, got %s", storageQ.DefaultValue)
+	}
+	if storageQ.MountPath != "/usr/share/elasticsearch/data" {
+		t.Errorf("expected mountPath /usr/share/elasticsearch/data, got %s", storageQ.MountPath)
+	}
+
+	// Verify group is Persistent Storage & Datasets
+	if storageQ.Group != "Persistent Storage & Datasets" {
+		t.Errorf("expected group Persistent Storage & Datasets, got %s", storageQ.Group)
+	}
+	_ = groups
+}
+
+func TestExtractStorageMountPaths(t *testing.T) {
+	tpl := `
+{% do c1.add_storage("/usr/share/elasticsearch/data", values.storage.data) %}
+{% do c1.add_storage(values.consts.config_path, values.storage.config) %}
+{% do perm_container.add_or_skip_action("config", values.storage.config, perms_config) %}
+{% do nc_storage.x.append(("/var/www/html", values.storage.html)) %}
+`
+	values := `
+consts:
+  config_path: /config
+`
+	paths := ExtractStorageMountPaths(tpl, values)
+	if paths["data"] != "/usr/share/elasticsearch/data" {
+		t.Errorf("expected data -> /usr/share/elasticsearch/data, got %s", paths["data"])
+	}
+	if paths["config"] != "/config" {
+		t.Errorf("expected config -> /config, got %s", paths["config"])
+	}
+	if paths["html"] != "/var/www/html" {
+		t.Errorf("expected html -> /var/www/html, got %s", paths["html"])
+	}
+}
+
+func TestGenerateComposeFromQuestions_PreservesExistingComposeAndImage(t *testing.T) {
+	app := domain.CatalogApp{
+		AppID:          "org.icewhale.esphome",
+		Title:          "ESPHome",
+		ContainerImage: "ghcr.io/esphome/esphome:2026.5.1",
+		DefaultPort:    6052,
+		ComposeYAML: `x-portals:
+  - name: "Web UI"
+    scheme: "http"
+    port: 6052
+    path: "/"
+name: esphome
+services:
+  esphome:
+    container_name: esphome
+    image: ghcr.io/esphome/esphome:2026.5.1
+    restart: always
+    ports:
+      - "6052:6052"
+    volumes:
+      - /mnt/fast/apps/esphome/config:/config
+    network_mode: host
+`,
+		Questions: []domain.CatalogQuestion{
+			{
+				Variable:     "web_port",
+				Label:        "Web UI Port",
+				Type:         "int",
+				DefaultValue: "6052",
+			},
+			{
+				Variable:     "storage.config",
+				Label:        "Storage Path (/config)",
+				Type:         "hostpath",
+				DefaultValue: "/mnt/fast/apps/esphome/config",
+				MountPath:    "/config",
+			},
+		},
+	}
+
+	answers := map[string]string{
+		"web_port":       "7052",
+		"storage.config": "/mnt/fast/apps/esphome/custom-config",
+	}
+
+	out := GenerateComposeFromQuestions(app, answers, "fast", "/mnt/fast/apps")
+
+	if strings.Contains(out, "org-icewhale-esphome:latest") {
+		t.Errorf("must not generate dummy image org-icewhale-esphome:latest")
+	}
+	if !strings.Contains(out, "ghcr.io/esphome/esphome:2026.5.1") {
+		t.Errorf("expected original image to be preserved, got:\n%s", out)
+	}
+	if !strings.Contains(out, "network_mode: host") {
+		t.Errorf("expected network_mode: host to be preserved, got:\n%s", out)
+	}
+	if !strings.Contains(out, "port: 7052") {
+		t.Errorf("expected x-portals to update to port 7052, got:\n%s", out)
+	}
+	if !strings.Contains(out, "/mnt/fast/apps/esphome/custom-config:/config") {
+		t.Errorf("expected volume to update to /mnt/fast/apps/esphome/custom-config:/config, got:\n%s", out)
+	}
+}
+

@@ -325,3 +325,113 @@ func TestCatalogAdapter_PersistentDiskCache(t *testing.T) {
 		t.Errorf("expected syncTime %v, got %v", syncTime1, syncTime3)
 	}
 }
+
+func TestCatalogAdapter_MultiCatalogSync(t *testing.T) {
+	tempDir := t.TempDir()
+
+	truenasJSON := `{
+		"stable": {
+			"truenas-app": {
+				"name": "truenas-app",
+				"title": "TrueNAS Test App",
+				"description": "TrueNAS description"
+			}
+		}
+	}`
+	casaosJSON := `{
+		"version": 2,
+		"base_url": "https://example.com/casaos",
+		"apps": [
+			{
+				"id": "casaos-app",
+				"title": "CasaOS Test App",
+				"tagline": "CasaOS tagline",
+				"version": "1.0.0"
+			}
+		]
+	}`
+	dokployJSON := `[
+		{
+			"id": "dokploy-app",
+			"name": "Dokploy Test App",
+			"description": "Dokploy description",
+			"version": "2.0.0"
+		}
+	]`
+
+	truenasSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(truenasJSON))
+	}))
+	defer truenasSrv.Close()
+
+	casaosSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(casaosJSON))
+	}))
+	defer casaosSrv.Close()
+
+	dokploySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(dokployJSON))
+	}))
+	defer dokploySrv.Close()
+
+	adapter := catalog.NewAdapter(tempDir)
+	adapter.SetCatalogURLForTest(truenasSrv.URL)
+	adapter.SetCasaOSURLForTest(casaosSrv.URL)
+	adapter.SetDokployURLForTest(dokploySrv.URL)
+
+	ctx := context.Background()
+	count, _, err := adapter.SyncCatalog(ctx, true)
+	if err != nil {
+		t.Fatalf("SyncCatalog failed: %v", err)
+	}
+	if count < 3 {
+		t.Fatalf("expected count >= 3, got %d", count)
+	}
+
+	// Verify TrueNAS app
+	tnApp, err := adapter.GetApp(ctx, "stable", "truenas-app")
+	if err != nil || tnApp.Title != "TrueNAS Test App" {
+		t.Errorf("failed getting TrueNAS app: %v, %v", tnApp, err)
+	}
+
+	// Verify CasaOS app
+	coApp, err := adapter.GetApp(ctx, "casaos", "casaos-app")
+	if err != nil || coApp.Title != "CasaOS Test App" {
+		t.Errorf("failed getting CasaOS app: %v, %v", coApp, err)
+	}
+
+	// Verify Dokploy app
+	dpApp, err := adapter.GetApp(ctx, "dokploy", "dokploy-app")
+	if err != nil || dpApp.Title != "Dokploy Test App" {
+		t.Errorf("failed getting Dokploy app: %v, %v", dpApp, err)
+	}
+
+	// Verify filter by train
+	casaosApps, _ := adapter.ListApps(ctx, "casaos", "", "")
+	for _, a := range casaosApps {
+		if a.Train != "casaos" {
+			t.Errorf("expected only casaos apps, got train %s", a.Train)
+		}
+	}
+
+	dokployApps, _ := adapter.ListApps(ctx, "dokploy", "", "")
+	for _, a := range dokployApps {
+		if a.Train != "dokploy" {
+			t.Errorf("expected only dokploy apps, got train %s", a.Train)
+		}
+	}
+
+	// Test cache reloading in new adapter instance
+	adapter2 := catalog.NewAdapter(tempDir)
+	coApp2, err := adapter2.GetApp(ctx, "casaos", "casaos-app")
+	if err != nil || coApp2.Title != "CasaOS Test App" {
+		t.Errorf("failed reloading CasaOS app from disk cache: %v, %v", coApp2, err)
+	}
+	dpApp2, err := adapter2.GetApp(ctx, "dokploy", "dokploy-app")
+	if err != nil || dpApp2.Title != "Dokploy Test App" {
+		t.Errorf("failed reloading Dokploy app from disk cache: %v, %v", dpApp2, err)
+	}
+}

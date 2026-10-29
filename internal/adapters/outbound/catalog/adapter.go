@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sigxcpu/nas/internal/adapters/outbound/docker"
 	"github.com/sigxcpu/nas/internal/domain"
 	"gopkg.in/yaml.v3"
 )
@@ -45,14 +46,16 @@ type rawCatalogEntry struct {
 }
 
 type Adapter struct {
-	mu           sync.RWMutex
-	cacheDir     string
-	apps         map[string]domain.CatalogApp // keyed by "train/app_id"
-	lastSync     time.Time
-	httpClient   *http.Client
-	catalogURL   string
-	appsPool     string
-	appdataPath  string
+	mu          sync.RWMutex
+	cacheDir    string
+	apps        map[string]domain.CatalogApp // keyed by "train/app_id"
+	lastSync    time.Time
+	httpClient  *http.Client
+	catalogURL  string
+	casaosURL   string
+	dokployURL  string
+	appsPool    string
+	appdataPath string
 }
 
 func NewAdapter(cacheDir string) *Adapter {
@@ -66,6 +69,8 @@ func NewAdapter(cacheDir string) *Adapter {
 		apps:        make(map[string]domain.CatalogApp),
 		httpClient:  &http.Client{Timeout: 30 * time.Second},
 		catalogURL:  defaultCatalogURL,
+		casaosURL:   defaultCasaOSIndexURL,
+		dokployURL:  defaultDokployMetaURL,
 		appsPool:    "tank",
 		appdataPath: "/mnt/tank/apps",
 	}
@@ -89,8 +94,14 @@ func (a *Adapter) ListApps(ctx context.Context, train, category, query string) (
 
 	var results []domain.CatalogApp
 	for _, app := range a.apps {
-		if tr != "" && tr != "all" && !strings.EqualFold(app.Train, tr) {
-			continue
+		if tr != "" && tr != "all" {
+			if tr == "truenas" {
+				if app.Train != "stable" && app.Train != "community" {
+					continue
+				}
+			} else if !strings.EqualFold(app.Train, tr) {
+				continue
+			}
 		}
 		if cat != "" && cat != "all" {
 			hasCat := false
@@ -124,9 +135,24 @@ func (a *Adapter) ListApps(ctx context.Context, train, category, query string) (
 	}
 
 	sort.Slice(results, func(i, j int) bool {
-		// Stable train first, then alphabetical by Title
-		if results[i].Train != results[j].Train {
-			return results[i].Train == "stable"
+		rank := func(tr string) int {
+			switch strings.ToLower(tr) {
+			case "stable":
+				return 0
+			case "casaos":
+				return 1
+			case "dokploy":
+				return 2
+			case "community":
+				return 3
+			default:
+				return 4
+			}
+		}
+		rI := rank(results[i].Train)
+		rJ := rank(results[j].Train)
+		if rI != rJ {
+			return rI < rJ
 		}
 		return results[i].Title < results[j].Title
 	})
@@ -147,21 +173,21 @@ func (a *Adapter) GetApp(ctx context.Context, train, appID string) (*domain.Cata
 		}
 	}
 
-	// Try stable first, then community
+	// Try known catalogs in order: stable, casaos, dokploy, community
 	if foundApp == nil {
-		if app, ok := a.apps["stable/"+appID]; ok {
-			cp := app
-			foundApp = &cp
-		} else if app, ok := a.apps["community/"+appID]; ok {
-			cp := app
-			foundApp = &cp
+		for _, tr := range []string{"stable", "casaos", "dokploy", "community"} {
+			if app, ok := a.apps[fmt.Sprintf("%s/%s", tr, appID)]; ok {
+				cp := app
+				foundApp = &cp
+				break
+			}
 		}
 	}
 
-	// Scan by AppID
+	// Scan by AppID case-insensitively
 	if foundApp == nil {
 		for _, app := range a.apps {
-			if app.AppID == appID {
+			if strings.EqualFold(app.AppID, appID) {
 				cp := app
 				foundApp = &cp
 				break
@@ -174,8 +200,15 @@ func (a *Adapter) GetApp(ctx context.Context, train, appID string) (*domain.Cata
 		return nil, fmt.Errorf("app %q not found in catalog", appID)
 	}
 
-	res := a.ensureComposeYAML(*foundApp)
-	a.enrichFromIXValues(ctx, &res)
+	res := *foundApp
+	if res.Train == "casaos" {
+		enrichFromCasaOS(ctx, a.httpClient, &res, a.cacheDir, a.getAppsPool(), a.getAppdataPath())
+	} else if res.Train == "dokploy" {
+		enrichFromDokploy(ctx, a.httpClient, &res, a.cacheDir, a.getAppsPool(), a.getAppdataPath())
+	} else {
+		res = a.ensureComposeYAML(res)
+		a.enrichFromIXValues(ctx, &res)
+	}
 	return &res, nil
 }
 
@@ -187,94 +220,288 @@ func (a *Adapter) SyncCatalog(ctx context.Context, force bool) (int, time.Time, 
 		a.mu.RUnlock()
 		return count, lastSync, nil
 	}
+	catalogURL := a.catalogURL
+	casaosURL := a.casaosURL
+	dokployURL := a.dokployURL
 	a.mu.RUnlock()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.catalogURL, nil)
-	if err != nil {
-		return 0, a.lastSync, fmt.Errorf("failed to create sync request: %w", err)
-	}
+	var (
+		wg          sync.WaitGroup
+		mu          sync.Mutex
+		truenasBody []byte
+		truenasErr  error
+		rawCatalog  map[string]map[string]rawCatalogEntry
 
-	resp, err := a.httpClient.Do(req)
-	if err != nil {
-		return 0, a.lastSync, fmt.Errorf("failed to fetch TrueNAS catalog: %w", err)
-	}
-	defer resp.Body.Close()
+		casaosBody []byte
+		casaosErr  error
+		casaosIdx  *casaosIndex
 
-	if resp.StatusCode != http.StatusOK {
-		return 0, a.lastSync, fmt.Errorf("truenas catalog returned HTTP status %d", resp.StatusCode)
-	}
+		dokployBody    []byte
+		dokployErr     error
+		dokployEntries []dokployMetaEntry
+	)
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, a.lastSync, fmt.Errorf("failed to read catalog body: %w", err)
-	}
+	// Fetch TrueNAS catalog
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, catalogURL, nil)
+		if err != nil {
+			mu.Lock()
+			truenasErr = err
+			mu.Unlock()
+			return
+		}
+		resp, err := a.httpClient.Do(req)
+		if err != nil {
+			mu.Lock()
+			truenasErr = err
+			mu.Unlock()
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			mu.Lock()
+			truenasErr = fmt.Errorf("truenas catalog returned HTTP status %d", resp.StatusCode)
+			mu.Unlock()
+			return
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			mu.Lock()
+			truenasErr = err
+			mu.Unlock()
+			return
+		}
+		var parsed map[string]map[string]rawCatalogEntry
+		if err := json.Unmarshal(body, &parsed); err != nil {
+			mu.Lock()
+			truenasErr = err
+			mu.Unlock()
+			return
+		}
+		mu.Lock()
+		truenasBody = body
+		rawCatalog = parsed
+		mu.Unlock()
+	}()
 
-	var rawCatalog map[string]map[string]rawCatalogEntry
-	if err := json.Unmarshal(body, &rawCatalog); err != nil {
-		return 0, a.lastSync, fmt.Errorf("failed to parse catalog JSON: %w", err)
+	// Fetch CasaOS catalog
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		idx, body, err := fetchCasaOSIndex(ctx, a.httpClient, casaosURL)
+		mu.Lock()
+		if err != nil {
+			casaosErr = err
+		} else {
+			casaosIdx = idx
+			casaosBody = body
+		}
+		mu.Unlock()
+	}()
+
+	// Fetch Dokploy catalog
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		entries, body, err := fetchDokployIndex(ctx, a.httpClient, dokployURL)
+		mu.Lock()
+		if err != nil {
+			dokployErr = err
+		} else {
+			dokployEntries = entries
+			dokployBody = body
+		}
+		mu.Unlock()
+	}()
+
+	wg.Wait()
+
+	if truenasErr != nil && casaosErr != nil && dokployErr != nil {
+		return 0, a.lastSync, fmt.Errorf("failed to fetch any catalog (truenas: %v, casaos: %v, dokploy: %v)", truenasErr, casaosErr, dokployErr)
 	}
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	count := 0
-	for trainName, trainApps := range rawCatalog {
-		if trainName != "stable" && trainName != "community" {
-			continue
-		}
-		for appKey, item := range trainApps {
-			cat := ""
-			if len(item.Categories) > 0 {
-				cat = item.Categories[0]
+	// Process TrueNAS entries
+	if rawCatalog != nil {
+		for trainName, trainApps := range rawCatalog {
+			if trainName != "stable" && trainName != "community" {
+				continue
 			}
-			appID := item.Name
+			for appKey, item := range trainApps {
+				cat := ""
+				if len(item.Categories) > 0 {
+					cat = item.Categories[0]
+				}
+				appID := item.Name
+				if appID == "" {
+					appID = appKey
+				}
+				title := item.Title
+				if title == "" {
+					title = appID
+				}
+
+				key := fmt.Sprintf("%s/%s", trainName, appID)
+				existing, exists := a.apps[key]
+
+				compose := ""
+				defaultPort := 0
+				if exists {
+					compose = existing.ComposeYAML
+					defaultPort = existing.DefaultPort
+				}
+
+				image := resolveContainerImage(appID, item.Sources, item.Home)
+				if image == "" && existing.ContainerImage != "" {
+					image = existing.ContainerImage
+				}
+
+				a.apps[key] = domain.CatalogApp{
+					AppID:          appID,
+					Title:          title,
+					Description:    cleanDescription(item.Description),
+					Category:       cat,
+					Categories:     item.Categories,
+					IconURL:        item.IconURL,
+					Home:           item.Home,
+					Train:          trainName,
+					Version:        item.LatestVer,
+					AppVersion:     item.LatestAppV,
+					Tags:           item.Tags,
+					Screenshots:    item.Screenshots,
+					Sources:        item.Sources,
+					ContainerImage: image,
+					ComposeYAML:    compose,
+					DefaultPort:    defaultPort,
+				}
+			}
+		}
+	}
+
+	// Process CasaOS entries
+	if casaosIdx != nil {
+		base := casaosIdx.BaseURL
+		if base == "" {
+			base = defaultCasaOSBaseURL
+		}
+		for _, item := range casaosIdx.Apps {
+			appID := item.ID
 			if appID == "" {
-				appID = appKey
+				continue
 			}
 			title := item.Title
 			if title == "" {
 				title = appID
 			}
-
-			key := fmt.Sprintf("%s/%s", trainName, appID)
+			cat := item.Category
+			if cat == "" && len(item.Categories) > 0 {
+				cat = item.Categories[0]
+			}
+			iconURL := item.Icon
+			if iconURL != "" && strings.HasPrefix(iconURL, "/") {
+				iconURL = strings.TrimRight(base, "/") + iconURL
+			}
+			var sources []string
+			if item.ComposeURL != "" {
+				compURL := item.ComposeURL
+				if strings.HasPrefix(compURL, "/") {
+					compURL = strings.TrimRight(base, "/") + compURL
+				}
+				sources = append(sources, compURL)
+			}
+			if item.MetaURL != "" {
+				metaURL := item.MetaURL
+				if strings.HasPrefix(metaURL, "/") {
+					metaURL = strings.TrimRight(base, "/") + metaURL
+				}
+				sources = append(sources, metaURL)
+			}
+			key := fmt.Sprintf("casaos/%s", appID)
 			existing, exists := a.apps[key]
-
 			compose := ""
 			defaultPort := 0
+			containerImage := ""
 			if exists {
 				compose = existing.ComposeYAML
 				defaultPort = existing.DefaultPort
+				containerImage = existing.ContainerImage
 			}
-
-			image := resolveContainerImage(appID, item.Sources, item.Home)
-			if image == "" && existing.ContainerImage != "" {
-				image = existing.ContainerImage
+			a.apps[key] = domain.CatalogApp{
+				AppID:          appID,
+				Title:          title,
+				Description:    cleanDescription(item.Tagline),
+				Category:       cat,
+				Categories:     item.Categories,
+				IconURL:        iconURL,
+				Train:          "casaos",
+				Version:        item.Version,
+				AppVersion:     item.Version,
+				Sources:        sources,
+				ComposeYAML:    compose,
+				ContainerImage: containerImage,
+				DefaultPort:    defaultPort,
 			}
+		}
+	}
 
+	// Process Dokploy entries
+	if dokployEntries != nil {
+		for _, item := range dokployEntries {
+			appID := item.ID
+			if appID == "" {
+				continue
+			}
+			title := item.Name
+			if title == "" {
+				title = appID
+			}
+			cat := ""
+			if len(item.Tags) > 0 {
+				cat = item.Tags[0]
+			}
+			home := ""
+			if item.Links != nil {
+				if h, ok := item.Links["website"]; ok {
+					home = h
+				} else if g, ok := item.Links["github"]; ok {
+					home = g
+				}
+			}
+			key := fmt.Sprintf("dokploy/%s", appID)
+			existing, exists := a.apps[key]
+			compose := ""
+			defaultPort := 0
+			containerImage := ""
+			if exists {
+				compose = existing.ComposeYAML
+				defaultPort = existing.DefaultPort
+				containerImage = existing.ContainerImage
+			}
 			a.apps[key] = domain.CatalogApp{
 				AppID:          appID,
 				Title:          title,
 				Description:    cleanDescription(item.Description),
 				Category:       cat,
-				Categories:     item.Categories,
-				IconURL:        item.IconURL,
-				Home:           item.Home,
-				Train:          trainName,
-				Version:        item.LatestVer,
-				AppVersion:     item.LatestAppV,
+				Categories:     item.Tags,
+				IconURL:        item.Logo,
+				Home:           home,
+				Train:          "dokploy",
+				Version:        item.Version,
+				AppVersion:     item.Version,
 				Tags:           item.Tags,
-				Screenshots:    item.Screenshots,
-				Sources:        item.Sources,
-				ContainerImage: image,
 				ComposeYAML:    compose,
+				ContainerImage: containerImage,
 				DefaultPort:    defaultPort,
 			}
-			count++
 		}
 	}
 
 	a.lastSync = time.Now().UTC()
-	_ = a.saveCacheToDisk(body)
+	_ = a.saveCacheToDisk(truenasBody, casaosBody, dokployBody)
 
 	return len(a.apps), a.lastSync, nil
 }
@@ -289,6 +516,18 @@ func (a *Adapter) SetCatalogURLForTest(url string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.catalogURL = url
+}
+
+func (a *Adapter) SetCasaOSURLForTest(url string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.casaosURL = url
+}
+
+func (a *Adapter) SetDokployURLForTest(url string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.dokployURL = url
 }
 
 func (a *Adapter) SetAppsPool(pool string) {
@@ -354,6 +593,7 @@ func (a *Adapter) ensureComposeYAML(app domain.CatalogApp) domain.CatalogApp {
 	app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/tank/media", mediaPath)
 	app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/mnt/tank/media", mediaPath)
 	app.ComposeYAML = strings.ReplaceAll(app.ComposeYAML, "/mnt/tank/media", mediaPath)
+	app.ComposeYAML = docker.NormalizeComposeVolumes(app.AppID, pool, app.ComposeYAML)
 	return app
 }
 
@@ -388,10 +628,18 @@ func atomicWriteFile(filename string, data []byte, perm os.FileMode) error {
 	return os.Rename(tmpPath, filename)
 }
 
-func (a *Adapter) saveCacheToDisk(data []byte) error {
-	cacheFile := filepath.Join(a.cacheDir, "catalog.json")
-	if err := atomicWriteFile(cacheFile, data, 0644); err != nil {
-		return err
+func (a *Adapter) saveCacheToDisk(truenasData, casaosData, dokployData []byte) error {
+	if len(truenasData) > 0 {
+		cacheFile := filepath.Join(a.cacheDir, "catalog.json")
+		_ = atomicWriteFile(cacheFile, truenasData, 0644)
+	}
+	if len(casaosData) > 0 {
+		casaosFile := filepath.Join(a.cacheDir, "casaos_index.json")
+		_ = atomicWriteFile(casaosFile, casaosData, 0644)
+	}
+	if len(dokployData) > 0 {
+		dokployFile := filepath.Join(a.cacheDir, "dokploy_meta.json")
+		_ = atomicWriteFile(dokployFile, dokployData, 0644)
 	}
 
 	meta := CatalogMeta{
@@ -409,69 +657,185 @@ func (a *Adapter) saveCacheToDisk(data []byte) error {
 }
 
 func (a *Adapter) loadCacheFromDisk() {
-	cacheFile := filepath.Join(a.cacheDir, "catalog.json")
-	data, err := os.ReadFile(cacheFile)
-	if err != nil {
-		return
-	}
-
-	var rawCatalog map[string]map[string]rawCatalogEntry
-	if err := json.Unmarshal(data, &rawCatalog); err != nil {
-		return
-	}
-
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	for trainName, trainApps := range rawCatalog {
-		if trainName != "stable" && trainName != "community" {
-			continue
+	// 1. TrueNAS catalog
+	cacheFile := filepath.Join(a.cacheDir, "catalog.json")
+	if data, err := os.ReadFile(cacheFile); err == nil {
+		var rawCatalog map[string]map[string]rawCatalogEntry
+		if err := json.Unmarshal(data, &rawCatalog); err == nil {
+			for trainName, trainApps := range rawCatalog {
+				if trainName != "stable" && trainName != "community" {
+					continue
+				}
+				for appKey, item := range trainApps {
+					cat := ""
+					if len(item.Categories) > 0 {
+						cat = item.Categories[0]
+					}
+					appID := item.Name
+					if appID == "" {
+						appID = appKey
+					}
+					title := item.Title
+					if title == "" {
+						title = appID
+					}
+
+					key := fmt.Sprintf("%s/%s", trainName, appID)
+					existing, exists := a.apps[key]
+					compose := ""
+					defaultPort := 0
+					if exists {
+						compose = existing.ComposeYAML
+						defaultPort = existing.DefaultPort
+					}
+
+					image := resolveContainerImage(appID, item.Sources, item.Home)
+					if image == "" && existing.ContainerImage != "" {
+						image = existing.ContainerImage
+					}
+
+					a.apps[key] = domain.CatalogApp{
+						AppID:          appID,
+						Title:          title,
+						Description:    cleanDescription(item.Description),
+						Category:       cat,
+						Categories:     item.Categories,
+						IconURL:        item.IconURL,
+						Home:           item.Home,
+						Train:          trainName,
+						Version:        item.LatestVer,
+						AppVersion:     item.LatestAppV,
+						Tags:           item.Tags,
+						Screenshots:    item.Screenshots,
+						Sources:        item.Sources,
+						ContainerImage: image,
+						ComposeYAML:    compose,
+						DefaultPort:    defaultPort,
+					}
+				}
+			}
 		}
-		for appKey, item := range trainApps {
-			cat := ""
-			if len(item.Categories) > 0 {
-				cat = item.Categories[0]
-			}
-			appID := item.Name
-			if appID == "" {
-				appID = appKey
-			}
-			title := item.Title
-			if title == "" {
-				title = appID
-			}
+	}
 
-			key := fmt.Sprintf("%s/%s", trainName, appID)
-			existing, exists := a.apps[key]
-			compose := ""
-			defaultPort := 0
-			if exists {
-				compose = existing.ComposeYAML
-				defaultPort = existing.DefaultPort
+	// 2. CasaOS catalog
+	casaosFile := filepath.Join(a.cacheDir, "casaos_index.json")
+	if data, err := os.ReadFile(casaosFile); err == nil {
+		var idx casaosIndex
+		if err := json.Unmarshal(data, &idx); err == nil {
+			base := idx.BaseURL
+			if base == "" {
+				base = defaultCasaOSBaseURL
 			}
-
-			image := resolveContainerImage(appID, item.Sources, item.Home)
-			if image == "" && existing.ContainerImage != "" {
-				image = existing.ContainerImage
+			for _, item := range idx.Apps {
+				appID := item.ID
+				if appID == "" {
+					continue
+				}
+				title := item.Title
+				if title == "" {
+					title = appID
+				}
+				cat := item.Category
+				if cat == "" && len(item.Categories) > 0 {
+					cat = item.Categories[0]
+				}
+				iconURL := item.Icon
+				if iconURL != "" && strings.HasPrefix(iconURL, "/") {
+					iconURL = strings.TrimRight(base, "/") + iconURL
+				}
+				var sources []string
+				if item.ComposeURL != "" {
+					compURL := item.ComposeURL
+					if strings.HasPrefix(compURL, "/") {
+						compURL = strings.TrimRight(base, "/") + compURL
+					}
+					sources = append(sources, compURL)
+				}
+				if item.MetaURL != "" {
+					metaURL := item.MetaURL
+					if strings.HasPrefix(metaURL, "/") {
+						metaURL = strings.TrimRight(base, "/") + metaURL
+					}
+					sources = append(sources, metaURL)
+				}
+				key := fmt.Sprintf("casaos/%s", appID)
+				existing, exists := a.apps[key]
+				compose := ""
+				defaultPort := 0
+				if exists {
+					compose = existing.ComposeYAML
+					defaultPort = existing.DefaultPort
+				}
+				a.apps[key] = domain.CatalogApp{
+					AppID:       appID,
+					Title:       title,
+					Description: cleanDescription(item.Tagline),
+					Category:    cat,
+					Categories:  item.Categories,
+					IconURL:     iconURL,
+					Train:       "casaos",
+					Version:     item.Version,
+					AppVersion:  item.Version,
+					Sources:     sources,
+					ComposeYAML: compose,
+					DefaultPort: defaultPort,
+				}
 			}
+		}
+	}
 
-			a.apps[key] = domain.CatalogApp{
-				AppID:          appID,
-				Title:          title,
-				Description:    cleanDescription(item.Description),
-				Category:       cat,
-				Categories:     item.Categories,
-				IconURL:        item.IconURL,
-				Home:           item.Home,
-				Train:          trainName,
-				Version:        item.LatestVer,
-				AppVersion:     item.LatestAppV,
-				Tags:           item.Tags,
-				Screenshots:    item.Screenshots,
-				Sources:        item.Sources,
-				ContainerImage: image,
-				ComposeYAML:    compose,
-				DefaultPort:    defaultPort,
+	// 3. Dokploy catalog
+	dokployFile := filepath.Join(a.cacheDir, "dokploy_meta.json")
+	if data, err := os.ReadFile(dokployFile); err == nil {
+		var entries []dokployMetaEntry
+		if err := json.Unmarshal(data, &entries); err == nil {
+			for _, item := range entries {
+				appID := item.ID
+				if appID == "" {
+					continue
+				}
+				title := item.Name
+				if title == "" {
+					title = appID
+				}
+				cat := ""
+				if len(item.Tags) > 0 {
+					cat = item.Tags[0]
+				}
+				home := ""
+				if item.Links != nil {
+					if h, ok := item.Links["website"]; ok {
+						home = h
+					} else if g, ok := item.Links["github"]; ok {
+						home = g
+					}
+				}
+				key := fmt.Sprintf("dokploy/%s", appID)
+				existing, exists := a.apps[key]
+				compose := ""
+				defaultPort := 0
+				if exists {
+					compose = existing.ComposeYAML
+					defaultPort = existing.DefaultPort
+				}
+				a.apps[key] = domain.CatalogApp{
+					AppID:       appID,
+					Title:       title,
+					Description: cleanDescription(item.Description),
+					Category:    cat,
+					Categories:  item.Tags,
+					IconURL:     item.Logo,
+					Home:        home,
+					Train:       "dokploy",
+					Version:     item.Version,
+					AppVersion:  item.Version,
+					Tags:        item.Tags,
+					ComposeYAML: compose,
+					DefaultPort: defaultPort,
+				}
 			}
 		}
 	}
@@ -931,7 +1295,7 @@ func (a *Adapter) enrichFromIXValues(ctx context.Context, app *domain.CatalogApp
 	}
 
 	if len(qData) > 0 {
-		groups, flatQs := ParseQuestionsYAML(qData, app.AppID, a.getAppsPool(), a.getAppdataPath())
+		groups, flatQs := ParseQuestionsYAMLWithTemplate(qData, app.AppID, a.getAppsPool(), a.getAppdataPath(), string(tplData), string(data))
 		app.QuestionGroups = groups
 		app.Questions = flatQs
 	} else {
@@ -942,7 +1306,7 @@ func (a *Adapter) enrichFromIXValues(ctx context.Context, app *domain.CatalogApp
 
 	portals := ExtractPortalsFromTemplate(string(tplData), string(data), qData)
 	if len(portals) > 0 {
-		if app.DefaultPort <= 0 && portals[0].Port > 0 {
+		if (app.DefaultPort <= 0 || app.DefaultPort == 8080) && portals[0].Port > 0 {
 			app.DefaultPort = portals[0].Port
 		}
 		var sb strings.Builder
@@ -1004,6 +1368,30 @@ func generateResolvedCompose(app domain.CatalogApp) (string, int) {
 	// Curated ports and images for well-known TrueNAS apps
 	image := fmt.Sprintf("%s:latest", appID)
 	switch appID {
+	case "esphome":
+		image = "ghcr.io/esphome/esphome:latest"
+		if app.ContainerImage != "" {
+			image = app.ContainerImage
+		}
+		port = 6052
+		if app.DefaultPort > 0 {
+			port = app.DefaultPort
+		}
+		return fmt.Sprintf(`services:
+  esphome:
+    image: %s
+    container_name: %s
+    restart: unless-stopped
+    ports:
+      - "%d:6052"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+    volumes:
+      - /mnt/tank/apps/%s/config:/config
+`, image, appID, port, appID), port
+
 	case "syncthing":
 		image = "ghcr.io/syncthing/syncthing:latest"
 		port = 8384
@@ -1226,6 +1614,24 @@ services:
     volumes:
       - /mnt/tank/apps/%s/config:/config
       - /mnt/tank/media/downloads:/downloads
+`, image, appID, port, appID), port
+
+	case "elastic-search", "elasticsearch":
+		image = "docker.elastic.co/elasticsearch/elasticsearch:9.5.5"
+		port = 9200
+		return fmt.Sprintf(`services:
+  elastic-search:
+    image: %s
+    container_name: %s
+    restart: unless-stopped
+    ports:
+      - "%d:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - /mnt/tank/apps/%s/data:/usr/share/elasticsearch/data
 `, image, appID, port, appID), port
 
 	case "transmission":
@@ -1576,6 +1982,61 @@ func (a *Adapter) seedDefaultApps() {
 			Train:       "stable",
 			Version:     "2024.10.2",
 			DefaultPort: 8123,
+		},
+		{
+			AppID:       "uptime-kuma",
+			Title:       "Uptime Kuma (CasaOS)",
+			Description: "A self-hosted monitoring tool like 'Uptime Robot'.",
+			Category:    "Utilities",
+			Categories:  []string{"Utilities", "Network"},
+			IconURL:     "https://raw.githubusercontent.com/IceWhaleTech/CasaOS-AppStore/main/Apps/UptimeKuma/icon.png",
+			Train:       "casaos",
+			Version:     "1.23.16",
+			DefaultPort: 3001,
+		},
+		{
+			AppID:       "bento-pdf",
+			Title:       "BentoPDF",
+			Description: "Your all-in-one privacy-first PDF toolkit. View, edit, and organize PDFs locally.",
+			Category:    "Utilities",
+			Categories:  []string{"Utilities", "Productivity"},
+			IconURL:     "https://raw.githubusercontent.com/IceWhaleTech/CasaOS-AppStore/main/Apps/BentoPDF/icon.png",
+			Train:       "casaos",
+			Version:     "1.0.0",
+			DefaultPort: 8080,
+		},
+		{
+			AppID:       "grafana",
+			Title:       "Grafana",
+			Description: "The open and composable observability and data visualization platform.",
+			Category:    "Monitoring",
+			Categories:  []string{"Monitoring", "Analytics"},
+			IconURL:     "https://raw.githubusercontent.com/Dokploy/templates/main/blueprints/grafana/logo.png",
+			Train:       "dokploy",
+			Version:     "11.0.0",
+			DefaultPort: 3000,
+		},
+		{
+			AppID:       "ackee",
+			Title:       "Ackee",
+			Description: "Self-hosted, Node.js based analytics tool for those who care about privacy.",
+			Category:    "Analytics",
+			Categories:  []string{"Analytics", "Privacy"},
+			IconURL:     "https://raw.githubusercontent.com/Dokploy/templates/main/blueprints/ackee/logo.png",
+			Train:       "dokploy",
+			Version:     "3.4.2",
+			DefaultPort: 3000,
+		},
+		{
+			AppID:       "n8n",
+			Title:       "n8n",
+			Description: "Free and source-available workflow automation tool. Easily automate tasks across different services.",
+			Category:    "Automation",
+			Categories:  []string{"Automation", "Integration"},
+			IconURL:     "https://raw.githubusercontent.com/Dokploy/templates/main/blueprints/n8n/logo.png",
+			Train:       "dokploy",
+			Version:     "1.48.0",
+			DefaultPort: 5678,
 		},
 	}
 
