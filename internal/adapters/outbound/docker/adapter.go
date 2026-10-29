@@ -3127,14 +3127,6 @@ func (a *Adapter) startDeploymentLocked(dir, id, msg string) {
 
 	go func() {
 		defer cancel()
-		composeFile := filepath.Join(dir, "compose.yaml")
-		if content, err := os.ReadFile(composeFile); err == nil {
-			normalized := a.NormalizeComposeVolumes(id, string(content))
-			normalized = NormalizeComposeEnvironment(normalized)
-			if normalized != string(content) {
-				_ = os.WriteFile(composeFile, []byte(normalized), 0644)
-			}
-		}
 		runErr := a.runCompose(bgCtx, dir, id, "up", "-d", "--remove-orphans")
 		a.mu.Lock()
 		defer a.mu.Unlock()

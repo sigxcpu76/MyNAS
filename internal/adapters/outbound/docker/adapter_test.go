@@ -729,6 +729,9 @@ func TestDockerHostPortPreemptiveCheck(t *testing.T) {
 		Name:        "dockerApps/redeploy-test",
 		ComposeYAML: existingAppYAML,
 	}, nil)
+	defer func() {
+		_, _ = adapter.StopApp(ctx, "redeploy-test")
+	}()
 	if err != nil && strings.Contains(err.Error(), "port conflict") {
 		t.Fatalf("UpdateApp failed with unexpected port conflict: %v", err)
 	}
