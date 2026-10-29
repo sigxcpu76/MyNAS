@@ -56,7 +56,7 @@ services:
 
   beforeEach(() => {
     vi.restoreAllMocks();
-    nasState.apps = [sampleAppWithUpdate];
+    nasState.dockerApps = [sampleAppWithUpdate];
     nasState.dockerConfig = {
       dataset: 'tank/apps',
       pool: 'tank',
