@@ -147,12 +147,29 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download All Artifacts
         uses: actions/download-artifact@v4
         with:
           path: release-assets
           merge-multiple: true
+
+      - name: Generate Changelog
+        uses: orhun/git-cliff-action@v4
+        id: git-cliff
+        with:
+          config: cliff.toml
+          args: --tag ${{ inputs.tag || github.ref_name }} --latest --strip header
+        env:
+          OUTPUT: release-notes.md
+          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Attach Changelog to Release Assets
+        run: |
+          cp release-notes.md release-assets/CHANGELOG.md
 
       - name: List Release Assets
         run: |
@@ -162,7 +179,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
+          name: ${{ inputs.tag || github.ref_name }}
+          body_path: release-notes.md
           files: release-assets/*
           draft: false
           prerelease: false
-          generate_release_notes: true
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
