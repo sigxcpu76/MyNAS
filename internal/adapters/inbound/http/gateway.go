@@ -7,18 +7,26 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
+	"net/url"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	grpcadapter "github.com/sigxcpu/nas/internal/adapters/inbound/grpc"
 	"github.com/sigxcpu/nas/internal/application"
+	"github.com/sigxcpu/nas/internal/domain"
 	nasv1 "github.com/sigxcpu/nas/internal/gen/nas/v1"
 	"golang.org/x/net/websocket"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -26,6 +34,9 @@ import (
 type Gateway struct {
 	mux           *http.ServeMux
 	grpcServer    nasv1.NasServiceServer
+	verifier      grpcadapter.TokenVerifier
+	innerServer   *grpc.Server
+	innerConn     *grpc.ClientConn
 	kvmService    *application.KvmService
 	dockerService *application.DockerService
 	lxcService    *application.LxcService
@@ -37,9 +48,13 @@ type Gateway struct {
 	shutdownOnce  sync.Once
 }
 
+// maxGatewayMsgSize bounds REST payloads relayed through the in-process gRPC server.
+const maxGatewayMsgSize = 256 << 20
+
 func NewGateway(
 	ctx context.Context,
 	grpcServer nasv1.NasServiceServer,
+	verifier grpcadapter.TokenVerifier,
 	kvmService *application.KvmService,
 	dockerService *application.DockerService,
 	lxcService *application.LxcService,
@@ -65,7 +80,33 @@ func NewGateway(
 	if setter, ok := grpcServer.(eventBusSetter); ok && eventBus != nil {
 		setter.SetEventBus(eventBus)
 	}
-	if err := nasv1.RegisterNasServiceHandlerServer(ctx, gwMux, grpcServer); err != nil {
+
+	// REST calls are relayed through an in-process gRPC server so they pass the
+	// same authentication and ID validation interceptors as native gRPC clients.
+	innerServer := grpc.NewServer(append(grpcadapter.ServerOptions(verifier),
+		grpc.MaxRecvMsgSize(maxGatewayMsgSize),
+		grpc.MaxSendMsgSize(maxGatewayMsgSize),
+	)...)
+	nasv1.RegisterNasServiceServer(innerServer, grpcServer)
+	lis := bufconn.Listen(1 << 20)
+	go func() { _ = innerServer.Serve(lis) }()
+	innerConn, err := grpc.NewClient("passthrough:///nas-gateway",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return lis.DialContext(ctx)
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(maxGatewayMsgSize),
+			grpc.MaxCallSendMsgSize(maxGatewayMsgSize),
+		),
+	)
+	if err != nil {
+		innerServer.Stop()
+		return nil, err
+	}
+	if err := nasv1.RegisterNasServiceHandlerClient(ctx, gwMux, nasv1.NewNasServiceClient(innerConn)); err != nil {
+		_ = innerConn.Close()
+		innerServer.Stop()
 		return nil, err
 	}
 
@@ -73,6 +114,9 @@ func NewGateway(
 	g := &Gateway{
 		mux:           mux,
 		grpcServer:    grpcServer,
+		verifier:      verifier,
+		innerServer:   innerServer,
+		innerConn:     innerConn,
 		kvmService:    kvmService,
 		dockerService: dockerService,
 		lxcService:    lxcService,
@@ -84,65 +128,50 @@ func NewGateway(
 	}
 
 	// 1. Storage Repositories (ISOs & LXC Templates)
-	mux.Handle("/v1/storage/isos/upload", corsMiddleware(http.HandlerFunc(g.handleUploadISO)))
-	mux.Handle("/v1/storage/isos", corsMiddleware(http.HandlerFunc(g.handleISOs)))
-	mux.Handle("/v1/storage/isos/", corsMiddleware(http.HandlerFunc(g.handleISOs)))
-	mux.Handle("/v1/storage/lxc-templates/upload", corsMiddleware(http.HandlerFunc(g.handleUploadLxcTemplate)))
-	mux.Handle("/v1/storage/lxc-templates", corsMiddleware(http.HandlerFunc(g.handleLxcTemplates)))
-	mux.Handle("/v1/storage/lxc-templates/", corsMiddleware(http.HandlerFunc(g.handleLxcTemplates)))
+	mux.Handle("/v1/storage/isos/upload", g.requireAuth(http.HandlerFunc(g.handleUploadISO)))
+	mux.Handle("/v1/storage/isos", g.requireAuth(http.HandlerFunc(g.handleISOs)))
+	mux.Handle("/v1/storage/isos/", g.requireAuth(http.HandlerFunc(g.handleISOs)))
+	mux.Handle("/v1/storage/lxc-templates/upload", g.requireAuth(http.HandlerFunc(g.handleUploadLxcTemplate)))
+	mux.Handle("/v1/storage/lxc-templates", g.requireAuth(http.HandlerFunc(g.handleLxcTemplates)))
+	mux.Handle("/v1/storage/lxc-templates/", g.requireAuth(http.HandlerFunc(g.handleLxcTemplates)))
 
 	// 2. Real-Time System Notification Stream (Server-Sent Events)
-	mux.HandleFunc("/v1/events", g.handleEventsSSE)
-	mux.HandleFunc("/events", g.handleEventsSSE)
+	mux.Handle("/v1/events", g.requireAuth(http.HandlerFunc(g.handleEventsSSE)))
+	mux.Handle("/events", g.requireAuth(http.HandlerFunc(g.handleEventsSSE)))
 
 	// 2b. Reactive gRPC Server-Side Streaming / Watch Handlers over HTTP
-	mux.Handle("/v1/dockerApps:watch", corsMiddleware(http.HandlerFunc(g.handleWatchDockerApps)))
-	mux.Handle("/v1/dockerContainers:watch", corsMiddleware(http.HandlerFunc(g.handleWatchDockerContainers)))
-	mux.Handle("/v1/virtualMachines:watch", corsMiddleware(http.HandlerFunc(g.handleWatchVirtualMachines)))
-	mux.Handle("/v1/lxcContainers:watch", corsMiddleware(http.HandlerFunc(g.handleWatchLxcContainers)))
-	mux.Handle("/v1/system:telemetryStream", corsMiddleware(http.HandlerFunc(g.handleStreamSystemTelemetry)))
-	mux.Handle("/v1/resources:watch", corsMiddleware(http.HandlerFunc(g.handleWatchResources)))
+	mux.Handle("/v1/dockerApps:watch", g.requireAuth(http.HandlerFunc(g.handleWatchDockerApps)))
+	mux.Handle("/v1/dockerContainers:watch", g.requireAuth(http.HandlerFunc(g.handleWatchDockerContainers)))
+	mux.Handle("/v1/virtualMachines:watch", g.requireAuth(http.HandlerFunc(g.handleWatchVirtualMachines)))
+	mux.Handle("/v1/lxcContainers:watch", g.requireAuth(http.HandlerFunc(g.handleWatchLxcContainers)))
+	mux.Handle("/v1/system:telemetryStream", g.requireAuth(http.HandlerFunc(g.handleStreamSystemTelemetry)))
+	mux.Handle("/v1/resources:watch", g.requireAuth(http.HandlerFunc(g.handleWatchResources)))
 
-	// 3. Google AIP REST/JSON API via gRPC-Gateway
-	mux.Handle("/v1/", corsMiddleware(gwMux))
+	// 3. Google AIP REST/JSON API via gRPC-Gateway (authenticated by the gRPC interceptors)
+	mux.Handle("/v1/", noStoreMiddleware(gwMux))
 
-	// 4. KVM noVNC WebSocket-to-RFB Proxy (/ws/novnc/{vmName}?token={token})
+	// 4. KVM noVNC WebSocket-to-RFB Proxy (/ws/novnc/{vmName}?token={token}).
+	// Authorized by the single-VM console token minted by the authenticated :openConsole call.
 	mux.Handle("/ws/novnc/", websocket.Server{
-		Handshake: func(cfg *websocket.Config, req *http.Request) error {
-			// Accept binary or base64 subprotocols requested by noVNC / RFB clients
-			if len(cfg.Protocol) > 0 {
-				cfg.Protocol = cfg.Protocol[:1]
-			}
-			return nil
-		},
-		Handler: g.handleNoVNCWebSocket,
+		Handshake: sameOriginHandshake,
+		Handler:   g.handleNoVNCWebSocket,
 	})
 
-	// 5. Docker Container Interactive Terminal WebSocket (/ws/docker/terminal/{containerId}?shell=/bin/sh)
-	mux.Handle("/ws/docker/terminal/", websocket.Server{
-		Handshake: func(cfg *websocket.Config, req *http.Request) error {
-			if len(cfg.Protocol) > 0 {
-				cfg.Protocol = cfg.Protocol[:1]
-			}
-			return nil
-		},
-		Handler: g.handleDockerTerminalWebSocket,
-	})
+	// 5. Docker Container Interactive Terminal WebSocket (/ws/docker/terminal/{containerId}?shell=/bin/sh&access_token=...)
+	mux.Handle("/ws/docker/terminal/", g.requireAuth(websocket.Server{
+		Handshake: sameOriginHandshake,
+		Handler:   g.handleDockerTerminalWebSocket,
+	}))
 
-	// 6. LXC Container Interactive Terminal WebSocket (/ws/lxc/terminal/{containerId}?shell=/bin/sh)
-	mux.Handle("/ws/lxc/terminal/", websocket.Server{
-		Handshake: func(cfg *websocket.Config, req *http.Request) error {
-			if len(cfg.Protocol) > 0 {
-				cfg.Protocol = cfg.Protocol[:1]
-			}
-			return nil
-		},
-		Handler: g.handleLxcTerminalWebSocket,
-	})
+	// 6. LXC Container Interactive Terminal WebSocket (/ws/lxc/terminal/{containerId}?shell=/bin/sh&access_token=...)
+	mux.Handle("/ws/lxc/terminal/", g.requireAuth(websocket.Server{
+		Handshake: sameOriginHandshake,
+		Handler:   g.handleLxcTerminalWebSocket,
+	}))
 
-	// 7. Embedded WebDAV File Sharing Server (/dav/{share_name}/...)
+	// 7. Embedded WebDAV File Sharing Server (/dav/{share_name}/...), protected by HTTP Basic Auth
 	if webdavHandler != nil {
-		mux.Handle("/dav/", corsMiddleware(webdavHandler))
+		mux.Handle("/dav/", webdavHandler)
 	}
 
 	// 8. Embedded Vue.js Single-Page Application (SPA)
@@ -304,7 +333,6 @@ func (g *Gateway) handleEventsSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("X-Accel-Buffering", "no")
 
 	// Handshake event
@@ -354,6 +382,12 @@ func (g *Gateway) Close() {
 	}
 	g.shutdownOnce.Do(func() {
 		close(g.shutdownCh)
+		if g.innerConn != nil {
+			_ = g.innerConn.Close()
+		}
+		if g.innerServer != nil {
+			g.innerServer.Stop()
+		}
 	})
 	if g.eventBus != nil {
 		g.eventBus.Close()
@@ -365,6 +399,9 @@ func (g *Gateway) handleNoVNCWebSocket(ws *websocket.Conn) {
 	req := ws.Request()
 	vmID := strings.TrimPrefix(req.URL.Path, "/ws/novnc/")
 	vmID = strings.Trim(vmID, "/")
+	if domain.ValidateResourceID(vmID, "virtual machine") != nil {
+		return
+	}
 	token := req.URL.Query().Get("token")
 
 	if _, err := g.kvmService.ValidateConsoleToken(req.Context(), vmID, token); err != nil {
@@ -394,13 +431,18 @@ func (g *Gateway) handleDockerTerminalWebSocket(ws *websocket.Conn) {
 	req := ws.Request()
 	containerID := strings.TrimPrefix(req.URL.Path, "/ws/docker/terminal/")
 	containerID = strings.Trim(containerID, "/")
-	if containerID == "" {
+	if err := domain.ValidateResourceID(containerID, "container"); err != nil {
+		_, _ = ws.Write([]byte(err.Error() + "\r\n"))
 		return
 	}
 
 	shell := req.URL.Query().Get("shell")
 	if shell == "" {
 		shell = "/bin/sh"
+	}
+	if !shellPathRegex.MatchString(shell) {
+		_, _ = ws.Write([]byte("Invalid shell path\r\n"))
+		return
 	}
 
 	ws.PayloadType = websocket.BinaryFrame
@@ -459,13 +501,18 @@ func (g *Gateway) handleLxcTerminalWebSocket(ws *websocket.Conn) {
 	req := ws.Request()
 	containerID := strings.TrimPrefix(req.URL.Path, "/ws/lxc/terminal/")
 	containerID = strings.Trim(containerID, "/")
-	if containerID == "" {
+	if err := domain.ValidateResourceID(containerID, "container"); err != nil {
+		_, _ = ws.Write([]byte(err.Error() + "\r\n"))
 		return
 	}
 
 	shell := req.URL.Query().Get("shell")
 	if shell == "" {
 		shell = "/bin/sh"
+	}
+	if !shellPathRegex.MatchString(shell) {
+		_, _ = ws.Write([]byte("Invalid shell path\r\n"))
+		return
 	}
 
 	ws.PayloadType = websocket.BinaryFrame
@@ -557,21 +604,63 @@ func (g *Gateway) handleSPA(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(indexBytes)
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
+// shellPathRegex restricts terminal shells to plain absolute paths such as /bin/bash.
+var shellPathRegex = regexp.MustCompile(`^/[a-zA-Z0-9/_.-]{1,127}$`)
+
+// noStoreMiddleware stops browsers and proxies from caching API responses.
+// No CORS headers are sent: the embedded UI is same-origin, and cross-origin
+// pages must not be able to drive the API.
+func noStoreMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS, PROPFIND, MKCOL, MOVE, COPY")
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Depth, Destination, Overwrite")
-		if strings.HasPrefix(r.URL.Path, "/v1/") {
-			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-			w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// requireAuth rejects requests without a valid bearer token. Browsers cannot set
+// headers on EventSource or WebSocket requests, so GET requests may instead pass
+// the token as the access_token query parameter.
+func (g *Gateway) requireAuth(next http.Handler) http.Handler {
+	return noStoreMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := r.Header.Get("Authorization")
+		if token == "" && r.Method == http.MethodGet {
+			token = r.URL.Query().Get("access_token")
 		}
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
+		if token == "" || g.verifier == nil {
+			writeUnauthenticated(w)
+			return
+		}
+		if _, err := g.verifier.VerifyToken(r.Context(), token); err != nil {
+			writeUnauthenticated(w)
 			return
 		}
 		next.ServeHTTP(w, r)
-	})
+	}))
+}
+
+func writeUnauthenticated(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("WWW-Authenticate", "Bearer")
+	w.WriteHeader(http.StatusUnauthorized)
+	_, _ = w.Write([]byte(`{"code":16,"message":"authentication required"}`))
+}
+
+// sameOriginHandshake blocks cross-site WebSocket hijacking: a browser always sends
+// Origin, and it must match the host the UI was served from. Non-browser clients
+// that omit Origin are allowed (they cannot ride on a victim's session).
+func sameOriginHandshake(cfg *websocket.Config, req *http.Request) error {
+	if origin := req.Header.Get("Origin"); origin != "" {
+		u, err := url.Parse(origin)
+		if err != nil || !strings.EqualFold(u.Host, req.Host) {
+			return fmt.Errorf("websocket origin %q not allowed", origin)
+		}
+	}
+	// Accept binary or base64 subprotocols requested by noVNC / RFB clients
+	if len(cfg.Protocol) > 0 {
+		cfg.Protocol = cfg.Protocol[:1]
+	}
+	return nil
 }
 
 // =============================================================================

@@ -2,12 +2,15 @@ package cli
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -49,7 +52,6 @@ func newStartCmd(rootOpts *RootOptions) *cobra.Command {
 		GRPCPort:   9090,
 		WebdavPort: 8081,
 		StateDir:   "/tmp/nas-state",
-		JWTSecret:  "nas-production-secret-2026",
 	}
 
 	cmd := &cobra.Command{
@@ -67,7 +69,7 @@ func newStartCmd(rootOpts *RootOptions) *cobra.Command {
 	cmd.Flags().IntVar(&opts.GRPCPort, "grpc-port", opts.GRPCPort, "Native gRPC API server listen port")
 	cmd.Flags().IntVar(&opts.WebdavPort, "webdav-port", opts.WebdavPort, "Dedicated WebDAV server listen port (default 8081, 0 to disable dedicated port)")
 	cmd.Flags().StringVar(&opts.StateDir, "state-dir", opts.StateDir, "Directory for NAS share & config state")
-	cmd.Flags().StringVar(&opts.JWTSecret, "jwt-secret", opts.JWTSecret, "HMAC secret for JWT issuance")
+	cmd.Flags().StringVar(&opts.JWTSecret, "jwt-secret", opts.JWTSecret, "HMAC secret for JWT issuance (default: random secret persisted in the state dir)")
 
 	return cmd
 }
@@ -116,7 +118,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	if opts.StateDir != "/tmp/nas-state" && opts.StateDir != "" {
 		cfg.Server.StateDir = opts.StateDir
 	}
-	if opts.JWTSecret != "nas-production-secret-2026" && opts.JWTSecret != "" {
+	if opts.JWTSecret != "" {
 		cfg.Server.JWTSecret = opts.JWTSecret
 	}
 
@@ -268,7 +270,14 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	dockerAppSvc := application.NewDockerAppService(dockerAdapter)
 	lxcSvc := application.NewLxcService(lxcAdapter)
 	shareSvc := application.NewShareService(cifsAdapter, webdavAdapter)
-	identitySvc := application.NewIdentityService(identityAdapter, opts.JWTSecret)
+	jwtSecret, err := resolveJWTSecret(cfg.Server.JWTSecret, stateDir)
+	if err != nil {
+		return fmt.Errorf("resolving JWT secret: %w", err)
+	}
+	identitySvc := application.NewIdentityService(identityAdapter, jwtSecret)
+	if !identity.PAMSupported {
+		logger.Warn("this build has no PAM support (CGO disabled); web UI and API logins will be rejected")
+	}
 	catalogSvc := application.NewCatalogService(catalogAdapter)
 
 	step("application services constructed")
@@ -283,15 +292,15 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	lxcCatalogSvc := application.NewLxcCatalogService(lxcCatalogAdapter)
 	nasGRPC.SetLxcCatalogService(lxcCatalogSvc)
 
-	rawGRPCServer := grpc.NewServer(
-		grpc.UnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
+	rawGRPCServer := grpc.NewServer(append(grpcadapter.ServerOptions(identitySvc),
+		grpc.ChainUnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 			resp, err = handler(ctx, req)
 			if err != nil {
 				logger.Error("grpc request error", "method", info.FullMethod, "error", err)
 			}
 			return resp, err
 		}),
-	)
+	)...)
 	nasv1.RegisterNasServiceServer(rawGRPCServer, nasGRPC)
 	reflection.Register(rawGRPCServer)
 
@@ -309,7 +318,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	}
 	step("storage repositories ensured (isos, lxc-templates datasets)")
 
-	gateway, err := httpadapter.NewGateway(ctx, nasGRPC, kvmSvc, dockerSvc, lxcSvc, storageRepoSvc, webdavAdapter, uiFS, eventBus)
+	gateway, err := httpadapter.NewGateway(ctx, nasGRPC, identitySvc, kvmSvc, dockerSvc, lxcSvc, storageRepoSvc, webdavAdapter, uiFS, eventBus)
 	if err != nil {
 		return err
 	}
@@ -425,4 +434,34 @@ func resolveStateDir(preferred string) string {
 	tmpDir := filepath.Join(os.TempDir(), "nasctl-state")
 	_ = os.MkdirAll(tmpDir, 0755)
 	return tmpDir
+}
+
+// legacyJWTSecrets were hardcoded defaults in earlier releases and may still be
+// present in saved config files; they are public and must never sign tokens.
+var legacyJWTSecrets = map[string]bool{
+	"nas-production-secret-2026":       true,
+	"nas-default-hmac-secret-key-2026": true,
+}
+
+// resolveJWTSecret returns the configured secret, or a random one generated once
+// and persisted (0600) in the state directory so sessions survive restarts.
+func resolveJWTSecret(configured, stateDir string) (string, error) {
+	if configured != "" && !legacyJWTSecrets[configured] {
+		return configured, nil
+	}
+	path := filepath.Join(stateDir, "jwt.secret")
+	if data, err := os.ReadFile(path); err == nil {
+		if secret := strings.TrimSpace(string(data)); len(secret) >= 32 {
+			return secret, nil
+		}
+	}
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	secret := hex.EncodeToString(buf)
+	if err := os.WriteFile(path, []byte(secret+"\n"), 0o600); err != nil {
+		return "", err
+	}
+	return secret, nil
 }

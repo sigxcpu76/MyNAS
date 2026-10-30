@@ -26,7 +26,7 @@ echo "=============================================================="
 if [ ! -f "$BASE_DIR/bin/nasctl" ]; then
     echo ">> [1/7] Building nasctl binary..."
     mkdir -p "$BASE_DIR/bin"
-    (cd "$BASE_DIR" && CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/nasctl cmd/nasctl/main.go)
+    (cd "$BASE_DIR" && CGO_ENABLED=1 go build -ldflags="-s -w" -o bin/nasctl cmd/nasctl/main.go)
 else
     echo ">> [1/7] Found existing nasctl binary at $BASE_DIR/bin/nasctl"
 fi

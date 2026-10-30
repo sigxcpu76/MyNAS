@@ -588,7 +588,7 @@ export function startEventStream(): void {
   if (eventSource) return;
 
   const token = aipClient.getToken();
-  const url = token ? `/v1/events?token=${encodeURIComponent(token)}` : '/v1/events';
+  const url = token ? `/v1/events?access_token=${encodeURIComponent(token)}` : '/v1/events';
 
   try {
     eventSource = new EventSource(url);
@@ -663,6 +663,16 @@ function handleIncomingEvent(evt: any): void {
       break;
   }
 }
+
+// An expired or revoked session drops the UI back to the login modal.
+aipClient.onUnauthorized = () => {
+  if (!nasState.authenticated) return;
+  stopWatchStream();
+  stopEventStream();
+  services.auth.logout();
+  nasState.authenticated = false;
+  nasState.currentUser = null;
+};
 
 export async function initSession(): Promise<void> {
   if (services.auth.isAuthenticated()) {

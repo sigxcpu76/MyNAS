@@ -205,11 +205,6 @@ func (a *WebdavAdapter) isUserAuthorized(user *domain.User, share domain.WebdavS
 // ServeHTTP serves WebDAV requests with HTTP Basic Auth, Read-Only enforcement,
 // and rich HTML directory auto-indexing for web browsers.
 func (a *WebdavAdapter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Enable CORS for web-based DAV clients and cross-origin tools
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "OPTIONS, GET, HEAD, POST, PUT, DELETE, TRACE, PROPFIND, PROPPATCH, COPY, MOVE, LOCK, UNLOCK")
-	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Depth, Destination, If, Lock-Token, Timeout, X-Requested-With")
-
 	if r.Method == http.MethodOptions {
 		w.Header().Set("DAV", "1, 2")
 		w.Header().Set("MS-Author-Via", "DAV")
@@ -272,7 +267,7 @@ func (a *WebdavAdapter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			user, err := authenticator(r.Context(), username, password)
 			if err != nil {
 				w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Basic realm="NAS WebDAV (%s)"`, share.ID))
-				http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+				http.Error(w, "Unauthorized: invalid username or password", http.StatusUnauthorized)
 				return
 			}
 			if !a.isUserAuthorized(user, share) {

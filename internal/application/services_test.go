@@ -427,8 +427,18 @@ func TestIdentityAndPrerequisites(t *testing.T) {
 		testUser = curr.Username
 	}
 
-	idSvc := application.NewIdentityService(identity.NewAdapter(), "unit-test-secret")
-	token, _, user, err := idSvc.Login(ctx, testUser, "admin123")
+	idAdapter := identity.NewAdapter()
+	idAdapter.SetPasswordVerifier(func(username, password string) error {
+		if password != "unit-test-password" {
+			return fmt.Errorf("bad password")
+		}
+		return nil
+	})
+	idSvc := application.NewIdentityService(idAdapter, "unit-test-secret")
+	if _, _, _, err := idSvc.Login(ctx, testUser, "admin123"); err == nil {
+		t.Fatalf("Login with the legacy admin123 password must fail")
+	}
+	token, _, user, err := idSvc.Login(ctx, testUser, "unit-test-password")
 	if err != nil || token == "" || user.Username != testUser {
 		t.Fatalf("Login failed: %v", err)
 	}

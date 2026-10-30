@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -19,13 +20,19 @@ type IdentityService struct {
 	jwtSecret []byte
 }
 
+// NewIdentityService signs tokens with jwtSecret. An empty secret gets a random
+// per-process key, so tokens are never signed with a guessable value.
 func NewIdentityService(identity ports.LinuxIdentityPort, jwtSecret string) *IdentityService {
-	if jwtSecret == "" {
-		jwtSecret = "nas-default-hmac-secret-key-2026"
+	secret := []byte(jwtSecret)
+	if len(secret) == 0 {
+		secret = make([]byte, 32)
+		if _, err := rand.Read(secret); err != nil {
+			panic(fmt.Sprintf("identity: generating JWT secret: %v", err))
+		}
 	}
 	return &IdentityService{
 		identity:  identity,
-		jwtSecret: []byte(jwtSecret),
+		jwtSecret: secret,
 	}
 }
 

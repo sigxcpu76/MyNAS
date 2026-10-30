@@ -84,6 +84,10 @@ export class AuthService {
   isAuthenticated(): boolean {
     return Boolean(this.authPort.getToken());
   }
+
+  getToken(): string | null {
+    return this.authPort.getToken();
+  }
 }
 
 // ---------------------------------------------------------------------------

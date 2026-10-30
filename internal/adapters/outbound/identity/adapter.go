@@ -3,12 +3,9 @@ package identity
 import (
 	"bufio"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
-	userpkg "os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -17,27 +14,38 @@ import (
 	"github.com/sigxcpu/nas/internal/domain"
 )
 
+// PasswordVerifier checks a username/password pair, returning nil on success.
+type PasswordVerifier func(username, password string) error
+
 type Adapter struct {
-	mu           sync.RWMutex
-	users        map[string]domain.User
-	groups       map[string]domain.Group
-	passwordHash map[string]string
-	nextUID      int32
-	nextGID      int32
+	mu             sync.RWMutex
+	users          map[string]domain.User
+	groups         map[string]domain.Group
+	verifyPassword PasswordVerifier
+	nextUID        int32
+	nextGID        int32
 }
 
 func NewAdapter() *Adapter {
 	a := &Adapter{
-		users:        make(map[string]domain.User),
-		groups:       make(map[string]domain.Group),
-		passwordHash: make(map[string]string),
-		nextUID:      1000,
-		nextGID:      1000,
+		users:   make(map[string]domain.User),
+		groups:  make(map[string]domain.Group),
+		nextUID: 1000,
+		nextGID: 1000,
+		verifyPassword: func(username, password string) error {
+			return AuthenticatePAM("", username, password)
+		},
 	}
 	a.loadFromLinuxSystem()
 	a.loadSambaUsers()
-	a.initHostUserAccess()
 	return a
+}
+
+// SetPasswordVerifier replaces the PAM password check (used by tests).
+func (a *Adapter) SetPasswordVerifier(fn PasswordVerifier) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.verifyPassword = fn
 }
 
 func (a *Adapter) loadSambaUsers() {
@@ -63,11 +71,6 @@ func (a *Adapter) loadSambaUsers() {
 			}
 		}
 	}
-}
-
-func hashPassword(pw string) string {
-	sum := sha256.Sum256([]byte("nas-salt:" + pw))
-	return hex.EncodeToString(sum[:])
 }
 
 func (a *Adapter) loadFromLinuxSystem() {
@@ -179,24 +182,6 @@ func (a *Adapter) loadFromLinuxSystem() {
 	}
 }
 
-// initHostUserAccess ensures the current Linux user executing nasctl has credentials
-// seeded for development/testing when unprivileged.
-func (a *Adapter) initHostUserAccess() {
-	curr, err := userpkg.Current()
-	if err == nil && curr.Username != "" {
-		if u, exists := a.users[curr.Username]; exists {
-			u.IsAdmin = true
-			a.users[curr.Username] = u
-			// Seed a known password for the host user for test/dev convenience
-			a.passwordHash[curr.Username] = hashPassword("admin123")
-		}
-	}
-	// Seed root for test/dev convenience
-	if _, exists := a.users["root"]; exists {
-		a.passwordHash["root"] = hashPassword("admin123")
-	}
-}
-
 func readAuthorizedKeys(homeDir string) []string {
 	if homeDir == "" || homeDir == "/" || homeDir == "/nonexistent" {
 		return []string{}
@@ -220,41 +205,25 @@ func readAuthorizedKeys(homeDir string) []string {
 }
 
 func (a *Adapter) Authenticate(ctx context.Context, username, password string) (*domain.User, error) {
+	// Errors are deliberately identical for unknown users, wrong passwords and
+	// locked accounts so the login endpoint cannot be used to enumerate users.
+	invalid := fmt.Errorf("%w: invalid username or password", domain.ErrUnauthorized)
+	if username == "" || password == "" {
+		return nil, invalid
+	}
+
+	a.mu.RLock()
+	verify := a.verifyPassword
+	a.mu.RUnlock()
+	if verify == nil || verify(username, password) != nil {
+		return nil, invalid
+	}
+
 	a.mu.RLock()
 	user, ok := a.users[username]
-	if !ok {
+	if !ok || user.Locked {
 		a.mu.RUnlock()
-		return nil, fmt.Errorf("%w: unknown Linux system user %q", domain.ErrUnauthorized, username)
-	}
-	if user.Locked {
-		a.mu.RUnlock()
-		return nil, fmt.Errorf("%w: account %q is locked", domain.ErrPermissionDenied, username)
-	}
-
-	verified := false
-
-	// 1. Check in-memory/test override password hash first (avoids faillock in test suites)
-	if expected, hasHash := a.passwordHash[username]; hasHash && expected == hashPassword(password) {
-		verified = true
-	}
-
-	// 2. Direct shadow crypt_r check (used when running as root or via sudo)
-	if !verified {
-		if v, err := AuthenticateShadow(username, password); err == nil && v {
-			verified = true
-		}
-	}
-
-	// 3. Fallback to Linux PAM authentication (when /etc/shadow is unreadable by non-root)
-	if !verified {
-		if err := AuthenticatePAM("", username, password); err == nil {
-			verified = true
-		}
-	}
-
-	if !verified {
-		a.mu.RUnlock()
-		return nil, fmt.Errorf("%w: invalid credentials for Linux user %q", domain.ErrUnauthorized, username)
+		return nil, invalid
 	}
 
 	cp := user
@@ -382,7 +351,6 @@ func (a *Adapter) CreateUser(ctx context.Context, user domain.User) (*domain.Use
 		user.SSHAuthorizedKeys = []string{}
 	}
 	if user.Password != "" {
-		a.passwordHash[user.ID] = hashPassword(user.Password)
 		if user.SMBPassword == "" {
 			user.SMBPassword = user.Password
 			user.SMBEnabled = true
@@ -467,7 +435,6 @@ func (a *Adapter) UpdateUser(ctx context.Context, user domain.User, fields []str
 	existing.Locked = user.Locked
 	existing.IsAdmin = user.IsAdmin
 	if user.Password != "" {
-		a.passwordHash[user.ID] = hashPassword(user.Password)
 		if user.SMBPassword == "" {
 			user.SMBPassword = user.Password
 		}
@@ -519,7 +486,6 @@ func (a *Adapter) DeleteUser(ctx context.Context, username string, removeHome bo
 		_ = exec.CommandContext(ctx, "userdel", args...).Run()
 	}
 	delete(a.users, username)
-	delete(a.passwordHash, username)
 	return nil
 }
 

@@ -220,6 +220,48 @@ func (d *stubDockerPort) ResizeExec(ctx context.Context, execID string, height, 
 	return nil
 }
 
+const testPassword = "test-password"
+
+// bearerTransport attaches the session token to every request, like the web UI does.
+type bearerTransport struct {
+	token string
+	base  http.RoundTripper
+}
+
+func (b *bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set("Authorization", "Bearer "+b.token)
+	return b.base.RoundTrip(r)
+}
+
+func testLoginUsername() string {
+	if curr, err := osuser.Current(); err == nil && curr.Username != "" {
+		return curr.Username
+	}
+	return "root"
+}
+
+// login authenticates against the test server and returns the access token.
+func login(t *testing.T, srv *httptest.Server) string {
+	t.Helper()
+	payload := fmt.Sprintf(`{"username":%q,"password":%q}`, testLoginUsername(), testPassword)
+	resp, err := srv.Client().Post(srv.URL+"/v1/auth:login", "application/json", strings.NewReader(payload))
+	if err != nil {
+		t.Fatalf("login request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 on :login, got %d", resp.StatusCode)
+	}
+	var data struct {
+		AccessToken string `json:"accessToken"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil || data.AccessToken == "" {
+		t.Fatalf("expected non-empty accessToken: %v", err)
+	}
+	return data.AccessToken
+}
+
 func setupTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	ctx := context.Background()
@@ -270,7 +312,14 @@ func setupTestServer(t *testing.T) *httptest.Server {
 		Enabled: true,
 	})
 	shareSvc := application.NewShareService(share.NewCifsAdapter(t.TempDir()), webdavAdapter)
-	identitySvc := application.NewIdentityService(identity.NewAdapter(), "test-jwt-secret")
+	identityAdapter := identity.NewAdapter()
+	identityAdapter.SetPasswordVerifier(func(username, password string) error {
+		if password != testPassword {
+			return fmt.Errorf("bad password")
+		}
+		return nil
+	})
+	identitySvc := application.NewIdentityService(identityAdapter, "test-jwt-secret")
 	catalogSvc := application.NewCatalogService(catalog.NewAdapter(t.TempDir()))
 
 	grpcSrv := grpcadapter.NewServer(systemSvc, prereqSvc, diskSvc, zfsSvc, kvmSvc, dockerSvc, dockerAppSvc, lxcSvc, shareSvc, identitySvc, catalogSvc)
@@ -280,7 +329,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	}
 	eventBus := application.NewEventBus()
 	storageRepoSvc := application.NewStorageRepoService(nil, t.TempDir())
-	gw, err := httpadapter.NewGateway(ctx, grpcSrv, kvmSvc, dockerSvc, lxcSvc, storageRepoSvc, webdavAdapter, uiFS, eventBus)
+	gw, err := httpadapter.NewGateway(ctx, grpcSrv, identitySvc, kvmSvc, dockerSvc, lxcSvc, storageRepoSvc, webdavAdapter, uiFS, eventBus)
 	if err != nil {
 		t.Fatalf("failed to create gateway: %v", err)
 	}
@@ -290,29 +339,9 @@ func setupTestServer(t *testing.T) *httptest.Server {
 func TestGoogleAIPGatewayEndToEnd(t *testing.T) {
 	srv := setupTestServer(t)
 	defer srv.Close()
-	client := srv.Client()
-
-	// 1. Auth custom method POST /v1/auth:login
-	testUsername := "root"
-	if curr, err := osuser.Current(); err == nil && curr.Username != "" {
-		testUsername = curr.Username
-	}
-	loginPayload := fmt.Sprintf(`{"username":%q,"password":"admin123"}`, testUsername)
-	loginResp, err := client.Post(srv.URL+"/v1/auth:login", "application/json", strings.NewReader(loginPayload))
-	if err != nil {
-		t.Fatalf("login request failed: %v", err)
-	}
-	defer loginResp.Body.Close()
-	if loginResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 on :login, got %d", loginResp.StatusCode)
-	}
-	var loginData map[string]any
-	if err := json.NewDecoder(loginResp.Body).Decode(&loginData); err != nil {
-		t.Fatalf("decode login response: %v", err)
-	}
-	if loginData["accessToken"] == "" {
-		t.Fatalf("expected non-empty accessToken")
-	}
+	// 1. Auth custom method POST /v1/auth:login; every later call carries the token
+	token := login(t, srv)
+	client := &http.Client{Transport: &bearerTransport{token: token, base: srv.Client().Transport}}
 
 	// 2. Prerequisites List & :check custom method
 	prereqResp, err := client.Post(srv.URL+"/v1/prerequisites:check", "application/json", strings.NewReader(`{}`))
@@ -459,7 +488,7 @@ func TestGoogleAIPGatewayEndToEnd(t *testing.T) {
 	}
 
 	// 8. Docker Interactive Terminal WebSocket (/ws/docker/terminal/{containerId})
-	dockerWsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws/docker/terminal/c1?shell=/bin/sh"
+	dockerWsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws/docker/terminal/c1?shell=/bin/sh&access_token=" + token
 	wsConfig, wsErr := websocket.NewConfig(dockerWsURL, srv.URL)
 	if wsErr != nil {
 		t.Fatalf("failed to create ws config: %v", wsErr)
@@ -601,7 +630,7 @@ func TestGoogleAIPGatewayEndToEnd(t *testing.T) {
 func TestWatchStreamingWithDeltas(t *testing.T) {
 	srv := setupTestServer(t)
 	defer srv.Close()
-	client := srv.Client()
+	client := &http.Client{Transport: &bearerTransport{token: login(t, srv), base: srv.Client().Transport}}
 
 	// 1. Open DockerApps watch stream
 	watchResp, err := client.Get(srv.URL + "/v1/dockerApps:watch")

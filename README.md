@@ -152,7 +152,7 @@ NaN adopts the TrueNAS SCALE Electric Eel philosophy where containers are organi
 - **Samba / CIFS Sharing**: Manage SMB shares, valid users and groups, guest access, and file creation masks.
 - **Dedicated Port WebDAV Server**: Single-binary built-in Go WebDAV engine isolated on a dedicated port (default `8081`, flag `--webdav-port 8081`) separate from the administrative web UI (`8080`) for network and firewall security isolation.
 - **Built-in Auto-Index Directory Browser**: Accessing any WebDAV share or folder in a web browser renders a clean, responsive auto-index HTML page with breadcrumbs, instant file filtering, size formatting, and direct downloads.
-- **Granular Access Control**: Toggle shares between **Read-Write (Full Access)** and **Read-Only** with HTTP Basic Authentication verified directly against Linux PAM and `/etc/shadow`.
+- **Granular Access Control**: Toggle shares between **Read-Write (Full Access)** and **Read-Only** with HTTP Basic Authentication verified against Linux PAM.
 - **1-Click Mount & Client Guide**: Wide table view with port-adjusted mount URLs, 1-click clipboard copy, and interactive connection guides for Windows (Map Network Drive / `net use`), macOS Finder (`Cmd+K`), Linux (`davfs2`), and Nextcloud external storage.
 - **Interactive Path Selectors**: Browse server file hierarchies directly from modal folder pickers instead of typing raw disk paths with automatic share slug derivation.
 
@@ -271,11 +271,12 @@ Run `nasctl start` to start the embedded management interface:
 # Run with root privileges to manage ZFS, disks, and system users
 sudo ./bin/nasctl start \
   --http-port 8080 \
-  --grpc-port 9090 \
-  --jwt-secret "your-production-secret-token"
+  --grpc-port 9090
 ```
 
-Open your browser and navigate to `http://localhost:8080`. Log in using your existing Linux system credentials (`username` and `password`).
+Open your browser and navigate to `http://localhost:8080`. Log in using your existing Linux system credentials (`username` and `password`), verified through PAM (the `/etc/pam.d/nasctl` service if present, otherwise `system-auth` or `login`). PAM requires a CGO-enabled build.
+
+Tokens are signed with a random secret generated on first start and stored (mode 0600) as `jwt.secret` in the state directory; `--jwt-secret` overrides it.
 
 ### CLI Client Usage
 
@@ -309,7 +310,7 @@ NaN follows the **Google API Improvement Proposals (AIP)** convention:
 - **Protobuf Schemas**: Maintained modularly in [`proto/nas/v1/`](proto/nas/v1/) (`service.proto` and per-entity proto files).
 - **gRPC API**: Served on `:9090`.
 - **REST / JSON Gateway**: Served on `:8080/v1/...` via `grpc-gateway`.
-- **Authentication**: JWT Bearer token via `POST /v1/auth:login` and header `Authorization: Bearer <token>`.
+- **Authentication**: Every endpoint except `POST /v1/auth:login` requires a JWT Bearer token (`Authorization: Bearer <token>`). EventSource and WebSocket endpoints accept it as the `access_token` query parameter. The CLI stores one via `nasctl login`.
 
 ### Common AIP Endpoints
 

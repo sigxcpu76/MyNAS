@@ -17,6 +17,7 @@ import (
 
 type RootOptions struct {
 	ServerAddr string
+	Token      string
 	LogLevel   string
 	ConfigFile string
 	JSONOutput bool
@@ -52,12 +53,15 @@ and Linux system users/groups.`,
 	}
 
 	rootCmd.PersistentFlags().StringVarP(&opts.ServerAddr, "server", "s", opts.ServerAddr, "gRPC API server address (host:port) for CLI client commands")
+	rootCmd.PersistentFlags().StringVar(&opts.Token, "token", "", "Bearer token for CLI client commands (default: $NASCTL_TOKEN or the token saved by `nasctl login`)")
 	rootCmd.PersistentFlags().StringVar(&opts.LogLevel, "log-level", opts.LogLevel, "Log level (debug, info, warn, error)")
 	rootCmd.PersistentFlags().StringVarP(&opts.ConfigFile, "config", "c", opts.ConfigFile, "Path to config.yaml configuration file")
 	rootCmd.PersistentFlags().BoolVar(&opts.JSONOutput, "json", false, "Output CLI responses as JSON")
 
 	rootCmd.AddCommand(
 		newStartCmd(opts),
+		newLoginCmd(opts),
+		newLogoutCmd(opts),
 		newSystemCmd(opts),
 		newPrereqCmd(opts),
 		newDiskCmd(opts),
@@ -76,7 +80,8 @@ and Linux system users/groups.`,
 }
 
 func (o *RootOptions) dialClient(ctx context.Context) (nasv1.NasServiceClient, *grpc.ClientConn, error) {
-	conn, err := grpc.NewClient(o.ServerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	dialOpts := append([]grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}, authDialOptions(o.resolveToken())...)
+	conn, err := grpc.NewClient(o.ServerAddr, dialOpts...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to connect to gRPC server %s: %w", o.ServerAddr, err)
 	}

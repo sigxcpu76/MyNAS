@@ -38,6 +38,8 @@ export function normalizeInt64(val: unknown): number {
 
 export class AipClient {
   private token: string | null = null;
+  /** Invoked when the server rejects the current session token (HTTP 401). */
+  onUnauthorized: (() => void) | null = null;
   private readonly baseUrl: string;
   private readonly fetchImpl: FetchLike;
   private readonly isCustomFetch: boolean;
@@ -291,6 +293,10 @@ export class AipClient {
       } catch {
         parsed = { message: text };
       }
+    }
+
+    if (response.status === 401 && this.token) {
+      this.onUnauthorized?.();
     }
 
     if (!response.ok) {

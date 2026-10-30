@@ -58,7 +58,7 @@ func DefaultConfig() *Config {
 			GRPCPort:   9090,
 			WebdavPort: 8081,
 			StateDir:   stateDir,
-			JWTSecret:  "nas-production-secret-2026",
+			JWTSecret:  "",
 		},
 		System: SystemConfig{
 			MainPool:      "",
@@ -198,7 +198,8 @@ func Save(cfg *Config, targetPath string) error {
 		return fmt.Errorf("failed to marshal config to yaml: %w", err)
 	}
 
-	if err := os.WriteFile(targetPath, data, 0644); err != nil {
+	// 0600: the file may carry the JWT signing secret.
+	if err := os.WriteFile(targetPath, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write config to %s: %w", targetPath, err)
 	}
 

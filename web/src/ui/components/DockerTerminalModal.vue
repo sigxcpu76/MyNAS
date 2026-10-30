@@ -4,6 +4,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import MdiIcon from './MdiIcon.vue';
+import { services } from '../../container';
 import {
   mdiConsole,
   mdiClose,
@@ -56,7 +57,8 @@ function getWebSocketUrl(containerId: string, shell: string): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.host;
   const basePath = props.endpointType === 'lxc' ? '/ws/lxc/terminal/' : '/ws/docker/terminal/';
-  return `${protocol}//${host}${basePath}${encodeURIComponent(containerId)}?shell=${encodeURIComponent(shell)}`;
+  const token = services.auth.getToken() ?? '';
+  return `${protocol}//${host}${basePath}${encodeURIComponent(containerId)}?shell=${encodeURIComponent(shell)}&access_token=${encodeURIComponent(token)}`;
 }
 
 function sendResize() {

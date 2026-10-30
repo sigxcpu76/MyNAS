@@ -3,9 +3,7 @@
 package identity
 
 /*
-#cgo LDFLAGS: -lpam -lcrypt
-#define _GNU_SOURCE
-#include <crypt.h>
+#cgo LDFLAGS: -lpam
 #include <security/pam_appl.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,65 +65,27 @@ int authenticate_via_pam(const char *service, const char *username, const char *
     return ret;
 }
 
-int verify_shadow_crypt(const char *password, const char *hash) {
-    if (!password || !hash || hash[0] == '*' || hash[0] == '!' || hash[0] == '\0') {
-        return 0;
-    }
-    struct crypt_data data;
-    memset(&data, 0, sizeof(data));
-    char *result = crypt_r(password, hash, &data);
-    if (!result) {
-        return 0;
-    }
-    return (strcmp(result, hash) == 0) ? 1 : 0;
-}
 */
 import "C"
 import (
-	"bufio"
 	"fmt"
 	"os"
-	"strings"
 	"unsafe"
 )
 
-// AuthenticateShadow checks the candidate password directly against /etc/shadow using crypt_r.
-// Returns (true, nil) if verified, (false, nil) if invalid, or error if shadow cannot be read.
-func AuthenticateShadow(username, password string) (bool, error) {
-	f, err := os.Open("/etc/shadow")
-	if err != nil {
-		return false, err
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		parts := strings.Split(line, ":")
-		if len(parts) >= 2 && parts[0] == username {
-			storedHash := parts[1]
-			cPw := C.CString(password)
-			cHash := C.CString(storedHash)
-			defer C.free(unsafe.Pointer(cPw))
-			defer C.free(unsafe.Pointer(cHash))
-
-			res := C.verify_shadow_crypt(cPw, cHash)
-			return res == 1, nil
-		}
-	}
-	return false, fmt.Errorf("user %q not found in /etc/shadow", username)
-}
+// PAMSupported reports whether this build can authenticate logins via PAM.
+const PAMSupported = true
 
 // AuthenticatePAM attempts to authenticate a username and password against Linux PAM.
 func AuthenticatePAM(serviceName, username, password string) error {
 	if serviceName == "" {
-		if _, err := os.Stat("/etc/pam.d/system-auth"); err == nil {
-			serviceName = "system-auth"
-		} else {
-			serviceName = "login"
+		serviceName = "login"
+		// Prefer a dedicated /etc/pam.d/nasctl policy when the admin installed one.
+		for _, candidate := range []string{"nasctl", "system-auth"} {
+			if _, err := os.Stat("/etc/pam.d/" + candidate); err == nil {
+				serviceName = candidate
+				break
+			}
 		}
 	}
 

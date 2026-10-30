@@ -2,6 +2,7 @@ package grpcadapter_test
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -34,6 +35,12 @@ func TestCifsShares_HiddenShareUserFiltering(t *testing.T) {
 	cifsAdapter := share.NewCifsAdapter(tempDir)
 	webdavAdapter := share.NewWebdavAdapter()
 	identAdapter := identity.NewAdapter()
+	identAdapter.SetPasswordVerifier(func(username, password string) error {
+		if password != "password123" {
+			return errors.New("bad password")
+		}
+		return nil
+	})
 
 	shareSvc := application.NewShareService(cifsAdapter, webdavAdapter)
 	identSvc := application.NewIdentityService(identAdapter, "super-secret-jwt-key-for-test-32b")
