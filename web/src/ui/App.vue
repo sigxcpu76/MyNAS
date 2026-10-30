@@ -7,6 +7,7 @@ import {
   mdiChevronDown,
   mdiChevronRight,
   mdiClose,
+  mdiConsole,
   mdiCubeOutline,
   mdiDatabase,
   mdiDatabaseCheck,
@@ -49,6 +50,7 @@ import PrerequisitesTopBarButton from './components/PrerequisitesTopBarButton.vu
 import PrerequisitesModal from './components/PrerequisitesModal.vue';
 import SystemDetailsTopBarButton from './components/SystemDetailsTopBarButton.vue';
 import SystemDetailsModal from './components/SystemDetailsModal.vue';
+import HostTerminalModal from './components/HostTerminalModal.vue';
 import NanLogo from './components/NanLogo.vue';
 import OverviewSkeleton from './components/OverviewSkeleton.vue';
 import OverviewView from './views/OverviewView.vue';
@@ -67,6 +69,7 @@ const storageExpanded = ref(true);
 const showPoolModal = ref(false);
 const showPrerequisitesModal = ref(false);
 const showSystemDetailsModal = ref(false);
+const showHostTerminalModal = ref(false);
 const isMobileDrawerOpen = ref(false);
 
 function toggleMobileDrawer() {
@@ -87,6 +90,9 @@ watch(
   (tab: string) => {
     if (tab === 'prerequisites') {
       showPrerequisitesModal.value = true;
+      navigateTo('overview', true);
+    } else if (tab === 'terminal') {
+      showHostTerminalModal.value = true;
       navigateTo('overview', true);
     }
   },
@@ -485,6 +491,14 @@ onMounted(() => {
             >
               Host Specs
             </button>
+            <button
+              class="btn btn-sm"
+              style="padding: 4px 8px; font-size: 11.5px"
+              @click="showHostTerminalModal = true; closeMobileDrawer()"
+            >
+              <MdiIcon :path="mdiConsole" size="13" style="margin-right: 4px" />
+              Terminal
+            </button>
           </div>
           <div v-if="nasState.authenticated && nasState.currentUser" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 6px; border-top: 1px solid var(--border-subtle)">
             <span class="badge badge-info" style="font-size: 11px">
@@ -555,6 +569,15 @@ onMounted(() => {
         </div>
 
         <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0">
+          <button
+            class="btn btn-sm btn-icon-mobile hide-mobile"
+            title="Open Host Terminal (Shell on NAS host)"
+            aria-label="Host Terminal"
+            @click="showHostTerminalModal = true"
+          >
+            <MdiIcon :path="mdiConsole" size="14" />
+            <span style="margin-left: 4px">Terminal</span>
+          </button>
           <SystemDetailsTopBarButton class="hide-mobile" @click="showSystemDetailsModal = true" />
           <PrerequisitesTopBarButton class="hide-mobile" @click="showPrerequisitesModal = true" />
           <ThemeSelector class="hide-mobile" />
@@ -747,6 +770,13 @@ onMounted(() => {
     <SystemDetailsModal
       v-if="showSystemDetailsModal"
       @close="showSystemDetailsModal = false"
+      @open-terminal="showSystemDetailsModal = false; showHostTerminalModal = true"
+    />
+
+    <!-- Host Terminal Modal -->
+    <HostTerminalModal
+      v-if="showHostTerminalModal"
+      @close="showHostTerminalModal = false"
     />
 
     <!-- Confirmation / Question / Alert Modal -->

@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import {
+  mdiChevronDown,
+  mdiChevronRight,
   mdiClose,
   mdiDatabase,
   mdiDelete,
+  mdiFormatListBulleted,
   mdiHarddisk,
   mdiMagnify,
   mdiPencil,
   mdiPlus,
   mdiRefresh,
+  mdiTreeOutline,
 } from '@mdi/js';
 import { services } from '../../container';
 import {
@@ -20,12 +24,14 @@ import {
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import SortableTh from '../components/SortableTh.vue';
-import { useTableSort } from '../composables/useTableSort';
+import { sortHierarchy, useTableSort } from '../composables/useTableSort';
 import { confirmDelete } from '../modal';
 import { nasState, notify, refreshAllData, refreshZfsSubresources } from '../store';
 
 const selectedPool = ref<string>('all');
 const searchQuery = ref('');
+const viewMode = ref<'tree' | 'flat'>('tree');
+const expandedPaths = ref<Set<string>>(new Set());
 
 // Modals
 const showCreateVolume = ref(false);
@@ -59,7 +65,7 @@ const allVolumes = computed<Array<ZfsVolume & { poolName: string }>>(() => {
   for (const pool of nasState.pools) {
     const pName = pool.name;
     const shortName = pool.poolName || pName.replace(/^zfsPools\//, '');
-    if (selectedPool.value !== 'all' && selectedPool.value !== pName) {
+    if (selectedPool.value !== 'all' && selectedPool.value !== pName && selectedPool.value !== shortName) {
       continue;
     }
     const vols = nasState.volumesByPool[pName] || [];
@@ -70,13 +76,148 @@ const allVolumes = computed<Array<ZfsVolume & { poolName: string }>>(() => {
   return result;
 });
 
-const filteredVolumes = computed(() => {
+// Tree Hierarchy Node for Volumes View
+export interface VolumeNode {
+  id: string;
+  name: string;
+  fullName: string;
+  poolName: string;
+  devicePath: string;
+  sizeBytes: number;
+  usedBytes: number;
+  volblocksize: string;
+  thinProvisioned: boolean;
+  compression: string;
+  sync?: string;
+  readonly?: boolean;
+  dedup?: boolean;
+  depth: number;
+  isPoolRoot: boolean;
+  poolState?: string;
+  raw?: ZfsVolume;
+  children: VolumeNode[];
+}
+
+const hierarchyTree = computed<VolumeNode[]>(() => {
+  const rootNodes: VolumeNode[] = [];
+
+  for (const pool of nasState.pools) {
+    const pName = pool.name;
+    const shortName = pool.poolName || pName.replace(/^zfsPools\//, '');
+    if (selectedPool.value !== 'all' && selectedPool.value !== pName && selectedPool.value !== shortName) {
+      continue;
+    }
+
+    const poolNode: VolumeNode = {
+      id: pool.name,
+      name: shortName,
+      fullName: shortName,
+      poolName: shortName,
+      devicePath: '',
+      sizeBytes: pool.sizeBytes || 0,
+      usedBytes: pool.allocatedBytes || 0,
+      volblocksize: '',
+      thinProvisioned: false,
+      compression: (pool.compression as string) || 'lz4',
+      sync: pool.sync || 'standard',
+      readonly: false,
+      dedup: false,
+      depth: 0,
+      isPoolRoot: true,
+      poolState: pool.state || 'ONLINE',
+      children: [],
+    };
+
+    const vols = nasState.volumesByPool[pName] || [];
+    for (const v of vols) {
+      const fullName = v.volumePath || v.name.replace(/^zfsPools\/[^/]+\/volumes\//, '');
+      let leafName = fullName;
+      if (leafName.startsWith(shortName + '/')) {
+        leafName = leafName.substring(shortName.length + 1);
+      }
+      const childNode: VolumeNode = {
+        id: v.name,
+        name: leafName,
+        fullName,
+        poolName: shortName,
+        devicePath: v.devicePath || '',
+        sizeBytes: v.sizeBytes || 0,
+        usedBytes: v.usedBytes || 0,
+        volblocksize: v.volblocksize || '16k',
+        thinProvisioned: Boolean(v.thinProvisioned),
+        compression: (v.compression as string) || 'lz4',
+        sync: v.sync || 'standard',
+        readonly: Boolean(v.readonly),
+        dedup: Boolean(v.dedup),
+        depth: 1,
+        isPoolRoot: false,
+        raw: v,
+        children: [],
+      };
+      poolNode.children.push(childNode);
+    }
+
+    // Sort child volumes alphabetically by fullName/name
+    poolNode.children.sort((a, b) => a.fullName.localeCompare(b.fullName));
+    rootNodes.push(poolNode);
+  }
+
+  // Sort pool roots alphabetically by name
+  rootNodes.sort((a, b) => a.name.localeCompare(b.name));
+  return rootNodes;
+});
+
+function flattenTree(nodes: VolumeNode[], result: VolumeNode[] = []): VolumeNode[] {
+  for (const node of nodes) {
+    result.push(node);
+    if (expandedPaths.value.has(node.id) && node.children.length > 0) {
+      flattenTree(node.children, result);
+    }
+  }
+  return result;
+}
+
+const visibleNodes = computed<VolumeNode[]>(() => {
   const q = searchQuery.value.trim().toLowerCase();
-  if (!q) return allVolumes.value;
-  return allVolumes.value.filter((v) => {
-    const fn = v.volumePath || v.name;
-    return fn.toLowerCase().includes(q) || v.devicePath.toLowerCase().includes(q) || v.poolName.toLowerCase().includes(q);
-  });
+  if (viewMode.value === 'flat' || q) {
+    return allVolumes.value
+      .filter((v) => {
+        if (!q) return true;
+        const fn = v.volumePath || v.name;
+        return (
+          fn.toLowerCase().includes(q) ||
+          v.devicePath.toLowerCase().includes(q) ||
+          v.poolName.toLowerCase().includes(q)
+        );
+      })
+      .map((v) => {
+        const fullName = v.volumePath || v.name.replace(/^zfsPools\/[^/]+\/volumes\//, '');
+        let leafName = fullName;
+        if (leafName.startsWith(v.poolName + '/')) {
+          leafName = leafName.substring(v.poolName.length + 1);
+        }
+        return {
+          id: v.name,
+          name: leafName,
+          fullName,
+          poolName: v.poolName,
+          devicePath: v.devicePath || '',
+          sizeBytes: v.sizeBytes || 0,
+          usedBytes: v.usedBytes || 0,
+          volblocksize: v.volblocksize || '16k',
+          thinProvisioned: Boolean(v.thinProvisioned),
+          compression: (v.compression as string) || 'lz4',
+          sync: v.sync || 'standard',
+          readonly: Boolean(v.readonly),
+          dedup: Boolean(v.dedup),
+          depth: 0,
+          isPoolRoot: false,
+          raw: v,
+          children: [],
+        };
+      });
+  }
+  return flattenTree(hierarchyTree.value);
 });
 
 /** Converts a ZFS block size string such as "16k" / "1M" into bytes for sorting. */
@@ -87,17 +228,76 @@ function blockSizeBytes(s: string | undefined): number | null {
   return parseFloat(m[1]) * mult;
 }
 
-const volumeSort = useTableSort(filteredVolumes, {
-  name: (v) => v.volumePath || v.name.replace(/^zfsPools\/[^/]+\/volumes\//, ''),
-  pool: (v) => v.poolName,
-  capacity: (v) => v.sizeBytes,
-  blockSize: (v) => blockSizeBytes(v.volblocksize),
-  provisioning: (v) => (v.thinProvisioned ? 'Thin' : 'Thick'),
+const volumeSort = useTableSort(visibleNodes, {
+  name: (n) => n.name,
+  pool: (n) => n.poolName,
+  capacity: (n) => n.sizeBytes,
+  blockSize: (n) => (n.isPoolRoot ? null : blockSizeBytes(n.volblocksize)),
+  provisioning: (n) => (n.isPoolRoot ? n.poolState : n.thinProvisioned ? 'Thin' : 'Thick'),
 });
 
-function openCreateModal() {
+// Child node id -> parent pool id derived from hierarchyTree
+const volumeParentIds = computed(() => {
+  const map = new Map<string, string>();
+  const walk = (nodes: VolumeNode[]) => {
+    for (const n of nodes) {
+      for (const c of n.children) {
+        map.set(c.id, n.id);
+      }
+      walk(n.children);
+    }
+  };
+  walk(hierarchyTree.value);
+  return map;
+});
+
+const sortedNodes = computed<VolumeNode[]>(() => {
+  if (!volumeSort.key.value) return visibleNodes.value;
+  if (viewMode.value === 'flat' || searchQuery.value.trim()) return volumeSort.sorted.value;
+  return sortHierarchy(
+    visibleNodes.value,
+    (n) => n.id,
+    (n) => volumeParentIds.value.get(n.id),
+    volumeSort.compare
+  );
+});
+
+function toggleCollapse(nodeId: string) {
+  if (expandedPaths.value.has(nodeId)) {
+    expandedPaths.value.delete(nodeId);
+  } else {
+    expandedPaths.value.add(nodeId);
+  }
+}
+
+function expandAll() {
+  const set = new Set<string>();
+  const collect = (nodes: VolumeNode[]) => {
+    for (const n of nodes) {
+      if (n.children.length > 0) {
+        set.add(n.id);
+        collect(n.children);
+      }
+    }
+  };
+  collect(hierarchyTree.value);
+  expandedPaths.value = set;
+}
+
+function collapseAll() {
+  expandedPaths.value.clear();
+}
+
+function openCreateModal(targetPoolName?: string) {
   const defaultPool = nasState.pools[0]?.name || '';
-  volumeForm.poolName = selectedPool.value !== 'all' ? selectedPool.value : defaultPool;
+  if (targetPoolName) {
+    const matched = nasState.pools.find(
+      (p) => p.name === targetPoolName || p.poolName === targetPoolName || p.name.replace(/^zfsPools\//, '') === targetPoolName
+    );
+    volumeForm.poolName = matched ? matched.name : (targetPoolName.startsWith('zfsPools/') ? targetPoolName : `zfsPools/${targetPoolName}`);
+  } else {
+    volumeForm.poolName = selectedPool.value !== 'all' ? selectedPool.value : defaultPool;
+  }
   volumeForm.volumeId = '';
   volumeForm.volsizeGib = 20;
   volumeForm.thinProvisioned = true;
@@ -198,7 +398,7 @@ onMounted(async () => {
 
 <template>
   <div style="display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 100%; min-width: 0">
-    <!-- Header Card with "New Volume" Button -->
+    <!-- Header Card with Controls and "New Volume" Button -->
     <div class="card" style="padding: 18px 20px">
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px">
         <div>
@@ -220,6 +420,46 @@ onMounted(async () => {
                 {{ p.poolName || p.name.replace(/^zfsPools\//, '') }}
               </option>
             </select>
+          </div>
+
+          <!-- View Mode Toggle -->
+          <div class="view-mode-toggle">
+            <button
+              class="toggle-btn"
+              :class="{ active: viewMode === 'tree' }"
+              @click="viewMode = 'tree'"
+            >
+              <MdiIcon :path="mdiTreeOutline" size="14" />
+              Tree
+            </button>
+            <button
+              class="toggle-btn"
+              :class="{ active: viewMode === 'flat' }"
+              @click="viewMode = 'flat'"
+            >
+              <MdiIcon :path="mdiFormatListBulleted" size="14" />
+              Flat
+            </button>
+          </div>
+
+          <!-- Tree Expand / Collapse All Controls -->
+          <div v-if="viewMode === 'tree' && !searchQuery" class="tree-expand-controls">
+            <button
+              class="btn btn-sm btn-icon"
+              title="Expand All"
+              aria-label="Expand All"
+              @click="expandAll"
+            >
+              <MdiIcon :path="mdiChevronDown" size="16" />
+            </button>
+            <button
+              class="btn btn-sm btn-icon"
+              title="Collapse All"
+              aria-label="Collapse All"
+              @click="collapseAll"
+            >
+              <MdiIcon :path="mdiChevronRight" size="16" />
+            </button>
           </div>
 
           <!-- Search Input -->
@@ -252,18 +492,18 @@ onMounted(async () => {
         <table class="data-table">
           <thead>
             <tr>
-              <SortableTh :sort="volumeSort" sort-key="name" style="min-width: 160px">Volume Name</SortableTh>
-              <SortableTh :sort="volumeSort" sort-key="pool">Pool</SortableTh>
-              <SortableTh :sort="volumeSort" sort-key="capacity">Capacity & Usage</SortableTh>
+              <SortableTh :sort="volumeSort" sort-key="name" style="min-width: 200px">Volume Name</SortableTh>
+              <SortableTh :sort="volumeSort" sort-key="pool" style="min-width: 90px">Pool</SortableTh>
+              <SortableTh :sort="volumeSort" sort-key="capacity" style="min-width: 140px">Capacity & Usage</SortableTh>
               <SortableTh :sort="volumeSort" sort-key="blockSize" class="col-desktop-only">Block Size</SortableTh>
               <SortableTh :sort="volumeSort" sort-key="provisioning" class="col-desktop-only">Provisioning</SortableTh>
               <th class="col-desktop-only">Properties</th>
-              <th style="text-align: right">Actions</th>
+              <th style="min-width: 110px; text-align: right">Actions</th>
             </tr>
           </thead>
           <tbody>
             <!-- Moving Skeleton Placeholders when Loading -->
-            <template v-if="nasState.loading && filteredVolumes.length === 0">
+            <template v-if="nasState.loading && visibleNodes.length === 0">
               <tr v-for="r in 4" :key="r">
                 <td>
                   <div style="display: flex; align-items: center; gap: 8px">
@@ -285,7 +525,7 @@ onMounted(async () => {
               </tr>
             </template>
 
-            <tr v-else-if="filteredVolumes.length === 0">
+            <tr v-else-if="visibleNodes.length === 0">
               <td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 36px">
                 <div v-if="searchQuery">
                   No volumes match filter "<strong>{{ searchQuery }}</strong>".
@@ -296,15 +536,46 @@ onMounted(async () => {
               </td>
             </tr>
 
-            <tr v-for="v in volumeSort.sorted.value" :key="v.name">
-              <!-- Volume Name -->
+            <tr v-for="node in sortedNodes" :key="node.id" class="tree-row">
+              <!-- Name & Hierarchy -->
               <td>
-                <div style="display: flex; align-items: center; gap: 8px">
-                  <MdiIcon :path="mdiHarddisk" size="18" style="color: var(--purple-text); flex-shrink: 0" />
-                  <div>
-                    <div class="mono font-semibold" style="font-size: 12px; color: var(--text-primary)">
-                      {{ v.volumePath || v.name.replace(/^zfsPools\/[^/]+\/volumes\//, '') }}
-                    </div>
+                <div
+                  class="tree-cell"
+                  :style="{ paddingLeft: viewMode === 'tree' && !searchQuery ? `${node.depth * 20}px` : '0px' }"
+                >
+                  <button
+                    v-if="viewMode === 'tree' && !searchQuery && node.children.length > 0"
+                    class="chevron-btn"
+                    :title="expandedPaths.has(node.id) ? 'Collapse' : 'Expand'"
+                    :aria-label="expandedPaths.has(node.id) ? 'Collapse' : 'Expand'"
+                    @click="toggleCollapse(node.id)"
+                  >
+                    <MdiIcon
+                      :path="expandedPaths.has(node.id) ? mdiChevronDown : mdiChevronRight"
+                      size="16"
+                    />
+                  </button>
+                  <span v-else-if="viewMode === 'tree' && !searchQuery" class="chevron-spacer"></span>
+
+                  <MdiIcon
+                    :path="node.isPoolRoot ? mdiDatabase : mdiHarddisk"
+                    size="18"
+                    :style="{ color: node.isPoolRoot ? 'var(--accent-primary)' : 'var(--purple-text)', flexShrink: 0 }"
+                  />
+
+                  <div style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
+                    <span class="mono font-semibold" style="font-size: 12px; color: var(--text-primary)" :title="node.fullName">
+                      {{ node.name }}
+                    </span>
+                    <span v-if="node.isPoolRoot" class="badge badge-info mono" style="font-size: 10px; margin-left: 6px">
+                      zpool
+                    </span>
+                    <span v-if="node.isPoolRoot" class="card-subtitle mono" style="font-size: 11px; margin-left: 6px">
+                      ({{ node.children.length }} {{ node.children.length === 1 ? 'volume' : 'volumes' }})
+                    </span>
+                    <span v-if="viewMode === 'flat' && !node.isPoolRoot" class="card-subtitle mono" style="font-size: 11px; margin-left: 6px">
+                      ({{ node.fullName }})
+                    </span>
                   </div>
                 </div>
               </td>
@@ -312,67 +583,98 @@ onMounted(async () => {
               <!-- Pool -->
               <td>
                 <span class="badge mono badge-neutral" style="font-size: 11px">
-                  {{ v.poolName }}
+                  {{ node.poolName }}
                 </span>
               </td>
 
               <!-- Capacity & Used -->
               <td>
-                <div>
+                <div v-if="node.isPoolRoot">
                   <div class="mono" style="font-weight: 700; font-size: 12px">
-                    {{ formatBytes(v.sizeBytes) }}
+                    {{ formatBytes(node.sizeBytes) }}
                   </div>
                   <div style="font-size: 11px; color: var(--text-secondary); margin-top: 1px">
-                    Used: {{ formatBytes(v.usedBytes) }}
+                    Allocated: {{ formatBytes(node.usedBytes) }}
+                  </div>
+                </div>
+                <div v-else>
+                  <div class="mono" style="font-weight: 700; font-size: 12px">
+                    {{ formatBytes(node.sizeBytes) }}
+                  </div>
+                  <div style="font-size: 11px; color: var(--text-secondary); margin-top: 1px">
+                    Used: {{ formatBytes(node.usedBytes) }}
                   </div>
                 </div>
               </td>
 
               <!-- Block Size -->
               <td class="col-desktop-only">
-                <span class="badge mono badge-neutral" style="font-size: 10.5px">
-                  {{ v.volblocksize || '16k' }}
+                <span v-if="!node.isPoolRoot" class="badge mono badge-neutral" style="font-size: 10.5px">
+                  {{ node.volblocksize || '16k' }}
                 </span>
+                <span v-else style="color: var(--text-secondary); font-size: 11px">—</span>
               </td>
 
               <!-- Provisioning -->
               <td class="col-desktop-only">
                 <span
+                  v-if="node.isPoolRoot"
                   class="badge mono"
-                  :class="v.thinProvisioned ? 'badge-success' : 'badge-neutral'"
+                  :class="node.poolState === 'ONLINE' ? 'badge-success' : 'badge-danger'"
                   style="font-size: 10.5px"
                 >
-                  {{ v.thinProvisioned ? 'Thin' : 'Thick' }}
+                  {{ node.poolState }}
+                </span>
+                <span
+                  v-else
+                  class="badge mono"
+                  :class="node.thinProvisioned ? 'badge-success' : 'badge-neutral'"
+                  style="font-size: 10.5px"
+                >
+                  {{ node.thinProvisioned ? 'Thin' : 'Thick' }}
                 </span>
               </td>
 
               <!-- Properties -->
               <td class="col-desktop-only">
-                <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap">
-                  <span class="badge badge-info mono" style="font-size: 10px">{{ v.compression || 'lz4' }}</span>
+                <div v-if="node.isPoolRoot" style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap">
+                  <span class="badge badge-info mono" style="font-size: 10px">{{ node.compression || 'lz4' }}</span>
+                </div>
+                <div v-else style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap">
+                  <span class="badge badge-info mono" style="font-size: 10px">{{ node.compression || 'lz4' }}</span>
                   <span
-                    v-if="v.sync && v.sync !== 'standard'"
+                    v-if="node.sync && node.sync !== 'standard'"
                     class="badge mono"
-                    :class="v.sync === 'always' ? 'badge-success' : 'badge-danger'"
+                    :class="node.sync === 'always' ? 'badge-success' : 'badge-danger'"
                     style="font-size: 10px"
                   >
-                    sync:{{ v.sync }}
+                    sync:{{ node.sync }}
                   </span>
                   <span v-else class="badge badge-neutral mono" style="font-size: 10px; opacity: 0.75">
                     sync:std
                   </span>
-                  <span v-if="v.readonly" class="badge badge-warning mono" style="font-size: 10px">RO</span>
-                  <span v-if="v.dedup" class="badge badge-purple mono" style="font-size: 10px">Dedup</span>
+                  <span v-if="node.readonly" class="badge badge-warning mono" style="font-size: 10px">RO</span>
+                  <span v-if="node.dedup" class="badge badge-purple mono" style="font-size: 10px">Dedup</span>
                 </div>
               </td>
 
               <!-- Actions -->
               <td style="text-align: right">
-                <div style="display: inline-flex; gap: 6px; justify-content: flex-end">
+                <div v-if="node.isPoolRoot" style="display: inline-flex; gap: 6px; justify-content: flex-end">
+                  <button
+                    class="btn btn-sm"
+                    title="Create Volume in this Pool"
+                    @click="openCreateModal(node.poolName)"
+                  >
+                    <MdiIcon :path="mdiPlus" size="13" style="margin-right: 4px" />
+                    New Vol
+                  </button>
+                </div>
+                <div v-else-if="node.raw" style="display: inline-flex; gap: 6px; justify-content: flex-end">
                   <button
                     class="btn btn-sm"
                     title="Edit Settings & Resize Volsize"
-                    @click="startEditVolume(v)"
+                    @click="startEditVolume(node.raw)"
                   >
                     <MdiIcon :path="mdiPencil" size="13" style="margin-right: 4px" />
                     Resize
@@ -380,7 +682,7 @@ onMounted(async () => {
                   <button
                     class="btn btn-danger btn-sm btn-icon"
                     title="Delete Volume"
-                    @click="handleDeleteVolume(v)"
+                    @click="handleDeleteVolume(node.raw)"
                   >
                     <MdiIcon :path="mdiDelete" size="13" />
                   </button>
@@ -569,6 +871,66 @@ onMounted(async () => {
   height: 32px;
   font-size: 12px;
   width: 170px;
+}
+
+.view-mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-base);
+}
+
+.toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.toggle-btn.active {
+  background: var(--accent-primary);
+  color: #000;
+}
+
+.tree-expand-controls {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.tree-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chevron-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.chevron-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.chevron-spacer {
+  width: 20px;
+  display: inline-block;
 }
 
 .badge-purple {

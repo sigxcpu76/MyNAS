@@ -46,6 +46,8 @@ type Gateway struct {
 	eventBus      *application.EventBus
 	shutdownCh    chan struct{}
 	shutdownOnce  sync.Once
+	passwdPath    string
+	groupPath     string
 }
 
 // maxGatewayMsgSize bounds REST payloads relayed through the in-process gRPC server.
@@ -169,12 +171,22 @@ func NewGateway(
 		Handler:   g.handleLxcTerminalWebSocket,
 	}))
 
-	// 7. Embedded WebDAV File Sharing Server (/dav/{share_name}/...), protected by HTTP Basic Auth
+	// 7. Host Interactive Terminal WebSocket (/ws/host/terminal?access_token=...)
+	mux.Handle("/ws/host/terminal", g.requireAuth(websocket.Server{
+		Handshake: sameOriginHandshake,
+		Handler:   g.handleHostTerminalWebSocket,
+	}))
+	mux.Handle("/ws/host/terminal/", g.requireAuth(websocket.Server{
+		Handshake: sameOriginHandshake,
+		Handler:   g.handleHostTerminalWebSocket,
+	}))
+
+	// 8. Embedded WebDAV File Sharing Server (/dav/{share_name}/...), protected by HTTP Basic Auth
 	if webdavHandler != nil {
 		mux.Handle("/dav/", webdavHandler)
 	}
 
-	// 8. Embedded Vue.js Single-Page Application (SPA)
+	// 9. Embedded Vue.js Single-Page Application (SPA)
 	mux.HandleFunc("/", g.handleSPA)
 
 	return g, nil
@@ -631,12 +643,20 @@ func (g *Gateway) requireAuth(next http.Handler) http.Handler {
 			writeUnauthenticated(w)
 			return
 		}
-		if _, err := g.verifier.VerifyToken(r.Context(), token); err != nil {
+		user, err := g.verifier.VerifyToken(r.Context(), token)
+		if err != nil {
 			writeUnauthenticated(w)
 			return
 		}
-		next.ServeHTTP(w, r)
+		ctx := grpcadapter.WithCaller(r.Context(), user)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	}))
+}
+
+// SetPasswdPathsForTest overrides the passwd and group file paths used for host terminal lookups.
+func (g *Gateway) SetPasswdPathsForTest(passwdPath, groupPath string) {
+	g.passwdPath = passwdPath
+	g.groupPath = groupPath
 }
 
 func writeUnauthenticated(w http.ResponseWriter) {

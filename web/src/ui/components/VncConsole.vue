@@ -463,18 +463,17 @@ onBeforeUnmount(() => {
         >
           <MdiIcon :path="mdiOpenInNew" size="16" />
         </button>
-
-        <div class="toolbar-divider"></div>
-
-        <!-- Close / Exit -->
-        <button
-          class="btn btn-secondary btn-sm btn-icon"
-          :title="standalone ? 'Close Window' : 'Close Console'"
-          @click="emit('close')"
-        >
-          <MdiIcon :path="mdiClose" size="16" />
-        </button>
       </div>
+
+      <!-- Close / Exit: Always locked to Top Right -->
+      <button
+        class="btn btn-secondary btn-sm btn-icon vnc-top-close-btn"
+        :title="standalone ? 'Close Window' : 'Close Console'"
+        aria-label="Close Console"
+        @click="emit('close')"
+      >
+        <MdiIcon :path="mdiClose" size="18" />
+      </button>
     </div>
 
     <!-- Screen Canvas Viewport -->
@@ -614,12 +613,31 @@ onBeforeUnmount(() => {
 }
 
 .vnc-header {
+  position: relative;
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
   flex-shrink: 0;
+  padding-right: 36px;
+  min-height: 28px;
+}
+
+.vnc-top-close-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  right: 0;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  max-height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
 }
 
 .header-left {
@@ -653,16 +671,20 @@ onBeforeUnmount(() => {
   height: 18px;
   background: var(--border-color, #334155);
   margin: 0 4px;
+  align-self: center;
 }
 
+.header-actions .btn-icon,
 .btn-icon {
-  width: 32px;
-  height: 30px;
-  min-width: 32px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  max-height: 28px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
 }
 
 .scale-select-wrapper {
@@ -672,9 +694,10 @@ onBeforeUnmount(() => {
   background: var(--bg-secondary, #1e293b);
   border: 1px solid var(--border-color, #334155);
   border-radius: 6px;
-  height: 30px;
+  height: 28px;
+  box-sizing: border-box;
   padding: 0 4px 0 7px;
-  gap: 4px;
+  gap: 3px;
   transition: border-color 0.15s ease;
 }
 
@@ -685,22 +708,33 @@ onBeforeUnmount(() => {
 .scale-icon {
   color: var(--text-secondary, #94a3b8);
   pointer-events: none;
+  flex-shrink: 0;
 }
 
 .scale-select {
   appearance: none;
-  background: transparent;
-  color: var(--text-primary, #f8fafc);
-  border: none;
-  outline: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  color: var(--text-primary, #f8fafc) !important;
   font-size: 12px;
-  padding-right: 14px;
+  font-family: inherit;
+  line-height: 26px;
+  height: 26px;
+  padding: 0 16px 0 2px !important;
+  margin: 0 !important;
+  width: auto !important;
   cursor: pointer;
+  box-sizing: border-box;
 }
 
 .scale-select option {
-  background: #1e293b;
-  color: #f8fafc;
+  background: var(--bg-surface, #1e293b);
+  color: var(--text-primary, #f8fafc);
 }
 
 .scale-chevron {
@@ -712,7 +746,8 @@ onBeforeUnmount(() => {
 
 .keys-dropdown-container {
   position: relative;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
 }
 
 .keys-dropdown-menu {

@@ -4,6 +4,7 @@ import {
   mdiCheck,
   mdiChip,
   mdiClose,
+  mdiConsole,
   mdiContentCopy,
   mdiCpu64Bit,
   mdiHarddisk,
@@ -21,6 +22,7 @@ import { nasState, notify, refreshTelemetry } from '../store';
 
 const emit = defineEmits<{
   (e: 'close'): void;
+  (e: 'openTerminal'): void;
 }>();
 
 const telemetry = computed(() => nasState.systemTelemetry);
@@ -139,6 +141,14 @@ async function copySystemSummary() {
           >
             <MdiIcon :path="mdiRefresh" size="14" :class="{ 'spin-icon': isRefreshing }" style="margin-right: 4px" />
             {{ isRefreshing ? 'Refreshing...' : 'Refresh' }}
+          </button>
+          <button
+            class="btn btn-sm btn-secondary"
+            title="Open interactive host shell terminal"
+            @click="emit('openTerminal')"
+          >
+            <MdiIcon :path="mdiConsole" size="14" style="margin-right: 4px" />
+            Host Shell
           </button>
           <button
             class="btn btn-sm btn-secondary"

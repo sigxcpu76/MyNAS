@@ -44,6 +44,7 @@ export type NavTab =
   | 'shares-cifs'
   | 'shares-webdav'
   | 'identity'
+  | 'terminal'
   | 'vnc-console';
 
 export type ManagedModule = 'zfs' | 'kvm' | 'docker' | 'lxc' | 'cifs';

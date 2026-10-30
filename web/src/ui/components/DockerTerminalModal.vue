@@ -279,7 +279,7 @@ onBeforeUnmount(() => {
       :class="{ 'docker-terminal-fullscreen': isFullscreen }"
     >
       <!-- Terminal Header / Toolbar -->
-      <div class="card-header" style="padding: 12px 18px; border-bottom: 1px solid var(--border-subtle); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px">
+      <div class="card-header docker-terminal-header">
         <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
           <div style="display: flex; align-items: center; gap: 8px">
             <span style="color: var(--accent-primary); display: inline-flex">
@@ -379,18 +379,17 @@ onBeforeUnmount(() => {
           >
             <MdiIcon :path="isFullscreen ? mdiFullscreenExit : mdiFullscreen" size="16" />
           </button>
-
-          <!-- Close Modal -->
-          <button
-            class="btn btn-sm btn-icon"
-            style="height: 28px; width: 28px; padding: 0"
-            title="Close Terminal"
-            aria-label="Close Terminal"
-            @click="emit('close')"
-          >
-            <MdiIcon :path="mdiClose" size="16" />
-          </button>
         </div>
+
+        <!-- Close Modal: Always locked to Top Right -->
+        <button
+          class="btn btn-sm btn-icon terminal-top-close-btn"
+          title="Close Terminal"
+          aria-label="Close Terminal"
+          @click="emit('close')"
+        >
+          <MdiIcon :path="mdiClose" size="18" />
+        </button>
       </div>
 
       <!-- Terminal Body Canvas / Container -->
@@ -413,6 +412,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .docker-terminal-card {
+  position: relative;
   max-width: 980px;
   width: 95vw;
   display: flex;
@@ -423,6 +423,44 @@ onBeforeUnmount(() => {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
   overflow: hidden;
   transition: all 0.2s ease;
+}
+
+.docker-terminal-header {
+  position: relative;
+  padding: 10px 48px 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  background: #070b14;
+  min-height: 48px;
+}
+
+.terminal-top-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  height: 28px;
+  width: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  z-index: 10;
+}
+
+.terminal-top-close-btn:hover {
+  background: var(--bg-surface, #1e293b);
+  color: #fff;
+  border-color: var(--border-strong, #475569);
 }
 
 .docker-terminal-fullscreen {

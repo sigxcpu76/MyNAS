@@ -32,6 +32,11 @@ func CallerFromContext(ctx context.Context) *domain.User {
 	return u
 }
 
+// WithCaller returns a child context carrying the authenticated domain.User.
+func WithCaller(ctx context.Context, u *domain.User) context.Context {
+	return context.WithValue(ctx, callerKey{}, u)
+}
+
 // ServerOptions returns the interceptors every NasService gRPC server must run:
 // bearer-token authentication followed by request ID validation.
 func ServerOptions(verifier TokenVerifier) []grpc.ServerOption {

@@ -16,6 +16,7 @@ export const TAB_ROUTES: Record<NavTab, string> = {
   'shares-cifs': '/shares/cifs',
   'shares-webdav': '/shares/webdav',
   identity: '/users',
+  terminal: '/terminal',
   'vnc-console': '/vnc-console',
 };
 
@@ -25,6 +26,9 @@ export const ROUTE_ALIASES: Record<string, NavTab> = {
   '/overview': 'overview',
   '/prerequisites': 'prerequisites',
   '/prereqs': 'prerequisites',
+  '/terminal': 'terminal',
+  '/shell': 'terminal',
+  '/host/terminal': 'terminal',
   '/storage': 'storage-disks',
   '/storage/disks': 'storage-disks',
   '/disks': 'storage-disks',
