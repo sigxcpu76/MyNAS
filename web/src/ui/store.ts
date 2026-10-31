@@ -231,6 +231,9 @@ export const nasState = reactive({
   toasts: [] as ToastNotification[],
 });
 
+// Kick off polling if any cached app was in DEPLOYING state
+setTimeout(() => checkAndPollDeployingApps(), 100);
+
 export function getModuleAvailability(module: ManagedModule): ModuleStatus {
   // Gating: Only ZFS is enabled until a main pool is selected
   // Do not report missing main pool if initial fetch is still in flight and no config is available yet
@@ -486,7 +489,10 @@ export async function refreshAllData(): Promise<void> {
     }
     if (vms !== null) nasState.vms = vms;
     if (dockerContainers !== null) nasState.dockerContainers = dockerContainers;
-    if (dockerApps !== null) nasState.dockerApps = dockerApps;
+    if (dockerApps !== null) {
+      nasState.dockerApps = dockerApps;
+      checkAndPollDeployingApps();
+    }
     if (lxcContainers !== null) nasState.lxcContainers = lxcContainers;
     if (cifsShares !== null) nasState.cifsShares = cifsShares;
     if (webdavShares !== null) nasState.webdavShares = webdavShares;
@@ -521,6 +527,29 @@ export async function refreshAllData(): Promise<void> {
   }
 }
 
+let deployingPollTimer: any = null;
+
+export function checkAndPollDeployingApps(): void {
+  if (typeof window === 'undefined') return;
+  const hasDeploying = (nasState.dockerApps || []).some((a) => a?.state === 'DEPLOYING');
+  if (hasDeploying) {
+    if (!deployingPollTimer) {
+      deployingPollTimer = setInterval(async () => {
+        const stillDeploying = (nasState.dockerApps || []).some((a) => a?.state === 'DEPLOYING');
+        if (!stillDeploying) {
+          clearInterval(deployingPollTimer);
+          deployingPollTimer = null;
+          return;
+        }
+        await refreshDockerData();
+      }, 2500);
+    }
+  } else if (deployingPollTimer) {
+    clearInterval(deployingPollTimer);
+    deployingPollTimer = null;
+  }
+}
+
 export async function refreshDockerData(): Promise<void> {
   const dockerOk = getModuleAvailability('docker').enabled;
   if (!dockerOk) return;
@@ -530,7 +559,10 @@ export async function refreshDockerData(): Promise<void> {
       services.apps.listApps().catch(() => null),
     ]);
     if (containers !== null) nasState.dockerContainers = containers;
-    if (apps !== null) nasState.dockerApps = apps;
+    if (apps !== null) {
+      nasState.dockerApps = apps;
+      checkAndPollDeployingApps();
+    }
     nasState.lastRefreshed = new Date().toLocaleTimeString();
     saveLocalCache();
   } catch {
@@ -633,6 +665,7 @@ export function handleWatchResourceChange(msg: {
     switch (resourceType) {
       case 'dockerApps':
         nasState.dockerApps = Array.isArray(payload) ? payload.map(mapDockerApp) : [];
+        checkAndPollDeployingApps();
         break;
       case 'dockerContainers':
         nasState.dockerContainers = Array.isArray(payload) ? payload.map(mapDockerContainer) : [];
@@ -660,16 +693,27 @@ export function handleWatchResourceChange(msg: {
     case 'dockerApps': {
       const app = payload ? mapDockerApp(payload) : null;
       const name = msg.resourceName || app?.name;
-      const idx = nasState.dockerApps.findIndex((a) => a.name === name);
+      const appId = app?.appId || (name ? name.replace(/^dockerApps\//, '') : '');
+      const idx = nasState.dockerApps.findIndex(
+        (a) => (name && a.name === name) || (appId && a.appId === appId)
+      );
       if (eventType === 'DELETED') {
         if (idx !== -1) nasState.dockerApps.splice(idx, 1);
       } else if (app) {
         if (idx !== -1) {
-          nasState.dockerApps[idx] = { ...nasState.dockerApps[idx], ...app };
+          const existing = nasState.dockerApps[idx];
+          nasState.dockerApps[idx] = {
+            ...existing,
+            ...app,
+            services: (app.services && app.services.length > 0) ? app.services : (existing.services || []),
+            containers: (app.containers && app.containers.length > 0) ? app.containers : (existing.containers || []),
+            portMappings: (app.portMappings && app.portMappings.length > 0) ? app.portMappings : (existing.portMappings || []),
+          };
         } else {
           nasState.dockerApps.push(app);
         }
       }
+      checkAndPollDeployingApps();
       break;
     }
     case 'dockerContainers': {

@@ -62,49 +62,50 @@ const isRefreshing = ref(false);
 const transitioningApps = reactive<Record<string, 'starting' | 'stopping' | 'restarting'>>({});
 
 const runningCount = computed(
-  () => nasState.dockerApps.filter((a) => a.state === 'RUNNING').length
+  () => (nasState.dockerApps || []).filter((a) => a?.state === 'RUNNING').length
 );
 const stoppedCount = computed(
-  () => nasState.dockerApps.filter((a) => a.state === 'STOPPED').length
+  () => (nasState.dockerApps || []).filter((a) => a?.state === 'STOPPED').length
 );
 const partialCount = computed(
-  () => nasState.dockerApps.filter((a) => a.state === 'PARTIALLY_RUNNING').length
+  () => (nasState.dockerApps || []).filter((a) => a?.state === 'PARTIALLY_RUNNING').length
 );
 
 const totalContainersCount = computed(() =>
-  nasState.dockerApps.reduce((acc, a) => acc + (a.containers?.length || 0), 0)
+  (nasState.dockerApps || []).reduce((acc, a) => acc + (a?.containers?.length || 0), 0)
 );
 
 const totalMemoryUsageMib = computed(() =>
-  nasState.dockerApps.reduce((acc, a) => acc + (a.totalMemoryMib || 0), 0)
+  (nasState.dockerApps || []).reduce((acc, a) => acc + (Number(a?.totalMemoryMib) || 0), 0)
 );
 
 const filteredApps = computed(() => {
-  return nasState.dockerApps.filter((a) => {
+  return (nasState.dockerApps || []).filter((a) => {
+    if (!a) return false;
     if (stateFilter.value !== 'ALL' && a.state !== stateFilter.value) {
       return false;
     }
     if (!searchQuery.value.trim()) return true;
     const q = searchQuery.value.toLowerCase();
-    const matchesId = a.appId.toLowerCase().includes(q);
-    const matchesTitle = a.title.toLowerCase().includes(q);
-    const matchesService = (a.services || []).some((s) => s.toLowerCase().includes(q));
-    const matchesPort = (a.portMappings || []).some((p) => p.toLowerCase().includes(q));
+    const matchesId = String(a.appId || '').toLowerCase().includes(q);
+    const matchesTitle = String(a.title || '').toLowerCase().includes(q);
+    const matchesService = (a.services || []).some((s) => String(s || '').toLowerCase().includes(q));
+    const matchesPort = (a.portMappings || []).some((p) => String(p || '').toLowerCase().includes(q));
     const matchesContainer = (a.containers || []).some(
-      (c) => c.name.toLowerCase().includes(q) || c.image.toLowerCase().includes(q)
+      (c) => String(c?.name || '').toLowerCase().includes(q) || String(c?.image || '').toLowerCase().includes(q)
     );
     return matchesId || matchesTitle || matchesService || matchesPort || matchesContainer;
   });
 });
 
 const appSort = useTableSort(filteredApps, {
-  name: (a) => a.title || a.appId,
-  autostart: (a) => (a.autoStart ? 1 : 0),
+  name: (a) => a?.title || a?.appId || '',
+  autostart: (a) => (a?.autoStart ? 1 : 0),
   webui: (a) =>
-    getPrimaryWebUiUrl(a) ? (a.portals && a.portals.length > 0 ? a.portals[0].name || 'Open UI' : 'Open UI') : null,
-  cpu: (a) => a.totalCpuPercent,
-  memory: (a) => a.totalMemoryMib,
-  network: (a) => (a.state === 'RUNNING' ? (a.totalNetRxRate || 0) + (a.totalNetTxRate || 0) : null),
+    getPrimaryWebUiUrl(a) ? (a?.portals && a.portals.length > 0 ? a.portals[0]?.name || 'Open UI' : 'Open UI') : null,
+  cpu: (a) => Number(a?.totalCpuPercent) || 0,
+  memory: (a) => Number(a?.totalMemoryMib) || 0,
+  network: (a) => (a?.state === 'RUNNING' ? (Number(a?.totalNetRxRate) || 0) + (Number(a?.totalNetTxRate) || 0) : null),
 });
 
 function openDockerDetail(app: DockerApp) {
@@ -133,10 +134,11 @@ function formatNetworkTotal(app: DockerApp): string {
 }
 
 function formatBytes(bytes: number): string {
-  if (!bytes || bytes <= 0) return '0 B';
+  if (!bytes || bytes <= 0 || !Number.isFinite(bytes)) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
+  if (i < 0 || i >= sizes.length || !Number.isFinite(i)) return '0 B';
   return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
 }
 
@@ -819,15 +821,15 @@ function getAppPorts(app: DockerApp): AppPortEntry[] {
   const result: AppPortEntry[] = [];
   const seen = new Set<string>();
 
-  const rawPorts = [...(app.portMappings || [])];
-  for (const c of app.containers || []) {
-    for (const p of c.ports || []) {
+  const rawPorts = [...(app?.portMappings || [])];
+  for (const c of app?.containers || []) {
+    for (const p of c?.ports || []) {
       rawPorts.push(p);
     }
   }
 
   for (const p of rawPorts) {
-    let clean = p.trim();
+    let clean = String(p || '').trim();
     if (!clean) continue;
     let proto = 'tcp';
     if (clean.includes('/')) {
@@ -930,9 +932,7 @@ function openWebPortal(url: string) {
 onMounted(() => {
   window.addEventListener('click', handleGlobalClick);
   fetchDockerConfig();
-  if (nasState.dockerApps.length === 0) {
-    refreshApps();
-  }
+  refreshApps();
   loadCatalog().catch(() => {});
 });
 
@@ -1203,7 +1203,7 @@ onUnmounted(() => {
             v-for="app in appSort.sorted.value"
             :key="app.name"
             style="border-bottom: 1px solid var(--border-subtle)"
-            :title="`Application: ${app.title || app.appId}\nServices: ${app.services.join(', ') || 'none'}\nStatus: ${app.statusText || app.state}`"
+            :title="`Application: ${app.title || app.appId}\nServices: ${(app.services || []).join(', ') || 'none'}\nStatus: ${app.statusText || app.state}`"
           >
             <!-- Application (Status Indicator Icon + Title + AppId with Services Tooltip) -->
             <td style="padding: 8px 10px; width: 280px; min-width: 220px; max-width: 340px">
@@ -1302,9 +1302,9 @@ onUnmounted(() => {
                     v-else
                     class="mono"
                     style="font-size: 11.5px; color: var(--text-secondary); cursor: help"
-                    :title="`Services: ${app.services.join(', ') || 'none'}`"
+                    :title="`Services: ${(app.services || []).join(', ') || 'none'}`"
                   >
-                    {{ app.appId }} · {{ app.services.length }} service{{ app.services.length === 1 ? '' : 's' }} · {{ app.statusText }}
+                    {{ app.appId }} · {{ (app.services || []).length }} service{{ (app.services || []).length === 1 ? '' : 's' }} · {{ app.statusText }}
                   </div>
                 </div>
               </div>
@@ -1418,7 +1418,7 @@ onUnmounted(() => {
             <!-- CPU -->
             <td class="col-desktop-only" style="padding: 10px 14px; width: 85px; min-width: 85px; max-width: 85px; box-sizing: border-box; white-space: nowrap">
               <div class="mono" style="font-size: 12.5px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums">
-                {{ app.totalCpuPercent.toFixed(1) }}%
+                {{ (Number(app.totalCpuPercent) || 0).toFixed(1) }}%
               </div>
             </td>
 
@@ -1878,7 +1878,7 @@ onUnmounted(() => {
             @click="inspectActiveTab = 'containers'"
           >
             <MdiIcon :path="mdiLayers" size="14" style="margin-right: 4px" />
-            Containers ({{ inspectedApp.containers.length }})
+            Containers ({{ (inspectedApp.containers || []).length }})
           </button>
           <button
             class="btn btn-sm"
@@ -1921,7 +1921,7 @@ onUnmounted(() => {
                 <td style="padding: 8px">
                   <span class="badge" :class="c.state === 'RUNNING' ? 'badge-success' : (c.state === 'COMPLETED' ? 'badge-info' : 'badge-neutral')">{{ c.state }}</span>
                 </td>
-                <td style="padding: 8px; width: 85px; min-width: 85px; max-width: 85px; white-space: nowrap; font-variant-numeric: tabular-nums" class="mono">{{ c.cpuPercent.toFixed(1) }}%</td>
+                <td style="padding: 8px; width: 85px; min-width: 85px; max-width: 85px; white-space: nowrap; font-variant-numeric: tabular-nums" class="mono">{{ (Number(c.cpuPercent) || 0).toFixed(1) }}%</td>
                 <td style="padding: 8px; width: 105px; min-width: 105px; max-width: 105px; white-space: nowrap; font-variant-numeric: tabular-nums" class="mono">{{ c.memoryMib }} MiB</td>
                 <td class="mono" style="padding: 8px; font-size: 11px">
                   {{ formatContainerPorts(c.ports) }}
@@ -1950,7 +1950,7 @@ onUnmounted(() => {
               <label style="font-size: 12px; color: var(--text-secondary)">Service:</label>
               <select v-model="selectedService" class="form-input" style="padding: 3px 8px; font-size: 12px; width: auto" @change="fetchLogs">
                 <option value="">(All Services)</option>
-                <option v-for="s in inspectedApp.services" :key="s" :value="s">{{ s }}</option>
+                <option v-for="s in (inspectedApp.services || [])" :key="s" :value="s">{{ s }}</option>
               </select>
 
               <label style="font-size: 12px; color: var(--text-secondary); margin-left: 8px">Tail:</label>

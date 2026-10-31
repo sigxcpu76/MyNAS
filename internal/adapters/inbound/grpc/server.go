@@ -4059,7 +4059,13 @@ func (s *Server) WatchResources(req *nasv1.WatchResourcesRequest, stream nasv1.N
 				if match("dockerApps") && strings.HasPrefix(evt.Resource, "dockerApps/") {
 					act := strings.ToUpper(evt.Action)
 					if act == "DELETE" || act == "DESTROY" {
-						_ = sendChange("dockerApps", nasv1.WatchResourceChange_DELETED, evt.Resource, map[string]string{"name": evt.Resource})
+						// Only send DELETED if the compose application itself no longer exists.
+						// Sub-container exit or destroy events must not delete the compose application.
+						if app, err := s.GetDockerApp(ctx, &nasv1.GetDockerAppRequest{Name: evt.Resource}); err == nil && app != nil {
+							_ = sendChange("dockerApps", nasv1.WatchResourceChange_MODIFIED, evt.Resource, app)
+						} else {
+							_ = sendChange("dockerApps", nasv1.WatchResourceChange_DELETED, evt.Resource, map[string]string{"name": evt.Resource})
+						}
 					} else {
 						if app, err := s.GetDockerApp(ctx, &nasv1.GetDockerAppRequest{Name: evt.Resource}); err == nil && app != nil {
 							evtType := nasv1.WatchResourceChange_MODIFIED

@@ -62,6 +62,9 @@ type Adapter struct {
 	deployingErrors map[string]string
 	deployCancel    map[string]context.CancelFunc
 
+	eventMu sync.RWMutex
+	onEvent func(domain.Event)
+
 	// guards registry credential files (config.json / registries.json)
 	registryMu sync.Mutex
 	// registryVerify overrides `docker login` verification (tests only).
@@ -1494,7 +1497,6 @@ func (a *Adapter) waitForDeployment(id string, maxWait time.Duration) {
 func (a *Adapter) DeleteApp(ctx context.Context, id string, deleteVolumes bool) error {
 	a.cancelDeployment(id, 15*time.Second)
 	a.mu.Lock()
-	defer a.mu.Unlock()
 
 	delete(a.deployingApps, id)
 	delete(a.deployingErrors, id)
@@ -1509,6 +1511,9 @@ func (a *Adapter) DeleteApp(ctx context.Context, id string, deleteVolumes bool) 
 	}
 
 	_ = os.RemoveAll(appDir)
+	a.mu.Unlock()
+
+	a.emitEvent(domain.NewEvent("docker", "DELETE", "dockerApps/"+id, "App deleted"))
 	return nil
 }
 
@@ -1572,7 +1577,11 @@ func (a *Adapter) StopApp(ctx context.Context, id string) (*domain.DockerApp, er
 	}
 
 	liveContainers := a.fetchLiveContainers(ctx)
-	return a.buildApp(ctx, id, liveContainers)
+	app, err := a.buildApp(ctx, id, liveContainers)
+	if err == nil {
+		a.emitEvent(domain.NewEvent("docker", "MODIFIED", "dockerApps/"+id, "App stopped"))
+	}
+	return app, err
 }
 
 // RestartApp restarts all containers in a Docker Compose Application.
@@ -1597,7 +1606,11 @@ func (a *Adapter) RestartApp(ctx context.Context, id string) (*domain.DockerApp,
 	}
 
 	liveContainers := a.fetchLiveContainers(ctx)
-	return a.buildApp(ctx, id, liveContainers)
+	app, err := a.buildApp(ctx, id, liveContainers)
+	if err == nil {
+		a.emitEvent(domain.NewEvent("docker", "MODIFIED", "dockerApps/"+id, "App restarted"))
+	}
+	return app, err
 }
 
 // UpgradeApp pulls latest images for all services in the compose stack and redeploys with --remove-orphans in the background.
@@ -2228,10 +2241,29 @@ type dockerEventMessage struct {
 // StartEventWatcher launches a background worker that streams real-time container lifecycle events
 // directly from the Docker Engine Unix socket and invokes onEvent for every state change.
 func (a *Adapter) StartEventWatcher(ctx context.Context, onEvent func(domain.Event)) {
+	a.eventMu.Lock()
+	a.onEvent = onEvent
+	a.eventMu.Unlock()
 	if !a.hasSocket {
 		return
 	}
 	go a.watchDockerEvents(ctx, onEvent)
+}
+
+// SetEventSink assigns an event sink callback for programmatic event notifications.
+func (a *Adapter) SetEventSink(fn func(domain.Event)) {
+	a.eventMu.Lock()
+	defer a.eventMu.Unlock()
+	a.onEvent = fn
+}
+
+func (a *Adapter) emitEvent(evt domain.Event) {
+	a.eventMu.RLock()
+	fn := a.onEvent
+	a.eventMu.RUnlock()
+	if fn != nil {
+		fn(evt)
+	}
 }
 
 func (a *Adapter) watchDockerEvents(ctx context.Context, onEvent func(domain.Event)) {
@@ -3186,19 +3218,24 @@ func (a *Adapter) startDeploymentLocked(dir, id, msg string) {
 	a.deployCancel[id] = cancel
 	delete(a.deployingErrors, id)
 
+	go a.emitEvent(domain.NewEvent("docker", "MODIFIED", "dockerApps/"+id, msg))
+
 	go func() {
 		defer cancel()
 		runErr := a.runCompose(bgCtx, dir, id, "up", "-d", "--remove-orphans")
 		a.mu.Lock()
-		defer a.mu.Unlock()
 		delete(a.deployCancel, id)
 		if _, stillDeploying := a.deployingApps[id]; !stillDeploying {
+			a.mu.Unlock()
 			return
 		}
 		delete(a.deployingApps, id)
 		if runErr != nil && !isComposeCanceled(runErr, "") {
 			a.deployingErrors[id] = fmt.Sprintf("Deployment failed: %v", runErr)
 		}
+		a.mu.Unlock()
+
+		a.emitEvent(domain.NewEvent("docker", "MODIFIED", "dockerApps/"+id, "Deployment completed"))
 	}()
 }
 
@@ -3217,20 +3254,25 @@ func (a *Adapter) startUpgradeLocked(dir, id, msg string) {
 	a.deployCancel[id] = cancel
 	delete(a.deployingErrors, id)
 
+	go a.emitEvent(domain.NewEvent("docker", "MODIFIED", "dockerApps/"+id, msg))
+
 	go func() {
 		defer cancel()
 		_ = a.runCompose(bgCtx, dir, id, "pull")
 		runErr := a.runCompose(bgCtx, dir, id, "up", "-d", "--remove-orphans")
 		a.mu.Lock()
-		defer a.mu.Unlock()
 		delete(a.deployCancel, id)
 		if _, stillDeploying := a.deployingApps[id]; !stillDeploying {
+			a.mu.Unlock()
 			return
 		}
 		delete(a.deployingApps, id)
 		if runErr != nil && !isComposeCanceled(runErr, "") {
 			a.deployingErrors[id] = fmt.Sprintf("Upgrade failed: %v", runErr)
 		}
+		a.mu.Unlock()
+
+		a.emitEvent(domain.NewEvent("docker", "MODIFIED", "dockerApps/"+id, "Upgrade completed"))
 	}()
 }
 
@@ -3292,6 +3334,7 @@ func (a *Adapter) cancelDeployment(id string, maxWait time.Duration) {
 		cancel()
 	}
 	a.waitForDeployment(id, maxWait)
+	a.emitEvent(domain.NewEvent("docker", "MODIFIED", "dockerApps/"+id, "Deployment cancelled"))
 }
 
 // ensureExternalNetworks creates any networks a compose file declares as `external: true` that do not

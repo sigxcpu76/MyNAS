@@ -6,5 +6,10 @@ import { initTheme } from './ui/theme';
 
 initTheme();
 initRouter();
-createApp(App).mount('#app');
+
+const app = createApp(App);
+app.config.errorHandler = (err, instance, info) => {
+  console.error('[Vue Global Error]', err, info);
+};
+app.mount('#app');
 

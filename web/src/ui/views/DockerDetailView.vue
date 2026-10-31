@@ -345,7 +345,7 @@ watch(
               <div class="metric-item">
                 <span class="metric-label">Total Real CPU</span>
                 <span class="metric-val mono">
-                  {{ app?.state === 'RUNNING' && app?.totalCpuPercent !== undefined ? app.totalCpuPercent.toFixed(1) + '%' : '-' }}
+                  {{ app?.state === 'RUNNING' && app?.totalCpuPercent != null ? (Number(app.totalCpuPercent) || 0).toFixed(1) + '%' : '-' }}
                 </span>
               </div>
               <div class="metric-item">
@@ -353,8 +353,8 @@ watch(
                 <span class="metric-val mono">
                   {{
                     app?.state === 'RUNNING' && app?.totalMemoryMib
-                      ? app.totalMemoryMib >= 1024
-                        ? (app.totalMemoryMib / 1024).toFixed(2) + ' GiB'
+                      ? (Number(app.totalMemoryMib) || 0) >= 1024
+                        ? ((Number(app.totalMemoryMib) || 0) / 1024).toFixed(2) + ' GiB'
                         : app.totalMemoryMib + ' MiB'
                       : '-'
                   }}
