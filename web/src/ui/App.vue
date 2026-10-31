@@ -135,7 +135,18 @@ const activeSelectedLxc = computed<string | null>(() => {
     nasState.selectedResourceId.startsWith('lxc:')
   ) {
     const raw = nasState.selectedResourceId.replace(/^lxc:/, '');
-    return raw.replace(/^lxcContainers\//, '').trim() || null;
+    const clean = raw.replace(/^lxcContainers\//, '').trim();
+    const found = nasState.lxcContainers.find(
+      (c) =>
+        c.name === clean ||
+        c.name === `lxcContainers/${clean}` ||
+        c.containerName === clean ||
+        c.name.replace(/^lxcContainers\//, '') === clean
+    );
+    if (found) {
+      return found.name.replace(/^lxcContainers\//, '');
+    }
+    return clean || null;
   }
   return null;
 });

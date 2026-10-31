@@ -69,9 +69,17 @@ const container = computed<LxcContainer | null>(() => {
       (c) =>
         c.name === target ||
         c.name === `lxcContainers/${target}` ||
-        c.containerName === target
+        c.containerName === target ||
+        c.name.replace(/^lxcContainers\//, '') === target
     ) || null
   );
+});
+
+const technicalContainerId = computed(() => {
+  if (container.value?.name) {
+    return container.value.name.replace(/^lxcContainers\//, '').trim();
+  }
+  return cleanContainerName.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9._-]/g, '');
 });
 
 // -----------------------------------------------------------------------------
@@ -205,7 +213,7 @@ const showTerminalModal = ref(false);
 
 const terminalContainerOptions = computed<TerminalContainerOption[]>(() => {
   if (!container.value) return [];
-  const id = cleanContainerName.value;
+  const id = technicalContainerId.value;
   return [
     {
       id,
@@ -216,7 +224,7 @@ const terminalContainerOptions = computed<TerminalContainerOption[]>(() => {
 });
 
 function popoutTerminal() {
-  const id = cleanContainerName.value;
+  const id = technicalContainerId.value;
   const url = `/terminal?lxc=${encodeURIComponent(id)}`;
   window.open(
     url,
@@ -533,8 +541,8 @@ watch(
       </div>
       <div v-else class="card detail-card" style="padding: 0; overflow: hidden">
         <EmbeddedTerminal
-          :container-id="cleanContainerName"
-          :container-name="container?.containerName || cleanContainerName"
+          :container-id="technicalContainerId"
+          :container-name="container?.containerName || technicalContainerId"
           endpoint-type="lxc"
           @popout="popoutTerminal"
         />

@@ -303,7 +303,16 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	}
 	dockerSvc := application.NewDockerService(dockerPort)
 	dockerAppSvc := application.NewDockerAppService(dockerPort)
-	lxcSvc := application.NewLxcService(lxc.NewAdapter())
+	lxcAdapter := lxc.NewAdapter()
+	_, _ = lxcAdapter.CreateContainer(ctx, domain.LxcContainer{
+		ID:            "alpine-linux",
+		ContainerName: "Alpine Linux",
+		Distribution:  "alpine",
+		Release:       "3.19",
+		Architecture:  "amd64",
+		State:         "RUNNING",
+	})
+	lxcSvc := application.NewLxcService(lxcAdapter)
 	webdavAdapter := share.NewWebdavAdapter()
 	webdavDir := t.TempDir()
 	_, _ = webdavAdapter.CreateShare(ctx, domain.WebdavShare{
@@ -514,6 +523,29 @@ func TestGoogleAIPGatewayEndToEnd(t *testing.T) {
 	_, err = wsConn.Write([]byte(`{"type":"resize","cols":120,"rows":35}`))
 	if err != nil {
 		t.Fatalf("failed to send resize to ws: %v", err)
+	}
+
+	// 8b. LXC Interactive Terminal WebSocket (/ws/lxc/terminal/{containerId})
+	// Test connecting with display name containing spaces (e.g. "Alpine Linux") to verify resolution to technical ID "alpine-linux"
+	lxcWsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws/lxc/terminal/Alpine%20Linux?shell=/bin/sh&access_token=" + token
+	lxcWsConfig, lxcWsErr := websocket.NewConfig(lxcWsURL, srv.URL)
+	if lxcWsErr != nil {
+		t.Fatalf("failed to create lxc ws config: %v", lxcWsErr)
+	}
+	lxcWsConn, lxcWsErr := websocket.DialConfig(lxcWsConfig)
+	if lxcWsErr != nil {
+		t.Fatalf("failed to connect to lxc terminal ws with spaces: %v", lxcWsErr)
+	}
+	defer lxcWsConn.Close()
+
+	lxcWsBuf := make([]byte, 256)
+	_ = lxcWsConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	lxcWsN, err := lxcWsConn.Read(lxcWsBuf)
+	if err != nil {
+		t.Fatalf("failed to read from lxc terminal ws: %v", err)
+	}
+	if !strings.Contains(string(lxcWsBuf[:lxcWsN]), "alpine-linux") {
+		t.Fatalf("expected resolved lxc container alpine-linux in output, got: %s", string(lxcWsBuf[:lxcWsN]))
 	}
 
 	// 8. Docker storage config & filesystem directories API

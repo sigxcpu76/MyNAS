@@ -89,7 +89,7 @@ function cleanPoolName(name: string | undefined | null): string {
 }
 
 function openLxcDetail(lx: LxcContainer) {
-  const clean = lx.containerName || lx.name.replace(/^lxcContainers\//, '');
+  const clean = lx.name.replace(/^lxcContainers\//, '');
   selectResource(`lxc:${clean}`);
 }
 

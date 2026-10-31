@@ -375,7 +375,7 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
                     nasState.selectedResourceId === `lxc:${c.containerName}` ||
                     nasState.selectedResourceId === `lxc:${c.name.replace(/^lxcContainers\//, '')}`
                 }"
-                @click="handleSelect(`lxc:${c.containerName || c.name.replace(/^lxcContainers\//, '')}`, 'lxc')"
+                @click="handleSelect(`lxc:${c.name.replace(/^lxcContainers\//, '')}`, 'lxc')"
               >
                 <MdiIcon
                   v-if="c.state === 'FROZEN'"
