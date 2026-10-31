@@ -204,27 +204,15 @@ async function deleteVm() {
   }
 }
 
-async function popoutVmConsole() {
+function popoutVmConsole() {
   if (!currentVm.value) return;
   const clean = currentVm.value.name.replace(/^virtualMachines\//, '');
-  try {
-    const s = await services.kvm.openConsole(clean);
-    const tokenParam = s?.token ? `&token=${encodeURIComponent(s.token)}` : '';
-    const portParam = s?.vncPort ? `&port=${s.vncPort}` : '';
-    const url = `/vnc-console?vm=${encodeURIComponent(clean)}${tokenParam}${portParam}`;
-    window.open(
-      url,
-      `vnc_${clean}`,
-      'width=1024,height=768,location=no,toolbar=no,menubar=no,status=no,resizable=yes'
-    );
-  } catch {
-    const url = `/vnc-console?vm=${encodeURIComponent(clean)}`;
-    window.open(
-      url,
-      `vnc_${clean}`,
-      'width=1024,height=768,location=no,toolbar=no,menubar=no,status=no,resizable=yes'
-    );
-  }
+  const url = `/vnc-console?vm=${encodeURIComponent(clean)}`;
+  window.open(
+    url,
+    `vnc_${clean}`,
+    'width=1024,height=768,location=no,toolbar=no,menubar=no,status=no,resizable=yes'
+  );
 }
 
 // -----------------------------------------------------------------------------
