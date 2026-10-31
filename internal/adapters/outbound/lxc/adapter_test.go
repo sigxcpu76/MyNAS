@@ -3,7 +3,10 @@ package lxc_test
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/sigxcpu/nas/internal/adapters/outbound/lxc"
 	"github.com/sigxcpu/nas/internal/domain"
@@ -265,3 +268,141 @@ func TestLxcAdapter_DedicatedZfsDataset(t *testing.T) {
 		t.Fatalf("expected dataset containers/alpine-vpn to be deleted, got: %+v", zfsMock.deletedDatasets)
 	}
 }
+
+func TestLxcAdapter_MetricsSampling_CgroupV2(t *testing.T) {
+	ctx := context.Background()
+	fakeCgroupRoot := t.TempDir()
+
+	adapter := lxc.NewAdapter()
+	adapter.SetCgroupRoot(fakeCgroupRoot)
+
+	ctID := "ct-metrics-v2"
+	cgDir := filepath.Join(fakeCgroupRoot, "lxc.payload."+ctID)
+	if err := os.MkdirAll(cgDir, 0755); err != nil {
+		t.Fatalf("failed to create fake cgroup dir: %v", err)
+	}
+
+	// 16 MiB in bytes
+	memBytes := 16 * 1024 * 1024
+	if err := os.WriteFile(filepath.Join(cgDir, "memory.current"), []byte("16777216\n"), 0644); err != nil {
+		t.Fatalf("failed to write memory.current: %v", err)
+	}
+
+	cpuStat := "usage_usec 1000000\nuser_usec 400000\nsystem_usec 600000\n"
+	if err := os.WriteFile(filepath.Join(cgDir, "cpu.stat"), []byte(cpuStat), 0644); err != nil {
+		t.Fatalf("failed to write cpu.stat: %v", err)
+	}
+
+	// Create running container
+	_, err := adapter.CreateContainer(ctx, domain.LxcContainer{
+		ID:           ctID,
+		Distribution: "alpine",
+		Release:      "3.20",
+		RootfsPath:   filepath.Join(t.TempDir(), "rootfs"),
+	})
+	if err != nil {
+		t.Fatalf("CreateContainer failed: %v", err)
+	}
+
+	// First sample should immediately read memory accurately
+	c1, err := adapter.GetContainer(ctx, ctID)
+	if err != nil {
+		t.Fatalf("GetContainer failed: %v", err)
+	}
+	if c1.MemoryUsedMiB != int64(memBytes/(1024*1024)) {
+		t.Errorf("expected MemoryUsedMiB == 16, got %d", c1.MemoryUsedMiB)
+	}
+
+	// Simulate CPU time advancement
+	time.Sleep(200 * time.Millisecond)
+	// Add 100,000 usec (0.1s CPU time over ~0.2s elapsed ~= ~50% CPU)
+	updatedCpuStat := "usage_usec 1100000\nuser_usec 450000\nsystem_usec 650000\n"
+	if err := os.WriteFile(filepath.Join(cgDir, "cpu.stat"), []byte(updatedCpuStat), 0644); err != nil {
+		t.Fatalf("failed to update cpu.stat: %v", err)
+	}
+
+	c2, err := adapter.GetContainer(ctx, ctID)
+	if err != nil {
+		t.Fatalf("GetContainer 2 failed: %v", err)
+	}
+	if c2.CPUPercent <= 0 {
+		t.Errorf("expected positive CPUPercent after tick, got %f", c2.CPUPercent)
+	}
+	if c2.MemoryUsedMiB != 16 {
+		t.Errorf("expected MemoryUsedMiB == 16, got %d", c2.MemoryUsedMiB)
+	}
+
+	// Test ListContainers also includes the metrics
+	list, err := adapter.ListContainers(ctx)
+	if err != nil {
+		t.Fatalf("ListContainers failed: %v", err)
+	}
+	var found *domain.LxcContainer
+	for i := range list {
+		if list[i].ID == ctID {
+			found = &list[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("container %q not in ListContainers", ctID)
+	}
+	if found.MemoryUsedMiB != 16 {
+		t.Errorf("expected found.MemoryUsedMiB == 16, got %d", found.MemoryUsedMiB)
+	}
+	if found.CPUPercent <= 0 {
+		t.Errorf("expected found.CPUPercent > 0, got %f", found.CPUPercent)
+	}
+
+	// When container is stopped, metrics should reset to zero
+	stopped, err := adapter.StopContainer(ctx, ctID)
+	if err != nil {
+		t.Fatalf("StopContainer failed: %v", err)
+	}
+	if stopped.CPUPercent != 0 || stopped.MemoryUsedMiB != 0 {
+		t.Errorf("expected zero metrics for stopped container, got CPU=%f, Mem=%d", stopped.CPUPercent, stopped.MemoryUsedMiB)
+	}
+}
+
+func TestLxcAdapter_MetricsSampling_CgroupV1(t *testing.T) {
+	ctx := context.Background()
+	fakeCgroupRoot := t.TempDir()
+
+	adapter := lxc.NewAdapter()
+	adapter.SetCgroupRoot(fakeCgroupRoot)
+
+	ctID := "ct-metrics-v1"
+	cgDir := filepath.Join(fakeCgroupRoot, "lxc", ctID)
+	if err := os.MkdirAll(cgDir, 0755); err != nil {
+		t.Fatalf("failed to create fake cgroup v1 dir: %v", err)
+	}
+
+	// 32 MiB in bytes
+	if err := os.WriteFile(filepath.Join(cgDir, "memory.usage_in_bytes"), []byte("33554432\n"), 0644); err != nil {
+		t.Fatalf("failed to write memory.usage_in_bytes: %v", err)
+	}
+
+	// 1 second in nanoseconds = 1,000,000 usec
+	if err := os.WriteFile(filepath.Join(cgDir, "cpuacct.usage"), []byte("1000000000\n"), 0644); err != nil {
+		t.Fatalf("failed to write cpuacct.usage: %v", err)
+	}
+
+	_, err := adapter.CreateContainer(ctx, domain.LxcContainer{
+		ID:           ctID,
+		Distribution: "debian",
+		Release:      "bookworm",
+		RootfsPath:   filepath.Join(t.TempDir(), "rootfs"),
+	})
+	if err != nil {
+		t.Fatalf("CreateContainer failed: %v", err)
+	}
+
+	c, err := adapter.GetContainer(ctx, ctID)
+	if err != nil {
+		t.Fatalf("GetContainer failed: %v", err)
+	}
+	if c.MemoryUsedMiB != 32 {
+		t.Errorf("expected MemoryUsedMiB == 32 for cgroup v1, got %d", c.MemoryUsedMiB)
+	}
+}
+

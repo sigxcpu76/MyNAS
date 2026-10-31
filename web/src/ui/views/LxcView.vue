@@ -36,7 +36,7 @@ import PathSelector from '../components/PathSelector.vue';
 import DockerTerminalModal, { type TerminalContainerOption } from '../components/DockerTerminalModal.vue';
 import { useTableSort } from '../composables/useTableSort';
 import { services } from '../../container';
-import { nasState, notify, refreshLxcTemplates as storeRefreshTemplates } from '../store';
+import { nasState, notify, refreshLxcTemplates as storeRefreshTemplates, selectResource } from '../store';
 import { confirmDelete } from '../modal';
 import { toZfsSafeSlug } from '../../domain/id';
 import { formatBytes, type LxcCatalogItem, type LxcContainer, type LxcMountPoint, type StorageImage } from '../../domain/models';
@@ -86,6 +86,11 @@ function switchTab(tab: 'containers' | 'catalog' | 'templates') {
 function cleanPoolName(name: string | undefined | null): string {
   if (!name) return '';
   return name.replace(/^zfsPools\//, '').trim();
+}
+
+function openLxcDetail(lx: LxcContainer) {
+  const clean = lx.containerName || lx.name.replace(/^lxcContainers\//, '');
+  selectResource(`lxc:${clean}`);
 }
 
 // Main storage pool and templates directory
@@ -206,6 +211,8 @@ const lxcSort = useTableSort(() => nasState.lxcContainers, {
   ipv4: (lx) => ipv4ToNumber(lx.ipv4Address),
   // Primary key: CPU cores, secondary: memory limit (MiB)
   resources: (lx) => lx.cpuCores * 1e9 + lx.memoryLimitMib,
+  cpu: (lx) => lx.cpuPercent ?? 0,
+  memory: (lx) => lx.memoryUsedMib ?? 0,
 });
 
 const templateSort = useTableSort(() => nasState.lxcTemplates, {
@@ -1078,7 +1085,7 @@ function copyTemplatePath(path: string) {
               <SortableTh :sort="lxcSort" sort-key="autostart" class="col-desktop-only">Autostart</SortableTh>
               <SortableTh :sort="lxcSort" sort-key="distro" class="col-desktop-only">Distro / Release / Arch</SortableTh>
               <SortableTh :sort="lxcSort" sort-key="ipv4">IPv4 Address</SortableTh>
-              <SortableTh :sort="lxcSort" sort-key="resources" class="col-desktop-only">Resources</SortableTh>
+              <SortableTh :sort="lxcSort" sort-key="resources" class="col-desktop-only">Resource Usage</SortableTh>
               <th style="text-align: right">Actions</th>
             </tr>
           </thead>
@@ -1117,7 +1124,8 @@ function copyTemplatePath(path: string) {
               <td>
                 <div
                   style="font-weight: 600; cursor: pointer; color: var(--text-primary)"
-                  @click="openInspectModal(lx, 'overview')"
+                  title="Open Container Details"
+                  @click="openLxcDetail(lx)"
                 >
                   {{ lx.containerName }}
                 </div>
@@ -1191,10 +1199,19 @@ function copyTemplatePath(path: string) {
                 {{ lx.ipv4Address || '—' }}
               </td>
 
-              <!-- Resources -->
+              <!-- Resource Usage -->
               <td class="mono col-desktop-only" style="font-size: 12px">
-                <div>{{ lx.cpuCores }} Cores · {{ lx.memoryLimitMib }} MiB</div>
-                <div v-if="lx.mountPoints && lx.mountPoints.length > 0" style="font-size: 11px; color: var(--text-muted)">
+                <div v-if="lx.state === 'RUNNING'">
+                  <span :style="{ color: (lx.cpuPercent || 0) > 85 ? 'var(--danger-text)' : 'var(--text-primary)' }">
+                    {{ (lx.cpuPercent || 0).toFixed(1) }}% CPU
+                  </span>
+                  <span style="color: var(--text-muted); margin: 0 4px">·</span>
+                  <span style="color: var(--text-primary)">
+                    {{ lx.memoryUsedMib || 0 }} MiB RAM
+                  </span>
+                </div>
+                <div v-else style="color: var(--text-muted)">—</div>
+                <div v-if="lx.mountPoints && lx.mountPoints.length > 0" style="font-size: 11px; color: var(--text-muted); margin-top: 2px">
                   {{ lx.mountPoints.length }} bind mount{{ lx.mountPoints.length > 1 ? 's' : '' }}
                 </div>
               </td>
@@ -1278,6 +1295,15 @@ function copyTemplatePath(path: string) {
                       size="13"
                       :class="{ 'spin-icon': transitioningContainers[lx.name] === 'stopping' }"
                     />
+                  </button>
+
+                  <!-- Details Button -->
+                  <button
+                    class="btn btn-xs btn-secondary"
+                    title="Open Container Details & Management"
+                    @click="openLxcDetail(lx)"
+                  >
+                    <MdiIcon :path="mdiInformationOutline" size="13" />
                   </button>
 
                   <!-- Terminal Button -->
@@ -1996,12 +2022,27 @@ function copyTemplatePath(path: string) {
           </div>
 
           <div class="card" style="padding: 12px; background: var(--bg-surface)">
-            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase">Hardware Resources</div>
-            <div class="mono" style="font-size: 14px; font-weight: 600; margin-top: 4px">
-              {{ inspectedContainer.cpuCores }} vCPUs · {{ inspectedContainer.memoryLimitMib }} MiB RAM
-            </div>
-            <div style="font-size: 11px; color: var(--text-secondary)">
+            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase">Container Environment</div>
+            <div style="font-size: 13px; font-weight: 600; margin-top: 4px">
               {{ inspectedContainer.unprivileged ? 'Unprivileged Container' : 'Privileged Container' }}
+            </div>
+            <div class="mono" style="font-size: 11px; color: var(--text-secondary); margin-top: 2px">
+              User Namespace Isolation
+            </div>
+          </div>
+
+          <div class="card" style="padding: 12px; background: var(--bg-surface)">
+            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase">Real Resource Usage</div>
+            <div v-if="inspectedContainer.state === 'RUNNING'" style="margin-top: 4px">
+              <div class="mono" style="font-size: 14px; font-weight: 600">
+                CPU: {{ (inspectedContainer.cpuPercent || 0).toFixed(1) }}%
+              </div>
+              <div class="mono" style="font-size: 12px; color: var(--text-primary); margin-top: 2px">
+                RAM: {{ inspectedContainer.memoryUsedMib || 0 }} MiB
+              </div>
+            </div>
+            <div v-else class="mono" style="font-size: 13px; color: var(--text-muted); margin-top: 4px">
+              {{ inspectedContainer.state }}
             </div>
           </div>
 

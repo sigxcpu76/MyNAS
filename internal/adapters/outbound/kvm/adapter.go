@@ -9,10 +9,12 @@ import (
 	"encoding/xml"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -27,15 +29,76 @@ type consoleTicket struct {
 	ExpiresAt time.Time
 }
 
+type vmMetricsSample struct {
+	cpuNs      uint64
+	sampleTime time.Time
+	cpuPercent float64
+	memUsedMiB int64
+	cachedAt   time.Time
+}
+
+type domstatEntry struct {
+	cpuNs  uint64
+	rssKiB uint64
+	hasCPU bool
+	hasRSS bool
+}
+
+func parseDomstatsOutput(output string) map[string]domstatEntry {
+	result := make(map[string]domstatEntry)
+	lines := strings.Split(output, "\n")
+	currentDomain := ""
+	currentEntry := domstatEntry{}
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "Domain: '") {
+			if currentDomain != "" {
+				result[currentDomain] = currentEntry
+			}
+			end := strings.Index(line[9:], "'")
+			if end != -1 {
+				currentDomain = line[9 : 9+end]
+			} else {
+				currentDomain = ""
+			}
+			currentEntry = domstatEntry{}
+			continue
+		}
+		if currentDomain == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "cpu.time=") {
+			valStr := strings.TrimPrefix(line, "cpu.time=")
+			if u, err := strconv.ParseUint(valStr, 10, 64); err == nil {
+				currentEntry.cpuNs = u
+				currentEntry.hasCPU = true
+			}
+		} else if strings.HasPrefix(line, "balloon.rss=") {
+			valStr := strings.TrimPrefix(line, "balloon.rss=")
+			if u, err := strconv.ParseUint(valStr, 10, 64); err == nil {
+				currentEntry.rssKiB = u
+				currentEntry.hasRSS = true
+			}
+		}
+	}
+	if currentDomain != "" {
+		result[currentDomain] = currentEntry
+	}
+	return result
+}
+
 type Adapter struct {
-	mu        sync.RWMutex
-	logger    *slog.Logger
-	mainPool  string
-	stateDir  string
-	vms       map[string]domain.VirtualMachine
-	tickets   map[string]consoleTicket
-	snapshots map[string][]domain.VirtualMachineSnapshot
-	nextPort  int32
+	mu           sync.RWMutex
+	logger       *slog.Logger
+	mainPool     string
+	stateDir     string
+	vms          map[string]domain.VirtualMachine
+	tickets      map[string]consoleTicket
+	snapshots    map[string][]domain.VirtualMachineSnapshot
+	nextPort     int32
+	metricsCache map[string]vmMetricsSample
+	metricsMu    sync.Mutex
 }
 
 func NewAdapter() *Adapter {
@@ -53,12 +116,13 @@ func NewAdapterWithStateDir(stateDir string) *Adapter {
 	_ = os.MkdirAll(stateDir, 0755)
 
 	a := &Adapter{
-		logger:    slog.Default().With("subsystem", "libvirt"),
-		stateDir:  stateDir,
-		vms:       make(map[string]domain.VirtualMachine),
-		tickets:   make(map[string]consoleTicket),
-		snapshots: make(map[string][]domain.VirtualMachineSnapshot),
-		nextPort:  5903,
+		logger:       slog.Default().With("subsystem", "libvirt"),
+		stateDir:     stateDir,
+		vms:          make(map[string]domain.VirtualMachine),
+		tickets:      make(map[string]consoleTicket),
+		snapshots:    make(map[string][]domain.VirtualMachineSnapshot),
+		nextPort:     5903,
+		metricsCache: make(map[string]vmMetricsSample),
 	}
 
 	if os.Geteuid() == 0 {
@@ -579,8 +643,224 @@ func (a *Adapter) getDomainFromVirsh(ctx context.Context, name string) (*domain.
 	return &vm, nil
 }
 
+func (a *Adapter) sampleAllVMMetrics(ctx context.Context) map[string]vmMetricsSample {
+	if !a.hasVirsh() {
+		return nil
+	}
+	tctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(tctx, "virsh", "domstats", "--cpu-total", "--balloon", "--nowait")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	stats := parseDomstatsOutput(string(out))
+	now := time.Now()
+
+	a.metricsMu.Lock()
+	defer a.metricsMu.Unlock()
+	if a.metricsCache == nil {
+		a.metricsCache = make(map[string]vmMetricsSample)
+	}
+
+	results := make(map[string]vmMetricsSample)
+	for vmName, entry := range stats {
+		memMiB := int64(entry.rssKiB / 1024)
+		cached, hasCache := a.metricsCache[vmName]
+		cpuPct := 0.0
+
+		if hasCache && !cached.sampleTime.IsZero() && entry.hasCPU {
+			dt := now.Sub(cached.sampleTime)
+			if dt >= 150*time.Millisecond {
+				if entry.cpuNs >= cached.cpuNs {
+					deltaNs := entry.cpuNs - cached.cpuNs
+					cpuPct = (float64(deltaNs) / float64(dt.Nanoseconds())) * 100.0
+					cpuPct = math.Round(cpuPct*10) / 10
+				}
+				sample := vmMetricsSample{
+					cpuNs:      entry.cpuNs,
+					sampleTime: now,
+					cpuPercent: cpuPct,
+					memUsedMiB: memMiB,
+					cachedAt:   now,
+				}
+				a.metricsCache[vmName] = sample
+				results[vmName] = sample
+				continue
+			}
+			sample := vmMetricsSample{
+				cpuNs:      cached.cpuNs,
+				sampleTime: cached.sampleTime,
+				cpuPercent: cached.cpuPercent,
+				memUsedMiB: memMiB,
+				cachedAt:   now,
+			}
+			a.metricsCache[vmName] = sample
+			results[vmName] = sample
+			continue
+		}
+
+		sample := vmMetricsSample{
+			cpuNs:      entry.cpuNs,
+			sampleTime: now,
+			cpuPercent: 0,
+			memUsedMiB: memMiB,
+			cachedAt:   now,
+		}
+		a.metricsCache[vmName] = sample
+		results[vmName] = sample
+
+		go func(name string, baseNs uint64, baseTime time.Time) {
+			time.Sleep(200 * time.Millisecond)
+			bCmd := exec.Command("virsh", "domstats", "--cpu-total", "--balloon", "--nowait", name)
+			bOut, bErr := bCmd.Output()
+			if bErr != nil {
+				return
+			}
+			bStats := parseDomstatsOutput(string(bOut))
+			bEntry, ok := bStats[name]
+			if !ok || !bEntry.hasCPU {
+				return
+			}
+			t2 := time.Now()
+			dt := t2.Sub(baseTime)
+			if dt > 0 && bEntry.cpuNs >= baseNs {
+				pct := (float64(bEntry.cpuNs-baseNs) / float64(dt.Nanoseconds())) * 100.0
+				pct = math.Round(pct*10) / 10
+				a.metricsMu.Lock()
+				a.metricsCache[name] = vmMetricsSample{
+					cpuNs:      bEntry.cpuNs,
+					sampleTime: t2,
+					cpuPercent: pct,
+					memUsedMiB: int64(bEntry.rssKiB / 1024),
+					cachedAt:   t2,
+				}
+				a.metricsMu.Unlock()
+			}
+		}(vmName, entry.cpuNs, now)
+	}
+
+	return results
+}
+
+func (a *Adapter) sampleSingleVMMetrics(ctx context.Context, vmName string) (float64, int64) {
+	now := time.Now()
+	a.metricsMu.Lock()
+	cached, hasCache := a.metricsCache[vmName]
+	if hasCache && now.Sub(cached.cachedAt) < 1500*time.Millisecond {
+		cpuPct := cached.cpuPercent
+		memMiB := cached.memUsedMiB
+		a.metricsMu.Unlock()
+		return cpuPct, memMiB
+	}
+	a.metricsMu.Unlock()
+
+	if !a.hasVirsh() {
+		if hasCache {
+			return cached.cpuPercent, cached.memUsedMiB
+		}
+		return 0, 0
+	}
+
+	tctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(tctx, "virsh", "domstats", "--cpu-total", "--balloon", "--nowait", vmName)
+	out, err := cmd.Output()
+	if err != nil {
+		if hasCache {
+			return cached.cpuPercent, cached.memUsedMiB
+		}
+		return 0, 0
+	}
+
+	stats := parseDomstatsOutput(string(out))
+	entry, ok := stats[vmName]
+	if !ok {
+		if hasCache {
+			return cached.cpuPercent, cached.memUsedMiB
+		}
+		return 0, 0
+	}
+
+	memMiB := int64(entry.rssKiB / 1024)
+	a.metricsMu.Lock()
+	defer a.metricsMu.Unlock()
+
+	cached, hasCache = a.metricsCache[vmName]
+	if hasCache && !cached.sampleTime.IsZero() && entry.hasCPU {
+		dt := now.Sub(cached.sampleTime)
+		if dt >= 150*time.Millisecond {
+			cpuPct := 0.0
+			if entry.cpuNs >= cached.cpuNs {
+				deltaNs := entry.cpuNs - cached.cpuNs
+				cpuPct = (float64(deltaNs) / float64(dt.Nanoseconds())) * 100.0
+				cpuPct = math.Round(cpuPct*10) / 10
+			}
+			a.metricsCache[vmName] = vmMetricsSample{
+				cpuNs:      entry.cpuNs,
+				sampleTime: now,
+				cpuPercent: cpuPct,
+				memUsedMiB: memMiB,
+				cachedAt:   now,
+			}
+			return cpuPct, memMiB
+		}
+		a.metricsCache[vmName] = vmMetricsSample{
+			cpuNs:      cached.cpuNs,
+			sampleTime: cached.sampleTime,
+			cpuPercent: cached.cpuPercent,
+			memUsedMiB: memMiB,
+			cachedAt:   now,
+		}
+		return cached.cpuPercent, memMiB
+	}
+
+	a.metricsCache[vmName] = vmMetricsSample{
+		cpuNs:      entry.cpuNs,
+		sampleTime: now,
+		cpuPercent: 0,
+		memUsedMiB: memMiB,
+		cachedAt:   now,
+	}
+
+	go func(name string, baseNs uint64, baseTime time.Time) {
+		time.Sleep(200 * time.Millisecond)
+		bCmd := exec.Command("virsh", "domstats", "--cpu-total", "--balloon", "--nowait", name)
+		bOut, bErr := bCmd.Output()
+		if bErr != nil {
+			return
+		}
+		bStats := parseDomstatsOutput(string(bOut))
+		bEntry, ok := bStats[name]
+		if !ok || !bEntry.hasCPU {
+			return
+		}
+		t2 := time.Now()
+		dt := t2.Sub(baseTime)
+		if dt > 0 && bEntry.cpuNs >= baseNs {
+			pct := (float64(bEntry.cpuNs-baseNs) / float64(dt.Nanoseconds())) * 100.0
+			pct = math.Round(pct*10) / 10
+			a.metricsMu.Lock()
+			a.metricsCache[name] = vmMetricsSample{
+				cpuNs:      bEntry.cpuNs,
+				sampleTime: t2,
+				cpuPercent: pct,
+				memUsedMiB: int64(bEntry.rssKiB / 1024),
+				cachedAt:   t2,
+			}
+			a.metricsMu.Unlock()
+		}
+	}(vmName, entry.cpuNs, now)
+
+	return 0, memMiB
+}
+
 func (a *Adapter) ListVMs(ctx context.Context) ([]domain.VirtualMachine, error) {
 	if a.hasVirsh() {
+		metricsMap := a.sampleAllVMMetrics(ctx)
+
 		cmd := exec.CommandContext(ctx, "virsh", "list", "--all", "--name")
 		out, err := cmd.Output()
 		if err == nil {
@@ -593,6 +873,17 @@ func (a *Adapter) ListVMs(ctx context.Context) ([]domain.VirtualMachine, error) 
 				}
 				vm, err := a.getDomainFromVirsh(ctx, name)
 				if err == nil && vm != nil {
+					if vm.State == "RUNNING" {
+						if m, ok := metricsMap[name]; ok {
+							vm.GuestCPUPercent = m.cpuPercent
+							vm.GuestMemoryUsedMiB = m.memUsedMiB
+						} else {
+							vm.GuestCPUPercent, vm.GuestMemoryUsedMiB = a.sampleSingleVMMetrics(ctx, name)
+						}
+					} else {
+						vm.GuestCPUPercent = 0
+						vm.GuestMemoryUsedMiB = 0
+					}
 					vms = append(vms, *vm)
 				}
 			}
@@ -609,6 +900,12 @@ func (a *Adapter) GetVM(ctx context.Context, id string) (*domain.VirtualMachine,
 	}
 	vm, err := a.getDomainFromVirsh(ctx, id)
 	if err == nil {
+		if vm.State == "RUNNING" {
+			vm.GuestCPUPercent, vm.GuestMemoryUsedMiB = a.sampleSingleVMMetrics(ctx, id)
+		} else {
+			vm.GuestCPUPercent = 0
+			vm.GuestMemoryUsedMiB = 0
+		}
 		return vm, nil
 	}
 	return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, id)
@@ -936,6 +1233,10 @@ func (a *Adapter) UpdateVM(ctx context.Context, vm domain.VirtualMachine, fields
 }
 
 func (a *Adapter) DeleteVM(ctx context.Context, id string) error {
+	a.metricsMu.Lock()
+	delete(a.metricsCache, id)
+	a.metricsMu.Unlock()
+
 	if a.isRealDomain(ctx, id) {
 		_ = exec.CommandContext(ctx, "virsh", "destroy", id).Run()
 		out, err := exec.CommandContext(ctx, "virsh", "undefine", "--nvram", "--snapshots-metadata", id).CombinedOutput()
@@ -1011,6 +1312,10 @@ func (a *Adapter) StartVM(ctx context.Context, id string) (*domain.VirtualMachin
 }
 
 func (a *Adapter) StopVM(ctx context.Context, id string, force bool) (*domain.VirtualMachine, error) {
+	a.metricsMu.Lock()
+	delete(a.metricsCache, id)
+	a.metricsMu.Unlock()
+
 	if a.isRealDomain(ctx, id) {
 		verb := "shutdown"
 		if force {

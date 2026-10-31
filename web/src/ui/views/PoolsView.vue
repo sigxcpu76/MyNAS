@@ -33,8 +33,13 @@ import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import PathSelector from '../components/PathSelector.vue';
 import { confirmDelete } from '../modal';
-import { confirmModal, nasState, notify, refreshAllData } from '../store';
+import { confirmModal, nasState, notify, refreshAllData, selectResource } from '../store';
 import { navigateTo } from '../router';
+
+function openPoolDetails(pool: ZfsPool) {
+  const name = pool.poolName || pool.name.replace(/^zfsPools\//, '');
+  selectResource(`pool:${name}`);
+}
 
 onMounted(() => {
   if (nasState.disks.length === 0 || nasState.pools.length === 0) {
@@ -974,7 +979,12 @@ function viewPoolDatasets(poolName: string) {
             />
             <div style="min-width: 0">
               <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
-                <span class="mono" style="font-weight: 700; font-size: 16px; color: var(--text-primary)">
+                <span
+                  class="mono"
+                  style="font-weight: 700; font-size: 16px; color: var(--text-primary); cursor: pointer"
+                  title="Click to view pool configuration & details"
+                  @click="openPoolDetails(p)"
+                >
                   {{ p.poolName || p.name.replace(/^zfsPools\//, '') }}
                 </span>
                 <span
@@ -1080,6 +1090,13 @@ function viewPoolDatasets(poolName: string) {
         <!-- Card Footer / Action Buttons -->
         <div class="pool-card-footer">
           <div style="display: flex; align-items: center; gap: 8px">
+            <button
+              class="btn btn-sm btn-secondary"
+              title="Inspect Pool Configuration, Datasets, Volumes & Topology"
+              @click="openPoolDetails(p)"
+            >
+              Details
+            </button>
             <button
               class="btn btn-sm btn-primary"
               title="View Child Datasets in this pool"

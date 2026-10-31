@@ -16,6 +16,7 @@ import {
   mdiFileDocumentOutline,
   mdiFolderOutline,
   mdiHarddisk,
+  mdiInformationOutline,
   mdiKeyVariant,
   mdiLayers,
   mdiLoading,
@@ -49,7 +50,7 @@ import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import SortableTh from '../components/SortableTh.vue';
 import { useTableSort } from '../composables/useTableSort';
-import { nasState, notify } from '../store';
+import { nasState, notify, selectResource } from '../store';
 import { confirmDelete } from '../modal';
 
 // =============================================================================
@@ -105,6 +106,11 @@ const appSort = useTableSort(filteredApps, {
   memory: (a) => a.totalMemoryMib,
   network: (a) => (a.state === 'RUNNING' ? (a.totalNetRxRate || 0) + (a.totalNetTxRate || 0) : null),
 });
+
+function openDockerDetail(app: DockerApp) {
+  const clean = app.appId || app.name.replace(/^dockerApps\//, '');
+  selectResource(`docker:${clean}`);
+}
 
 // =============================================================================
 // Realtime Telemetry & Network Rate Formatter
@@ -1233,7 +1239,11 @@ onUnmounted(() => {
 
                 <div>
                   <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
-                    <span style="font-weight: 600; font-size: 12px; color: var(--text-primary)">
+                    <span
+                      style="font-weight: 600; font-size: 12px; color: var(--text-primary); cursor: pointer"
+                      title="Open Application Details"
+                      @click="openDockerDetail(app)"
+                    >
                       {{ app.title || app.appId }}
                     </span>
                     <span
@@ -1512,6 +1522,16 @@ onUnmounted(() => {
                   @click="openUpgradeModal(app)"
                 >
                   <MdiIcon :path="mdiArrowUpBoldCircleOutline" size="16" />
+                </button>
+
+                <button
+                  class="btn btn-sm btn-icon"
+                  style="flex-shrink: 0"
+                  title="View Application Details"
+                  aria-label="View Application Details"
+                  @click="openDockerDetail(app)"
+                >
+                  <MdiIcon :path="mdiInformationOutline" size="16" />
                 </button>
 
                 <button

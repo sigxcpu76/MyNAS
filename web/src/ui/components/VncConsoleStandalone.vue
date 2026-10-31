@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { services } from '../../container';
-import { nasState, notify } from '../store';
+import { initSession, nasState, notify } from '../store';
 import type { VirtualMachineConsoleSession } from '../../domain/models';
 import VncConsole from './VncConsole.vue';
 
@@ -20,6 +20,9 @@ async function loadSession() {
     loading.value = false;
     return;
   }
+
+  // Ensure session credentials are read from localStorage before API requests
+  await initSession();
 
   // If token is already present in query parameters, use it immediately
   if (initialToken) {
