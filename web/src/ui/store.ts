@@ -6,6 +6,13 @@
 import { reactive } from 'vue';
 import { aipClient, services } from '../container';
 import { isDotDataset } from '../domain/models';
+import {
+  mapDockerApp,
+  mapDockerContainer,
+  mapLxcContainer,
+  mapSystemTelemetry,
+  mapVirtualMachine,
+} from '../adapters/http/httpAdapters';
 import type {
   CifsShare,
   CifsGlobalConfig,
@@ -132,7 +139,7 @@ export const nasState = reactive({
   liveSyncActive: false,
 
   systemConfig: cached?.systemConfig || null,
-  systemTelemetry: cached?.systemTelemetry || (null as SystemTelemetry | null),
+  systemTelemetry: cached?.systemTelemetry ? mapSystemTelemetry(cached.systemTelemetry) : (null as SystemTelemetry | null),
   prerequisites: cached?.prerequisites || [],
   disks: cached?.disks || [],
   pools: cached?.pools || [],
@@ -454,21 +461,23 @@ export function handleWatchResourceChange(msg: {
   if (eventType === 'SNAPSHOT' && payload) {
     switch (resourceType) {
       case 'dockerApps':
-        nasState.dockerApps = Array.isArray(payload) ? payload : [];
+        nasState.dockerApps = Array.isArray(payload) ? payload.map(mapDockerApp) : [];
         break;
       case 'dockerContainers':
-        nasState.dockerContainers = Array.isArray(payload) ? payload : [];
+        nasState.dockerContainers = Array.isArray(payload) ? payload.map(mapDockerContainer) : [];
         break;
       case 'virtualMachines':
-        nasState.vms = Array.isArray(payload) ? payload : [];
+        nasState.vms = Array.isArray(payload) ? payload.map(mapVirtualMachine) : [];
         break;
       case 'lxcContainers':
-        nasState.lxcContainers = Array.isArray(payload) ? payload : [];
+        nasState.lxcContainers = Array.isArray(payload) ? payload.map(mapLxcContainer) : [];
         break;
-      case 'telemetry':
-        nasState.systemTelemetry = payload;
-        recordNetworkTrafficSample(payload);
+      case 'telemetry': {
+        const mapped = mapSystemTelemetry(payload);
+        nasState.systemTelemetry = mapped;
+        recordNetworkTrafficSample(mapped);
         break;
+      }
     }
     nasState.lastRefreshed = new Date().toLocaleTimeString();
     saveLocalCache();
@@ -478,7 +487,7 @@ export function handleWatchResourceChange(msg: {
   // Delta updates (ADDED, MODIFIED, DELETED)
   switch (resourceType) {
     case 'dockerApps': {
-      const app = payload as DockerApp;
+      const app = payload ? mapDockerApp(payload) : null;
       const name = msg.resourceName || app?.name;
       const idx = nasState.dockerApps.findIndex((a) => a.name === name);
       if (eventType === 'DELETED') {
@@ -493,7 +502,7 @@ export function handleWatchResourceChange(msg: {
       break;
     }
     case 'dockerContainers': {
-      const container = payload as DockerContainer;
+      const container = payload ? mapDockerContainer(payload) : null;
       const name = msg.resourceName || container?.name;
       const idx = nasState.dockerContainers.findIndex((c) => c.name === name);
       if (eventType === 'DELETED') {
@@ -508,7 +517,7 @@ export function handleWatchResourceChange(msg: {
       break;
     }
     case 'virtualMachines': {
-      const vm = payload as VirtualMachine;
+      const vm = payload ? mapVirtualMachine(payload) : null;
       const name = msg.resourceName || vm?.name;
       const idx = nasState.vms.findIndex((v) => v.name === name);
       if (eventType === 'DELETED') {
@@ -523,7 +532,7 @@ export function handleWatchResourceChange(msg: {
       break;
     }
     case 'lxcContainers': {
-      const ct = payload as LxcContainer;
+      const ct = payload ? mapLxcContainer(payload) : null;
       const name = msg.resourceName || ct?.name;
       const idx = nasState.lxcContainers.findIndex((c) => c.name === name);
       if (eventType === 'DELETED') {
@@ -539,8 +548,9 @@ export function handleWatchResourceChange(msg: {
     }
     case 'telemetry': {
       if (payload) {
-        nasState.systemTelemetry = payload;
-        recordNetworkTrafficSample(payload);
+        const mapped = mapSystemTelemetry(payload);
+        nasState.systemTelemetry = mapped;
+        recordNetworkTrafficSample(mapped);
       }
       break;
     }

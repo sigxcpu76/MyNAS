@@ -25,7 +25,7 @@ const ramChartOptions = computed<echarts.EChartsOption>(() => {
     };
   }
 
-  const servicesBytes = mem.servicesBytes || 0;
+  const servicesBytes = mem.servicesBytes || Math.max(0, (mem.usedBytes || 0) - (mem.zfsArcBytes || 0));
   const zfsArcBytes = mem.zfsArcBytes || 0;
   const buffersAndCache = Math.max(0, (mem.buffersBytes || 0) + (mem.cachedBytes || 0) - zfsArcBytes);
   const freeBytes = mem.freeBytes || 0;

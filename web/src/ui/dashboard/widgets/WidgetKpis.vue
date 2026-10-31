@@ -142,7 +142,7 @@ function getTempClass(temp: number): string {
         ></div>
       </div>
       <p class="card-subtitle" style="margin-top: 6px; margin-bottom: 0">
-        Services: {{ formatBytes(telemetry?.memory?.servicesBytes || 0) }} · ARC: {{ formatBytes(telemetry?.memory?.zfsArcBytes || 0) }} · Free: {{ formatBytes(telemetry?.memory?.freeBytes || 0) }}
+        Services: {{ formatBytes(telemetry?.memory?.servicesBytes || ((telemetry?.memory?.usedBytes || 0) - (telemetry?.memory?.zfsArcBytes || 0))) }} · ARC: {{ formatBytes(telemetry?.memory?.zfsArcBytes || 0) }} · Free: {{ formatBytes(telemetry?.memory?.freeBytes || 0) }}
       </p>
     </div>
 

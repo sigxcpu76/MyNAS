@@ -843,17 +843,20 @@ export const ResourceNames = {
 // Domain Helpers: Byte Size Formatting & Validation Rules
 // ---------------------------------------------------------------------------
 
-export function formatBytes(bytes: number, decimals = 1): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+export function formatBytes(bytes: number | string | null | undefined, decimals = 1): string {
+  const num = typeof bytes === 'number' ? bytes : Number(bytes);
+  if (!Number.isFinite(num) || num <= 0) return '0 B';
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
   const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+  const i = Math.min(Math.floor(Math.log(num) / Math.log(k)), sizes.length - 1);
+  return `${parseFloat((num / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 }
 
-export function gibToBytes(gib: number): number {
-  return Math.round(gib * 1024 * 1024 * 1024);
+export function gibToBytes(gib: number | string | null | undefined): number {
+  const num = typeof gib === 'number' ? gib : Number(gib);
+  if (!Number.isFinite(num) || num <= 0) return 0;
+  return Math.round(num * 1024 * 1024 * 1024);
 }
 
 const relativeTimeFormat = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
@@ -889,16 +892,18 @@ export function formatAbsoluteTime(value: string | number | Date | null | undefi
   return Number.isFinite(d.getTime()) ? d.toLocaleString() : '';
 }
 
-export function bytesToGib(bytes: number, decimals = 1): number {
-  if (!bytes || bytes <= 0) return 0;
-  return parseFloat((bytes / (1024 * 1024 * 1024)).toFixed(decimals));
+export function bytesToGib(bytes: number | string | null | undefined, decimals = 1): number {
+  const num = typeof bytes === 'number' ? bytes : Number(bytes);
+  if (!num || num <= 0 || !Number.isFinite(num)) return 0;
+  return parseFloat((num / (1024 * 1024 * 1024)).toFixed(decimals));
 }
 
-export function formatUptime(totalSeconds: number): string {
-  if (!totalSeconds || totalSeconds <= 0) return '0m';
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
+export function formatUptime(totalSeconds: number | string | null | undefined): string {
+  const num = typeof totalSeconds === 'number' ? totalSeconds : Number(totalSeconds);
+  if (!num || num <= 0 || !Number.isFinite(num)) return '0m';
+  const days = Math.floor(num / 86400);
+  const hours = Math.floor((num % 86400) / 3600);
+  const minutes = Math.floor((num % 3600) / 60);
 
   const parts: string[] = [];
   if (days > 0) parts.push(`${days}d`);
