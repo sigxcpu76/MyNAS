@@ -461,3 +461,52 @@ func TestLiveLibvirtDomainLifecycle_OptInOnly(t *testing.T) {
 		t.Errorf("StopVM failed: state=%v, err=%v", stopped, err)
 	}
 }
+
+func TestParseDomstatsOutput(t *testing.T) {
+	rawOutput := `Domain: 'debian-server'
+  cpu.time=10531595765000
+  cpu.user=8022844783000
+  cpu.system=2508750982000
+  balloon.current=4194304
+  balloon.maximum=4194304
+  balloon.rss=1399788
+
+Domain: 'windows-10'
+  cpu.time=105650000000
+  cpu.user=64890000000
+  cpu.system=40760000000
+  balloon.current=16777216
+  balloon.maximum=16777216
+`
+	stats := parseDomstatsOutput(rawOutput)
+	if len(stats) != 2 {
+		t.Fatalf("expected 2 domains parsed, got %d", len(stats))
+	}
+
+	deb, ok := stats["debian-server"]
+	if !ok {
+		t.Fatalf("expected debian-server in parsed stats")
+	}
+	if !deb.hasCPU || deb.cpuNs != 10531595765000 {
+		t.Errorf("expected cpu.time=10531595765000, got %d (hasCPU=%v)", deb.cpuNs, deb.hasCPU)
+	}
+	if !deb.hasRSS || deb.rssKiB != 1399788 {
+		t.Errorf("expected balloon.rss=1399788, got %d (hasRSS=%v)", deb.rssKiB, deb.hasRSS)
+	}
+	expectedMemMiB := int64(1399788 / 1024)
+	if int64(deb.rssKiB/1024) != expectedMemMiB {
+		t.Errorf("expected memMiB %d, got %d", expectedMemMiB, deb.rssKiB/1024)
+	}
+
+	win, ok := stats["windows-10"]
+	if !ok {
+		t.Fatalf("expected windows-10 in parsed stats")
+	}
+	if !win.hasCPU || win.cpuNs != 105650000000 {
+		t.Errorf("expected windows-10 cpu.time=105650000000, got %d", win.cpuNs)
+	}
+	if win.hasRSS {
+		t.Errorf("windows-10 has no balloon.rss, expected hasRSS=false")
+	}
+}
+

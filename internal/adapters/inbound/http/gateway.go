@@ -443,9 +443,27 @@ func (g *Gateway) handleDockerTerminalWebSocket(ws *websocket.Conn) {
 	req := ws.Request()
 	containerID := strings.TrimPrefix(req.URL.Path, "/ws/docker/terminal/")
 	containerID = strings.Trim(containerID, "/")
-	if err := domain.ValidateResourceID(containerID, "container"); err != nil {
-		_, _ = ws.Write([]byte(err.Error() + "\r\n"))
+
+	if g.dockerService == nil {
+		_, _ = ws.Write([]byte("Docker service unavailable\r\n"))
 		return
+	}
+
+	if err := domain.ValidateResourceID(containerID, "container"); err != nil {
+		resolved := false
+		if list, lErr := g.dockerService.ListContainers(req.Context()); lErr == nil {
+			for _, c := range list {
+				if strings.EqualFold(c.ContainerName, containerID) || strings.EqualFold(c.ID, containerID) {
+					containerID = c.ID
+					resolved = true
+					break
+				}
+			}
+		}
+		if !resolved {
+			_, _ = ws.Write([]byte(err.Error() + "\r\n"))
+			return
+		}
 	}
 
 	shell := req.URL.Query().Get("shell")
@@ -458,11 +476,6 @@ func (g *Gateway) handleDockerTerminalWebSocket(ws *websocket.Conn) {
 	}
 
 	ws.PayloadType = websocket.BinaryFrame
-
-	if g.dockerService == nil {
-		_, _ = ws.Write([]byte("Docker service unavailable\r\n"))
-		return
-	}
 
 	conn, execID, err := g.dockerService.ExecAttach(req.Context(), containerID, []string{shell})
 	if err != nil {
@@ -513,9 +526,38 @@ func (g *Gateway) handleLxcTerminalWebSocket(ws *websocket.Conn) {
 	req := ws.Request()
 	containerID := strings.TrimPrefix(req.URL.Path, "/ws/lxc/terminal/")
 	containerID = strings.Trim(containerID, "/")
-	if err := domain.ValidateResourceID(containerID, "container"); err != nil {
-		_, _ = ws.Write([]byte(err.Error() + "\r\n"))
+
+	if g.lxcService == nil {
+		_, _ = ws.Write([]byte("LXC service unavailable\r\n"))
 		return
+	}
+
+	// Resolve container ID if human/display title or spaces were passed
+	if err := domain.ValidateResourceID(containerID, "container"); err != nil {
+		resolved := false
+		if list, lErr := g.lxcService.ListContainers(req.Context()); lErr == nil {
+			for _, c := range list {
+				if strings.EqualFold(c.ContainerName, containerID) || strings.EqualFold(c.ID, containerID) {
+					containerID = c.ID
+					resolved = true
+					break
+				}
+			}
+		}
+		if !resolved {
+			_, _ = ws.Write([]byte(err.Error() + "\r\n"))
+			return
+		}
+	} else {
+		// Even if valid ID syntax, if it matches a ContainerName, resolve to technical ID
+		if list, lErr := g.lxcService.ListContainers(req.Context()); lErr == nil {
+			for _, c := range list {
+				if strings.EqualFold(c.ContainerName, containerID) {
+					containerID = c.ID
+					break
+				}
+			}
+		}
 	}
 
 	shell := req.URL.Query().Get("shell")
@@ -528,11 +570,6 @@ func (g *Gateway) handleLxcTerminalWebSocket(ws *websocket.Conn) {
 	}
 
 	ws.PayloadType = websocket.BinaryFrame
-
-	if g.lxcService == nil {
-		_, _ = ws.Write([]byte("LXC service unavailable\r\n"))
-		return
-	}
 
 	conn, execID, err := g.lxcService.ExecAttach(req.Context(), containerID, []string{shell})
 	if err != nil {

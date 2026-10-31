@@ -1,16 +1,20 @@
 package lxc
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -52,21 +56,249 @@ func (c *ptyConn) SetDeadline(t time.Time) error      { return nil }
 func (c *ptyConn) SetReadDeadline(t time.Time) error  { return nil }
 func (c *ptyConn) SetWriteDeadline(t time.Time) error { return nil }
 
+type lxcMetricsSample struct {
+	cpuUsec    uint64
+	sampleTime time.Time
+	cpuPercent float64
+	memUsedMiB int64
+	cachedAt   time.Time
+}
+
 type Adapter struct {
-	mu         sync.RWMutex
-	mainPool   string
-	zfsPort    ports.ZfsEnginePort
-	containers map[string]domain.LxcContainer
-	execPTYs   map[string]*os.File
-	httpClient *http.Client
+	mu              sync.RWMutex
+	mainPool        string
+	zfsPort         ports.ZfsEnginePort
+	containers      map[string]domain.LxcContainer
+	execPTYs        map[string]*os.File
+	httpClient      *http.Client
+	cgroupRoot      string
+	cgroupPathCache map[string]string
+	metricsCache    map[string]lxcMetricsSample
+	metricsMu       sync.Mutex
 }
 
 func NewAdapter() *Adapter {
 	return &Adapter{
-		containers: make(map[string]domain.LxcContainer),
-		execPTYs:   make(map[string]*os.File),
-		httpClient: &http.Client{Timeout: 30 * time.Minute},
+		containers:      make(map[string]domain.LxcContainer),
+		execPTYs:        make(map[string]*os.File),
+		httpClient:      &http.Client{Timeout: 30 * time.Minute},
+		cgroupRoot:      "/sys/fs/cgroup",
+		cgroupPathCache: make(map[string]string),
+		metricsCache:    make(map[string]lxcMetricsSample),
 	}
+}
+
+// SetCgroupRoot allows overriding cgroup base directory (primarily for testing).
+func (a *Adapter) SetCgroupRoot(root string) {
+	a.metricsMu.Lock()
+	defer a.metricsMu.Unlock()
+	a.cgroupRoot = root
+}
+
+func (a *Adapter) findCgroupDir(id string) string {
+	a.metricsMu.Lock()
+	if cachedDir, ok := a.cgroupPathCache[id]; ok {
+		if fi, err := os.Stat(cachedDir); err == nil && fi.IsDir() {
+			a.metricsMu.Unlock()
+			return cachedDir
+		}
+		delete(a.cgroupPathCache, id)
+	}
+	root := a.cgroupRoot
+	if root == "" {
+		root = "/sys/fs/cgroup"
+	}
+	a.metricsMu.Unlock()
+
+	candidates := []string{
+		filepath.Join(root, "lxc.payload."+id),
+		filepath.Join(root, "lxc.payload", id),
+		filepath.Join(root, "lxc", id),
+		filepath.Join(root, "system.slice", "lxc@"+id+".service"),
+	}
+	for _, cand := range candidates {
+		if fi, err := os.Stat(cand); err == nil && fi.IsDir() {
+			a.metricsMu.Lock()
+			a.cgroupPathCache[id] = cand
+			a.metricsMu.Unlock()
+			return cand
+		}
+	}
+
+	// Fallback: discover via container init PID if lxc-info is available
+	if _, err := exec.LookPath("lxc-info"); err == nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "lxc-info", "-n", id, "-p", "-H")
+		if out, err := cmd.Output(); err == nil {
+			pidStr := strings.TrimSpace(string(out))
+			if pid, err := strconv.Atoi(pidStr); err == nil && pid > 0 {
+				if cgData, err := os.ReadFile(fmt.Sprintf("/proc/%d/cgroup", pid)); err == nil {
+					for _, line := range strings.Split(string(cgData), "\n") {
+						line = strings.TrimSpace(line)
+						if strings.HasPrefix(line, "0::") {
+							relPath := strings.TrimPrefix(line, "0::")
+							fullPath := filepath.Join(root, strings.TrimPrefix(relPath, "/"))
+							if fi, err := os.Stat(fullPath); err == nil && fi.IsDir() {
+								a.metricsMu.Lock()
+								a.cgroupPathCache[id] = fullPath
+								a.metricsMu.Unlock()
+								return fullPath
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return ""
+}
+
+func readCgroupMetrics(cgDir string) (cpuUsec uint64, memBytes int64, err error) {
+	// 1. Memory Usage
+	// Cgroup v2: memory.current
+	memFile := filepath.Join(cgDir, "memory.current")
+	if data, readErr := os.ReadFile(memFile); readErr == nil {
+		if v, parseErr := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64); parseErr == nil {
+			memBytes = v
+		}
+	} else {
+		// Cgroup v1 fallback: memory.usage_in_bytes
+		memV1File := filepath.Join(cgDir, "memory.usage_in_bytes")
+		if data, readErr := os.ReadFile(memV1File); readErr == nil {
+			if v, parseErr := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64); parseErr == nil {
+				memBytes = v
+			}
+		}
+	}
+
+	// 2. CPU Usage
+	// Cgroup v2: cpu.stat -> usage_usec <int>
+	cpuStatFile := filepath.Join(cgDir, "cpu.stat")
+	if data, readErr := os.ReadFile(cpuStatFile); readErr == nil {
+		scanner := bufio.NewScanner(bytes.NewReader(data))
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if strings.HasPrefix(line, "usage_usec") {
+				fields := strings.Fields(line)
+				if len(fields) >= 2 {
+					if u, parseErr := strconv.ParseUint(fields[1], 10, 64); parseErr == nil {
+						cpuUsec = u
+						break
+					}
+				}
+			}
+		}
+	} else {
+		// Cgroup v1 fallback: cpuacct.usage (nanoseconds)
+		cpuV1File := filepath.Join(cgDir, "cpuacct.usage")
+		if data, readErr := os.ReadFile(cpuV1File); readErr == nil {
+			if ns, parseErr := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); parseErr == nil {
+				cpuUsec = ns / 1000
+			}
+		}
+	}
+
+	return cpuUsec, memBytes, nil
+}
+
+func (a *Adapter) sampleContainerMetrics(id string) (float64, int64) {
+	now := time.Now()
+	a.metricsMu.Lock()
+	cached, hasCache := a.metricsCache[id]
+	if hasCache && now.Sub(cached.sampleTime) < 150*time.Millisecond {
+		cpuPct := cached.cpuPercent
+		memMiB := cached.memUsedMiB
+		a.metricsMu.Unlock()
+		return cpuPct, memMiB
+	}
+	a.metricsMu.Unlock()
+
+	cgDir := a.findCgroupDir(id)
+	if cgDir == "" {
+		if hasCache {
+			return cached.cpuPercent, cached.memUsedMiB
+		}
+		return 0, 0
+	}
+
+	currUsec, memBytes, err := readCgroupMetrics(cgDir)
+	if err != nil {
+		if hasCache {
+			return cached.cpuPercent, cached.memUsedMiB
+		}
+		return 0, 0
+	}
+
+	memMiB := memBytes / (1024 * 1024)
+
+	a.metricsMu.Lock()
+	defer a.metricsMu.Unlock()
+
+	cached, hasCache = a.metricsCache[id]
+	if hasCache && !cached.sampleTime.IsZero() {
+		dt := now.Sub(cached.sampleTime)
+		if dt >= 150*time.Millisecond {
+			cpuPct := 0.0
+			if currUsec >= cached.cpuUsec {
+				deltaUsec := currUsec - cached.cpuUsec
+				cpuPct = (float64(deltaUsec) / float64(dt.Microseconds())) * 100.0
+				cpuPct = math.Round(cpuPct*10) / 10
+			}
+			a.metricsCache[id] = lxcMetricsSample{
+				cpuUsec:    currUsec,
+				sampleTime: now,
+				cpuPercent: cpuPct,
+				memUsedMiB: memMiB,
+				cachedAt:   now,
+			}
+			return cpuPct, memMiB
+		}
+		// If interval too short, update memory and keep previous cpuPercent
+		a.metricsCache[id] = lxcMetricsSample{
+			cpuUsec:    cached.cpuUsec,
+			sampleTime: cached.sampleTime,
+			cpuPercent: cached.cpuPercent,
+			memUsedMiB: memMiB,
+			cachedAt:   now,
+		}
+		return cached.cpuPercent, memMiB
+	}
+
+	// Cold start: record baseline sample and warm up in background
+	a.metricsCache[id] = lxcMetricsSample{
+		cpuUsec:    currUsec,
+		sampleTime: now,
+		cpuPercent: 0,
+		memUsedMiB: memMiB,
+		cachedAt:   now,
+	}
+
+	go func(ctId, dir string, baseUsec uint64, baseTime time.Time) {
+		time.Sleep(200 * time.Millisecond)
+		u, m, err := readCgroupMetrics(dir)
+		if err != nil {
+			return
+		}
+		t2 := time.Now()
+		dt := t2.Sub(baseTime)
+		if dt > 0 && u >= baseUsec {
+			pct := (float64(u-baseUsec) / float64(dt.Microseconds())) * 100.0
+			pct = math.Round(pct*10) / 10
+			a.metricsMu.Lock()
+			a.metricsCache[ctId] = lxcMetricsSample{
+				cpuUsec:    u,
+				sampleTime: t2,
+				cpuPercent: pct,
+				memUsedMiB: m / (1024 * 1024),
+				cachedAt:   t2,
+			}
+			a.metricsMu.Unlock()
+		}
+	}(id, cgDir, currUsec, now)
+
+	return 0, memMiB
 }
 
 func (a *Adapter) SetZfsPort(zfsPort ports.ZfsEnginePort) {
@@ -305,6 +537,12 @@ func (a *Adapter) ListContainers(ctx context.Context) ([]domain.LxcContainer, er
 
 	out := make([]domain.LxcContainer, 0, len(a.containers))
 	for _, c := range a.containers {
+		if c.State == "RUNNING" {
+			c.CPUPercent, c.MemoryUsedMiB = a.sampleContainerMetrics(c.ID)
+		} else {
+			c.CPUPercent = 0
+			c.MemoryUsedMiB = 0
+		}
 		out = append(out, c)
 	}
 	return out, nil
@@ -329,6 +567,13 @@ func (a *Adapter) GetContainer(ctx context.Context, id string) (*domain.LxcConta
 		c.IPv4Address = st.ipv4
 		a.containers[id] = c
 		a.mu.Unlock()
+	}
+
+	if c.State == "RUNNING" {
+		c.CPUPercent, c.MemoryUsedMiB = a.sampleContainerMetrics(c.ID)
+	} else {
+		c.CPUPercent = 0
+		c.MemoryUsedMiB = 0
 	}
 
 	cp := c
@@ -1048,6 +1293,11 @@ func (a *Adapter) DeleteContainer(ctx context.Context, id string, force bool) er
 		_ = exec.CommandContext(ctx, "lxc-destroy", "-n", id, "-f").Run()
 	}
 
+	a.metricsMu.Lock()
+	delete(a.metricsCache, id)
+	delete(a.cgroupPathCache, id)
+	a.metricsMu.Unlock()
+
 	// Clean up config and log files
 	_ = os.RemoveAll(fmt.Sprintf("/var/lib/lxc/%s", id))
 	_ = os.Remove(fmt.Sprintf("/var/log/lxc/%s.log", id))
@@ -1205,6 +1455,13 @@ func (a *Adapter) StopContainer(ctx context.Context, id string) (*domain.LxcCont
 	}
 	c.State = "STOPPED"
 	c.IPv4Address = ""
+	c.CPUPercent = 0
+	c.MemoryUsedMiB = 0
+
+	a.metricsMu.Lock()
+	delete(a.metricsCache, id)
+	delete(a.cgroupPathCache, id)
+	a.metricsMu.Unlock()
 
 	a.mu.Lock()
 	a.containers[id] = c

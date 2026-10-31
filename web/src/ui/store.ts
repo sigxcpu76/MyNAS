@@ -71,8 +71,23 @@ export interface ModuleStatus {
 
 export interface ToastNotification {
   id: number;
-  type: 'success' | 'error' | 'info';
+  type: 'success' | 'error' | 'info' | 'warning';
   message: string;
+}
+
+export interface TaskRecord {
+  id: string;
+  startTime: string;
+  endTime?: string;
+  startTimestamp: number;
+  endTimestamp?: number;
+  node: string;
+  user: string;
+  description: string;
+  status: 'RUNNING' | 'OK' | 'ERROR';
+  duration?: string;
+  details?: string;
+  logs: string[];
 }
 
 export interface TrafficPoint {
@@ -95,6 +110,31 @@ interface LocalCachePayload {
 
 const STORAGE_CACHE_KEY = 'nan_cache_v1';
 const LEGACY_CACHE_KEY = 'aegis_nas_cache_v1';
+export const STORAGE_RESOURCE_KEY = 'nan_last_active_resource';
+export const STORAGE_TASK_COLLAPSED_KEY = 'nan_task_console_collapsed';
+
+function loadSavedResource(): string {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return window.localStorage.getItem(STORAGE_RESOURCE_KEY) || 'node:local';
+    }
+  } catch {
+    // ignore
+  }
+  return 'node:local';
+}
+
+function loadTaskConsoleCollapsed(): boolean {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const v = window.localStorage.getItem(STORAGE_TASK_COLLAPSED_KEY);
+      if (v !== null) return v === 'true';
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
 
 function loadLocalCache(): LocalCachePayload | null {
   try {
@@ -131,6 +171,27 @@ const cached = loadLocalCache();
 
 export const nasState = reactive({
   activeTab: 'overview' as NavTab,
+  selectedResourceId: loadSavedResource() as string,
+  isTaskConsoleCollapsed: loadTaskConsoleCollapsed() as boolean,
+  activeTaskDetail: null as TaskRecord | null,
+  tasks: [
+    {
+      id: 'task-init',
+      startTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      startTimestamp: Date.now(),
+      node: 'nas01',
+      user: 'system',
+      description: 'System: Initialized Proxmox-Style Hypervisor & Storage Workbench',
+      status: 'OK',
+      duration: '0.1s',
+      details: 'Appliance session established',
+      logs: [
+        `[${new Date().toLocaleTimeString()}] [INFO] Proxmox-style appliance shell initialized`,
+        `[${new Date().toLocaleTimeString()}] [INFO] Connected to NAS API backend`,
+        `[${new Date().toLocaleTimeString()}] [OK] Resource tree & audit console ready`,
+      ],
+    },
+  ] as TaskRecord[],
   authenticated: services.auth.isAuthenticated(),
   currentUser: null as User | null,
   loading: false,
@@ -214,13 +275,123 @@ export function getModuleAvailability(module: ManagedModule): ModuleStatus {
   };
 }
 
-export function notify(type: 'success' | 'error' | 'info', message: string): void {
+export function notify(type: 'success' | 'error' | 'info' | 'warning', message: string): void {
   const id = nextToastId++;
   nasState.toasts.push({ id, type, message });
   setTimeout(() => {
     const idx = nasState.toasts.findIndex((t) => t.id === id);
     if (idx !== -1) nasState.toasts.splice(idx, 1);
   }, 4200);
+}
+
+let nextTaskIdCounter = 1;
+
+export function selectResource(resourceId: string): void {
+  nasState.selectedResourceId = resourceId;
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(STORAGE_RESOURCE_KEY, resourceId);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function setTaskConsoleCollapsed(collapsed: boolean): void {
+  nasState.isTaskConsoleCollapsed = collapsed;
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(STORAGE_TASK_COLLAPSED_KEY, String(collapsed));
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function formatDurationMs(ms: number): string {
+  if (ms < 1000) return `${Math.max(1, Math.round(ms))}ms`;
+  const secs = ms / 1000;
+  if (secs < 60) return `${secs.toFixed(1)}s`;
+  const mins = Math.floor(secs / 60);
+  const remSecs = Math.round(secs % 60);
+  return `${mins}m ${remSecs}s`;
+}
+
+export function startTask(
+  description: string,
+  details = '',
+  node = nasState.systemTelemetry?.host?.hostname || 'nas01',
+  user = nasState.currentUser?.username || 'root'
+): TaskRecord {
+  const id = `task-${Date.now()}-${nextTaskIdCounter++}`;
+  const now = Date.now();
+  const timeStr = new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const task: TaskRecord = {
+    id,
+    startTime: timeStr,
+    startTimestamp: now,
+    node,
+    user,
+    description,
+    status: 'RUNNING',
+    details,
+    logs: [
+      `[${timeStr}] [INFO] Task initiated on node "${node}" by "${user}"`,
+      `[${timeStr}] [INFO] Action: ${description}`,
+    ],
+  };
+  if (details) {
+    task.logs.push(`[${timeStr}] [INFO] Parameters: ${details}`);
+  }
+  nasState.tasks.unshift(task);
+  if (nasState.tasks.length > 100) {
+    nasState.tasks.pop();
+  }
+  return task;
+}
+
+export function appendTaskLog(taskId: string, message: string): void {
+  const t = nasState.tasks.find((task) => task.id === taskId);
+  if (!t) return;
+  const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  t.logs.push(`[${timeStr}] ${message}`);
+}
+
+export function finishTask(taskId: string, status: 'OK' | 'ERROR', message?: string): void {
+  const t = nasState.tasks.find((task) => task.id === taskId);
+  if (!t) return;
+  const now = Date.now();
+  t.endTimestamp = now;
+  t.endTime = new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  t.status = status;
+  t.duration = formatDurationMs(now - t.startTimestamp);
+  if (message) {
+    appendTaskLog(taskId, `[${status}] ${message}`);
+  }
+  appendTaskLog(taskId, `[INFO] Task finished with status: ${status} (duration: ${t.duration})`);
+}
+
+export function clearTasks(): void {
+  nasState.tasks = nasState.tasks.filter((t) => t.status === 'RUNNING');
+}
+
+export async function runTrackedTask<T>(
+  description: string,
+  fn: (taskId: string) => Promise<T>,
+  details = '',
+  node = nasState.systemTelemetry?.host?.hostname || 'nas01',
+  user = nasState.currentUser?.username || 'root'
+): Promise<T> {
+  const task = startTask(description, details, node, user);
+  try {
+    const res = await fn(task.id);
+    finishTask(task.id, 'OK', 'Command finished successfully');
+    return res;
+  } catch (err: any) {
+    const errMsg = err?.message || String(err);
+    finishTask(task.id, 'ERROR', `Error: ${errMsg}`);
+    throw err;
+  }
 }
 
 export async function refreshIsos(): Promise<void> {

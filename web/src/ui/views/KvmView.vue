@@ -15,7 +15,7 @@ import {
   type VirtualMachineSnapshot,
   type VirtualMachineCdrom,
 } from '../../domain/models';
-import { askModal, confirmModal, nasState, notify, refreshIsos as storeRefreshIsos } from '../store';
+import { askModal, confirmModal, nasState, notify, refreshIsos as storeRefreshIsos, selectResource } from '../store';
 import { confirmDelete } from '../modal';
 import NoVncModal from '../components/NoVncModal.vue';
 import MdiIcon from '../components/MdiIcon.vue';
@@ -63,6 +63,11 @@ const inspectingVm = ref<VirtualMachine | null>(null);
 const inspectorTab = ref<'summary' | 'hardware' | 'cloudinit' | 'snapshots'>('summary');
 const cloningVm = ref<VirtualMachine | null>(null);
 const showCreateWizard = ref(false);
+
+function openVmDetail(vm: VirtualMachine) {
+  const clean = vm.vmName || vm.name.replace(/^virtualMachines\//, '');
+  selectResource(`vm:${clean}`);
+}
 
 // =============================================================================
 // Top Navigation Subtabs
@@ -334,8 +339,9 @@ function visibleGuestIps(vm: { guestIpAddresses?: string[] }): string[] {
 
 const vmSort = useTableSort(filteredVms, {
   name: (vm) => vm.vmName,
-  vcpus: (vm) => vm.vcpus,
-  memory: (vm) => vm.memoryMib,
+  cpu: (vm) => vm.guestCpuPercent ?? 0,
+  vcpus: (vm) => vm.guestCpuPercent ?? 0,
+  memory: (vm) => vm.guestMemoryUsedMib ?? 0,
   ip: (vm) => visibleGuestIps(vm)[0],
   autostart: (vm) => (vm.autostart ? 1 : 0),
 });
@@ -355,8 +361,12 @@ const snapshotSort = useTableSort(snapshotsList, {
 });
 
 const runningCount = computed(() => nasState.vms.filter((v) => v.state === 'RUNNING').length);
-const totalVcpus = computed(() => nasState.vms.reduce((acc, v) => acc + (v.vcpus || 0), 0));
-const totalMemoryMib = computed(() => nasState.vms.reduce((acc, v) => acc + (v.memoryMib || 0), 0));
+const totalCpuUsage = computed(() =>
+  nasState.vms.filter((v) => v.state === 'RUNNING').reduce((acc, v) => acc + (v.guestCpuPercent || 0), 0)
+);
+const totalRealMemoryBytes = computed(() =>
+  nasState.vms.filter((v) => v.state === 'RUNNING').reduce((acc, v) => acc + ((v.guestMemoryUsedMib || 0) * 1024 * 1024), 0)
+);
 
 const availableZvols = computed(() => {
   const list: string[] = [];
@@ -1798,21 +1808,21 @@ async function handleWizardSubmit() {
 
       <div class="card">
         <div class="card-header" style="margin-bottom: 6px">
-          <span class="card-subtitle">vCPU Allocation</span>
+          <span class="card-subtitle">CPU Usage</span>
           <MdiIcon :path="mdiSpeedometer" size="18" style="color: var(--accent-primary)" />
         </div>
         <div style="font-size: 24px; font-weight: 700; color: var(--text-primary)">
-          {{ totalVcpus }}
+          {{ totalCpuUsage.toFixed(1) }}%
         </div>
       </div>
 
       <div class="card">
         <div class="card-header" style="margin-bottom: 6px">
-          <span class="card-subtitle">RAM Allocated</span>
+          <span class="card-subtitle">Memory Usage</span>
           <MdiIcon :path="mdiServer" size="18" style="color: var(--accent-primary)" />
         </div>
         <div style="font-size: 24px; font-weight: 700; color: var(--text-primary)">
-          {{ formatBytes(totalMemoryMib * 1024 * 1024) }}
+          {{ formatBytes(totalRealMemoryBytes) }}
         </div>
       </div>
     </div>
@@ -1841,8 +1851,8 @@ async function handleWizardSubmit() {
           <thead>
             <tr>
               <SortableTh :sort="vmSort" sort-key="name">Name</SortableTh>
-              <SortableTh :sort="vmSort" sort-key="vcpus" class="col-desktop-only">vCPUs</SortableTh>
-              <SortableTh :sort="vmSort" sort-key="memory">Memory</SortableTh>
+              <SortableTh :sort="vmSort" sort-key="cpu" class="col-desktop-only">CPU Usage</SortableTh>
+              <SortableTh :sort="vmSort" sort-key="memory">Memory Usage</SortableTh>
               <SortableTh :sort="vmSort" sort-key="ip" class="col-desktop-only">IP Addresses</SortableTh>
               <SortableTh :sort="vmSort" sort-key="autostart" class="col-desktop-only" style="width: 100px; min-width: 100px">Autostart</SortableTh>
               <th style="text-align: right">Actions</th>
@@ -1887,7 +1897,7 @@ async function handleWizardSubmit() {
             >
               <!-- Name (row tint conveys power state) -->
               <td>
-                <div class="font-semibold" style="color: var(--text-primary); cursor: pointer" @click="openInspector(vm)">
+                <div class="font-semibold" style="color: var(--text-primary); cursor: pointer" title="Open VM Details" @click="openVmDetail(vm)">
                   {{ vm.vmName }}
                   <span v-if="vm.isTemplate" class="badge badge-warning" style="font-size: 9px; margin-left: 4px">TEMPLATE</span>
                   <span
@@ -1915,12 +1925,20 @@ async function handleWizardSubmit() {
                 </div>
               </td>
 
-              <!-- vCPUs (total threads) -->
-              <td class="mono col-desktop-only" style="font-size: 12px">{{ vm.vcpus }}</td>
+              <!-- CPU Usage -->
+              <td class="mono col-desktop-only" style="font-size: 12px">
+                <span v-if="vm.state === 'RUNNING'" :style="{ color: (vm.guestCpuPercent || 0) > 85 ? 'var(--danger-text)' : 'var(--text-primary)' }">
+                  {{ (vm.guestCpuPercent || 0).toFixed(1) }}%
+                </span>
+                <span v-else style="color: var(--text-muted)">—</span>
+              </td>
 
-              <!-- Memory -->
+              <!-- Memory Usage -->
               <td class="mono" style="font-size: 12px; white-space: nowrap">
-                {{ formatBytes(vm.memoryMib * 1024 * 1024) }}
+                <span v-if="vm.state === 'RUNNING'" style="color: var(--text-primary)">
+                  {{ vm.guestMemoryUsedMib ? formatBytes(vm.guestMemoryUsedMib * 1024 * 1024) : '0 MiB' }}
+                </span>
+                <span v-else style="color: var(--text-muted)">—</span>
               </td>
 
               <!-- IP Addresses -->
@@ -2047,6 +2065,15 @@ async function handleWizardSubmit() {
                     @click="handleOpenConsole(vm)"
                   >
                     <MdiIcon :path="mdiConsole" size="13" />
+                  </button>
+
+                  <!-- Details View -->
+                  <button
+                    class="btn btn-xs btn-secondary"
+                    title="Open Dedicated VM Detail View"
+                    @click="openVmDetail(vm)"
+                  >
+                    <MdiIcon :path="mdiInformationOutline" size="13" />
                   </button>
 
                   <!-- Clone -->
@@ -2364,25 +2391,16 @@ async function handleWizardSubmit() {
             <!-- Telemetry Gauges -->
             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px">
               <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px">
-                <div class="card-subtitle">CPU Usage</div>
+                <div class="card-subtitle">Real CPU Usage</div>
                 <div style="font-size: 22px; font-weight: 700; color: var(--text-primary); margin-top: 4px">
-                  {{ inspectingVm.guestCpuPercent ? inspectingVm.guestCpuPercent.toFixed(1) + '%' : '-' }}
-                </div>
-                <div class="text-muted" style="font-size: 11px; margin-top: 4px">
-                  Allocated: {{ inspectingVm.vcpus }} vCPU ({{ inspectingVm.cpuType || 'host' }})
+                  {{ inspectingVm.state === 'RUNNING' ? ((inspectingVm.guestCpuPercent || 0).toFixed(1) + '%') : '—' }}
                 </div>
               </div>
 
               <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px">
-                <div class="card-subtitle">Memory Usage</div>
+                <div class="card-subtitle">Real Memory Usage</div>
                 <div style="font-size: 22px; font-weight: 700; color: var(--text-primary); margin-top: 4px">
-                  {{ inspectingVm.guestMemoryUsedMib ? formatBytes(inspectingVm.guestMemoryUsedMib * 1024 * 1024) : '-' }}
-                  <span style="font-size: 13px; color: var(--text-secondary); font-weight: normal">
-                    / {{ formatBytes(inspectingVm.memoryMib * 1024 * 1024) }}
-                  </span>
-                </div>
-                <div class="text-muted" style="font-size: 11px; margin-top: 4px">
-                  Fixed Dedicated Memory
+                  {{ inspectingVm.state === 'RUNNING' && inspectingVm.guestMemoryUsedMib ? formatBytes(inspectingVm.guestMemoryUsedMib * 1024 * 1024) : (inspectingVm.state === 'RUNNING' ? '0 MiB' : '—') }}
                 </div>
               </div>
 
