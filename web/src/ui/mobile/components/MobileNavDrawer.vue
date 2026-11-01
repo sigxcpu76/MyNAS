@@ -17,12 +17,14 @@ import {
   mdiConsole,
   mdiLogout,
   mdiLaptop,
+  mdiCellphoneArrowDown,
 } from '@mdi/js';
 import MdiIcon from '../../components/MdiIcon.vue';
 import NanLogo from '../../components/NanLogo.vue';
 import { nasState } from '../../store';
 import { navigateTo } from '../../router';
 import { useDevice } from '../../composables/useDevice';
+import { usePwaInstall } from '../../composables/usePwaInstall';
 import ThemeSelector from '../../components/ThemeSelector.vue';
 import FontSizeSelector from '../../components/FontSizeSelector.vue';
 
@@ -39,6 +41,7 @@ const emit = defineEmits<{
 }>();
 
 const { setViewMode } = useDevice();
+const { isStandalone, promptInstall } = usePwaInstall();
 
 function close() {
   emit('update:modelValue', false);
@@ -70,6 +73,16 @@ function handleSwitchToDesktop() {
 
           <!-- Drawer Navigation Items -->
           <div class="drawer-content">
+            <!-- PWA Install Banner -->
+            <div v-if="!isStandalone" class="pwa-drawer-tile" @click="close(); promptInstall()">
+              <div class="pwa-drawer-icon">
+                <MdiIcon :path="mdiCellphoneArrowDown" size="18" />
+              </div>
+              <div class="pwa-drawer-text">
+                <span class="pwa-drawer-title">Install NaN App</span>
+                <span class="pwa-drawer-sub">Add to Home Screen</span>
+              </div>
+            </div>
             <div class="nav-section-title">Core Management</div>
             <div class="nav-links-list">
               <button class="nav-link-btn" @click="nav('overview')">
@@ -203,6 +216,51 @@ function handleSwitchToDesktop() {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.pwa-drawer-tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.15) 0%, rgba(129, 140, 248, 0.15) 100%);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.1s ease;
+}
+
+.pwa-drawer-tile:active {
+  transform: scale(0.98);
+}
+
+.pwa-drawer-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.2);
+  color: var(--accent-primary, #38bdf8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pwa-drawer-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.pwa-drawer-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary, #f8fafc);
+}
+
+.pwa-drawer-sub {
+  font-size: 11px;
+  color: var(--accent-primary, #38bdf8);
 }
 
 .nav-section-title {

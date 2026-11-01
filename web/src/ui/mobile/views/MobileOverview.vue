@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import {
   mdiCpu64Bit,
   mdiMemory,
@@ -12,15 +12,21 @@ import {
   mdiConsole,
   mdiArrowRight,
   mdiThermometer,
+  mdiCellphoneArrowDown,
+  mdiClose,
 } from '@mdi/js';
 import MdiIcon from '../../components/MdiIcon.vue';
 import { nasState, refreshAllData } from '../../store';
 import { navigateTo } from '../../router';
+import { usePwaInstall } from '../../composables/usePwaInstall';
 
 const emit = defineEmits<{
   (e: 'open-terminal'): void;
   (e: 'open-system-details'): void;
 }>();
+
+const { isStandalone, promptInstall } = usePwaInstall();
+const bannerDismissed = ref(false);
 
 const telem = computed(() => nasState.systemTelemetry);
 
@@ -89,6 +95,25 @@ const isDegraded = computed(() => {
 
 <template>
   <div class="mobile-overview-container">
+    <!-- PWA Install Quick Banner -->
+    <div v-if="!isStandalone && !bannerDismissed" class="pwa-quick-banner">
+      <div class="banner-left" @click="promptInstall">
+        <div class="banner-icon">
+          <MdiIcon :path="mdiCellphoneArrowDown" size="18" />
+        </div>
+        <div class="banner-text">
+          <span class="banner-title">Install NaN App</span>
+          <span class="banner-sub">Add to home screen for native feel</span>
+        </div>
+      </div>
+      <div class="banner-actions">
+        <button class="btn btn-xs btn-primary" @click="promptInstall">Install</button>
+        <button class="btn btn-xs btn-ghost btn-icon" aria-label="Dismiss banner" @click="bannerDismissed = true">
+          <MdiIcon :path="mdiClose" size="14" />
+        </button>
+      </div>
+    </div>
+
     <!-- System Health Hero Card -->
     <div class="hero-health-card" :class="{ 'hero-warning': isDegraded }">
       <div class="hero-header">
@@ -260,6 +285,65 @@ const isDegraded = computed(() => {
   flex-direction: column;
   gap: 14px;
   padding: 12px;
+}
+
+.pwa-quick-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.12) 0%, rgba(129, 140, 248, 0.12) 100%);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 14px;
+  padding: 10px 12px;
+  gap: 8px;
+}
+
+.banner-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.banner-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.2);
+  color: var(--accent-primary, #38bdf8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.banner-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.banner-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary, #f8fafc);
+}
+
+.banner-sub {
+  font-size: 11px;
+  color: var(--text-secondary, #94a3b8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .hero-health-card {

@@ -81,6 +81,7 @@ import IdentityView from './views/IdentityView.vue';
 import { useDevice } from './composables/useDevice';
 import MobileShell from './mobile/MobileShell.vue';
 import MobileTerminal from './mobile/components/MobileTerminal.vue';
+import PwaInstallSheet from './components/PwaInstallSheet.vue';
 
 const { isMobile } = useDevice();
 
@@ -670,6 +671,7 @@ onMounted(() => {
     @close="activeLxcTerminal = null"
   />
   <ConfirmModal />
+  <PwaInstallSheet />
 
   <!-- Toast Notifications Stack -->
   <div class="toast-stack">
