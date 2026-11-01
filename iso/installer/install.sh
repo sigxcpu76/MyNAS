@@ -426,6 +426,7 @@ EOF
     rm -f "$TARGET/etc/initramfs-tools/conf.d/live.conf"
     rm -f "$TARGET/etc/systemd/system/getty@tty1.service.d/override.conf"
     rm -f "$TARGET/etc/systemd/system/serial-getty@ttyS0.service.d/override.conf"
+    rm -rf "$TARGET/etc/systemd/system/networking.service.d"
     rm -f "$TARGET/usr/local/bin/mynas-installer"
     sed -i '/MYNAS_INSTALLER_RAN/,/fi/d' "$TARGET/root/.bashrc" 2>/dev/null || true
     sed -i '/mynas-installer/d' "$TARGET/root/.bashrc" 2>/dev/null || true

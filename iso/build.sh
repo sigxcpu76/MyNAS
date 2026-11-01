@@ -141,6 +141,13 @@ ExecStart=
 ExecStart=-/sbin/agetty --autologin root --keep-baud 115200,38400,9600 %I $TERM
 EOF
 
+# Prevent networking.service from blocking live installer boot
+mkdir -p "$CHROOT_DIR/etc/systemd/system/networking.service.d"
+cat << 'EOF' > "$CHROOT_DIR/etc/systemd/system/networking.service.d/timeout.conf"
+[Service]
+TimeoutStartSec=10s
+EOF
+
 # Launch installer automatically when logging into root shell in live mode
 cat << 'EOF' >> "$CHROOT_DIR/root/.bashrc"
 if [ -z "$MYNAS_INSTALLER_RAN" ] && [ -x /usr/local/bin/mynas-installer ]; then
