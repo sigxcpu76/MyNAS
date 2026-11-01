@@ -72,6 +72,17 @@ import { AipClient, normalizeInt64 } from './aipClient';
 // Mappers (protojson camelCase + snake_case compatibility + int64 coercion)
 // ---------------------------------------------------------------------------
 
+export function resolveHostUrl(url: string): string {
+  if (!url) return '';
+  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+    const host = window.location.hostname;
+    return url.replace(/:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::|\/|$)/, (match) => {
+      return match.replace(/localhost|127\.0\.0\.1|0\.0\.0\.0/, host);
+    });
+  }
+  return url;
+}
+
 export function mapUser(raw: any): User {
   if (!raw) {
     return {
@@ -640,10 +651,10 @@ export function mapDockerApp(raw: any): DockerApp {
     containers,
     portMappings: raw?.portMappings ?? raw?.port_mappings ?? [],
     volumes: raw?.volumes ?? [],
-    webUiUrl: raw?.webUiUrl ?? raw?.web_ui_url ?? '',
+    webUiUrl: resolveHostUrl(raw?.webUiUrl ?? raw?.web_ui_url ?? ''),
     portals: (raw?.portals || []).map((p: any) => ({
       name: p?.name || 'Web UI',
-      url: p?.url || '',
+      url: resolveHostUrl(p?.url || ''),
       port: Number(p?.port || 0),
       protocol: p?.protocol || 'http',
       path: p?.path || '/',

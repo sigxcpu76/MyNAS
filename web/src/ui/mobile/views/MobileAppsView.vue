@@ -64,9 +64,17 @@ function isAppRunning(app: DockerApp): boolean {
 }
 
 function getAppPortalUrl(app: DockerApp): string | null {
-  if (app.webUiUrl) return app.webUiUrl;
-  if (app.portals && app.portals.length > 0) return app.portals[0].url;
-  return null;
+  let target = '';
+  if (app.webUiUrl) target = app.webUiUrl;
+  else if (app.portals && app.portals.length > 0 && app.portals[0].url) target = app.portals[0].url;
+  if (!target) return null;
+  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+    const host = window.location.hostname;
+    return target.replace(/:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::|\/|$)/, (match) => {
+      return match.replace(/localhost|127\.0\.0\.1|0\.0\.0\.0/, host);
+    });
+  }
+  return target;
 }
 
 async function handleStart() {
