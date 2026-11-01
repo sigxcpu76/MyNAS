@@ -183,21 +183,9 @@ rm -rf "$CHROOT_DIR/usr/lib/firmware/ath10k" \
        "$CHROOT_DIR/usr/lib/firmware/ti-connectivity" \
        "$CHROOT_DIR/usr/lib/firmware/mrvl"
 
-# 3. Strip non-server kernel modules (audio, TV tuners, consumer sensors, wireless)
+# 3. Rebuild module dependency maps
 PVE_KVER=$(ls "$CHROOT_DIR/usr/lib/modules" | grep pve | head -n 1)
 if [ -n "$PVE_KVER" ]; then
-    KMOD_DIR="$CHROOT_DIR/usr/lib/modules/$PVE_KVER/kernel"
-    rm -rf "$KMOD_DIR/sound" \
-           "$KMOD_DIR/drivers/media" \
-           "$KMOD_DIR/drivers/iio" \
-           "$KMOD_DIR/drivers/net/wireless" \
-           "$KMOD_DIR/drivers/comedi" \
-           "$KMOD_DIR/drivers/isdn" \
-           "$KMOD_DIR/drivers/net/can" \
-           "$KMOD_DIR/net/wireless" \
-           "$KMOD_DIR/net/mac80211" \
-           "$KMOD_DIR/net/bluetooth"
-    # Rebuild module dependency maps
     chroot "$CHROOT_DIR" depmod -a "$PVE_KVER"
 fi
 
