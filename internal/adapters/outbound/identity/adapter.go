@@ -221,14 +221,20 @@ func (a *Adapter) Authenticate(ctx context.Context, username, password string) (
 
 	a.mu.RLock()
 	user, ok := a.users[username]
+	a.mu.RUnlock()
+	if !ok {
+		// User might have been created via CLI (adduser/useradd) after daemon startup.
+		a.mu.Lock()
+		a.loadFromLinuxSystem()
+		user, ok = a.users[username]
+		a.mu.Unlock()
+	}
 	if !ok || user.Locked {
-		a.mu.RUnlock()
 		return nil, invalid
 	}
 
 	cp := user
 	cp.Password = ""
-	a.mu.RUnlock()
 
 	// Automatically synchronize Samba password upon successful authentication
 	if os.Geteuid() == 0 && password != "" {
@@ -294,6 +300,10 @@ func (a *Adapter) findNextAvailableGIDLocked() int32 {
 }
 
 func (a *Adapter) ListUsers(ctx context.Context, includeSystem bool) ([]domain.User, error) {
+	a.mu.Lock()
+	a.loadFromLinuxSystem()
+	a.mu.Unlock()
+
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	var out []domain.User
@@ -310,8 +320,14 @@ func (a *Adapter) ListUsers(ctx context.Context, includeSystem bool) ([]domain.U
 
 func (a *Adapter) GetUser(ctx context.Context, username string) (*domain.User, error) {
 	a.mu.RLock()
-	defer a.mu.RUnlock()
 	u, ok := a.users[username]
+	a.mu.RUnlock()
+	if !ok {
+		a.mu.Lock()
+		a.loadFromLinuxSystem()
+		u, ok = a.users[username]
+		a.mu.Unlock()
+	}
 	if !ok {
 		return nil, fmt.Errorf("%w: linux user %q", domain.ErrNotFound, username)
 	}
