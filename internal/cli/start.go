@@ -30,6 +30,7 @@ import (
 	"github.com/sigxcpu/nas/internal/adapters/outbound/system"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/zfs"
 	"github.com/sigxcpu/nas/internal/application"
+	"github.com/sigxcpu/nas/internal/certutil"
 	"github.com/sigxcpu/nas/internal/config"
 	"github.com/sigxcpu/nas/internal/domain"
 	nasv1 "github.com/sigxcpu/nas/internal/gen/nas/v1"
@@ -40,16 +41,20 @@ import (
 )
 
 type StartOptions struct {
-	HTTPPort   int
-	GRPCPort   int
-	WebdavPort int
-	StateDir   string
-	JWTSecret  string
+	HTTPPort    int
+	HTTPSPort   int
+	TLSCertFile string
+	TLSKeyFile  string
+	GRPCPort    int
+	WebdavPort  int
+	StateDir    string
+	JWTSecret   string
 }
 
 func newStartCmd(rootOpts *RootOptions) *cobra.Command {
 	opts := &StartOptions{
 		HTTPPort:   8080,
+		HTTPSPort:  -1,
 		GRPCPort:   9090,
 		WebdavPort: 8081,
 		StateDir:   "/tmp/nas-state",
@@ -65,6 +70,9 @@ func newStartCmd(rootOpts *RootOptions) *cobra.Command {
 
 	cmd.Flags().IntVar(&opts.HTTPPort, "http-port", opts.HTTPPort, "HTTP/WebUI/gRPC-Gateway/WebDAV/noVNC listen port")
 	cmd.Flags().IntVar(&opts.HTTPPort, "port", opts.HTTPPort, "Alias for --http-port")
+	cmd.Flags().IntVar(&opts.HTTPSPort, "https-port", opts.HTTPSPort, "HTTPS/TLS listen port (default 8443, 0 to disable HTTPS)")
+	cmd.Flags().StringVar(&opts.TLSCertFile, "tls-cert", "", "Path to custom TLS certificate file (optional)")
+	cmd.Flags().StringVar(&opts.TLSKeyFile, "tls-key", "", "Path to custom TLS private key file (optional)")
 	var dummyBind string
 	cmd.Flags().StringVar(&dummyBind, "bind", "0.0.0.0", "Bind interface/address (default 0.0.0.0)")
 	cmd.Flags().IntVar(&opts.GRPCPort, "grpc-port", opts.GRPCPort, "Native gRPC API server listen port")
@@ -109,6 +117,15 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	// Override with CLI flags if explicitly provided
 	if opts.HTTPPort != 8080 || cfg.Server.HTTPPort == 0 {
 		cfg.Server.HTTPPort = opts.HTTPPort
+	}
+	if opts.HTTPSPort >= 0 {
+		cfg.Server.HTTPSPort = opts.HTTPSPort
+	}
+	if opts.TLSCertFile != "" {
+		cfg.Server.TLSCertFile = opts.TLSCertFile
+	}
+	if opts.TLSKeyFile != "" {
+		cfg.Server.TLSKeyFile = opts.TLSKeyFile
 	}
 	if opts.GRPCPort != 9090 || cfg.Server.GRPCPort == 0 {
 		cfg.Server.GRPCPort = opts.GRPCPort
@@ -364,6 +381,32 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
+	var httpsServer *http.Server
+	if cfg.Server.HTTPSPort > 0 {
+		certDir := filepath.Join(stateDir, "certs")
+		tlsCfg, caPEM, err := certutil.EnsureTLSConfig(certDir, cfg.Server.TLSCertFile, cfg.Server.TLSKeyFile)
+		if err != nil {
+			logger.Error("failed to configure TLS for HTTPS server", "error", err)
+		} else {
+			if len(caPEM) > 0 {
+				gateway.SetCACert(caPEM)
+			}
+			httpsAddr := fmt.Sprintf(":%d", cfg.Server.HTTPSPort)
+			httpsServer = &http.Server{
+				Addr:              httpsAddr,
+				Handler:           gateway,
+				TLSConfig:         tlsCfg,
+				ReadHeaderTimeout: 10 * time.Second,
+			}
+			go func() {
+				logger.Info("HTTPS server listening", "https_port", cfg.Server.HTTPSPort, "addr", httpsAddr)
+				if err := httpsServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+					logger.Warn("HTTPS server stopped", "error", err)
+				}
+			}()
+		}
+	}
+
 	var webdavServer *http.Server
 	if cfg.Server.WebdavPort > 0 {
 		webdavAddr := fmt.Sprintf(":%d", cfg.Server.WebdavPort)
@@ -385,6 +428,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 		logger.Info("nasctl server started",
 			"startup_total", time.Since(startupBegin).Round(time.Millisecond).String(),
 			"http_port", cfg.Server.HTTPPort,
+			"https_port", cfg.Server.HTTPSPort,
 			"grpc_port", cfg.Server.GRPCPort,
 			"webdav_port", cfg.Server.WebdavPort,
 			"tty_mode", logging.IsTTY(rootOpts.ErrOut),
@@ -409,9 +453,12 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 		gateway.Close()
 	}
 
-	// 2. Shut down HTTP listener with bounded 2-second timeout
+	// 2. Shut down HTTP & HTTPS listeners with bounded 2-second timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer shutdownCancel()
+	if httpsServer != nil {
+		_ = httpsServer.Shutdown(shutdownCtx)
+	}
 	if webdavServer != nil {
 		_ = webdavServer.Shutdown(shutdownCtx)
 	}

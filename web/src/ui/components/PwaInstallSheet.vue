@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import {
   mdiDownload,
   mdiExportVariant,
@@ -6,6 +7,9 @@ import {
   mdiDotsVertical,
   mdiCellphoneArrowDown,
   mdiCheckCircle,
+  mdiLockAlertOutline,
+  mdiCertificateOutline,
+  mdiOpenInNew,
 } from '@mdi/js';
 import MdiIcon from './MdiIcon.vue';
 import BottomSheet from './BottomSheet.vue';
@@ -17,6 +21,16 @@ const {
   showInstallSheet,
   triggerNativePrompt,
 } = usePwaInstall();
+
+const isHttps = computed(() => {
+  if (typeof window === 'undefined') return true;
+  return window.location.protocol === 'https:';
+});
+
+const httpsUrl = computed(() => {
+  if (typeof window === 'undefined') return '#';
+  return `https://${window.location.hostname}:8443${window.location.pathname}${window.location.search}`;
+});
 
 async function handleInstallClick() {
   if (hasNativePrompt.value) {
@@ -39,6 +53,21 @@ async function handleInstallClick() {
           <div class="app-name">NaN // Not Another NAS</div>
           <div class="app-tagline">Web Management & Hypervisor</div>
         </div>
+      </div>
+
+      <!-- HTTPS Recommended Notice if accessing over HTTP -->
+      <div v-if="!isHttps" class="https-prompt-card">
+        <div class="https-prompt-header">
+          <MdiIcon :path="mdiLockAlertOutline" size="20" style="color: #f59e0b" />
+          <span class="https-prompt-title">HTTPS Recommended for PWA</span>
+        </div>
+        <p class="https-prompt-desc">
+          Mobile browsers (Chrome / Safari) strictly require a secure HTTPS connection to install standalone PWAs and register Service Workers.
+        </p>
+        <a :href="httpsUrl" class="btn btn-warning btn-block btn-switch-https">
+          <span>Switch to HTTPS (Port 8443)</span>
+          <MdiIcon :path="mdiOpenInNew" size="16" style="margin-left: 6px" />
+        </a>
       </div>
 
       <!-- Native Browser Install Action (If supported by browser) -->
@@ -110,6 +139,29 @@ async function handleInstallClick() {
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Root Certificate Authority Card for 1-Tap Trust -->
+      <div class="ca-card">
+        <div class="ca-card-header">
+          <MdiIcon :path="mdiCertificateOutline" size="18" style="color: #38bdf8" />
+          <span class="ca-card-title">1-Tap Certificate Trust</span>
+        </div>
+        <p class="ca-card-desc">
+          If your browser warns about the self-signed SSL certificate on port 8443, download and install the NAS Root CA certificate once:
+        </p>
+        <a href="/ca.crt" download="nan-nas-ca.crt" class="btn btn-secondary btn-block btn-ca-download">
+          <MdiIcon :path="mdiDownload" size="18" style="margin-right: 6px; color: #38bdf8;" />
+          <span>Download Root CA (nan-nas-ca.crt)</span>
+        </a>
+        <details class="ca-details">
+          <summary class="ca-summary">How to trust on your phone / PC</summary>
+          <div class="ca-steps">
+            <div><strong>Android:</strong> Settings &rarr; Security &amp; privacy &rarr; More security &rarr; Install from storage &rarr; <em>CA certificate</em> &rarr; select downloaded <code>nan-nas-ca.crt</code>.</div>
+            <div><strong>iOS / Safari:</strong> Download cert &rarr; Allow &rarr; Settings &rarr; Profile Downloaded &rarr; Install &rarr; Settings &rarr; General &rarr; About &rarr; <em>Certificate Trust Settings</em> &rarr; Enable full trust.</div>
+            <div><strong>Windows / Mac:</strong> Double-click cert file &rarr; Install into <em>Trusted Root Certification Authorities</em>.</div>
+          </div>
+        </details>
       </div>
 
       <!-- PWA Features Summary -->
@@ -262,5 +314,131 @@ async function handleInstallClick() {
   gap: 8px;
   font-size: 12px;
   color: var(--text-secondary, #94a3b8);
+}
+
+.https-prompt-card {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.https-prompt-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.https-prompt-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fbbf24;
+}
+
+.https-prompt-desc {
+  font-size: 12px;
+  color: var(--text-secondary, #cbd5e1);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.btn-switch-https {
+  background: #f59e0b;
+  color: #0f172a;
+  font-weight: 700;
+  border: none;
+  padding: 10px 14px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-switch-https:hover {
+  background: #d97706;
+}
+
+.ca-card {
+  background: var(--bg-surface-elevated, #243248);
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ca-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ca-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent-primary, #38bdf8);
+}
+
+.ca-card-desc {
+  font-size: 12px;
+  color: var(--text-secondary, #94a3b8);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.btn-ca-download {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 10px 14px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.btn-ca-download:hover {
+  background: rgba(56, 189, 248, 0.2);
+}
+
+.ca-details {
+  font-size: 12px;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.ca-summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-muted, #64748b);
+  margin-bottom: 6px;
+}
+
+.ca-summary:hover {
+  color: var(--text-primary, #f8fafc);
+}
+
+.ca-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--bg-base, #0f172a);
+  border-radius: 8px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-secondary, #cbd5e1);
 }
 </style>

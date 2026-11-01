@@ -18,11 +18,14 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	HTTPPort   int    `mapstructure:"http_port" json:"http_port" yaml:"http_port"`
-	GRPCPort   int    `mapstructure:"grpc_port" json:"grpc_port" yaml:"grpc_port"`
-	WebdavPort int    `mapstructure:"webdav_port" json:"webdav_port" yaml:"webdav_port"`
-	StateDir   string `mapstructure:"state_dir" json:"state_dir" yaml:"state_dir"`
-	JWTSecret  string `mapstructure:"jwt_secret" json:"jwt_secret" yaml:"jwt_secret"`
+	HTTPPort    int    `mapstructure:"http_port" json:"http_port" yaml:"http_port"`
+	HTTPSPort   int    `mapstructure:"https_port" json:"https_port" yaml:"https_port"`
+	TLSCertFile string `mapstructure:"tls_cert_file" json:"tls_cert_file" yaml:"tls_cert_file"`
+	TLSKeyFile  string `mapstructure:"tls_key_file" json:"tls_key_file" yaml:"tls_key_file"`
+	GRPCPort    int    `mapstructure:"grpc_port" json:"grpc_port" yaml:"grpc_port"`
+	WebdavPort  int    `mapstructure:"webdav_port" json:"webdav_port" yaml:"webdav_port"`
+	StateDir    string `mapstructure:"state_dir" json:"state_dir" yaml:"state_dir"`
+	JWTSecret   string `mapstructure:"jwt_secret" json:"jwt_secret" yaml:"jwt_secret"`
 }
 
 type SystemConfig struct {
@@ -54,11 +57,14 @@ func DefaultConfig() *Config {
 
 	return &Config{
 		Server: ServerConfig{
-			HTTPPort:   8080,
-			GRPCPort:   9090,
-			WebdavPort: 8081,
-			StateDir:   stateDir,
-			JWTSecret:  "",
+			HTTPPort:    8080,
+			HTTPSPort:   8443,
+			TLSCertFile: "",
+			TLSKeyFile:  "",
+			GRPCPort:    9090,
+			WebdavPort:  8081,
+			StateDir:    stateDir,
+			JWTSecret:   "",
 		},
 		System: SystemConfig{
 			MainPool:      "",
@@ -93,6 +99,9 @@ func Load(explicitPath string) (*Config, string, error) {
 	// Set defaults in viper
 	def := DefaultConfig()
 	v.SetDefault("server.http_port", def.Server.HTTPPort)
+	v.SetDefault("server.https_port", def.Server.HTTPSPort)
+	v.SetDefault("server.tls_cert_file", def.Server.TLSCertFile)
+	v.SetDefault("server.tls_key_file", def.Server.TLSKeyFile)
 	v.SetDefault("server.grpc_port", def.Server.GRPCPort)
 	v.SetDefault("server.webdav_port", def.Server.WebdavPort)
 	v.SetDefault("server.state_dir", def.Server.StateDir)

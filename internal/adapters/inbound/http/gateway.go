@@ -46,6 +46,8 @@ type Gateway struct {
 	eventBus      *application.EventBus
 	shutdownCh    chan struct{}
 	shutdownOnce  sync.Once
+	caCertPEMMu   sync.RWMutex
+	caCertPEM     []byte
 	passwdPath    string
 	groupPath     string
 }
@@ -185,6 +187,10 @@ func NewGateway(
 	if webdavHandler != nil {
 		mux.Handle("/dav/", webdavHandler)
 	}
+
+	// 8b. Root Certificate Authority endpoint for 1-tap client trust & PWA support
+	mux.HandleFunc("/ca.crt", g.handleDownloadCA)
+	mux.HandleFunc("/api/v1/ca.crt", g.handleDownloadCA)
 
 	// 9. Embedded Vue.js Single-Page Application (SPA)
 	mux.HandleFunc("/", g.handleSPA)
@@ -977,4 +983,28 @@ func (g *Gateway) handleWatchResources(w http.ResponseWriter, r *http.Request) {
 		flusher: flusher,
 	}
 	_ = g.grpcServer.WatchResources(&nasv1.WatchResourcesRequest{ResourceTypes: rTypes}, stream)
+}
+
+// SetCACert stores the Root Certificate Authority PEM bytes for client trust installation.
+func (g *Gateway) SetCACert(pem []byte) {
+	g.caCertPEMMu.Lock()
+	defer g.caCertPEMMu.Unlock()
+	g.caCertPEM = pem
+}
+
+// handleDownloadCA streams the Root CA certificate to clients.
+func (g *Gateway) handleDownloadCA(w http.ResponseWriter, r *http.Request) {
+	g.caCertPEMMu.RLock()
+	certBytes := g.caCertPEM
+	g.caCertPEMMu.RUnlock()
+
+	if len(certBytes) == 0 {
+		http.Error(w, "Root CA certificate is not available or not configured.", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/x-x509-ca-cert")
+	w.Header().Set("Content-Disposition", `attachment; filename="nan-nas-ca.crt"`)
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	_, _ = w.Write(certBytes)
 }
