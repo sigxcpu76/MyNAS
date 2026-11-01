@@ -201,11 +201,10 @@ if [ -n "$PVE_KVER" ]; then
     chroot "$CHROOT_DIR" depmod -a "$PVE_KVER"
 fi
 
-# 4. Strip documentation, man pages, locales, and dev headers
+# 4. Strip documentation, man pages, and info (keep /usr/include for DKMS / driver builds)
 rm -rf "$CHROOT_DIR/usr/share/doc/"* \
        "$CHROOT_DIR/usr/share/man/"* \
-       "$CHROOT_DIR/usr/share/info/"* \
-       "$CHROOT_DIR/usr/include/"*
+       "$CHROOT_DIR/usr/share/info/"*
 
 # Configure initramfs for Live ISO boot
 echo ">> [4c/7] Configuring initramfs for Live boot..."
