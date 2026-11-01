@@ -28,6 +28,7 @@
   - [Building from Source](#building-from-source)
   - [Running the Server Daemon](#running-the-server-daemon)
   - [CLI Client Usage](#cli-client-usage)
+  - [NVIDIA GPU Drivers & Container Toolkit](#nvidia-gpu-drivers--container-toolkit)
 - [API & Protocols](#api--protocols)
 - [License](#license)
 
@@ -299,6 +300,87 @@ The `nasctl` binary doubles as a full CLI client communicating with the running 
 # Inspect system prerequisites
 ./bin/nasctl prereq list
 ./bin/nasctl prereq check
+```
+
+### NVIDIA GPU Drivers & Container Toolkit
+
+NaN supports hardware transcoding and GPU acceleration for containerized workloads (such as Jellyfin, Plex, Ollama, and Frigate). On systems running Debian 13 (Trixie) with the Proxmox 7.0 (Linux 6.12+) kernel, follow these steps to install the proprietary driver and Docker runtime:
+
+#### 1. Install Build Dependencies & Proxmox Kernel Headers
+
+The Linux 6.12+ build system uses `gendwarfksyms` for module symbol versioning, which requires `libdw.so.1` (from `libdw1`), standard C development headers, and the matching kernel headers:
+
+```bash
+sudo apt update
+sudo apt install -y build-essential dkms libdw1 libelf-dev proxmox-default-headers
+```
+
+> [!TIP]
+> If your system boots via UEFI Secure Boot or HP ProLiant UEFI, ensure the signed kernel package is retained (`proxmox-kernel-$(uname -r)-signed`).
+
+#### 2. Install NVIDIA Proprietary Drivers
+
+Download and execute the official NVIDIA Linux driver (`.run` installer):
+
+```bash
+# Make installer executable
+chmod +x NVIDIA-Linux-x86_64-*.run
+
+# Run installation wizard
+sudo ./NVIDIA-Linux-x86_64-*.run
+```
+
+When prompted:
+1. **Register kernel module sources with DKMS?** &rarr; Select **Yes** (ensures driver modules rebuild automatically across future kernel updates).
+2. **Nouveau is currently loaded?** &rarr; Select **Yes** to blacklist Nouveau, reboot your server once, and re-run the `.run` script.
+
+Verify the driver is loaded:
+```bash
+nvidia-smi
+```
+
+#### 3. Install the NVIDIA Container Toolkit (Docker GPU Passthrough)
+
+To expose your GPU to Docker containers managed through NaN:
+
+```bash
+# 1. Add the NVIDIA Container Toolkit GPG repository
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+# 2. Install the toolkit
+sudo apt update
+sudo apt install -y nvidia-container-toolkit
+
+# 3. Configure the Docker daemon runtime and restart
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+```
+
+#### 4. Verify Docker Container Access
+
+Run a lightweight test container to verify GPU passthrough into Docker:
+
+```bash
+docker run --rm --gpus all ubuntu nvidia-smi
+```
+
+To enable GPU acceleration in your Docker Compose app descriptors within NaN, include the standard reservations stanza:
+
+```yaml
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, video]
 ```
 
 ---
