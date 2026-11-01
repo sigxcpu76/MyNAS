@@ -109,6 +109,7 @@ const nasTheme = EditorView.theme({
   },
 });
 
+const readOnlyCompartment = new Compartment();
 const highlightCompartment = new Compartment();
 
 function getHighlightExtension(dark: boolean) {
@@ -126,7 +127,7 @@ onMounted(() => {
       highlightCompartment.of(getHighlightExtension(isDarkMode.value)),
       nasTheme,
       EditorView.lineWrapping,
-      EditorState.readOnly.of(props.readOnly),
+      readOnlyCompartment.of(EditorState.readOnly.of(props.readOnly)),
       autocompletion({
         override: [dockerComposeCompletionSource],
         defaultKeymap: true,
@@ -148,6 +149,18 @@ onMounted(() => {
     parent: editorContainer.value,
   });
 });
+
+// Dynamically reconfigure readOnly on prop change
+watch(
+  () => props.readOnly,
+  (newReadOnly) => {
+    if (view) {
+      view.dispatch({
+        effects: readOnlyCompartment.reconfigure(EditorState.readOnly.of(newReadOnly)),
+      });
+    }
+  }
+);
 
 // Dynamically reconfigure highlight style on theme mode change
 watch(isDarkMode, (newDark) => {

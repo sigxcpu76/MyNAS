@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import {
   mdiAlertCircleOutline,
+  mdiArrowRight,
   mdiCheck,
   mdiCheckCircleOutline,
   mdiClose,
@@ -1265,12 +1266,25 @@ function viewPoolDatasets(poolName: string) {
         <div class="modal-header">
           <div>
             <div style="display: flex; align-items: center; gap: 10px">
-              <h3 class="card-title" style="margin: 0; font-size: 18px">Create Pool</h3>
+              <div class="modal-icon-badge">
+                <MdiIcon :path="mdiDatabase" size="20" style="color: var(--accent-primary)" />
+              </div>
+              <div>
+                <h3 class="card-title" style="margin: 0; font-size: 18px">Create Storage Pool</h3>
+                <div class="card-subtitle" style="margin-top: 2px">
+                  Step 1 of 2: Define VDEV topology and assign physical drives
+                </div>
+              </div>
             </div>
           </div>
-          <button class="btn btn-sm btn-icon" @click="showCreatePool = false">
-            <MdiIcon :path="mdiClose" size="16" />
-          </button>
+          <div class="stepper-nav">
+            <span class="step-circle active" title="Step 1: Topology & Disks">1</span>
+            <span class="step-circle upcoming" title="Step 2: Initialization">2</span>
+            <div class="stepper-divider"></div>
+            <button class="modal-close-btn" title="Close modal" @click="showCreatePool = false">
+              <MdiIcon :path="mdiClose" size="16" />
+            </button>
+          </div>
         </div>
 
         <!-- Modal Body (Scrollable Workspace) -->
@@ -1609,18 +1623,20 @@ function viewPoolDatasets(poolName: string) {
 
         <!-- Modal Footer -->
         <div class="modal-footer">
-          <button type="button" class="btn btn-sm" @click="showCreatePool = false">
+          <button type="button" class="btn btn-secondary btn-sm" @click="showCreatePool = false">
             Cancel
           </button>
           <button
             type="button"
             class="btn btn-primary btn-sm"
+            style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; padding: 6px 18px"
             :disabled="!isPoolBuilderValid || creatingPool"
             @click="handleCreatePool"
           >
-            <MdiIcon v-if="creatingPool" :path="mdiRefresh" size="14" class="spin" style="margin-right: 4px" />
-            <MdiIcon v-else :path="mdiPlus" size="16" style="margin-right: 4px" />
-            {{ creatingPool ? 'Creating Pool...' : 'Create Storage Pool' }}
+            <MdiIcon v-if="creatingPool" :path="mdiRefresh" size="14" class="spin-icon" />
+            <MdiIcon v-else :path="mdiPlus" size="15" />
+            <span>{{ creatingPool ? 'Creating Pool...' : 'Create Storage Pool' }}</span>
+            <MdiIcon v-if="!creatingPool" :path="mdiArrowRight" size="15" />
           </button>
         </div>
       </div>
@@ -2124,11 +2140,23 @@ function viewPoolDatasets(poolName: string) {
   background: var(--bg-surface);
   border: 1px solid var(--border-strong);
   border-radius: 12px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--modal-shadow);
   display: flex;
   flex-direction: column;
   max-height: 88vh;
   overflow: hidden;
+}
+
+.modal-icon-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .builder-modal-container {
@@ -2141,15 +2169,15 @@ function viewPoolDatasets(poolName: string) {
   padding: 16px 22px;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-base);
+  background: var(--bg-surface);
 }
 
 .modal-footer {
   padding: 14px 22px;
   border-top: 1px solid var(--border-subtle);
-  background: var(--bg-base);
+  background: var(--bg-surface);
   display: flex;
   justify-content: flex-end;
   gap: 10px;
@@ -2158,7 +2186,7 @@ function viewPoolDatasets(poolName: string) {
 .modal-tabs {
   display: flex;
   border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-base);
+  background: var(--bg-surface);
   padding: 0 16px;
 }
 
@@ -2178,7 +2206,7 @@ function viewPoolDatasets(poolName: string) {
 .tab-btn.active {
   color: var(--accent-primary);
   border-bottom-color: var(--accent-primary);
-  background: rgba(56, 189, 248, 0.05);
+  background: var(--accent-bg-subtle);
 }
 
 .modal-body {
@@ -2200,9 +2228,9 @@ function viewPoolDatasets(poolName: string) {
 }
 
 .drives-bank-panel {
-  background: rgba(0, 0, 0, 0.22);
+  background: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 14px;
   display: flex;
   flex-direction: column;
@@ -2220,17 +2248,17 @@ function viewPoolDatasets(poolName: string) {
 .drive-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 10px 12px;
   cursor: grab;
   user-select: none;
-  transition: all 0.15s ease;
+  box-shadow: none;
+  transition: border-color 0.12s ease;
 }
 
 .drive-card:hover {
   border-color: var(--accent-primary);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  box-shadow: none;
 }
 
 .drive-card.is-assigned {
@@ -2248,11 +2276,11 @@ function viewPoolDatasets(poolName: string) {
 }
 
 .vdev-builder-card {
-  background: var(--bg-base);
+  background: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 14px;
-  transition: all 0.2s ease;
+  transition: border-color 0.15s ease;
 }
 
 .vdev-builder-card.is-data {
@@ -2277,25 +2305,26 @@ function viewPoolDatasets(poolName: string) {
 
 .vdev-builder-card.drag-hover {
   border-color: var(--accent-primary);
-  background: rgba(56, 189, 248, 0.08);
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.25);
+  background: var(--accent-bg-subtle);
+  box-shadow: none;
 }
 
 .vdev-drop-target {
-  min-height: 58px;
-  border: 2px dashed rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
-  padding: 10px;
+  min-height: 64px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  padding: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.15);
-  transition: border-color 0.15s ease;
+  background: transparent;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
 .vdev-drop-target.has-drives {
   border-style: solid;
-  border-color: rgba(255, 255, 255, 0.08);
+  border-color: var(--border-subtle);
+  background: var(--bg-surface);
 }
 
 .drop-placeholder {
@@ -2306,17 +2335,18 @@ function viewPoolDatasets(poolName: string) {
   font-size: 11.5px;
   text-align: center;
   pointer-events: none;
+  gap: 4px;
 }
 
 .vdev-drive-chip {
-  background: var(--bg-surface);
+  background: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: 4px;
+  border-radius: 6px;
   padding: 6px 10px;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  gap: 8px;
+  box-shadow: none;
 }
 
 .chip-remove-btn {
@@ -2337,7 +2367,7 @@ function viewPoolDatasets(poolName: string) {
 .vdev-validation-bar {
   margin-top: 8px;
   padding: 6px 10px;
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 11px;
   display: flex;
   align-items: center;
@@ -2362,10 +2392,10 @@ function viewPoolDatasets(poolName: string) {
 }
 
 .capacity-summary-card {
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 12px 16px;
+  border-radius: 10px;
+  padding: 14px 16px;
 }
 
 .summary-metrics-grid {

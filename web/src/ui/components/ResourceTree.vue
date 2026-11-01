@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import {
   mdiAccountGroup,
+  mdiCalendarClock,
   mdiCheckCircle,
   mdiChevronDown,
   mdiChevronRight,
@@ -31,13 +32,13 @@ import { navigateTo } from '../router';
 const searchQuery = ref('');
 const searchInputRef = ref<HTMLInputElement | null>(null);
 
-// Tree collapse states
+// Tree collapse states (start all collapsed by default)
 const openSections = ref<Record<string, boolean>>({
-  storage: true,
-  vms: true,
-  lxc: true,
-  docker: true,
-  shares: true,
+  storage: false,
+  vms: false,
+  lxc: false,
+  docker: false,
+  shares: false,
   access: false,
 });
 
@@ -85,6 +86,11 @@ function handleSelect(resourceId: string, tab: NavTab) {
   navigateTo(tab);
 }
 
+function handleHeaderSelect(sec: string, resourceId: string, tab: NavTab) {
+  openSections.value[sec] = true;
+  handleSelect(resourceId, tab);
+}
+
 // Filter matching helpers
 const query = computed(() => searchQuery.value.trim().toLowerCase());
 
@@ -118,7 +124,7 @@ const filteredDocker = computed(() => {
   });
 });
 
-function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'shares' | 'access'): boolean {
+function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'shares' | 'cron' | 'access'): boolean {
   if (!query.value) return true;
   if (section === 'storage') {
     return matches('storage') || matches('disks') || matches('pools') || filteredPools.value.length > 0;
@@ -134,6 +140,9 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
   }
   if (section === 'shares') {
     return matches('shares') || matches('smb') || matches('cifs') || matches('webdav');
+  }
+  if (section === 'cron') {
+    return matches('cron') || matches('tasks') || matches('scheduled') || matches('jobs') || matches('backup');
   }
   if (section === 'access') {
     return matches('users') || matches('groups') || matches('identity') || matches('access');
@@ -178,9 +187,12 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
             {{ hostname }}
             <span v-if="defaultIp" class="tree-ip mono font-xs">({{ defaultIp }})</span>
           </span>
-          <span class="badge badge-success font-xs mono" style="margin-left: auto; padding: 1px 5px">
-            ONLINE
-          </span>
+          <MdiIcon
+            :path="mdiCircle"
+            size="9"
+            style="color: var(--success); margin-left: auto"
+            title="Node Online"
+          />
         </div>
 
         <!-- Node Children -->
@@ -189,30 +201,26 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
           <div v-show="isSectionVisible('storage')" class="tree-group">
             <div
               class="tree-row tree-header-row"
-              @click="toggleSection('storage')"
+              :class="{ selected: nasState.selectedResourceId === 'node:pools' && nasState.activeTab === 'storage-pools' }"
+              @click="handleHeaderSelect('storage', 'node:pools', 'storage-pools')"
             >
-              <MdiIcon
-                :path="openSections.storage || query ? mdiChevronDown : mdiChevronRight"
-                size="14"
-                class="chevron-icon"
-              />
+              <span
+                class="chevron-btn"
+                :title="openSections.storage || query ? 'Collapse' : 'Expand'"
+                @click.stop="toggleSection('storage')"
+              >
+                <MdiIcon
+                  :path="openSections.storage || query ? mdiChevronDown : mdiChevronRight"
+                  size="14"
+                  class="chevron-icon"
+                />
+              </span>
               <MdiIcon :path="mdiDatabase" size="15" style="color: var(--warning-text)" />
               <span class="tree-label">Storage</span>
               <span class="nav-badge font-xs">{{ nasState.pools.length }}</span>
             </div>
 
             <div v-show="openSections.storage || query" class="tree-sub-branch">
-              <!-- Storage Pools Overview -->
-              <div
-                class="tree-row tree-leaf"
-                :class="{ selected: nasState.selectedResourceId === 'node:pools' && nasState.activeTab === 'storage-pools' }"
-                @click="handleSelect('node:pools', 'storage-pools')"
-              >
-                <MdiIcon :path="mdiDatabase" size="13" style="color: var(--text-secondary)" />
-                <span class="tree-label font-sm">Pools Overview</span>
-                <span class="nav-badge font-xs" style="margin-left: auto">{{ nasState.pools.length }}</span>
-              </div>
-
               <!-- Individual Storage Pools -->
               <div
                 v-for="p in filteredPools"
@@ -221,15 +229,16 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
                 :class="{ selected: nasState.selectedResourceId === `pool:${p.poolName || p.name.replace(/^zfsPools\//, '')}` }"
                 @click="nasState.selectedPoolName = p.name; handleSelect(`pool:${p.poolName || p.name.replace(/^zfsPools\//, '')}`, 'storage-pools')"
               >
-                <MdiIcon :path="mdiDatabase" size="13" style="color: var(--accent-secondary)" />
-                <span class="tree-label mono font-sm">{{ p.poolName || p.name.replace(/^zfsPools\//, '') }}</span>
-                <span
-                  class="badge font-xs mono"
-                  :class="p.state === 'ONLINE' ? 'badge-success' : 'badge-danger'"
-                  style="margin-left: auto; padding: 1px 4px; font-size: 9px"
-                >
-                  {{ p.state || 'ONLINE' }}
-                </span>
+                <MdiIcon
+                  :path="mdiCircle"
+                  size="9"
+                  :style="{
+                    color: p.state === 'ONLINE' ? 'var(--success)' : 'var(--danger)',
+                    opacity: p.state === 'ONLINE' ? 1 : 0.85,
+                  }"
+                  :title="`Status: ${(p.state || 'ONLINE').toLowerCase()}`"
+                />
+                <span class="tree-label font-sm">{{ p.poolName || p.name.replace(/^zfsPools\//, '') }}</span>
               </div>
 
               <!-- Physical Disks -->
@@ -263,30 +272,26 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
           <div v-show="isSectionVisible('vms')" class="tree-group">
             <div
               class="tree-row tree-header-row"
-              @click="toggleSection('vms')"
+              :class="{ selected: nasState.selectedResourceId === 'node:vms' && nasState.activeTab === 'kvm' }"
+              @click="handleHeaderSelect('vms', 'node:vms', 'kvm')"
             >
-              <MdiIcon
-                :path="openSections.vms || query ? mdiChevronDown : mdiChevronRight"
-                size="14"
-                class="chevron-icon"
-              />
+              <span
+                class="chevron-btn"
+                :title="openSections.vms || query ? 'Collapse' : 'Expand'"
+                @click.stop="toggleSection('vms')"
+              >
+                <MdiIcon
+                  :path="openSections.vms || query ? mdiChevronDown : mdiChevronRight"
+                  size="14"
+                  class="chevron-icon"
+                />
+              </span>
               <MdiIcon :path="mdiMonitor" size="15" style="color: var(--accent-primary)" />
               <span class="tree-label">Virtual Machines</span>
               <span class="nav-badge font-xs">{{ nasState.vms.length }}</span>
             </div>
 
             <div v-show="openSections.vms || query" class="tree-sub-branch">
-              <!-- VMs Overview Row -->
-              <div
-                class="tree-row tree-leaf"
-                :class="{ selected: nasState.selectedResourceId === 'node:vms' && nasState.activeTab === 'kvm' }"
-                @click="handleSelect('node:vms', 'kvm')"
-              >
-                <MdiIcon :path="mdiMonitor" size="13" style="color: var(--text-secondary)" />
-                <span class="tree-label font-sm">VMs Overview</span>
-                <span class="nav-badge font-xs" style="margin-left: auto">{{ nasState.vms.length }}</span>
-              </div>
-
               <div
                 v-if="filteredVms.length === 0"
                 class="tree-empty-hint"
@@ -307,25 +312,16 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
               >
                 <!-- Power State Glyph -->
                 <MdiIcon
-                  :path="vm.state === 'RUNNING' ? mdiCircle : mdiCircle"
+                  :path="mdiCircle"
                   size="9"
                   :style="{
                     color: vm.state === 'RUNNING' ? 'var(--success)' : 'var(--text-muted)',
                     opacity: vm.state === 'RUNNING' ? 1 : 0.6,
                   }"
+                  :title="`Status: ${vm.state === 'RUNNING' ? 'running' : 'stopped'}`"
                 />
                 <span class="tree-label font-sm" :title="vm.vmName">
                   {{ vm.vmName }}
-                </span>
-                <span
-                  class="font-xs mono"
-                  :style="{
-                    color: vm.state === 'RUNNING' ? 'var(--success-text)' : 'var(--text-muted)',
-                    marginLeft: 'auto',
-                    fontSize: '10px'
-                  }"
-                >
-                  {{ vm.state === 'RUNNING' ? 'running' : 'stopped' }}
                 </span>
               </div>
             </div>
@@ -335,30 +331,26 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
           <div v-show="isSectionVisible('lxc')" class="tree-group">
             <div
               class="tree-row tree-header-row"
-              @click="toggleSection('lxc')"
+              :class="{ selected: nasState.selectedResourceId === 'node:lxc' && nasState.activeTab === 'lxc' }"
+              @click="handleHeaderSelect('lxc', 'node:lxc', 'lxc')"
             >
-              <MdiIcon
-                :path="openSections.lxc || query ? mdiChevronDown : mdiChevronRight"
-                size="14"
-                class="chevron-icon"
-              />
+              <span
+                class="chevron-btn"
+                :title="openSections.lxc || query ? 'Collapse' : 'Expand'"
+                @click.stop="toggleSection('lxc')"
+              >
+                <MdiIcon
+                  :path="openSections.lxc || query ? mdiChevronDown : mdiChevronRight"
+                  size="14"
+                  class="chevron-icon"
+                />
+              </span>
               <MdiIcon :path="mdiCubeOutline" size="15" style="color: var(--accent-secondary)" />
               <span class="tree-label">LXC Containers</span>
               <span class="nav-badge font-xs">{{ nasState.lxcContainers.length }}</span>
             </div>
 
             <div v-show="openSections.lxc || query" class="tree-sub-branch">
-              <!-- Containers Overview Row -->
-              <div
-                class="tree-row tree-leaf"
-                :class="{ selected: nasState.selectedResourceId === 'node:lxc' && nasState.activeTab === 'lxc' }"
-                @click="handleSelect('node:lxc', 'lxc')"
-              >
-                <MdiIcon :path="mdiCubeOutline" size="13" style="color: var(--text-secondary)" />
-                <span class="tree-label font-sm">Containers Overview</span>
-                <span class="nav-badge font-xs" style="margin-left: auto">{{ nasState.lxcContainers.length }}</span>
-              </div>
-
               <div
                 v-if="filteredLxc.length === 0"
                 class="tree-empty-hint"
@@ -391,19 +383,10 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
                     color: c.state === 'RUNNING' ? 'var(--success)' : 'var(--text-muted)',
                     opacity: c.state === 'RUNNING' ? 1 : 0.6,
                   }"
+                  :title="`Status: ${(c.state || 'stopped').toLowerCase()}`"
                 />
                 <span class="tree-label font-sm" :title="c.containerName || c.name">
                   {{ c.containerName || c.name.replace('lxcContainers/', '') }}
-                </span>
-                <span
-                  class="font-xs mono"
-                  :style="{
-                    color: c.state === 'RUNNING' ? 'var(--success-text)' : 'var(--text-muted)',
-                    marginLeft: 'auto',
-                    fontSize: '10px'
-                  }"
-                >
-                  {{ (c.state || 'stopped').toLowerCase() }}
                 </span>
               </div>
             </div>
@@ -413,30 +396,26 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
           <div v-show="isSectionVisible('docker')" class="tree-group">
             <div
               class="tree-row tree-header-row"
-              @click="toggleSection('docker')"
+              :class="{ selected: nasState.selectedResourceId === 'node:docker' && nasState.activeTab === 'docker' }"
+              @click="handleHeaderSelect('docker', 'node:docker', 'docker')"
             >
-              <MdiIcon
-                :path="openSections.docker || query ? mdiChevronDown : mdiChevronRight"
-                size="14"
-                class="chevron-icon"
-              />
+              <span
+                class="chevron-btn"
+                :title="openSections.docker || query ? 'Collapse' : 'Expand'"
+                @click.stop="toggleSection('docker')"
+              >
+                <MdiIcon
+                  :path="openSections.docker || query ? mdiChevronDown : mdiChevronRight"
+                  size="14"
+                  class="chevron-icon"
+                />
+              </span>
               <MdiIcon :path="mdiLayers" size="15" style="color: var(--info-text)" />
               <span class="tree-label">Docker Apps</span>
               <span class="nav-badge font-xs">{{ nasState.dockerApps.length }}</span>
             </div>
 
             <div v-show="openSections.docker || query" class="tree-sub-branch">
-              <!-- Apps Overview Row -->
-              <div
-                class="tree-row tree-leaf"
-                :class="{ selected: nasState.selectedResourceId === 'node:docker' && nasState.activeTab === 'docker' }"
-                @click="handleSelect('node:docker', 'docker')"
-              >
-                <MdiIcon :path="mdiLayers" size="13" style="color: var(--text-secondary)" />
-                <span class="tree-label font-sm">Apps Overview</span>
-                <span class="nav-badge font-xs" style="margin-left: auto">{{ nasState.dockerApps.length }}</span>
-              </div>
-
               <div
                 v-if="filteredDocker.length === 0"
                 class="tree-empty-hint"
@@ -462,22 +441,13 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
                     color: a.state === 'RUNNING' ? 'var(--success)' : 'var(--text-muted)',
                     opacity: a.state === 'RUNNING' ? 1 : 0.6,
                   }"
+                  :title="`Status: ${(a.state || 'stopped').toLowerCase()}`"
                 />
                 <span
                   class="tree-label font-sm"
                   :title="a.title || a.appId || a.name.replace(/^dockerApps\//, '')"
                 >
                   {{ a.title || a.appId || a.name.replace(/^dockerApps\//, '') }}
-                </span>
-                <span
-                  class="font-xs mono"
-                  :style="{
-                    color: a.state === 'RUNNING' ? 'var(--success-text)' : 'var(--text-muted)',
-                    marginLeft: 'auto',
-                    fontSize: '10px'
-                  }"
-                >
-                  {{ (a.state || 'stopped').toLowerCase() }}
                 </span>
               </div>
             </div>
@@ -487,13 +457,20 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
           <div v-show="isSectionVisible('shares')" class="tree-group">
             <div
               class="tree-row tree-header-row"
-              @click="toggleSection('shares')"
+              :class="{ selected: (nasState.selectedResourceId === 'shares:cifs' || nasState.selectedResourceId === 'shares:webdav') && (nasState.activeTab === 'shares-cifs' || nasState.activeTab === 'shares-webdav') }"
+              @click="handleHeaderSelect('shares', 'shares:cifs', 'shares-cifs')"
             >
-              <MdiIcon
-                :path="openSections.shares || query ? mdiChevronDown : mdiChevronRight"
-                size="14"
-                class="chevron-icon"
-              />
+              <span
+                class="chevron-btn"
+                :title="openSections.shares || query ? 'Collapse' : 'Expand'"
+                @click.stop="toggleSection('shares')"
+              >
+                <MdiIcon
+                  :path="openSections.shares || query ? mdiChevronDown : mdiChevronRight"
+                  size="14"
+                  class="chevron-icon"
+                />
+              </span>
               <MdiIcon :path="mdiFolderNetwork" size="15" style="color: var(--accent-primary)" />
               <span class="tree-label">Shares</span>
               <span class="nav-badge font-xs">
@@ -523,7 +500,20 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
             </div>
           </div>
 
-          <!-- 6. Access & Identity -->
+          <!-- 6. Scheduled Tasks (Native CronJobs) -->
+          <div v-show="isSectionVisible('cron')" class="tree-group">
+            <div
+              class="tree-row tree-leaf"
+              :class="{ selected: nasState.selectedResourceId === 'node:cron' && nasState.activeTab === 'cron' }"
+              @click="handleSelect('node:cron', 'cron')"
+            >
+              <MdiIcon :path="mdiCalendarClock" size="15" style="color: var(--accent-primary)" />
+              <span class="tree-label font-sm">Scheduled Tasks</span>
+              <span class="nav-badge font-xs" style="margin-left: auto">{{ nasState.cronJobs.length }}</span>
+            </div>
+          </div>
+
+          <!-- 7. Access & Identity -->
           <div v-show="isSectionVisible('access')" class="tree-group">
             <div
               class="tree-row tree-leaf"
@@ -636,8 +626,31 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
   padding: 5px 6px;
 }
 
-.chevron-icon {
+.chevron-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  margin-right: 1px;
+  flex-shrink: 0;
+  cursor: pointer;
   color: var(--text-muted);
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.chevron-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.tree-row.selected .chevron-btn {
+  color: var(--accent-primary);
+}
+
+.chevron-icon {
+  color: inherit;
 }
 
 .tree-branch {

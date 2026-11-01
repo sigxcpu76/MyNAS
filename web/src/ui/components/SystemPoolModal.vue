@@ -307,28 +307,28 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 16px;
-  background: var(--bg-base, #0f172a);
-  border: 1px solid var(--border-subtle, #334155);
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  transition: all 0.18s ease;
+  transition: border-color 0.12s ease;
 }
 
 .pool-item:hover {
-  border-color: var(--accent-primary, #3b82f6);
+  border-color: var(--accent-primary);
 }
 
 .pool-item.active {
-  border-color: rgba(34, 197, 94, 0.5);
-  background: rgba(34, 197, 94, 0.04);
+  border-color: var(--success);
+  background: var(--success-bg);
 }
 
 .modal-footer {
   padding: 14px 20px;
   display: flex;
   justify-content: flex-end;
-  border-top: 1px solid var(--border-subtle, #334155);
-  background: rgba(15, 23, 42, 0.5);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
 }
 
 .spin-icon {

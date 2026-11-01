@@ -436,27 +436,27 @@ const poolDisks = computed(() => {
             <div class="metrics-grid">
               <div class="metric-item">
                 <span class="metric-label">VDEV Topology</span>
-                <span class="metric-val mono badge badge-neutral">{{ (pool?.vdevLayout || 'stripe').toUpperCase() }}</span>
+                <span class="metric-val badge badge-neutral">{{ (pool?.vdevLayout || 'stripe').toUpperCase() }}</span>
               </div>
               <div class="metric-item">
                 <span class="metric-label">Deduplication</span>
-                <span class="metric-val mono">{{ pool?.dedupRatio ? pool.dedupRatio.toFixed(2) + 'x' : '1.00x' }}</span>
+                <span class="metric-val">{{ pool?.dedupRatio ? pool.dedupRatio.toFixed(2) + 'x' : '1.00x' }}</span>
               </div>
               <div class="metric-item">
                 <span class="metric-label">Compression</span>
-                <span class="metric-val mono">{{ pool?.compression || 'lz4' }}</span>
+                <span class="metric-val">{{ pool?.compression || 'lz4' }}</span>
               </div>
               <div class="metric-item">
                 <span class="metric-label">Sync Policy</span>
-                <span class="metric-val mono">{{ pool?.sync || 'standard' }}</span>
+                <span class="metric-val">{{ pool?.sync || 'standard' }}</span>
               </div>
               <div class="metric-item">
                 <span class="metric-label">Autotrim</span>
-                <span class="metric-val mono">{{ pool?.autotrim || 'off' }}</span>
+                <span class="metric-val">{{ pool?.autotrim || 'off' }}</span>
               </div>
               <div class="metric-item">
                 <span class="metric-label">Health State</span>
-                <span class="metric-val mono" style="color: var(--success-text)">{{ pool?.state || 'ONLINE' }}</span>
+                <span class="metric-val" style="color: var(--success-text)">{{ pool?.state || 'ONLINE' }}</span>
               </div>
             </div>
           </div>
@@ -503,7 +503,7 @@ const poolDisks = computed(() => {
                     <tr v-for="d in poolDisks" :key="d.devicePath">
                       <td class="mono font-sm" style="font-weight: 600">{{ d.devicePath }}</td>
                       <td class="font-sm text-secondary">{{ d.model || d.vendor || 'Unknown' }}</td>
-                      <td class="mono font-sm">{{ formatBytes(d.sizeBytes) }}</td>
+                      <td class="font-sm">{{ formatBytes(d.sizeBytes) }}</td>
                       <td>
                         <span class="badge badge-success font-xs">ONLINE</span>
                       </td>
@@ -555,18 +555,18 @@ const poolDisks = computed(() => {
                     <span>{{ ds.name.replace(/^zfsPools\/[^/]+\/datasets\//, '') }}</span>
                   </div>
                 </td>
-                <td class="mono font-sm">{{ formatBytes(ds.usedBytes) }}</td>
-                <td class="mono font-sm text-muted">{{ formatBytes(ds.availableBytes) }}</td>
-                <td class="mono font-sm text-muted">{{ formatBytes(ds.referencedBytes) }}</td>
+                <td class="font-sm">{{ formatBytes(ds.usedBytes) }}</td>
+                <td class="font-sm text-muted">{{ formatBytes(ds.availableBytes) }}</td>
+                <td class="font-sm text-muted">{{ formatBytes(ds.referencedBytes) }}</td>
                 <td class="mono font-sm text-secondary">{{ ds.mountpoint || '-' }}</td>
-                <td class="mono font-sm">{{ ds.compression || 'lz4' }}</td>
+                <td class="font-sm">{{ ds.compression || 'lz4' }}</td>
                 <td style="text-align: center">
                   <button
                     class="btn btn-xs btn-ghost"
                     title="Delete Dataset"
                     @click="handleDeleteDataset(ds)"
                   >
-                    <MdiIcon :path="mdiDelete" size="14" style="color: var(--danger-text)" />
+                    <MdiIcon :path="mdiTrashCanOutline" size="14" style="color: var(--danger-text)" />
                   </button>
                 </td>
               </tr>
@@ -612,16 +612,16 @@ const poolDisks = computed(() => {
                     <span>{{ vol.name.replace(/^zfsPools\/[^/]+\/volumes\//, '') }}</span>
                   </div>
                 </td>
-                <td class="mono font-sm">{{ formatBytes(vol.sizeBytes) }}</td>
-                <td class="mono font-sm text-muted">{{ formatBytes(vol.usedBytes) }}</td>
-                <td class="mono font-sm text-secondary">{{ vol.volblocksize || '16K' }}</td>
+                <td class="font-sm">{{ formatBytes(vol.sizeBytes) }}</td>
+                <td class="font-sm text-muted">{{ formatBytes(vol.usedBytes) }}</td>
+                <td class="font-sm text-secondary">{{ vol.volblocksize || '16K' }}</td>
                 <td style="text-align: center">
                   <button
                     class="btn btn-xs btn-ghost"
                     title="Delete Volume"
                     @click="handleDeleteVolume(vol)"
                   >
-                    <MdiIcon :path="mdiDelete" size="14" style="color: var(--danger-text)" />
+                    <MdiIcon :path="mdiTrashCanOutline" size="14" style="color: var(--danger-text)" />
                   </button>
                 </td>
               </tr>
@@ -657,10 +657,10 @@ const poolDisks = computed(() => {
               <tbody>
                 <tr v-for="d in poolDisks" :key="d.devicePath">
                   <td class="mono font-sm" style="font-weight: 600">{{ d.devicePath }}</td>
-                  <td class="font-sm"><span class="badge badge-neutral mono">{{ pool?.vdevLayout || 'mirror' }}</span></td>
+                  <td class="font-sm"><span class="badge badge-neutral">{{ pool?.vdevLayout || 'mirror' }}</span></td>
                   <td class="font-sm text-secondary">{{ d.model || d.vendor || '-' }}</td>
-                  <td class="mono font-sm">{{ formatBytes(d.sizeBytes) }}</td>
-                  <td class="mono font-xs text-muted">{{ d.transport || 'SATA/NVMe' }}</td>
+                  <td class="font-sm">{{ formatBytes(d.sizeBytes) }}</td>
+                  <td class="font-xs text-muted">{{ d.transport || 'SATA/NVMe' }}</td>
                   <td><span class="badge badge-success font-xs">ONLINE</span></td>
                 </tr>
               </tbody>

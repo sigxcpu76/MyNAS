@@ -26,7 +26,7 @@ var File_nas_v1_service_proto protoreflect.FileDescriptor
 
 const file_nas_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"\x14nas/v1/service.proto\x12\x06nas.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x17google/api/client.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x11nas/v1/auth.proto\x1a\x14nas/v1/catalog.proto\x1a\x11nas/v1/disk.proto\x1a\x13nas/v1/docker.proto\x1a\x17nas/v1/filesystem.proto\x1a\x10nas/v1/kvm.proto\x1a\x10nas/v1/lxc.proto\x1a\x19nas/v1/prerequisite.proto\x1a\x12nas/v1/share.proto\x1a\x13nas/v1/system.proto\x1a\x11nas/v1/user.proto\x1a\x10nas/v1/zfs.proto2\xfc|\n" +
+	"\x14nas/v1/service.proto\x12\x06nas.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x17google/api/client.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x11nas/v1/auth.proto\x1a\x14nas/v1/catalog.proto\x1a\x11nas/v1/cron.proto\x1a\x11nas/v1/disk.proto\x1a\x13nas/v1/docker.proto\x1a\x17nas/v1/filesystem.proto\x1a\x10nas/v1/kvm.proto\x1a\x10nas/v1/lxc.proto\x1a\x19nas/v1/prerequisite.proto\x1a\x12nas/v1/share.proto\x1a\x13nas/v1/system.proto\x1a\x11nas/v1/user.proto\x1a\x10nas/v1/zfs.proto2\x91\x83\x01\n" +
 	"\n" +
 	"NasService\x12O\n" +
 	"\x05Login\x12\x14.nas.v1.LoginRequest\x1a\x15.nas.v1.LoginResponse\"\x19\x82\xd3\xe4\x93\x02\x13:\x01*\"\x0e/v1/auth:login\x12R\n" +
@@ -167,7 +167,16 @@ const file_nas_v1_service_proto_rawDesc = "" +
 	"\vDeleteGroup\x12\x1a.nas.v1.DeleteGroupRequest\x1a\x16.google.protobuf.Empty\"\"\xdaA\x04name\x82\xd3\xe4\x93\x02\x15*\x13/v1/{name=groups/*}\x12l\n" +
 	"\x0fListCatalogApps\x12\x1e.nas.v1.ListCatalogAppsRequest\x1a\x1f.nas.v1.ListCatalogAppsResponse\"\x18\x82\xd3\xe4\x93\x02\x12\x12\x10/v1/catalog/apps\x12d\n" +
 	"\rGetCatalogApp\x12\x1c.nas.v1.GetCatalogAppRequest\x1a\x12.nas.v1.CatalogApp\"!\x82\xd3\xe4\x93\x02\x1b\x12\x19/v1/catalog/apps/{app_id}\x12c\n" +
-	"\vSyncCatalog\x12\x1a.nas.v1.SyncCatalogRequest\x1a\x1b.nas.v1.SyncCatalogResponse\"\x1b\x82\xd3\xe4\x93\x02\x15:\x01*\"\x10/v1/catalog:syncB2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
+	"\vSyncCatalog\x12\x1a.nas.v1.SyncCatalogRequest\x1a\x1b.nas.v1.SyncCatalogResponse\"\x1b\x82\xd3\xe4\x93\x02\x15:\x01*\"\x10/v1/catalog:sync\x12_\n" +
+	"\fListCronJobs\x12\x1b.nas.v1.ListCronJobsRequest\x1a\x1c.nas.v1.ListCronJobsResponse\"\x14\x82\xd3\xe4\x93\x02\x0e\x12\f/v1/cronJobs\x12^\n" +
+	"\n" +
+	"GetCronJob\x12\x19.nas.v1.GetCronJobRequest\x1a\x0f.nas.v1.CronJob\"$\xdaA\x04name\x82\xd3\xe4\x93\x02\x17\x12\x15/v1/{name=cronJobs/*}\x12u\n" +
+	"\rCreateCronJob\x12\x1c.nas.v1.CreateCronJobRequest\x1a\x0f.nas.v1.CronJob\"5\xdaA\x14cron_job,cron_job_id\x82\xd3\xe4\x93\x02\x18:\bcron_job\"\f/v1/cronJobs\x12\x87\x01\n" +
+	"\rUpdateCronJob\x12\x1c.nas.v1.UpdateCronJobRequest\x1a\x0f.nas.v1.CronJob\"G\xdaA\x14cron_job,update_mask\x82\xd3\xe4\x93\x02*:\bcron_job2\x1e/v1/{cron_job.name=cronJobs/*}\x12k\n" +
+	"\rDeleteCronJob\x12\x1c.nas.v1.DeleteCronJobRequest\x1a\x16.google.protobuf.Empty\"$\xdaA\x04name\x82\xd3\xe4\x93\x02\x17*\x15/v1/{name=cronJobs/*}\x12h\n" +
+	"\n" +
+	"RunCronJob\x12\x19.nas.v1.RunCronJobRequest\x1a\x12.nas.v1.CronJobRun\"+\xdaA\x04name\x82\xd3\xe4\x93\x02\x1e:\x01*\"\x19/v1/{name=cronJobs/*}:run\x12z\n" +
+	"\x0eGetCronJobLogs\x12\x1d.nas.v1.GetCronJobLogsRequest\x1a\x1e.nas.v1.GetCronJobLogsResponse\")\xdaA\x04name\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/{name=cronJobs/*}:logsB2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
 
 var file_nas_v1_service_proto_goTypes = []any{
 	(*LoginRequest)(nil),                          // 0: nas.v1.LoginRequest
@@ -296,63 +305,74 @@ var file_nas_v1_service_proto_goTypes = []any{
 	(*ListCatalogAppsRequest)(nil),                // 123: nas.v1.ListCatalogAppsRequest
 	(*GetCatalogAppRequest)(nil),                  // 124: nas.v1.GetCatalogAppRequest
 	(*SyncCatalogRequest)(nil),                    // 125: nas.v1.SyncCatalogRequest
-	(*LoginResponse)(nil),                         // 126: nas.v1.LoginResponse
-	(*User)(nil),                                  // 127: nas.v1.User
-	(*SystemConfig)(nil),                          // 128: nas.v1.SystemConfig
-	(*DiscoverPoolsResponse)(nil),                 // 129: nas.v1.DiscoverPoolsResponse
-	(*SystemTelemetry)(nil),                       // 130: nas.v1.SystemTelemetry
-	(*WatchResourceChange)(nil),                   // 131: nas.v1.WatchResourceChange
-	(*ListPrerequisitesResponse)(nil),             // 132: nas.v1.ListPrerequisitesResponse
-	(*Prerequisite)(nil),                          // 133: nas.v1.Prerequisite
-	(*CheckPrerequisitesResponse)(nil),            // 134: nas.v1.CheckPrerequisitesResponse
-	(*ListDisksResponse)(nil),                     // 135: nas.v1.ListDisksResponse
-	(*Disk)(nil),                                  // 136: nas.v1.Disk
-	(*ListZfsPoolsResponse)(nil),                  // 137: nas.v1.ListZfsPoolsResponse
-	(*ZfsPool)(nil),                               // 138: nas.v1.ZfsPool
-	(*emptypb.Empty)(nil),                         // 139: google.protobuf.Empty
-	(*ListZfsDatasetsResponse)(nil),               // 140: nas.v1.ListZfsDatasetsResponse
-	(*ZfsDataset)(nil),                            // 141: nas.v1.ZfsDataset
-	(*ListZfsVolumesResponse)(nil),                // 142: nas.v1.ListZfsVolumesResponse
-	(*ZfsVolume)(nil),                             // 143: nas.v1.ZfsVolume
-	(*ListVirtualMachinesResponse)(nil),           // 144: nas.v1.ListVirtualMachinesResponse
-	(*VirtualMachine)(nil),                        // 145: nas.v1.VirtualMachine
-	(*ListVirtualMachineSnapshotsResponse)(nil),   // 146: nas.v1.ListVirtualMachineSnapshotsResponse
-	(*VirtualMachineSnapshot)(nil),                // 147: nas.v1.VirtualMachineSnapshot
-	(*VirtualMachineConsoleSession)(nil),          // 148: nas.v1.VirtualMachineConsoleSession
-	(*WatchVirtualMachinesResponse)(nil),          // 149: nas.v1.WatchVirtualMachinesResponse
-	(*ListDockerContainersResponse)(nil),          // 150: nas.v1.ListDockerContainersResponse
-	(*DockerContainer)(nil),                       // 151: nas.v1.DockerContainer
-	(*GetDockerContainerLogsResponse)(nil),        // 152: nas.v1.GetDockerContainerLogsResponse
-	(*WatchDockerContainersResponse)(nil),         // 153: nas.v1.WatchDockerContainersResponse
-	(*ListDockerAppsResponse)(nil),                // 154: nas.v1.ListDockerAppsResponse
-	(*DockerApp)(nil),                             // 155: nas.v1.DockerApp
-	(*GetDockerAppLogsResponse)(nil),              // 156: nas.v1.GetDockerAppLogsResponse
-	(*WatchDockerAppsResponse)(nil),               // 157: nas.v1.WatchDockerAppsResponse
-	(*ListDockerNetworksResponse)(nil),            // 158: nas.v1.ListDockerNetworksResponse
-	(*DockerConfig)(nil),                          // 159: nas.v1.DockerConfig
-	(*CheckHostPortResponse)(nil),                 // 160: nas.v1.CheckHostPortResponse
-	(*CheckHostPortsResponse)(nil),                // 161: nas.v1.CheckHostPortsResponse
-	(*ListDockerRegistriesResponse)(nil),          // 162: nas.v1.ListDockerRegistriesResponse
-	(*DockerRegistry)(nil),                        // 163: nas.v1.DockerRegistry
-	(*ListFileSystemDirectoriesResponse)(nil),     // 164: nas.v1.ListFileSystemDirectoriesResponse
-	(*ListLxcContainersResponse)(nil),             // 165: nas.v1.ListLxcContainersResponse
-	(*LxcContainer)(nil),                          // 166: nas.v1.LxcContainer
-	(*GetLxcContainerLogsResponse)(nil),           // 167: nas.v1.GetLxcContainerLogsResponse
-	(*WatchLxcContainersResponse)(nil),            // 168: nas.v1.WatchLxcContainersResponse
-	(*ListLxcCatalogItemsResponse)(nil),           // 169: nas.v1.ListLxcCatalogItemsResponse
-	(*LxcCatalogItem)(nil),                        // 170: nas.v1.LxcCatalogItem
-	(*SyncLxcCatalogResponse)(nil),                // 171: nas.v1.SyncLxcCatalogResponse
-	(*ListCifsSharesResponse)(nil),                // 172: nas.v1.ListCifsSharesResponse
-	(*CifsShare)(nil),                             // 173: nas.v1.CifsShare
-	(*CifsGlobalConfig)(nil),                      // 174: nas.v1.CifsGlobalConfig
-	(*ListWebdavSharesResponse)(nil),              // 175: nas.v1.ListWebdavSharesResponse
-	(*WebdavShare)(nil),                           // 176: nas.v1.WebdavShare
-	(*ListUsersResponse)(nil),                     // 177: nas.v1.ListUsersResponse
-	(*ListGroupsResponse)(nil),                    // 178: nas.v1.ListGroupsResponse
-	(*Group)(nil),                                 // 179: nas.v1.Group
-	(*ListCatalogAppsResponse)(nil),               // 180: nas.v1.ListCatalogAppsResponse
-	(*CatalogApp)(nil),                            // 181: nas.v1.CatalogApp
-	(*SyncCatalogResponse)(nil),                   // 182: nas.v1.SyncCatalogResponse
+	(*ListCronJobsRequest)(nil),                   // 126: nas.v1.ListCronJobsRequest
+	(*GetCronJobRequest)(nil),                     // 127: nas.v1.GetCronJobRequest
+	(*CreateCronJobRequest)(nil),                  // 128: nas.v1.CreateCronJobRequest
+	(*UpdateCronJobRequest)(nil),                  // 129: nas.v1.UpdateCronJobRequest
+	(*DeleteCronJobRequest)(nil),                  // 130: nas.v1.DeleteCronJobRequest
+	(*RunCronJobRequest)(nil),                     // 131: nas.v1.RunCronJobRequest
+	(*GetCronJobLogsRequest)(nil),                 // 132: nas.v1.GetCronJobLogsRequest
+	(*LoginResponse)(nil),                         // 133: nas.v1.LoginResponse
+	(*User)(nil),                                  // 134: nas.v1.User
+	(*SystemConfig)(nil),                          // 135: nas.v1.SystemConfig
+	(*DiscoverPoolsResponse)(nil),                 // 136: nas.v1.DiscoverPoolsResponse
+	(*SystemTelemetry)(nil),                       // 137: nas.v1.SystemTelemetry
+	(*WatchResourceChange)(nil),                   // 138: nas.v1.WatchResourceChange
+	(*ListPrerequisitesResponse)(nil),             // 139: nas.v1.ListPrerequisitesResponse
+	(*Prerequisite)(nil),                          // 140: nas.v1.Prerequisite
+	(*CheckPrerequisitesResponse)(nil),            // 141: nas.v1.CheckPrerequisitesResponse
+	(*ListDisksResponse)(nil),                     // 142: nas.v1.ListDisksResponse
+	(*Disk)(nil),                                  // 143: nas.v1.Disk
+	(*ListZfsPoolsResponse)(nil),                  // 144: nas.v1.ListZfsPoolsResponse
+	(*ZfsPool)(nil),                               // 145: nas.v1.ZfsPool
+	(*emptypb.Empty)(nil),                         // 146: google.protobuf.Empty
+	(*ListZfsDatasetsResponse)(nil),               // 147: nas.v1.ListZfsDatasetsResponse
+	(*ZfsDataset)(nil),                            // 148: nas.v1.ZfsDataset
+	(*ListZfsVolumesResponse)(nil),                // 149: nas.v1.ListZfsVolumesResponse
+	(*ZfsVolume)(nil),                             // 150: nas.v1.ZfsVolume
+	(*ListVirtualMachinesResponse)(nil),           // 151: nas.v1.ListVirtualMachinesResponse
+	(*VirtualMachine)(nil),                        // 152: nas.v1.VirtualMachine
+	(*ListVirtualMachineSnapshotsResponse)(nil),   // 153: nas.v1.ListVirtualMachineSnapshotsResponse
+	(*VirtualMachineSnapshot)(nil),                // 154: nas.v1.VirtualMachineSnapshot
+	(*VirtualMachineConsoleSession)(nil),          // 155: nas.v1.VirtualMachineConsoleSession
+	(*WatchVirtualMachinesResponse)(nil),          // 156: nas.v1.WatchVirtualMachinesResponse
+	(*ListDockerContainersResponse)(nil),          // 157: nas.v1.ListDockerContainersResponse
+	(*DockerContainer)(nil),                       // 158: nas.v1.DockerContainer
+	(*GetDockerContainerLogsResponse)(nil),        // 159: nas.v1.GetDockerContainerLogsResponse
+	(*WatchDockerContainersResponse)(nil),         // 160: nas.v1.WatchDockerContainersResponse
+	(*ListDockerAppsResponse)(nil),                // 161: nas.v1.ListDockerAppsResponse
+	(*DockerApp)(nil),                             // 162: nas.v1.DockerApp
+	(*GetDockerAppLogsResponse)(nil),              // 163: nas.v1.GetDockerAppLogsResponse
+	(*WatchDockerAppsResponse)(nil),               // 164: nas.v1.WatchDockerAppsResponse
+	(*ListDockerNetworksResponse)(nil),            // 165: nas.v1.ListDockerNetworksResponse
+	(*DockerConfig)(nil),                          // 166: nas.v1.DockerConfig
+	(*CheckHostPortResponse)(nil),                 // 167: nas.v1.CheckHostPortResponse
+	(*CheckHostPortsResponse)(nil),                // 168: nas.v1.CheckHostPortsResponse
+	(*ListDockerRegistriesResponse)(nil),          // 169: nas.v1.ListDockerRegistriesResponse
+	(*DockerRegistry)(nil),                        // 170: nas.v1.DockerRegistry
+	(*ListFileSystemDirectoriesResponse)(nil),     // 171: nas.v1.ListFileSystemDirectoriesResponse
+	(*ListLxcContainersResponse)(nil),             // 172: nas.v1.ListLxcContainersResponse
+	(*LxcContainer)(nil),                          // 173: nas.v1.LxcContainer
+	(*GetLxcContainerLogsResponse)(nil),           // 174: nas.v1.GetLxcContainerLogsResponse
+	(*WatchLxcContainersResponse)(nil),            // 175: nas.v1.WatchLxcContainersResponse
+	(*ListLxcCatalogItemsResponse)(nil),           // 176: nas.v1.ListLxcCatalogItemsResponse
+	(*LxcCatalogItem)(nil),                        // 177: nas.v1.LxcCatalogItem
+	(*SyncLxcCatalogResponse)(nil),                // 178: nas.v1.SyncLxcCatalogResponse
+	(*ListCifsSharesResponse)(nil),                // 179: nas.v1.ListCifsSharesResponse
+	(*CifsShare)(nil),                             // 180: nas.v1.CifsShare
+	(*CifsGlobalConfig)(nil),                      // 181: nas.v1.CifsGlobalConfig
+	(*ListWebdavSharesResponse)(nil),              // 182: nas.v1.ListWebdavSharesResponse
+	(*WebdavShare)(nil),                           // 183: nas.v1.WebdavShare
+	(*ListUsersResponse)(nil),                     // 184: nas.v1.ListUsersResponse
+	(*ListGroupsResponse)(nil),                    // 185: nas.v1.ListGroupsResponse
+	(*Group)(nil),                                 // 186: nas.v1.Group
+	(*ListCatalogAppsResponse)(nil),               // 187: nas.v1.ListCatalogAppsResponse
+	(*CatalogApp)(nil),                            // 188: nas.v1.CatalogApp
+	(*SyncCatalogResponse)(nil),                   // 189: nas.v1.SyncCatalogResponse
+	(*ListCronJobsResponse)(nil),                  // 190: nas.v1.ListCronJobsResponse
+	(*CronJob)(nil),                               // 191: nas.v1.CronJob
+	(*CronJobRun)(nil),                            // 192: nas.v1.CronJobRun
+	(*GetCronJobLogsResponse)(nil),                // 193: nas.v1.GetCronJobLogsResponse
 }
 var file_nas_v1_service_proto_depIdxs = []int32{
 	0,   // 0: nas.v1.NasService.Login:input_type -> nas.v1.LoginRequest
@@ -481,134 +501,148 @@ var file_nas_v1_service_proto_depIdxs = []int32{
 	123, // 123: nas.v1.NasService.ListCatalogApps:input_type -> nas.v1.ListCatalogAppsRequest
 	124, // 124: nas.v1.NasService.GetCatalogApp:input_type -> nas.v1.GetCatalogAppRequest
 	125, // 125: nas.v1.NasService.SyncCatalog:input_type -> nas.v1.SyncCatalogRequest
-	126, // 126: nas.v1.NasService.Login:output_type -> nas.v1.LoginResponse
-	127, // 127: nas.v1.NasService.GetCurrentUser:output_type -> nas.v1.User
-	128, // 128: nas.v1.NasService.GetSystemConfig:output_type -> nas.v1.SystemConfig
-	128, // 129: nas.v1.NasService.UpdateSystemConfig:output_type -> nas.v1.SystemConfig
-	128, // 130: nas.v1.NasService.SelectMainPool:output_type -> nas.v1.SystemConfig
-	129, // 131: nas.v1.NasService.DiscoverPools:output_type -> nas.v1.DiscoverPoolsResponse
-	130, // 132: nas.v1.NasService.GetSystemTelemetry:output_type -> nas.v1.SystemTelemetry
-	130, // 133: nas.v1.NasService.StreamSystemTelemetry:output_type -> nas.v1.SystemTelemetry
-	131, // 134: nas.v1.NasService.WatchResources:output_type -> nas.v1.WatchResourceChange
-	132, // 135: nas.v1.NasService.ListPrerequisites:output_type -> nas.v1.ListPrerequisitesResponse
-	133, // 136: nas.v1.NasService.GetPrerequisite:output_type -> nas.v1.Prerequisite
-	134, // 137: nas.v1.NasService.CheckPrerequisites:output_type -> nas.v1.CheckPrerequisitesResponse
-	135, // 138: nas.v1.NasService.ListDisks:output_type -> nas.v1.ListDisksResponse
-	136, // 139: nas.v1.NasService.GetDisk:output_type -> nas.v1.Disk
-	137, // 140: nas.v1.NasService.ListZfsPools:output_type -> nas.v1.ListZfsPoolsResponse
-	138, // 141: nas.v1.NasService.GetZfsPool:output_type -> nas.v1.ZfsPool
-	138, // 142: nas.v1.NasService.CreateZfsPool:output_type -> nas.v1.ZfsPool
-	139, // 143: nas.v1.NasService.DeleteZfsPool:output_type -> google.protobuf.Empty
-	139, // 144: nas.v1.NasService.ExportZfsPool:output_type -> google.protobuf.Empty
-	138, // 145: nas.v1.NasService.ImportZfsPool:output_type -> nas.v1.ZfsPool
-	138, // 146: nas.v1.NasService.ScrubZfsPool:output_type -> nas.v1.ZfsPool
-	138, // 147: nas.v1.NasService.UpdateZfsPool:output_type -> nas.v1.ZfsPool
-	138, // 148: nas.v1.NasService.AddZfsPoolVdev:output_type -> nas.v1.ZfsPool
-	138, // 149: nas.v1.NasService.RemoveZfsPoolVdev:output_type -> nas.v1.ZfsPool
-	140, // 150: nas.v1.NasService.ListZfsDatasets:output_type -> nas.v1.ListZfsDatasetsResponse
-	141, // 151: nas.v1.NasService.GetZfsDataset:output_type -> nas.v1.ZfsDataset
-	141, // 152: nas.v1.NasService.CreateZfsDataset:output_type -> nas.v1.ZfsDataset
-	141, // 153: nas.v1.NasService.UpdateZfsDataset:output_type -> nas.v1.ZfsDataset
-	139, // 154: nas.v1.NasService.DeleteZfsDataset:output_type -> google.protobuf.Empty
-	141, // 155: nas.v1.NasService.SnapshotZfsDataset:output_type -> nas.v1.ZfsDataset
-	142, // 156: nas.v1.NasService.ListZfsVolumes:output_type -> nas.v1.ListZfsVolumesResponse
-	143, // 157: nas.v1.NasService.GetZfsVolume:output_type -> nas.v1.ZfsVolume
-	143, // 158: nas.v1.NasService.CreateZfsVolume:output_type -> nas.v1.ZfsVolume
-	143, // 159: nas.v1.NasService.UpdateZfsVolume:output_type -> nas.v1.ZfsVolume
-	139, // 160: nas.v1.NasService.DeleteZfsVolume:output_type -> google.protobuf.Empty
-	144, // 161: nas.v1.NasService.ListVirtualMachines:output_type -> nas.v1.ListVirtualMachinesResponse
-	145, // 162: nas.v1.NasService.GetVirtualMachine:output_type -> nas.v1.VirtualMachine
-	145, // 163: nas.v1.NasService.CreateVirtualMachine:output_type -> nas.v1.VirtualMachine
-	145, // 164: nas.v1.NasService.UpdateVirtualMachine:output_type -> nas.v1.VirtualMachine
-	139, // 165: nas.v1.NasService.DeleteVirtualMachine:output_type -> google.protobuf.Empty
-	145, // 166: nas.v1.NasService.StartVirtualMachine:output_type -> nas.v1.VirtualMachine
-	145, // 167: nas.v1.NasService.StopVirtualMachine:output_type -> nas.v1.VirtualMachine
-	145, // 168: nas.v1.NasService.RebootVirtualMachine:output_type -> nas.v1.VirtualMachine
-	145, // 169: nas.v1.NasService.ResetVirtualMachine:output_type -> nas.v1.VirtualMachine
-	145, // 170: nas.v1.NasService.PauseVirtualMachine:output_type -> nas.v1.VirtualMachine
-	145, // 171: nas.v1.NasService.ResumeVirtualMachine:output_type -> nas.v1.VirtualMachine
-	145, // 172: nas.v1.NasService.CloneVirtualMachine:output_type -> nas.v1.VirtualMachine
-	145, // 173: nas.v1.NasService.AttachVirtualMachineMedia:output_type -> nas.v1.VirtualMachine
-	145, // 174: nas.v1.NasService.EjectVirtualMachineMedia:output_type -> nas.v1.VirtualMachine
-	146, // 175: nas.v1.NasService.ListVirtualMachineSnapshots:output_type -> nas.v1.ListVirtualMachineSnapshotsResponse
-	147, // 176: nas.v1.NasService.CreateVirtualMachineSnapshot:output_type -> nas.v1.VirtualMachineSnapshot
-	145, // 177: nas.v1.NasService.RollbackVirtualMachineSnapshot:output_type -> nas.v1.VirtualMachine
-	139, // 178: nas.v1.NasService.DeleteVirtualMachineSnapshot:output_type -> google.protobuf.Empty
-	148, // 179: nas.v1.NasService.OpenVirtualMachineConsole:output_type -> nas.v1.VirtualMachineConsoleSession
-	149, // 180: nas.v1.NasService.WatchVirtualMachines:output_type -> nas.v1.WatchVirtualMachinesResponse
-	150, // 181: nas.v1.NasService.ListDockerContainers:output_type -> nas.v1.ListDockerContainersResponse
-	151, // 182: nas.v1.NasService.GetDockerContainer:output_type -> nas.v1.DockerContainer
-	151, // 183: nas.v1.NasService.CreateDockerContainer:output_type -> nas.v1.DockerContainer
-	151, // 184: nas.v1.NasService.UpdateDockerContainer:output_type -> nas.v1.DockerContainer
-	139, // 185: nas.v1.NasService.DeleteDockerContainer:output_type -> google.protobuf.Empty
-	152, // 186: nas.v1.NasService.GetDockerContainerLogs:output_type -> nas.v1.GetDockerContainerLogsResponse
-	151, // 187: nas.v1.NasService.StartDockerContainer:output_type -> nas.v1.DockerContainer
-	151, // 188: nas.v1.NasService.StopDockerContainer:output_type -> nas.v1.DockerContainer
-	151, // 189: nas.v1.NasService.RestartDockerContainer:output_type -> nas.v1.DockerContainer
-	153, // 190: nas.v1.NasService.WatchDockerContainers:output_type -> nas.v1.WatchDockerContainersResponse
-	154, // 191: nas.v1.NasService.ListDockerApps:output_type -> nas.v1.ListDockerAppsResponse
-	155, // 192: nas.v1.NasService.GetDockerApp:output_type -> nas.v1.DockerApp
-	155, // 193: nas.v1.NasService.CreateDockerApp:output_type -> nas.v1.DockerApp
-	155, // 194: nas.v1.NasService.UpdateDockerApp:output_type -> nas.v1.DockerApp
-	139, // 195: nas.v1.NasService.DeleteDockerApp:output_type -> google.protobuf.Empty
-	155, // 196: nas.v1.NasService.StartDockerApp:output_type -> nas.v1.DockerApp
-	155, // 197: nas.v1.NasService.StopDockerApp:output_type -> nas.v1.DockerApp
-	155, // 198: nas.v1.NasService.RestartDockerApp:output_type -> nas.v1.DockerApp
-	155, // 199: nas.v1.NasService.UpgradeDockerApp:output_type -> nas.v1.DockerApp
-	156, // 200: nas.v1.NasService.GetDockerAppLogs:output_type -> nas.v1.GetDockerAppLogsResponse
-	157, // 201: nas.v1.NasService.WatchDockerApps:output_type -> nas.v1.WatchDockerAppsResponse
-	158, // 202: nas.v1.NasService.ListDockerNetworks:output_type -> nas.v1.ListDockerNetworksResponse
-	159, // 203: nas.v1.NasService.GetDockerConfig:output_type -> nas.v1.DockerConfig
-	159, // 204: nas.v1.NasService.UpdateDockerConfig:output_type -> nas.v1.DockerConfig
-	160, // 205: nas.v1.NasService.CheckHostPort:output_type -> nas.v1.CheckHostPortResponse
-	161, // 206: nas.v1.NasService.CheckHostPorts:output_type -> nas.v1.CheckHostPortsResponse
-	162, // 207: nas.v1.NasService.ListDockerRegistries:output_type -> nas.v1.ListDockerRegistriesResponse
-	163, // 208: nas.v1.NasService.GetDockerRegistry:output_type -> nas.v1.DockerRegistry
-	163, // 209: nas.v1.NasService.CreateDockerRegistry:output_type -> nas.v1.DockerRegistry
-	163, // 210: nas.v1.NasService.UpdateDockerRegistry:output_type -> nas.v1.DockerRegistry
-	139, // 211: nas.v1.NasService.DeleteDockerRegistry:output_type -> google.protobuf.Empty
-	164, // 212: nas.v1.NasService.ListFileSystemDirectories:output_type -> nas.v1.ListFileSystemDirectoriesResponse
-	165, // 213: nas.v1.NasService.ListLxcContainers:output_type -> nas.v1.ListLxcContainersResponse
-	166, // 214: nas.v1.NasService.GetLxcContainer:output_type -> nas.v1.LxcContainer
-	166, // 215: nas.v1.NasService.CreateLxcContainer:output_type -> nas.v1.LxcContainer
-	166, // 216: nas.v1.NasService.UpdateLxcContainer:output_type -> nas.v1.LxcContainer
-	139, // 217: nas.v1.NasService.DeleteLxcContainer:output_type -> google.protobuf.Empty
-	166, // 218: nas.v1.NasService.StartLxcContainer:output_type -> nas.v1.LxcContainer
-	166, // 219: nas.v1.NasService.StopLxcContainer:output_type -> nas.v1.LxcContainer
-	166, // 220: nas.v1.NasService.RestartLxcContainer:output_type -> nas.v1.LxcContainer
-	166, // 221: nas.v1.NasService.FreezeLxcContainer:output_type -> nas.v1.LxcContainer
-	167, // 222: nas.v1.NasService.GetLxcContainerLogs:output_type -> nas.v1.GetLxcContainerLogsResponse
-	168, // 223: nas.v1.NasService.WatchLxcContainers:output_type -> nas.v1.WatchLxcContainersResponse
-	169, // 224: nas.v1.NasService.ListLxcCatalogItems:output_type -> nas.v1.ListLxcCatalogItemsResponse
-	170, // 225: nas.v1.NasService.GetLxcCatalogItem:output_type -> nas.v1.LxcCatalogItem
-	171, // 226: nas.v1.NasService.SyncLxcCatalog:output_type -> nas.v1.SyncLxcCatalogResponse
-	172, // 227: nas.v1.NasService.ListCifsShares:output_type -> nas.v1.ListCifsSharesResponse
-	173, // 228: nas.v1.NasService.GetCifsShare:output_type -> nas.v1.CifsShare
-	173, // 229: nas.v1.NasService.CreateCifsShare:output_type -> nas.v1.CifsShare
-	173, // 230: nas.v1.NasService.UpdateCifsShare:output_type -> nas.v1.CifsShare
-	139, // 231: nas.v1.NasService.DeleteCifsShare:output_type -> google.protobuf.Empty
-	174, // 232: nas.v1.NasService.GetCifsGlobalConfig:output_type -> nas.v1.CifsGlobalConfig
-	174, // 233: nas.v1.NasService.UpdateCifsGlobalConfig:output_type -> nas.v1.CifsGlobalConfig
-	175, // 234: nas.v1.NasService.ListWebdavShares:output_type -> nas.v1.ListWebdavSharesResponse
-	176, // 235: nas.v1.NasService.GetWebdavShare:output_type -> nas.v1.WebdavShare
-	176, // 236: nas.v1.NasService.CreateWebdavShare:output_type -> nas.v1.WebdavShare
-	176, // 237: nas.v1.NasService.UpdateWebdavShare:output_type -> nas.v1.WebdavShare
-	139, // 238: nas.v1.NasService.DeleteWebdavShare:output_type -> google.protobuf.Empty
-	177, // 239: nas.v1.NasService.ListUsers:output_type -> nas.v1.ListUsersResponse
-	127, // 240: nas.v1.NasService.GetUser:output_type -> nas.v1.User
-	127, // 241: nas.v1.NasService.CreateUser:output_type -> nas.v1.User
-	127, // 242: nas.v1.NasService.UpdateUser:output_type -> nas.v1.User
-	139, // 243: nas.v1.NasService.DeleteUser:output_type -> google.protobuf.Empty
-	178, // 244: nas.v1.NasService.ListGroups:output_type -> nas.v1.ListGroupsResponse
-	179, // 245: nas.v1.NasService.GetGroup:output_type -> nas.v1.Group
-	179, // 246: nas.v1.NasService.CreateGroup:output_type -> nas.v1.Group
-	179, // 247: nas.v1.NasService.UpdateGroup:output_type -> nas.v1.Group
-	139, // 248: nas.v1.NasService.DeleteGroup:output_type -> google.protobuf.Empty
-	180, // 249: nas.v1.NasService.ListCatalogApps:output_type -> nas.v1.ListCatalogAppsResponse
-	181, // 250: nas.v1.NasService.GetCatalogApp:output_type -> nas.v1.CatalogApp
-	182, // 251: nas.v1.NasService.SyncCatalog:output_type -> nas.v1.SyncCatalogResponse
-	126, // [126:252] is the sub-list for method output_type
-	0,   // [0:126] is the sub-list for method input_type
+	126, // 126: nas.v1.NasService.ListCronJobs:input_type -> nas.v1.ListCronJobsRequest
+	127, // 127: nas.v1.NasService.GetCronJob:input_type -> nas.v1.GetCronJobRequest
+	128, // 128: nas.v1.NasService.CreateCronJob:input_type -> nas.v1.CreateCronJobRequest
+	129, // 129: nas.v1.NasService.UpdateCronJob:input_type -> nas.v1.UpdateCronJobRequest
+	130, // 130: nas.v1.NasService.DeleteCronJob:input_type -> nas.v1.DeleteCronJobRequest
+	131, // 131: nas.v1.NasService.RunCronJob:input_type -> nas.v1.RunCronJobRequest
+	132, // 132: nas.v1.NasService.GetCronJobLogs:input_type -> nas.v1.GetCronJobLogsRequest
+	133, // 133: nas.v1.NasService.Login:output_type -> nas.v1.LoginResponse
+	134, // 134: nas.v1.NasService.GetCurrentUser:output_type -> nas.v1.User
+	135, // 135: nas.v1.NasService.GetSystemConfig:output_type -> nas.v1.SystemConfig
+	135, // 136: nas.v1.NasService.UpdateSystemConfig:output_type -> nas.v1.SystemConfig
+	135, // 137: nas.v1.NasService.SelectMainPool:output_type -> nas.v1.SystemConfig
+	136, // 138: nas.v1.NasService.DiscoverPools:output_type -> nas.v1.DiscoverPoolsResponse
+	137, // 139: nas.v1.NasService.GetSystemTelemetry:output_type -> nas.v1.SystemTelemetry
+	137, // 140: nas.v1.NasService.StreamSystemTelemetry:output_type -> nas.v1.SystemTelemetry
+	138, // 141: nas.v1.NasService.WatchResources:output_type -> nas.v1.WatchResourceChange
+	139, // 142: nas.v1.NasService.ListPrerequisites:output_type -> nas.v1.ListPrerequisitesResponse
+	140, // 143: nas.v1.NasService.GetPrerequisite:output_type -> nas.v1.Prerequisite
+	141, // 144: nas.v1.NasService.CheckPrerequisites:output_type -> nas.v1.CheckPrerequisitesResponse
+	142, // 145: nas.v1.NasService.ListDisks:output_type -> nas.v1.ListDisksResponse
+	143, // 146: nas.v1.NasService.GetDisk:output_type -> nas.v1.Disk
+	144, // 147: nas.v1.NasService.ListZfsPools:output_type -> nas.v1.ListZfsPoolsResponse
+	145, // 148: nas.v1.NasService.GetZfsPool:output_type -> nas.v1.ZfsPool
+	145, // 149: nas.v1.NasService.CreateZfsPool:output_type -> nas.v1.ZfsPool
+	146, // 150: nas.v1.NasService.DeleteZfsPool:output_type -> google.protobuf.Empty
+	146, // 151: nas.v1.NasService.ExportZfsPool:output_type -> google.protobuf.Empty
+	145, // 152: nas.v1.NasService.ImportZfsPool:output_type -> nas.v1.ZfsPool
+	145, // 153: nas.v1.NasService.ScrubZfsPool:output_type -> nas.v1.ZfsPool
+	145, // 154: nas.v1.NasService.UpdateZfsPool:output_type -> nas.v1.ZfsPool
+	145, // 155: nas.v1.NasService.AddZfsPoolVdev:output_type -> nas.v1.ZfsPool
+	145, // 156: nas.v1.NasService.RemoveZfsPoolVdev:output_type -> nas.v1.ZfsPool
+	147, // 157: nas.v1.NasService.ListZfsDatasets:output_type -> nas.v1.ListZfsDatasetsResponse
+	148, // 158: nas.v1.NasService.GetZfsDataset:output_type -> nas.v1.ZfsDataset
+	148, // 159: nas.v1.NasService.CreateZfsDataset:output_type -> nas.v1.ZfsDataset
+	148, // 160: nas.v1.NasService.UpdateZfsDataset:output_type -> nas.v1.ZfsDataset
+	146, // 161: nas.v1.NasService.DeleteZfsDataset:output_type -> google.protobuf.Empty
+	148, // 162: nas.v1.NasService.SnapshotZfsDataset:output_type -> nas.v1.ZfsDataset
+	149, // 163: nas.v1.NasService.ListZfsVolumes:output_type -> nas.v1.ListZfsVolumesResponse
+	150, // 164: nas.v1.NasService.GetZfsVolume:output_type -> nas.v1.ZfsVolume
+	150, // 165: nas.v1.NasService.CreateZfsVolume:output_type -> nas.v1.ZfsVolume
+	150, // 166: nas.v1.NasService.UpdateZfsVolume:output_type -> nas.v1.ZfsVolume
+	146, // 167: nas.v1.NasService.DeleteZfsVolume:output_type -> google.protobuf.Empty
+	151, // 168: nas.v1.NasService.ListVirtualMachines:output_type -> nas.v1.ListVirtualMachinesResponse
+	152, // 169: nas.v1.NasService.GetVirtualMachine:output_type -> nas.v1.VirtualMachine
+	152, // 170: nas.v1.NasService.CreateVirtualMachine:output_type -> nas.v1.VirtualMachine
+	152, // 171: nas.v1.NasService.UpdateVirtualMachine:output_type -> nas.v1.VirtualMachine
+	146, // 172: nas.v1.NasService.DeleteVirtualMachine:output_type -> google.protobuf.Empty
+	152, // 173: nas.v1.NasService.StartVirtualMachine:output_type -> nas.v1.VirtualMachine
+	152, // 174: nas.v1.NasService.StopVirtualMachine:output_type -> nas.v1.VirtualMachine
+	152, // 175: nas.v1.NasService.RebootVirtualMachine:output_type -> nas.v1.VirtualMachine
+	152, // 176: nas.v1.NasService.ResetVirtualMachine:output_type -> nas.v1.VirtualMachine
+	152, // 177: nas.v1.NasService.PauseVirtualMachine:output_type -> nas.v1.VirtualMachine
+	152, // 178: nas.v1.NasService.ResumeVirtualMachine:output_type -> nas.v1.VirtualMachine
+	152, // 179: nas.v1.NasService.CloneVirtualMachine:output_type -> nas.v1.VirtualMachine
+	152, // 180: nas.v1.NasService.AttachVirtualMachineMedia:output_type -> nas.v1.VirtualMachine
+	152, // 181: nas.v1.NasService.EjectVirtualMachineMedia:output_type -> nas.v1.VirtualMachine
+	153, // 182: nas.v1.NasService.ListVirtualMachineSnapshots:output_type -> nas.v1.ListVirtualMachineSnapshotsResponse
+	154, // 183: nas.v1.NasService.CreateVirtualMachineSnapshot:output_type -> nas.v1.VirtualMachineSnapshot
+	152, // 184: nas.v1.NasService.RollbackVirtualMachineSnapshot:output_type -> nas.v1.VirtualMachine
+	146, // 185: nas.v1.NasService.DeleteVirtualMachineSnapshot:output_type -> google.protobuf.Empty
+	155, // 186: nas.v1.NasService.OpenVirtualMachineConsole:output_type -> nas.v1.VirtualMachineConsoleSession
+	156, // 187: nas.v1.NasService.WatchVirtualMachines:output_type -> nas.v1.WatchVirtualMachinesResponse
+	157, // 188: nas.v1.NasService.ListDockerContainers:output_type -> nas.v1.ListDockerContainersResponse
+	158, // 189: nas.v1.NasService.GetDockerContainer:output_type -> nas.v1.DockerContainer
+	158, // 190: nas.v1.NasService.CreateDockerContainer:output_type -> nas.v1.DockerContainer
+	158, // 191: nas.v1.NasService.UpdateDockerContainer:output_type -> nas.v1.DockerContainer
+	146, // 192: nas.v1.NasService.DeleteDockerContainer:output_type -> google.protobuf.Empty
+	159, // 193: nas.v1.NasService.GetDockerContainerLogs:output_type -> nas.v1.GetDockerContainerLogsResponse
+	158, // 194: nas.v1.NasService.StartDockerContainer:output_type -> nas.v1.DockerContainer
+	158, // 195: nas.v1.NasService.StopDockerContainer:output_type -> nas.v1.DockerContainer
+	158, // 196: nas.v1.NasService.RestartDockerContainer:output_type -> nas.v1.DockerContainer
+	160, // 197: nas.v1.NasService.WatchDockerContainers:output_type -> nas.v1.WatchDockerContainersResponse
+	161, // 198: nas.v1.NasService.ListDockerApps:output_type -> nas.v1.ListDockerAppsResponse
+	162, // 199: nas.v1.NasService.GetDockerApp:output_type -> nas.v1.DockerApp
+	162, // 200: nas.v1.NasService.CreateDockerApp:output_type -> nas.v1.DockerApp
+	162, // 201: nas.v1.NasService.UpdateDockerApp:output_type -> nas.v1.DockerApp
+	146, // 202: nas.v1.NasService.DeleteDockerApp:output_type -> google.protobuf.Empty
+	162, // 203: nas.v1.NasService.StartDockerApp:output_type -> nas.v1.DockerApp
+	162, // 204: nas.v1.NasService.StopDockerApp:output_type -> nas.v1.DockerApp
+	162, // 205: nas.v1.NasService.RestartDockerApp:output_type -> nas.v1.DockerApp
+	162, // 206: nas.v1.NasService.UpgradeDockerApp:output_type -> nas.v1.DockerApp
+	163, // 207: nas.v1.NasService.GetDockerAppLogs:output_type -> nas.v1.GetDockerAppLogsResponse
+	164, // 208: nas.v1.NasService.WatchDockerApps:output_type -> nas.v1.WatchDockerAppsResponse
+	165, // 209: nas.v1.NasService.ListDockerNetworks:output_type -> nas.v1.ListDockerNetworksResponse
+	166, // 210: nas.v1.NasService.GetDockerConfig:output_type -> nas.v1.DockerConfig
+	166, // 211: nas.v1.NasService.UpdateDockerConfig:output_type -> nas.v1.DockerConfig
+	167, // 212: nas.v1.NasService.CheckHostPort:output_type -> nas.v1.CheckHostPortResponse
+	168, // 213: nas.v1.NasService.CheckHostPorts:output_type -> nas.v1.CheckHostPortsResponse
+	169, // 214: nas.v1.NasService.ListDockerRegistries:output_type -> nas.v1.ListDockerRegistriesResponse
+	170, // 215: nas.v1.NasService.GetDockerRegistry:output_type -> nas.v1.DockerRegistry
+	170, // 216: nas.v1.NasService.CreateDockerRegistry:output_type -> nas.v1.DockerRegistry
+	170, // 217: nas.v1.NasService.UpdateDockerRegistry:output_type -> nas.v1.DockerRegistry
+	146, // 218: nas.v1.NasService.DeleteDockerRegistry:output_type -> google.protobuf.Empty
+	171, // 219: nas.v1.NasService.ListFileSystemDirectories:output_type -> nas.v1.ListFileSystemDirectoriesResponse
+	172, // 220: nas.v1.NasService.ListLxcContainers:output_type -> nas.v1.ListLxcContainersResponse
+	173, // 221: nas.v1.NasService.GetLxcContainer:output_type -> nas.v1.LxcContainer
+	173, // 222: nas.v1.NasService.CreateLxcContainer:output_type -> nas.v1.LxcContainer
+	173, // 223: nas.v1.NasService.UpdateLxcContainer:output_type -> nas.v1.LxcContainer
+	146, // 224: nas.v1.NasService.DeleteLxcContainer:output_type -> google.protobuf.Empty
+	173, // 225: nas.v1.NasService.StartLxcContainer:output_type -> nas.v1.LxcContainer
+	173, // 226: nas.v1.NasService.StopLxcContainer:output_type -> nas.v1.LxcContainer
+	173, // 227: nas.v1.NasService.RestartLxcContainer:output_type -> nas.v1.LxcContainer
+	173, // 228: nas.v1.NasService.FreezeLxcContainer:output_type -> nas.v1.LxcContainer
+	174, // 229: nas.v1.NasService.GetLxcContainerLogs:output_type -> nas.v1.GetLxcContainerLogsResponse
+	175, // 230: nas.v1.NasService.WatchLxcContainers:output_type -> nas.v1.WatchLxcContainersResponse
+	176, // 231: nas.v1.NasService.ListLxcCatalogItems:output_type -> nas.v1.ListLxcCatalogItemsResponse
+	177, // 232: nas.v1.NasService.GetLxcCatalogItem:output_type -> nas.v1.LxcCatalogItem
+	178, // 233: nas.v1.NasService.SyncLxcCatalog:output_type -> nas.v1.SyncLxcCatalogResponse
+	179, // 234: nas.v1.NasService.ListCifsShares:output_type -> nas.v1.ListCifsSharesResponse
+	180, // 235: nas.v1.NasService.GetCifsShare:output_type -> nas.v1.CifsShare
+	180, // 236: nas.v1.NasService.CreateCifsShare:output_type -> nas.v1.CifsShare
+	180, // 237: nas.v1.NasService.UpdateCifsShare:output_type -> nas.v1.CifsShare
+	146, // 238: nas.v1.NasService.DeleteCifsShare:output_type -> google.protobuf.Empty
+	181, // 239: nas.v1.NasService.GetCifsGlobalConfig:output_type -> nas.v1.CifsGlobalConfig
+	181, // 240: nas.v1.NasService.UpdateCifsGlobalConfig:output_type -> nas.v1.CifsGlobalConfig
+	182, // 241: nas.v1.NasService.ListWebdavShares:output_type -> nas.v1.ListWebdavSharesResponse
+	183, // 242: nas.v1.NasService.GetWebdavShare:output_type -> nas.v1.WebdavShare
+	183, // 243: nas.v1.NasService.CreateWebdavShare:output_type -> nas.v1.WebdavShare
+	183, // 244: nas.v1.NasService.UpdateWebdavShare:output_type -> nas.v1.WebdavShare
+	146, // 245: nas.v1.NasService.DeleteWebdavShare:output_type -> google.protobuf.Empty
+	184, // 246: nas.v1.NasService.ListUsers:output_type -> nas.v1.ListUsersResponse
+	134, // 247: nas.v1.NasService.GetUser:output_type -> nas.v1.User
+	134, // 248: nas.v1.NasService.CreateUser:output_type -> nas.v1.User
+	134, // 249: nas.v1.NasService.UpdateUser:output_type -> nas.v1.User
+	146, // 250: nas.v1.NasService.DeleteUser:output_type -> google.protobuf.Empty
+	185, // 251: nas.v1.NasService.ListGroups:output_type -> nas.v1.ListGroupsResponse
+	186, // 252: nas.v1.NasService.GetGroup:output_type -> nas.v1.Group
+	186, // 253: nas.v1.NasService.CreateGroup:output_type -> nas.v1.Group
+	186, // 254: nas.v1.NasService.UpdateGroup:output_type -> nas.v1.Group
+	146, // 255: nas.v1.NasService.DeleteGroup:output_type -> google.protobuf.Empty
+	187, // 256: nas.v1.NasService.ListCatalogApps:output_type -> nas.v1.ListCatalogAppsResponse
+	188, // 257: nas.v1.NasService.GetCatalogApp:output_type -> nas.v1.CatalogApp
+	189, // 258: nas.v1.NasService.SyncCatalog:output_type -> nas.v1.SyncCatalogResponse
+	190, // 259: nas.v1.NasService.ListCronJobs:output_type -> nas.v1.ListCronJobsResponse
+	191, // 260: nas.v1.NasService.GetCronJob:output_type -> nas.v1.CronJob
+	191, // 261: nas.v1.NasService.CreateCronJob:output_type -> nas.v1.CronJob
+	191, // 262: nas.v1.NasService.UpdateCronJob:output_type -> nas.v1.CronJob
+	146, // 263: nas.v1.NasService.DeleteCronJob:output_type -> google.protobuf.Empty
+	192, // 264: nas.v1.NasService.RunCronJob:output_type -> nas.v1.CronJobRun
+	193, // 265: nas.v1.NasService.GetCronJobLogs:output_type -> nas.v1.GetCronJobLogsResponse
+	133, // [133:266] is the sub-list for method output_type
+	0,   // [0:133] is the sub-list for method input_type
 	0,   // [0:0] is the sub-list for extension type_name
 	0,   // [0:0] is the sub-list for extension extendee
 	0,   // [0:0] is the sub-list for field type_name
@@ -621,6 +655,7 @@ func file_nas_v1_service_proto_init() {
 	}
 	file_nas_v1_auth_proto_init()
 	file_nas_v1_catalog_proto_init()
+	file_nas_v1_cron_proto_init()
 	file_nas_v1_disk_proto_init()
 	file_nas_v1_docker_proto_init()
 	file_nas_v1_filesystem_proto_init()

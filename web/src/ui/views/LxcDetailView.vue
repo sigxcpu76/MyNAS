@@ -4,6 +4,7 @@ import {
   mdiAlertCircle,
   mdiArrowLeft,
   mdiCheckCircle,
+  mdiChevronDoubleDown,
   mdiClose,
   mdiConsole,
   mdiContentCopy,
@@ -28,6 +29,7 @@ import {
 import MdiIcon from '../components/MdiIcon.vue';
 import EmbeddedTerminal from '../components/EmbeddedTerminal.vue';
 import DockerTerminalModal, { type TerminalContainerOption } from '../components/DockerTerminalModal.vue';
+import { useAutoScroll } from '../composables/useAutoScroll';
 import { services } from '../../container';
 import {
   type LxcContainer,
@@ -44,7 +46,7 @@ import { confirmDelete } from '../modal';
 const props = withDefaults(
   defineProps<{
     containerName: string;
-    activeSubTab?: 'summary' | 'terminal' | 'mounts' | 'configuration' | 'logs';
+    activeSubTab?: 'summary' | 'console' | 'terminal' | 'mounts' | 'configuration' | 'logs';
   }>(),
   {
     activeSubTab: 'summary',
@@ -53,7 +55,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'back'): void;
-  (e: 'update:activeSubTab', tab: 'summary' | 'terminal' | 'mounts' | 'configuration' | 'logs'): void;
+  (e: 'update:activeSubTab', tab: 'summary' | 'console' | 'terminal' | 'mounts' | 'configuration' | 'logs'): void;
 }>();
 
 const isBusy = ref(false);
@@ -314,6 +316,8 @@ const isSavingConfig = ref(false);
 const configForm = reactive({
   containerName: '',
   description: '',
+  cpuCores: 2,
+  memoryLimitMib: 2048,
   networkBridge: '',
   autostart: false,
   unprivileged: true,
@@ -326,6 +330,8 @@ watch(
     if (ct) {
       configForm.containerName = ct.containerName || cleanContainerName.value;
       configForm.description = ct.description || '';
+      configForm.cpuCores = ct.cpuCores || 2;
+      configForm.memoryLimitMib = ct.memoryLimitMib || 2048;
       configForm.networkBridge = ct.networkBridge || 'br0';
       configForm.autostart = Boolean(ct.autostart);
       configForm.unprivileged = Boolean(ct.unprivileged);
@@ -343,6 +349,8 @@ async function handleSaveConfig() {
       await services.lxc.updateContainer(container.value!.name, {
         containerName: configForm.containerName.trim(),
         description: configForm.description.trim(),
+        cpuCores: Number(configForm.cpuCores) || 2,
+        memoryLimitMib: Number(configForm.memoryLimitMib) || 2048,
         networkBridge: configForm.networkBridge.trim() || 'br0',
         autostart: configForm.autostart,
         unprivileged: configForm.unprivileged,
@@ -364,17 +372,48 @@ async function handleSaveConfig() {
 const logTail = ref(100);
 const logsContent = ref('');
 const isLoadingLogs = ref(false);
+let logPollTimer: any = null;
 
-async function fetchLogs() {
+const {
+  containerRef: logContainerRef,
+  autoScroll,
+  scrollToBottom,
+  onScroll: onLogScroll,
+  toggleAutoScroll,
+} = useAutoScroll();
+
+function startLogPolling() {
+  stopLogPolling();
+  logPollTimer = setInterval(() => {
+    if (props.activeSubTab === 'logs') {
+      fetchLogs(true);
+    } else {
+      stopLogPolling();
+    }
+  }, 2500);
+}
+
+function stopLogPolling() {
+  if (logPollTimer) {
+    clearInterval(logPollTimer);
+    logPollTimer = null;
+  }
+}
+
+async function fetchLogs(silent = false) {
   if (!container.value) return;
-  isLoadingLogs.value = true;
+  if (!silent) isLoadingLogs.value = true;
   try {
     const raw = await services.lxc.getContainerLogs(container.value.name, logTail.value);
     logsContent.value = raw || 'No log entries recorded for this container.';
+    scrollToBottom();
   } catch (err: any) {
-    logsContent.value = `Failed to fetch logs: ${err.message || 'Unknown error'}`;
+    if (!silent) logsContent.value = `Failed to fetch logs: ${err.message || 'Unknown error'}`;
   } finally {
-    isLoadingLogs.value = false;
+    if (!silent) {
+      isLoadingLogs.value = false;
+      scrollToBottom();
+    }
   }
 }
 
@@ -386,12 +425,20 @@ function copyLogs() {
 watch(
   () => props.activeSubTab,
   (tab) => {
-    if (tab === 'logs' && !logsContent.value) {
-      fetchLogs();
+    if (tab === 'logs') {
+      autoScroll.value = true;
+      fetchLogs(false);
+      startLogPolling();
+    } else {
+      stopLogPolling();
     }
   },
   { immediate: true }
 );
+
+onBeforeUnmount(() => {
+  stopLogPolling();
+});
 </script>
 
 <template>
@@ -409,7 +456,7 @@ watch(
               <div class="metric-item">
                 <span class="metric-label">Power State</span>
                 <span
-                  class="badge mono font-xs"
+                  class="badge font-xs"
                   :class="
                     container?.state === 'RUNNING'
                       ? 'badge-success'
@@ -424,7 +471,7 @@ watch(
               </div>
               <div class="metric-item">
                 <span class="metric-label">Real CPU Usage</span>
-                <span class="metric-val mono">
+                <span class="metric-val">
                   {{
                     container?.state === 'RUNNING' && container?.cpuPercent !== undefined
                       ? container.cpuPercent.toFixed(1) + '%'
@@ -434,7 +481,7 @@ watch(
               </div>
               <div class="metric-item">
                 <span class="metric-label">Real Memory Used</span>
-                <span class="metric-val mono">
+                <span class="metric-val">
                   {{
                     container?.state === 'RUNNING' && container?.memoryUsedMib
                       ? container.memoryUsedMib >= 1024
@@ -456,7 +503,7 @@ watch(
               </div>
               <div class="metric-item">
                 <span class="metric-label">Architecture</span>
-                <span class="metric-val mono">{{ container?.architecture }}</span>
+                <span class="metric-val">{{ container?.architecture }}</span>
               </div>
               <div class="metric-item">
                 <span class="metric-label">Network Bridge</span>
@@ -466,7 +513,7 @@ watch(
                 <span class="metric-label">Autostart on Boot</span>
                 <button
                   type="button"
-                  class="badge interactive mono font-xs"
+                  class="badge interactive font-xs"
                   :class="container?.autostart ? 'badge-success' : 'badge-neutral'"
                   style="align-self: flex-start; cursor: pointer"
                   :disabled="isTogglingAutostart"
@@ -493,8 +540,8 @@ watch(
         <div class="card detail-card">
           <div class="card-header" style="display: flex; justify-content: space-between; align-items: center">
             <h3 class="card-title">Storage Bind Mounts</h3>
-            <button class="btn btn-xs btn-secondary" @click="emit('update:activeSubTab', 'mounts')">
-              Manage Mounts
+            <button class="btn btn-xs btn-secondary" @click="emit('update:activeSubTab', 'configuration')">
+              Edit Configuration
             </button>
           </div>
           <div class="card-body">
@@ -526,8 +573,8 @@ watch(
       </div>
     </div>
 
-    <!-- Subtab 2: Terminal -->
-    <div v-else-if="props.activeSubTab === 'terminal'" class="lxc-tab-content">
+    <!-- Subtab 2: Console / Terminal -->
+    <div v-else-if="props.activeSubTab === 'console' || props.activeSubTab === 'terminal'" class="lxc-tab-content">
       <div v-if="container?.state !== 'RUNNING'" class="card detail-card" style="padding: 48px; text-align: center">
         <MdiIcon :path="mdiAlertCircle" size="48" style="color: var(--warning-text); margin-bottom: 12px" />
         <h4 style="font-size: 16px; font-weight: 600; margin-bottom: 6px">Container is not running</h4>
@@ -549,112 +596,125 @@ watch(
       </div>
     </div>
 
-    <!-- Subtab 3: Storage Mounts -->
-    <div v-else-if="props.activeSubTab === 'mounts'" class="lxc-tab-content">
-      <div class="card detail-card">
-        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center">
-          <div>
-            <h3 class="card-title">Storage Bind Mounts</h3>
-            <p class="card-subtitle">ZFS datasets and host directories mapped into the container</p>
+    <!-- Subtab 3: Configuration (Settings, Resources & Storage Mounts) -->
+    <div v-else-if="props.activeSubTab === 'configuration' || props.activeSubTab === 'mounts'" class="lxc-tab-content">
+      <div class="grid-2">
+        <!-- Container Settings & Resource Limits -->
+        <div class="card detail-card">
+          <div class="card-header">
+            <h3 class="card-title">Container Settings & Resources</h3>
+            <p class="card-subtitle">Manage runtime limits, networking and security profiles</p>
           </div>
-          <button class="btn btn-sm btn-primary" @click="openAddMountModal">
-            <MdiIcon :path="mdiPlus" size="14" style="margin-right: 4px" />
-            <span>Add Mount Point</span>
-          </button>
+          <div class="card-body">
+            <form style="display: flex; flex-direction: column; gap: 14px" @submit.prevent="handleSaveConfig">
+              <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 12px">
+                <div class="form-group">
+                  <label class="form-label">Container Name</label>
+                  <input v-model="configForm.containerName" type="text" class="form-input" required />
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Network Bridge</label>
+                  <input v-model="configForm.networkBridge" type="text" class="form-input mono" placeholder="e.g. br0" />
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">CPU Cores</label>
+                  <input v-model.number="configForm.cpuCores" type="number" min="1" max="64" class="form-input" />
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Memory Limit (MiB)</label>
+                  <input v-model.number="configForm.memoryLimitMib" type="number" min="128" step="128" class="form-input" />
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Description</label>
+                <input v-model="configForm.description" type="text" class="form-input" placeholder="Optional notes or service description" />
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 4px">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px">
+                  <input v-model="configForm.autostart" type="checkbox" />
+                  <span>Autostart on host boot</span>
+                </label>
+
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px">
+                  <input v-model="configForm.unprivileged" type="checkbox" />
+                  <span>Unprivileged Container (maps UID/GID to unprivileged ranges)</span>
+                </label>
+
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px">
+                  <input v-model="configForm.gpuEnabled" type="checkbox" />
+                  <span>GPU Acceleration Passthrough (/dev/dri, nvidia)</span>
+                </label>
+              </div>
+
+              <div style="margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: flex-end">
+                <button type="submit" class="btn btn-sm btn-primary" :disabled="isSavingConfig">
+                  {{ isSavingConfig ? 'Saving Changes...' : 'Save Configuration' }}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-        <div class="card-body">
-          <div v-if="mountsList.length === 0" class="empty-state">
-            No bind mounts configured. Click "Add Mount Point" to map host storage.
+
+        <!-- Storage Bind Mounts -->
+        <div class="card detail-card">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center">
+            <div>
+              <h3 class="card-title">Storage Bind Mounts</h3>
+              <p class="card-subtitle">ZFS datasets and host directories mapped into the container</p>
+            </div>
+            <button class="btn btn-sm btn-secondary" @click="openAddMountModal">
+              <MdiIcon :path="mdiPlus" size="14" />
+              <span>Add Mount Point</span>
+            </button>
           </div>
-          <div v-else class="table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Host Path</th>
-                  <th>Container Mount Path</th>
-                  <th>Access Mode</th>
-                  <th style="text-align: right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(m, idx) in mountsList" :key="idx">
-                  <td class="mono font-sm" style="font-weight: 600">{{ m.hostPath }}</td>
-                  <td class="mono font-sm" style="color: var(--accent-primary)">{{ m.containerPath }}</td>
-                  <td>
-                    <span class="badge font-xs" :class="m.readOnly ? 'badge-warning' : 'badge-success'">
-                      {{ m.readOnly ? 'Read Only' : 'Read / Write' }}
-                    </span>
-                  </td>
-                  <td style="text-align: right">
-                    <button
-                      class="btn btn-xs btn-danger"
-                      title="Remove bind mount"
-                      :disabled="isSavingMounts"
-                      @click="handleRemoveMount(idx)"
-                    >
-                      <MdiIcon :path="mdiTrashCanOutline" size="13" />
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="card-body">
+            <div v-if="mountsList.length === 0" class="empty-state">
+              No bind mounts configured. Click "Add Mount Point" to map host storage.
+            </div>
+            <div v-else class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Host Path</th>
+                    <th>Container Mount Path</th>
+                    <th>Mode</th>
+                    <th style="text-align: right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(m, idx) in mountsList" :key="idx">
+                    <td class="mono font-sm" style="font-weight: 600">{{ m.hostPath }}</td>
+                    <td class="mono font-sm" style="color: var(--accent-primary)">{{ m.containerPath }}</td>
+                    <td>
+                      <span class="badge font-xs" :class="m.readOnly ? 'badge-warning' : 'badge-success'">
+                        {{ m.readOnly ? 'Read Only' : 'Read / Write' }}
+                      </span>
+                    </td>
+                    <td style="text-align: right">
+                      <button
+                        class="btn btn-xs btn-danger"
+                        title="Remove bind mount"
+                        :disabled="isSavingMounts"
+                        @click="handleRemoveMount(idx)"
+                      >
+                        <MdiIcon :path="mdiTrashCanOutline" size="13" />
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Subtab 4: Configuration -->
-    <div v-else-if="props.activeSubTab === 'configuration'" class="lxc-tab-content">
-      <div class="card detail-card" style="max-width: 720px">
-        <div class="card-header">
-          <h3 class="card-title">Container Settings</h3>
-          <p class="card-subtitle">Manage runtime behavior, networking and security profiles</p>
-        </div>
-        <div class="card-body">
-          <form style="display: flex; flex-direction: column; gap: 16px" @submit.prevent="handleSaveConfig">
-            <div class="form-group">
-              <label class="form-label">Container Name</label>
-              <input v-model="configForm.containerName" type="text" class="form-input" required />
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Description</label>
-              <input v-model="configForm.description" type="text" class="form-input" placeholder="Optional notes or service description" />
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Network Bridge</label>
-              <input v-model="configForm.networkBridge" type="text" class="form-input mono" placeholder="e.g. br0" />
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px">
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px">
-                <input v-model="configForm.autostart" type="checkbox" />
-                <span>Autostart on host boot</span>
-              </label>
-
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px">
-                <input v-model="configForm.unprivileged" type="checkbox" />
-                <span>Unprivileged Container (maps UID/GID to high unprivileged ranges)</span>
-              </label>
-
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px">
-                <input v-model="configForm.gpuEnabled" type="checkbox" />
-                <span>GPU Acceleration Passthrough (/dev/dri, nvidia)</span>
-              </label>
-            </div>
-
-            <div style="margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: flex-end">
-              <button type="submit" class="btn btn-primary" :disabled="isSavingConfig">
-                {{ isSavingConfig ? 'Saving Changes...' : 'Save Configuration' }}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-
-    <!-- Subtab 5: Logs -->
+    <!-- Subtab 4: Logs -->
     <div v-else-if="props.activeSubTab === 'logs'" class="lxc-tab-content">
       <div class="card detail-card">
         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center">
@@ -663,14 +723,23 @@ watch(
             <p class="card-subtitle">Recent boot, console and kernel messages for {{ cleanContainerName }}</p>
           </div>
           <div style="display: flex; align-items: center; gap: 8px">
-            <select v-model.number="logTail" class="form-select font-xs" @change="fetchLogs">
+            <select v-model.number="logTail" class="form-select font-xs" @change="fetchLogs(false)">
               <option :value="50">Last 50 lines</option>
               <option :value="100">Last 100 lines</option>
               <option :value="250">Last 250 lines</option>
               <option :value="500">Last 500 lines</option>
             </select>
-            <button class="btn btn-sm btn-secondary" :disabled="isLoadingLogs" @click="fetchLogs">
-              <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" />
+            <button
+              class="btn btn-sm"
+              :class="autoScroll ? 'btn-primary' : 'btn-secondary'"
+              :title="autoScroll ? 'Auto-scroll enabled (click to pause)' : 'Click to follow logs automatically'"
+              @click="toggleAutoScroll"
+            >
+              <MdiIcon :path="mdiChevronDoubleDown" size="14" style="margin-right: 4px" />
+              <span>Auto-scroll</span>
+            </button>
+            <button class="btn btn-sm btn-secondary" :disabled="isLoadingLogs" @click="fetchLogs(false)">
+              <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" :class="{ 'spin-icon': isLoadingLogs }" />
               <span>Refresh</span>
             </button>
             <button class="btn btn-sm btn-secondary" :disabled="!logsContent" @click="copyLogs">
@@ -681,6 +750,7 @@ watch(
         </div>
         <div class="card-body">
           <pre
+            ref="logContainerRef"
             class="mono font-xs"
             style="
               background: var(--bg-base);
@@ -693,6 +763,7 @@ watch(
               white-space: pre-wrap;
               word-break: break-all;
             "
+            @scroll="onLogScroll"
           >{{ isLoadingLogs ? 'Loading logs...' : logsContent }}</pre>
         </div>
       </div>

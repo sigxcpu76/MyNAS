@@ -747,6 +747,10 @@ type VirtualMachine struct {
 	IsTemplate          bool     `protobuf:"varint,45,opt,name=is_template,json=isTemplate,proto3" json:"is_template,omitempty"`
 	QemuCommandlineArgs []string `protobuf:"bytes,46,rep,name=qemu_commandline_args,json=qemuCommandlineArgs,proto3" json:"qemu_commandline_args,omitempty"`
 	SerialConsoleUrl    string   `protobuf:"bytes,47,opt,name=serial_console_url,json=serialConsoleUrl,proto3" json:"serial_console_url,omitempty"`
+	NetRxRate           int64    `protobuf:"varint,49,opt,name=net_rx_rate,json=netRxRate,proto3" json:"net_rx_rate,omitempty"`
+	NetTxRate           int64    `protobuf:"varint,50,opt,name=net_tx_rate,json=netTxRate,proto3" json:"net_tx_rate,omitempty"`
+	NetRxBytes          int64    `protobuf:"varint,51,opt,name=net_rx_bytes,json=netRxBytes,proto3" json:"net_rx_bytes,omitempty"`
+	NetTxBytes          int64    `protobuf:"varint,52,opt,name=net_tx_bytes,json=netTxBytes,proto3" json:"net_tx_bytes,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -1115,6 +1119,34 @@ func (x *VirtualMachine) GetSerialConsoleUrl() string {
 		return x.SerialConsoleUrl
 	}
 	return ""
+}
+
+func (x *VirtualMachine) GetNetRxRate() int64 {
+	if x != nil {
+		return x.NetRxRate
+	}
+	return 0
+}
+
+func (x *VirtualMachine) GetNetTxRate() int64 {
+	if x != nil {
+		return x.NetTxRate
+	}
+	return 0
+}
+
+func (x *VirtualMachine) GetNetRxBytes() int64 {
+	if x != nil {
+		return x.NetRxBytes
+	}
+	return 0
+}
+
+func (x *VirtualMachine) GetNetTxBytes() int64 {
+	if x != nil {
+		return x.NetTxBytes
+	}
+	return 0
 }
 
 type ListVirtualMachinesRequest struct {
@@ -2455,7 +2487,7 @@ const file_nas_v1_kvm_proto_rawDesc = "" +
 	"includeRam\x12'\n" +
 	"\x0fparent_snapshot\x18\x06 \x01(\tR\x0eparentSnapshot\x12\x19\n" +
 	"\bvm_state\x18\a \x01(\tR\avmState:w\xeaAt\n" +
-	"%nas.sigxcpu.io/VirtualMachineSnapshot\x126virtualMachines/{virtual_machine}/snapshots/{snapshot}*\tsnapshots2\bsnapshot\"\x97\x0f\n" +
+	"%nas.sigxcpu.io/VirtualMachineSnapshot\x126virtualMachines/{virtual_machine}/snapshots/{snapshot}*\tsnapshots2\bsnapshot\"\xb3\x10\n" +
 	"\x0eVirtualMachine\x12\x18\n" +
 	"\x04name\x18\x01 \x01(\tB\x04\xe2A\x01\bR\x04name\x12\x1d\n" +
 	"\avm_name\x18\x02 \x01(\tB\x04\xe2A\x01\x03R\x06vmName\x12\x18\n" +
@@ -2515,7 +2547,13 @@ const file_nas_v1_kvm_proto_rawDesc = "" +
 	"\vis_template\x18- \x01(\bR\n" +
 	"isTemplate\x122\n" +
 	"\x15qemu_commandline_args\x18. \x03(\tR\x13qemuCommandlineArgs\x12,\n" +
-	"\x12serial_console_url\x18/ \x01(\tR\x10serialConsoleUrl:f\xeaAc\n" +
+	"\x12serial_console_url\x18/ \x01(\tR\x10serialConsoleUrl\x12$\n" +
+	"\vnet_rx_rate\x181 \x01(\x03B\x04\xe2A\x01\x03R\tnetRxRate\x12$\n" +
+	"\vnet_tx_rate\x182 \x01(\x03B\x04\xe2A\x01\x03R\tnetTxRate\x12&\n" +
+	"\fnet_rx_bytes\x183 \x01(\x03B\x04\xe2A\x01\x03R\n" +
+	"netRxBytes\x12&\n" +
+	"\fnet_tx_bytes\x184 \x01(\x03B\x04\xe2A\x01\x03R\n" +
+	"netTxBytes:f\xeaAc\n" +
 	"\x1dnas.sigxcpu.io/VirtualMachine\x12!virtualMachines/{virtual_machine}*\x0fvirtualMachines2\x0evirtualMachine\"p\n" +
 	"\x1aListVirtualMachinesRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +

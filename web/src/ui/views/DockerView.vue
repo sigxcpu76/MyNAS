@@ -4,6 +4,7 @@ import {
   mdiAlertCircleOutline,
   mdiArrowUpBoldCircleOutline,
   mdiCheck,
+  mdiChevronDoubleDown,
   mdiChevronDown,
   mdiClose,
   mdiCloudSync,
@@ -44,13 +45,14 @@ import { composeYamlToForm, formToComposeYaml } from '../../domain/composeModel'
 import ComposeFormEditor from '../components/ComposeFormEditor.vue';
 import CodeMirrorEditor from '../components/CodeMirrorEditor.vue';
 import DockerTerminalModal, { type TerminalContainerOption } from '../components/DockerTerminalModal.vue';
+import { useAutoScroll } from '../composables/useAutoScroll';
 import CatalogQuestionWizard from '../components/CatalogQuestionWizard.vue';
 import DockerRegistriesModal from '../components/DockerRegistriesModal.vue';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import SortableTh from '../components/SortableTh.vue';
 import { useTableSort } from '../composables/useTableSort';
-import { nasState, notify, selectResource } from '../store';
+import { checkAndPollDeployingApps, nasState, notify, selectResource } from '../store';
 import { confirmDelete } from '../modal';
 
 // =============================================================================
@@ -191,6 +193,7 @@ async function updateTelemetry() {
     if (apps && Array.isArray(apps)) {
       if (apps.length > 0 || nasState.dockerApps.length === 0) {
         nasState.dockerApps = apps;
+        checkAndPollDeployingApps();
       }
     }
   } catch {
@@ -296,15 +299,23 @@ async function loadCatalog() {
 async function syncCatalog() {
   isSyncingCatalog.value = true;
   try {
-    notify('info', 'Syncing app catalog...');
+    notify('info', 'Checking upstream catalogs for updates...');
     const res = await services.catalog.syncCatalog(true);
     catalogLastSyncTime.value = res.lastSyncTime;
     nasState.catalogLastSync = res.lastSyncTime;
-    notify(
-      'success',
-      res.message || `Catalog synchronized: ${res.totalApps} applications available.`
-    );
-    await loadCatalog();
+    await Promise.all([loadCatalog(), refreshApps()]);
+    const updatesCount = nasState.dockerApps.filter((a) => a.updateAvailable).length;
+    if (updatesCount > 0) {
+      notify(
+        'success',
+        `Catalog synchronized (${res.totalApps} apps) — ${updatesCount} app update${updatesCount === 1 ? '' : 's'} available.`
+      );
+    } else {
+      notify(
+        'success',
+        res.message || `Catalog synchronized (${res.totalApps} apps) — all installed apps are up to date.`
+      );
+    }
   } catch (err: any) {
     notify('error', err?.message || 'Failed to sync catalog');
   } finally {
@@ -606,6 +617,38 @@ const logTail = ref(100);
 const selectedService = ref<string>('');
 const logsContent = ref('');
 const isLoadingLogs = ref(false);
+let logPollTimer: any = null;
+
+const {
+  containerRef: logContainerRef,
+  autoScroll,
+  scrollToBottom,
+  onScroll: onLogScroll,
+  toggleAutoScroll,
+} = useAutoScroll();
+
+function startLogPolling() {
+  stopLogPolling();
+  logPollTimer = setInterval(() => {
+    if (isInspectModalOpen.value && inspectActiveTab.value === 'logs') {
+      fetchLogs(true);
+    } else {
+      stopLogPolling();
+    }
+  }, 2500);
+}
+
+function stopLogPolling() {
+  if (logPollTimer) {
+    clearInterval(logPollTimer);
+    logPollTimer = null;
+  }
+}
+
+function closeInspectModal() {
+  isInspectModalOpen.value = false;
+  stopLogPolling();
+}
 
 const containerSort = useTableSort(() => inspectedApp.value?.containers ?? [], {
   name: (c) => c.name,
@@ -648,13 +691,17 @@ function openInspectModal(app: DockerApp, defaultTab: 'containers' | 'logs' | 'c
   selectedService.value = '';
   isInspectModalOpen.value = true;
   if (defaultTab === 'logs') {
-    fetchLogs();
+    autoScroll.value = true;
+    fetchLogs(false);
+    startLogPolling();
+  } else {
+    stopLogPolling();
   }
 }
 
-async function fetchLogs() {
+async function fetchLogs(silent = false) {
   if (!inspectedApp.value) return;
-  isLoadingLogs.value = true;
+  if (!silent) isLoadingLogs.value = true;
   try {
     const res = await services.apps.getAppLogs(
       inspectedApp.value.name,
@@ -662,10 +709,14 @@ async function fetchLogs() {
       selectedService.value || undefined
     );
     logsContent.value = res.logs || 'No log entries found for this application.';
+    scrollToBottom();
   } catch (err: any) {
-    logsContent.value = `Failed to fetch logs: ${err?.message || 'Unknown error'}`;
+    if (!silent) logsContent.value = `Failed to fetch logs: ${err?.message || 'Unknown error'}`;
   } finally {
-    isLoadingLogs.value = false;
+    if (!silent) {
+      isLoadingLogs.value = false;
+      scrollToBottom();
+    }
   }
 }
 
@@ -929,15 +980,26 @@ function openWebPortal(url: string) {
   window.open(targetUrl, '_blank', 'noopener,noreferrer');
 }
 
+let statsPollTimer: any = null;
+
 onMounted(() => {
   window.addEventListener('click', handleGlobalClick);
   fetchDockerConfig();
   refreshApps();
   loadCatalog().catch(() => {});
+  statsPollTimer = setInterval(() => {
+    if (!nasState.liveSyncActive) {
+      updateTelemetry();
+    }
+  }, 4000);
 });
 
 onUnmounted(() => {
   window.removeEventListener('click', handleGlobalClick);
+  if (statsPollTimer) {
+    clearInterval(statsPollTimer);
+    statsPollTimer = null;
+  }
 });
 </script>
 
@@ -955,6 +1017,17 @@ onUnmounted(() => {
         <button class="btn btn-sm" :disabled="isRefreshing" @click="refreshApps">
           <MdiIcon :path="mdiRefresh" size="14" :class="{ 'spin-icon': isRefreshing }" />
           <span class="hide-mobile" style="margin-left: 4px">{{ isRefreshing ? 'Refreshing...' : 'Refresh' }}</span>
+        </button>
+
+        <button
+          class="btn btn-sm"
+          style="display: flex; align-items: center; gap: 5px"
+          :disabled="isSyncingCatalog"
+          title="Sync upstream app catalogs and check installed apps for updates"
+          @click="syncCatalog"
+        >
+          <MdiIcon :path="mdiUpdate" size="15" :class="{ 'spin-icon': isSyncingCatalog }" style="color: var(--accent-primary)" />
+          <span class="hide-mobile">{{ isSyncingCatalog ? 'Checking...' : 'Check Updates' }}</span>
         </button>
 
         <button
@@ -1125,7 +1198,6 @@ onUnmounted(() => {
           <tr style="border-bottom: 1px solid var(--border-subtle); text-align: left; font-size: 11.5px; color: var(--text-secondary); text-transform: uppercase">
             <th style="padding: 10px 14px; width: 280px">Application</th>
             <th style="padding: 10px 14px; width: 130px">Web UI</th>
-            <th class="col-desktop-only" style="padding: 10px 14px; width: 100px">Autostart</th>
             <th class="col-desktop-only" style="padding: 10px 14px; width: 85px">CPU</th>
             <th class="col-desktop-only" style="padding: 10px 14px; width: 105px">Memory</th>
             <th class="col-desktop-only" style="padding: 10px 14px; width: 210px">Network (1s)</th>
@@ -1144,9 +1216,8 @@ onUnmounted(() => {
               </div>
             </td>
             <td style="padding: 10px 14px"><SkeletonBox width="75px" height="20px" rounded="10px" /></td>
-            <td class="col-desktop-only" style="padding: 10px 14px"><SkeletonBox width="60px" height="20px" rounded="10px" /></td>
-            <td class="col-desktop-only" style="padding: 10px 14px"><SkeletonBox width="45px" height="14px" /></td>
             <td class="col-desktop-only" style="padding: 10px 14px"><SkeletonBox width="60px" height="14px" /></td>
+            <td class="col-desktop-only" style="padding: 10px 14px"><SkeletonBox width="80px" height="14px" /></td>
             <td class="col-desktop-only" style="padding: 10px 14px"><SkeletonBox width="110px" height="14px" /></td>
             <td style="padding: 10px 14px; text-align: right">
               <div style="display: flex; gap: 6px; justify-content: flex-end">
@@ -1191,7 +1262,6 @@ onUnmounted(() => {
           <tr style="border-bottom: 1px solid var(--border-subtle); text-align: left; font-size: 11px; color: var(--text-secondary); text-transform: uppercase">
             <SortableTh :sort="appSort" sort-key="name" style="padding: 8px 10px; width: 280px; min-width: 220px; max-width: 340px">Application</SortableTh>
             <SortableTh :sort="appSort" sort-key="webui" style="padding: 8px 10px; width: 130px; min-width: 130px">Web UI</SortableTh>
-            <SortableTh :sort="appSort" sort-key="autostart" class="col-desktop-only" style="padding: 8px 10px; width: 100px; min-width: 100px; max-width: 110px">Autostart</SortableTh>
             <SortableTh :sort="appSort" sort-key="cpu" class="col-desktop-only" style="padding: 8px 10px; width: 85px; min-width: 85px; max-width: 85px">CPU</SortableTh>
             <SortableTh :sort="appSort" sort-key="memory" class="col-desktop-only" style="padding: 8px 10px; width: 105px; min-width: 105px; max-width: 105px">Memory</SortableTh>
             <SortableTh :sort="appSort" sort-key="network" class="col-desktop-only" style="padding: 8px 10px; width: 210px; min-width: 210px; max-width: 210px">Network (1s)</SortableTh>
@@ -1202,13 +1272,14 @@ onUnmounted(() => {
           <tr
             v-for="app in appSort.sorted.value"
             :key="app.name"
-            style="border-bottom: 1px solid var(--border-subtle)"
+            style="border-bottom: 1px solid var(--border-subtle); cursor: pointer"
             :title="`Application: ${app.title || app.appId}\nServices: ${(app.services || []).join(', ') || 'none'}\nStatus: ${app.statusText || app.state}`"
+            @click="openDockerDetail(app)"
           >
             <!-- Application (Status Indicator Icon + Title + AppId with Services Tooltip) -->
             <td style="padding: 8px 10px; width: 280px; min-width: 220px; max-width: 340px">
               <div style="display: flex; align-items: center; gap: 10px">
-                <!-- Status indicator dot replacing the old Docker logo -->
+                <!-- Status indicator dot -->
                 <div
                   :title="`Status: ${app.state} (${app.statusText})`"
                   style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 16px; height: 16px"
@@ -1221,41 +1292,42 @@ onUnmounted(() => {
                   ></span>
                   <span
                     v-else-if="app.state === 'RUNNING'"
-                    style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px rgba(34, 197, 94, 0.4)"
+                    style="display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--success)"
                   ></span>
                   <span
                     v-else-if="app.state === 'PARTIALLY_RUNNING'"
-                    style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--warning); box-shadow: 0 0 8px rgba(245, 158, 11, 0.4)"
+                    style="display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--warning)"
                   ></span>
                   <span
                     v-else-if="app.state === 'ERROR'"
-                    style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 8px rgba(239, 68, 68, 0.4)"
+                    style="display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--danger)"
                   ></span>
                   <span
                     v-else
-                    style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--text-muted)"
+                    style="display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--text-muted)"
                   ></span>
                 </div>
 
                 <div>
                   <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
                     <span
-                      style="font-weight: 600; font-size: 12px; color: var(--text-primary); cursor: pointer"
+                      style="font-weight: 600; font-size: 13px; color: var(--text-primary)"
                       title="Open Application Details"
-                      @click="openDockerDetail(app)"
                     >
                       {{ app.title || app.appId }}
                     </span>
-                    <span
+                    <button
                       v-if="app.updateAvailable"
+                      type="button"
                       class="badge badge-warning"
-                      style="font-size: 10px; padding: 1px 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px"
+                      style="font-size: 10px; padding: 1px 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; border: none"
                       :title="`Catalog Update Available: ${app.catalogVersion || 'installed'} → ${app.latestVersion || 'latest'}. Click to upgrade.`"
+                      :aria-label="`Upgrade ${app.title || app.appId}`"
                       @click.stop="openUpgradeModal(app)"
                     >
                       <MdiIcon :path="mdiUpdate" size="11" />
                       Update: {{ app.latestVersion || 'Available' }}
-                    </span>
+                    </button>
                     <span
                       v-if="transitioningApps[app.name]"
                       class="badge badge-warning pulse-anim"
@@ -1284,7 +1356,6 @@ onUnmounted(() => {
                   </div>
                   <div
                     v-if="app.state === 'DEPLOYING'"
-                    class="mono"
                     style="font-size: 11px; color: var(--accent-primary); margin-top: 1px"
                     :title="app.statusText"
                   >
@@ -1292,7 +1363,6 @@ onUnmounted(() => {
                   </div>
                   <div
                     v-else-if="app.state === 'ERROR'"
-                    class="mono"
                     style="font-size: 11px; color: var(--danger); margin-top: 1px"
                     :title="app.statusText"
                   >
@@ -1300,8 +1370,7 @@ onUnmounted(() => {
                   </div>
                   <div
                     v-else
-                    class="mono"
-                    style="font-size: 11.5px; color: var(--text-secondary); cursor: help"
+                    style="font-size: 11.5px; color: var(--text-secondary)"
                     :title="`Services: ${(app.services || []).join(', ') || 'none'}`"
                   >
                     {{ app.appId }} · {{ (app.services || []).length }} service{{ (app.services || []).length === 1 ? '' : 's' }} · {{ app.statusText }}
@@ -1311,13 +1380,13 @@ onUnmounted(() => {
             </td>
 
             <!-- Web Portal / Web UI -->
-            <td style="padding: 10px 14px; width: 130px; min-width: 130px; position: relative">
+            <td style="padding: 10px 14px; width: 130px; min-width: 130px; position: relative" @click.stop>
               <div v-if="getPrimaryWebUiUrl(app)" style="display: inline-flex; align-items: center; gap: 2px">
                 <button
                   class="btn btn-sm"
                   style="padding: 3px 8px; font-size: 11.5px; color: var(--success-text); border-color: var(--success-border); display: inline-flex; align-items: center; gap: 4px"
                   :title="`Open Web UI (${getPrimaryWebUiUrl(app)})`"
-                  @click="openWebPortal(getPrimaryWebUiUrl(app))"
+                  @click.stop="openWebPortal(getPrimaryWebUiUrl(app))"
                 >
                   <MdiIcon :path="mdiOpenInNew" size="13" />
                   {{ app.portals && app.portals.length > 0 ? (app.portals[0].name || 'Open UI') : 'Open UI' }}
@@ -1353,7 +1422,7 @@ onUnmounted(() => {
                     type="button"
                     class="btn btn-sm btn-ghost"
                     style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 6px 8px; text-align: left"
-                    @click="openWebPortal(portal.url)"
+                    @click.stop="openWebPortal(portal.url)"
                   >
                     <div style="display: flex; flex-direction: column">
                       <span style="font-weight: 600; font-size: 12px; color: var(--text-primary)">
@@ -1380,7 +1449,7 @@ onUnmounted(() => {
                     type="button"
                     class="btn btn-sm btn-ghost"
                     style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 5px 8px; text-align: left; font-size: 12px"
-                    @click="openPortUrl(p.hostPort)"
+                    @click.stop="openPortUrl(p.hostPort)"
                   >
                     <span class="mono font-semibold" style="color: var(--accent-primary)">
                       :{{ p.containerPort }}
@@ -1396,172 +1465,80 @@ onUnmounted(() => {
               </div>
             </td>
 
-            <!-- Autostart -->
-            <td class="col-desktop-only" style="padding: 10px 14px; width: 100px; min-width: 100px; max-width: 110px; white-space: nowrap">
-              <button
-                type="button"
-                class="badge"
-                :class="app.autoStart ? 'badge-success' : 'badge-neutral'"
-                style="cursor: pointer; border: 1px solid var(--border-subtle); display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px; transition: all 0.15s ease"
-                :title="`Click to ${app.autoStart ? 'disable' : 'enable'} autostart on host boot`"
-                :disabled="isTogglingAutostart"
-                @click.stop="toggleAppAutostart(app)"
-              >
-                <span
-                  style="display: inline-block; width: 6px; height: 6px; border-radius: 50%"
-                  :style="{ background: app.autoStart ? 'var(--success)' : 'var(--text-muted)' }"
-                ></span>
-                {{ app.autoStart ? 'On Boot' : 'Manual' }}
-              </button>
-            </td>
-
             <!-- CPU -->
             <td class="col-desktop-only" style="padding: 10px 14px; width: 85px; min-width: 85px; max-width: 85px; box-sizing: border-box; white-space: nowrap">
-              <div class="mono" style="font-size: 12.5px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums">
+              <div style="font-size: 12.5px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums">
                 {{ (Number(app.totalCpuPercent) || 0).toFixed(1) }}%
               </div>
             </td>
 
             <!-- Memory -->
             <td class="col-desktop-only" style="padding: 10px 14px; width: 105px; min-width: 105px; max-width: 105px; box-sizing: border-box; white-space: nowrap">
-              <div class="mono" style="font-size: 12.5px; color: var(--text-primary); font-variant-numeric: tabular-nums">
+              <div style="font-size: 12.5px; color: var(--text-primary); font-variant-numeric: tabular-nums">
                 {{ app.totalMemoryMib }} MiB
               </div>
             </td>
 
             <!-- Network (1s Live) -->
             <td class="col-desktop-only" style="padding: 10px 14px; width: 210px; min-width: 210px; max-width: 210px; box-sizing: border-box; white-space: nowrap">
-              <div class="mono" style="font-size: 11.5px; font-variant-numeric: tabular-nums">
+              <div style="font-size: 11.5px; font-variant-numeric: tabular-nums">
                 <div style="color: var(--text-primary); font-weight: 500">
                   {{ formatNetworkRate(app) }}
                 </div>
                 <div style="font-size: 10.5px; color: var(--text-secondary); min-height: 14px">
-                  {{ formatNetworkTotal(app) || ' ' }}
+                  {{ formatNetworkTotal(app) || ' ' }}
                 </div>
               </div>
             </td>
 
-            <!-- Actions (Icon-only buttons with tooltips) -->
-            <td style="padding: 10px 14px; min-width: 240px; text-align: right">
+            <!-- Quick Power Toggle Action -->
+            <td style="padding: 10px 14px; text-align: right" @click.stop>
               <div style="display: flex; gap: 6px; justify-content: flex-end; align-items: center; white-space: nowrap; flex-shrink: 0">
                 <button
                   v-if="app.state === 'DEPLOYING'"
-                  class="btn btn-sm btn-icon"
+                  class="btn btn-xs"
                   style="flex-shrink: 0; opacity: 0.6; cursor: not-allowed"
                   title="Deployment in progress in background..."
                   disabled
                 >
-                  <span class="spinner-sm" style="width: 14px; height: 14px; border-width: 2px"></span>
+                  <span class="spinner-sm" style="width: 12px; height: 12px; border-width: 2px; margin-right: 4px"></span>
+                  Deploying...
                 </button>
                 <button
                   v-else-if="app.state === 'RUNNING' || transitioningApps[app.name] === 'stopping'"
-                  class="btn btn-sm btn-icon btn-warning"
+                  class="btn btn-xs"
                   :class="{ 'btn-loading': transitioningApps[app.name] === 'stopping' }"
                   :disabled="Boolean(transitioningApps[app.name])"
                   style="flex-shrink: 0"
                   :title="transitioningApps[app.name] === 'stopping' ? 'Stopping application...' : 'Stop Application'"
                   aria-label="Stop Application"
-                  @click="stopApp(app)"
+                  @click.stop="stopApp(app)"
                 >
                   <MdiIcon
                     :path="transitioningApps[app.name] === 'stopping' ? mdiLoading : mdiStop"
                     :class="{ 'spin-icon': transitioningApps[app.name] === 'stopping' }"
-                    size="16"
+                    size="13"
+                    style="margin-right: 4px"
                   />
+                  {{ transitioningApps[app.name] === 'stopping' ? 'Stopping...' : 'Stop' }}
                 </button>
                 <button
-                  v-if="app.state === 'RUNNING' || transitioningApps[app.name] === 'restarting'"
-                  class="btn btn-sm btn-icon"
-                  :class="{ 'btn-loading': transitioningApps[app.name] === 'restarting' }"
-                  :disabled="Boolean(transitioningApps[app.name])"
-                  style="flex-shrink: 0"
-                  :title="transitioningApps[app.name] === 'restarting' ? 'Restarting application...' : 'Restart Application'"
-                  aria-label="Restart Application"
-                  @click="restartApp(app)"
-                >
-                  <MdiIcon
-                    :path="transitioningApps[app.name] === 'restarting' ? mdiLoading : mdiRestart"
-                    :class="{ 'spin-icon': transitioningApps[app.name] === 'restarting' }"
-                    size="16"
-                  />
-                </button>
-                <button
-                  v-if="app.state === 'RUNNING' && !transitioningApps[app.name]"
-                  class="btn btn-sm btn-icon"
-                  style="flex-shrink: 0; color: var(--accent-primary)"
-                  title="Open Shell Terminal"
-                  aria-label="Open Shell Terminal"
-                  @click="openTerminalForApp(app)"
-                >
-                  <MdiIcon :path="mdiConsole" size="16" />
-                </button>
-                <button
-                  v-if="(app.state !== 'RUNNING' && app.state !== 'DEPLOYING') || transitioningApps[app.name] === 'starting'"
-                  class="btn btn-sm btn-icon btn-success"
+                  v-else
+                  class="btn btn-xs btn-success"
                   :class="{ 'btn-loading': transitioningApps[app.name] === 'starting' }"
                   :disabled="Boolean(transitioningApps[app.name])"
                   style="flex-shrink: 0"
                   :title="transitioningApps[app.name] === 'starting' ? 'Starting application...' : 'Start Application'"
                   aria-label="Start Application"
-                  @click="startApp(app)"
+                  @click.stop="startApp(app)"
                 >
                   <MdiIcon
                     :path="transitioningApps[app.name] === 'starting' ? mdiLoading : mdiPlay"
                     :class="{ 'spin-icon': transitioningApps[app.name] === 'starting' }"
-                    size="16"
+                    size="13"
+                    style="margin-right: 4px"
                   />
-                </button>
-
-                <button
-                  class="btn btn-sm btn-icon"
-                  :class="app.updateAvailable ? 'btn-primary' : ''"
-                  :disabled="app.state === 'DEPLOYING' || Boolean(transitioningApps[app.name])"
-                  style="flex-shrink: 0"
-                  :title="app.updateAvailable ? `Upgrade available (${app.latestVersion}) - pull & redeploy` : 'Pull latest images & redeploy stack'"
-                  :aria-label="`Upgrade ${app.title || app.appId}`"
-                  @click="openUpgradeModal(app)"
-                >
-                  <MdiIcon :path="mdiArrowUpBoldCircleOutline" size="16" />
-                </button>
-
-                <button
-                  class="btn btn-sm btn-icon"
-                  style="flex-shrink: 0"
-                  title="View Application Details"
-                  aria-label="View Application Details"
-                  @click="openDockerDetail(app)"
-                >
-                  <MdiIcon :path="mdiInformationOutline" size="16" />
-                </button>
-
-                <button
-                  class="btn btn-sm btn-icon"
-                  style="flex-shrink: 0"
-                  title="View Application Logs"
-                  aria-label="View Application Logs"
-                  @click="openInspectModal(app, 'logs')"
-                >
-                  <MdiIcon :path="mdiFileDocumentOutline" size="16" />
-                </button>
-
-                <button
-                  class="btn btn-sm btn-icon"
-                  style="flex-shrink: 0"
-                  title="Edit Compose Configuration"
-                  aria-label="Edit Compose Configuration"
-                  @click="openEditModal(app)"
-                >
-                  <MdiIcon :path="mdiPencil" size="16" />
-                </button>
-
-                <button
-                  class="btn btn-sm btn-icon btn-danger"
-                  style="flex-shrink: 0"
-                  title="Delete Application"
-                  aria-label="Delete Application"
-                  @click="deleteApp(app)"
-                >
-                  <MdiIcon :path="mdiDelete" size="16" />
+                  {{ transitioningApps[app.name] === 'starting' ? 'Starting...' : 'Start' }}
                 </button>
               </div>
             </td>
@@ -1635,6 +1612,7 @@ onUnmounted(() => {
             :initial-compose-yaml="installComposeYaml"
             :is-edit-mode="false"
             :is-saving="isDeployingApp"
+            :show-cancel="true"
             @save="handleDeployApp"
             @cancel="isInstallModalOpen = false"
           />
@@ -1690,6 +1668,7 @@ onUnmounted(() => {
             :initial-compose-yaml="editingApp.composeYaml"
             :is-edit-mode="true"
             :is-saving="isUpdatingApp"
+            :show-cancel="true"
             @save="handleSaveAppEdit"
             @cancel="isEditModalOpen = false"
           />
@@ -1763,7 +1742,7 @@ onUnmounted(() => {
     <!-- ===================================================================== -->
     <!-- MODAL 3: App Inspector (Containers, Logs, YAML)                        -->
     <!-- ===================================================================== -->
-    <div v-if="isInspectModalOpen && inspectedApp" class="modal-backdrop">
+    <div v-if="isInspectModalOpen && inspectedApp" class="modal-backdrop" @click.self="closeInspectModal">
       <div class="modal-card modal-card-large">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-shrink: 0">
           <div>
@@ -1864,7 +1843,7 @@ onUnmounted(() => {
               </button>
             </template>
 
-            <button class="btn btn-sm" style="padding: 2px 6px" @click="isInspectModalOpen = false">
+            <button class="btn btn-sm" style="padding: 2px 6px" @click="closeInspectModal">
               <MdiIcon :path="mdiClose" size="18" />
             </button>
           </div>
@@ -1948,13 +1927,13 @@ onUnmounted(() => {
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; flex-wrap: wrap">
             <div style="display: flex; align-items: center; gap: 8px">
               <label style="font-size: 12px; color: var(--text-secondary)">Service:</label>
-              <select v-model="selectedService" class="form-input" style="padding: 3px 8px; font-size: 12px; width: auto" @change="fetchLogs">
+              <select v-model="selectedService" class="form-input" style="padding: 3px 8px; font-size: 12px; width: auto" @change="fetchLogs(false)">
                 <option value="">(All Services)</option>
                 <option v-for="s in (inspectedApp.services || [])" :key="s" :value="s">{{ s }}</option>
               </select>
 
               <label style="font-size: 12px; color: var(--text-secondary); margin-left: 8px">Tail:</label>
-              <select v-model="logTail" class="form-input" style="padding: 3px 8px; font-size: 12px; width: auto" @change="fetchLogs">
+              <select v-model="logTail" class="form-input" style="padding: 3px 8px; font-size: 12px; width: auto" @change="fetchLogs(false)">
                 <option :value="50">50 lines</option>
                 <option :value="100">100 lines</option>
                 <option :value="250">250 lines</option>
@@ -1963,8 +1942,17 @@ onUnmounted(() => {
             </div>
 
             <div style="display: flex; gap: 8px">
-              <button class="btn btn-sm" :disabled="isLoadingLogs" @click="fetchLogs">
-                <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" />
+              <button
+                class="btn btn-sm"
+                :class="autoScroll ? 'btn-primary' : ''"
+                :title="autoScroll ? 'Auto-scroll enabled (click to pause)' : 'Click to jump to bottom and follow logs'"
+                @click="toggleAutoScroll"
+              >
+                <MdiIcon :path="mdiChevronDoubleDown" size="14" style="margin-right: 4px" />
+                Auto-scroll
+              </button>
+              <button class="btn btn-sm" :disabled="isLoadingLogs" @click="fetchLogs(false)">
+                <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" :class="{ 'spin-icon': isLoadingLogs }" />
                 {{ isLoadingLogs ? 'Fetching...' : 'Refresh' }}
               </button>
               <button class="btn btn-sm" @click="copyLogs">
@@ -1975,6 +1963,7 @@ onUnmounted(() => {
           </div>
 
           <pre
+            ref="logContainerRef"
             class="mono"
             style="
               flex: 1;
@@ -1990,6 +1979,7 @@ onUnmounted(() => {
               word-break: break-all;
               border: 1px solid var(--border-subtle);
             "
+            @scroll="onLogScroll"
           >{{ logsContent }}</pre>
         </div>
 

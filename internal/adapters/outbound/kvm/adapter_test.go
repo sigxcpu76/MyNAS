@@ -470,6 +470,10 @@ func TestParseDomstatsOutput(t *testing.T) {
   balloon.current=4194304
   balloon.maximum=4194304
   balloon.rss=1399788
+  net.count=1
+  net.0.name=vnet16
+  net.0.rx.bytes=285163872
+  net.0.tx.bytes=2153970
 
 Domain: 'windows-10'
   cpu.time=105650000000
@@ -496,6 +500,9 @@ Domain: 'windows-10'
 	expectedMemMiB := int64(1399788 / 1024)
 	if int64(deb.rssKiB/1024) != expectedMemMiB {
 		t.Errorf("expected memMiB %d, got %d", expectedMemMiB, deb.rssKiB/1024)
+	}
+	if !deb.hasNet || deb.netRxBytes != 285163872 || deb.netTxBytes != 2153970 {
+		t.Errorf("expected netRx=285163872 netTx=2153970, got rx=%d tx=%d (hasNet=%v)", deb.netRxBytes, deb.netTxBytes, deb.hasNet)
 	}
 
 	win, ok := stats["windows-10"]

@@ -120,6 +120,10 @@ type VirtualMachine struct {
 	GuestOSName        string   `json:"guest_os_name"`
 	GuestCPUPercent    float64  `json:"guest_cpu_percent"`
 	GuestMemoryUsedMiB int64    `json:"guest_memory_used_mib"`
+	NetRxRate          int64    `json:"net_rx_rate"`
+	NetTxRate          int64    `json:"net_tx_rate"`
+	NetRxBytes         int64    `json:"net_rx_bytes"`
+	NetTxBytes         int64    `json:"net_tx_bytes"`
 
 	// Lifecycle, Watchdog & Consoles
 	StartupDelaySeconds int32    `json:"startup_delay_seconds"`

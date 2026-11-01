@@ -7,6 +7,7 @@ import { reactive } from 'vue';
 import { aipClient, services } from '../container';
 import { isDotDataset } from '../domain/models';
 import {
+  mapCronJob,
   mapDockerApp,
   mapDockerContainer,
   mapLxcContainer,
@@ -17,6 +18,7 @@ import type {
   CifsShare,
   CifsGlobalConfig,
   CatalogApp,
+  CronJob,
   Disk,
   DockerApp,
   DockerConfig,
@@ -50,6 +52,7 @@ export type NavTab =
   | 'shares'
   | 'shares-cifs'
   | 'shares-webdav'
+  | 'cron'
   | 'identity'
   | 'terminal'
   | 'vnc-console';
@@ -172,6 +175,10 @@ const cached = loadLocalCache();
 export const nasState = reactive({
   activeTab: 'overview' as NavTab,
   selectedResourceId: loadSavedResource() as string,
+  vmSubTab: 'summary' as 'summary' | 'console' | 'configuration' | 'hardware' | 'snapshots',
+  lxcSubTab: 'summary' as 'summary' | 'console' | 'terminal' | 'configuration' | 'mounts' | 'logs',
+  dockerSubTab: 'summary' as 'summary' | 'console' | 'configuration' | 'compose' | 'containers' | 'logs',
+  poolSubTab: 'summary' as 'summary' | 'datasets' | 'volumes' | 'topology' | 'config',
   isTaskConsoleCollapsed: loadTaskConsoleCollapsed() as boolean,
   activeTaskDetail: null as TaskRecord | null,
   tasks: [
@@ -222,6 +229,7 @@ export const nasState = reactive({
   cifsShares: [] as CifsShare[],
   cifsGlobalConfig: null as CifsGlobalConfig | null,
   webdavShares: [] as WebdavShare[],
+  cronJobs: [] as CronJob[],
   users: [] as User[],
   groups: [] as Group[],
   includeSystemAccounts: false,
@@ -290,6 +298,12 @@ export function notify(type: 'success' | 'error' | 'info' | 'warning', message: 
 let nextTaskIdCounter = 1;
 
 export function selectResource(resourceId: string): void {
+  if (nasState.selectedResourceId !== resourceId) {
+    nasState.vmSubTab = 'summary';
+    nasState.lxcSubTab = 'summary';
+    nasState.dockerSubTab = 'summary';
+    nasState.poolSubTab = 'summary';
+  }
   nasState.selectedResourceId = resourceId;
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
@@ -415,6 +429,14 @@ export async function refreshLxcTemplates(): Promise<void> {
   }
 }
 
+export async function refreshCronJobs(): Promise<void> {
+  try {
+    nasState.cronJobs = await services.cron.listCronJobs();
+  } catch (err) {
+    console.warn('Failed to refresh cron jobs:', err);
+  }
+}
+
 export async function refreshZfsSubresources(poolName: string): Promise<void> {
   if (!poolName || !getModuleAvailability('zfs').enabled) return;
   const [datasets, volumes] = await Promise.all([
@@ -464,6 +486,7 @@ export async function refreshAllData(): Promise<void> {
       webdavShares,
       users,
       groups,
+      cronJobs,
     ] = await Promise.all([
       services.disk.listDisks().catch(() => null),
       zfsOk ? services.zfs.listPools().catch(() => null) : Promise.resolve(null),
@@ -475,6 +498,7 @@ export async function refreshAllData(): Promise<void> {
       services.shares.listWebdavShares().catch(() => null),
       services.identity.listUsers(nasState.includeSystemAccounts).catch(() => null),
       services.identity.listGroups(nasState.includeSystemGroups).catch(() => null),
+      services.cron.listCronJobs().catch(() => null),
     ]);
 
     if (disks !== null) nasState.disks = disks;
@@ -498,6 +522,7 @@ export async function refreshAllData(): Promise<void> {
     if (webdavShares !== null) nasState.webdavShares = webdavShares;
     if (users !== null) nasState.users = users;
     if (groups !== null) nasState.groups = groups;
+    if (cronJobs !== null) nasState.cronJobs = cronJobs;
 
     if (kvmOk) {
       refreshIsos().catch(() => {});
@@ -642,6 +667,23 @@ let reconnectTimer: any = null;
 let watchAbortController: AbortController | null = null;
 let watchReconnectTimer: any = null;
 
+function mergeResourceListInPlace<T extends { name: string }>(target: T[], incoming: T[]): void {
+  const incomingNames = new Set(incoming.map((item) => item.name));
+  for (let i = target.length - 1; i >= 0; i--) {
+    if (!incomingNames.has(target[i].name)) {
+      target.splice(i, 1);
+    }
+  }
+  for (const item of incoming) {
+    const existing = target.find((t) => t.name === item.name);
+    if (existing) {
+      Object.assign(existing, item);
+    } else {
+      target.push(item);
+    }
+  }
+}
+
 export function handleWatchResourceChange(msg: {
   resourceType: string;
   eventType: 'SNAPSHOT' | 'ADDED' | 'MODIFIED' | 'DELETED' | string;
@@ -664,17 +706,35 @@ export function handleWatchResourceChange(msg: {
   if (eventType === 'SNAPSHOT' && payload) {
     switch (resourceType) {
       case 'dockerApps':
-        nasState.dockerApps = Array.isArray(payload) ? payload.map(mapDockerApp) : [];
+        mergeResourceListInPlace(
+          nasState.dockerApps,
+          Array.isArray(payload) ? payload.map(mapDockerApp) : []
+        );
         checkAndPollDeployingApps();
         break;
       case 'dockerContainers':
-        nasState.dockerContainers = Array.isArray(payload) ? payload.map(mapDockerContainer) : [];
+        mergeResourceListInPlace(
+          nasState.dockerContainers,
+          Array.isArray(payload) ? payload.map(mapDockerContainer) : []
+        );
         break;
       case 'virtualMachines':
-        nasState.vms = Array.isArray(payload) ? payload.map(mapVirtualMachine) : [];
+        mergeResourceListInPlace(
+          nasState.vms,
+          Array.isArray(payload) ? payload.map(mapVirtualMachine) : []
+        );
         break;
       case 'lxcContainers':
-        nasState.lxcContainers = Array.isArray(payload) ? payload.map(mapLxcContainer) : [];
+        mergeResourceListInPlace(
+          nasState.lxcContainers,
+          Array.isArray(payload) ? payload.map(mapLxcContainer) : []
+        );
+        break;
+      case 'cronJobs':
+        mergeResourceListInPlace(
+          nasState.cronJobs,
+          Array.isArray(payload) ? payload.map(mapCronJob) : []
+        );
         break;
       case 'telemetry': {
         const mapped = mapSystemTelemetry(payload);
@@ -761,6 +821,22 @@ export function handleWatchResourceChange(msg: {
       }
       break;
     }
+    case 'cronJobs': {
+      const job = payload ? mapCronJob(payload) : null;
+      const name = msg.resourceName || job?.name;
+      const id = job?.id || (name ? name.replace(/^cronJobs\//, '') : '');
+      const idx = nasState.cronJobs.findIndex((j) => (name && j.name === name) || (id && j.id === id));
+      if (eventType === 'DELETED') {
+        if (idx !== -1) nasState.cronJobs.splice(idx, 1);
+      } else if (job) {
+        if (idx !== -1) {
+          nasState.cronJobs[idx] = { ...nasState.cronJobs[idx], ...job };
+        } else {
+          nasState.cronJobs.push(job);
+        }
+      }
+      break;
+    }
     case 'telemetry': {
       if (payload) {
         const mapped = mapSystemTelemetry(payload);
@@ -780,7 +856,7 @@ export function startWatchStream(): void {
   if (watchAbortController) return;
 
   watchAbortController = new AbortController();
-  const endpoint = 'resources:watch?resourceTypes=dockerApps,dockerContainers,virtualMachines,lxcContainers,telemetry';
+  const endpoint = 'resources:watch?resourceTypes=dockerApps,dockerContainers,virtualMachines,lxcContainers,telemetry,cronJobs';
 
   nasState.liveSyncActive = true;
   aipClient
@@ -883,6 +959,9 @@ function handleIncomingEvent(evt: any): void {
       services.lxc.listContainers().then((c) => {
         nasState.lxcContainers = c;
       }).catch(() => {});
+      break;
+    case 'cron':
+      refreshCronJobs().catch(() => {});
       break;
     default:
       refreshAllData();

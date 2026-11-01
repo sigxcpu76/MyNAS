@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
   mdiAlertCircle,
   mdiCheckCircle,
@@ -20,6 +20,7 @@ import {
   setTaskConsoleCollapsed,
   type TaskRecord,
 } from '../store';
+import { useAutoScroll } from '../composables/useAutoScroll';
 
 const filter = ref<'all' | 'running' | 'errors'>('all');
 const activeTaskModal = ref<TaskRecord | null>(null);
@@ -65,13 +66,31 @@ function getLiveDuration(task: TaskRecord): string {
   return task.duration || '0s';
 }
 
+const {
+  containerRef: modalTerminalRef,
+  autoScroll,
+  scrollToBottom,
+  onScroll: onLogScroll,
+} = useAutoScroll();
+
 function openTaskDetails(task: TaskRecord) {
   activeTaskModal.value = task;
+  autoScroll.value = true;
+  scrollToBottom(true);
 }
 
 function closeTaskDetails() {
   activeTaskModal.value = null;
 }
+
+watch(
+  () => activeTaskModal.value?.logs.length,
+  () => {
+    if (activeTaskModal.value) {
+      scrollToBottom();
+    }
+  }
+);
 
 function copyLogs(task: TaskRecord) {
   const content = task.logs.join('\n');
@@ -303,7 +322,7 @@ function copyLogs(task: TaskRecord) {
           </span>
         </div>
 
-        <div class="task-modal-terminal">
+        <div ref="modalTerminalRef" class="task-modal-terminal" @scroll="onLogScroll">
           <div
             v-for="(logLine, idx) in activeTaskModal.logs"
             :key="idx"

@@ -7,6 +7,7 @@ import "google/api/client.proto";
 import "google/protobuf/empty.proto";
 import "nas/v1/auth.proto";
 import "nas/v1/catalog.proto";
+import "nas/v1/cron.proto";
 import "nas/v1/disk.proto";
 import "nas/v1/docker.proto";
 import "nas/v1/filesystem.proto";
@@ -980,5 +981,60 @@ service NasService {
       post: "/v1/catalog:sync"
       body: "*"
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Native Scheduled Tasks / CronJobs
+  // ---------------------------------------------------------------------------
+
+  rpc ListCronJobs(ListCronJobsRequest) returns (ListCronJobsResponse) {
+    option (google.api.http) = {
+      get: "/v1/cronJobs"
+    };
+  }
+
+  rpc GetCronJob(GetCronJobRequest) returns (CronJob) {
+    option (google.api.http) = {
+      get: "/v1/{name=cronJobs/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc CreateCronJob(CreateCronJobRequest) returns (CronJob) {
+    option (google.api.http) = {
+      post: "/v1/cronJobs"
+      body: "cron_job"
+    };
+    option (google.api.method_signature) = "cron_job,cron_job_id";
+  }
+
+  rpc UpdateCronJob(UpdateCronJobRequest) returns (CronJob) {
+    option (google.api.http) = {
+      patch: "/v1/{cron_job.name=cronJobs/*}"
+      body: "cron_job"
+    };
+    option (google.api.method_signature) = "cron_job,update_mask";
+  }
+
+  rpc DeleteCronJob(DeleteCronJobRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/{name=cronJobs/*}"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc RunCronJob(RunCronJobRequest) returns (CronJobRun) {
+    option (google.api.http) = {
+      post: "/v1/{name=cronJobs/*}:run"
+      body: "*"
+    };
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc GetCronJobLogs(GetCronJobLogsRequest) returns (GetCronJobLogsResponse) {
+    option (google.api.http) = {
+      get: "/v1/{name=cronJobs/*}:logs"
+    };
+    option (google.api.method_signature) = "name";
   }
 }

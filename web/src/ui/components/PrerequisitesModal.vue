@@ -145,7 +145,7 @@ function generateFallbackScript(): string {
   <div class="modal-backdrop">
     <div class="modal-card modal-card-xlarge">
       <!-- Modal Header -->
-      <div class="modal-header" style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 14px; margin-bottom: 16px">
+      <div class="modal-header">
         <div style="display: flex; align-items: center; gap: 12px">
           <div
             class="status-icon-wrapper"
@@ -169,7 +169,7 @@ function generateFallbackScript(): string {
           </div>
         </div>
 
-        <button class="btn btn-sm btn-icon" @click="emit('close')">
+        <button class="modal-close-btn btn-icon" title="Close" aria-label="Close" @click="emit('close')">
           <MdiIcon :path="mdiClose" size="18" />
         </button>
       </div>
@@ -375,6 +375,16 @@ function generateFallbackScript(): string {
 </template>
 
 <style scoped>
+.modal-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+
 .status-icon-wrapper {
   width: 42px;
   height: 42px;

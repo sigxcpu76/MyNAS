@@ -162,6 +162,10 @@ type LxcContainer struct {
 	InstallRecipe       string                 `protobuf:"bytes,20,opt,name=install_recipe,json=installRecipe,proto3" json:"install_recipe,omitempty"`
 	InstallScriptUrl    string                 `protobuf:"bytes,21,opt,name=install_script_url,json=installScriptUrl,proto3" json:"install_script_url,omitempty"`
 	TemplateDownloadUrl string                 `protobuf:"bytes,22,opt,name=template_download_url,json=templateDownloadUrl,proto3" json:"template_download_url,omitempty"`
+	NetRxRate           int64                  `protobuf:"varint,23,opt,name=net_rx_rate,json=netRxRate,proto3" json:"net_rx_rate,omitempty"`
+	NetTxRate           int64                  `protobuf:"varint,24,opt,name=net_tx_rate,json=netTxRate,proto3" json:"net_tx_rate,omitempty"`
+	NetRxBytes          int64                  `protobuf:"varint,25,opt,name=net_rx_bytes,json=netRxBytes,proto3" json:"net_rx_bytes,omitempty"`
+	NetTxBytes          int64                  `protobuf:"varint,26,opt,name=net_tx_bytes,json=netTxBytes,proto3" json:"net_tx_bytes,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -348,6 +352,34 @@ func (x *LxcContainer) GetTemplateDownloadUrl() string {
 		return x.TemplateDownloadUrl
 	}
 	return ""
+}
+
+func (x *LxcContainer) GetNetRxRate() int64 {
+	if x != nil {
+		return x.NetRxRate
+	}
+	return 0
+}
+
+func (x *LxcContainer) GetNetTxRate() int64 {
+	if x != nil {
+		return x.NetTxRate
+	}
+	return 0
+}
+
+func (x *LxcContainer) GetNetRxBytes() int64 {
+	if x != nil {
+		return x.NetRxBytes
+	}
+	return 0
+}
+
+func (x *LxcContainer) GetNetTxBytes() int64 {
+	if x != nil {
+		return x.NetTxBytes
+	}
+	return 0
 }
 
 type ListLxcContainersRequest struct {
@@ -1550,7 +1582,7 @@ const file_nas_v1_lxc_proto_rawDesc = "" +
 	"\rLxcMountPoint\x12\x1b\n" +
 	"\thost_path\x18\x01 \x01(\tR\bhostPath\x12%\n" +
 	"\x0econtainer_path\x18\x02 \x01(\tR\rcontainerPath\x12\x1b\n" +
-	"\tread_only\x18\x03 \x01(\bR\breadOnly\"\xb1\a\n" +
+	"\tread_only\x18\x03 \x01(\bR\breadOnly\"\xcd\b\n" +
 	"\fLxcContainer\x12\x18\n" +
 	"\x04name\x18\x01 \x01(\tB\x04\xe2A\x01\bR\x04name\x12+\n" +
 	"\x0econtainer_name\x18\x02 \x01(\tB\x04\xe2A\x01\x03R\rcontainerName\x12\x1a\n" +
@@ -1577,7 +1609,13 @@ const file_nas_v1_lxc_proto_rawDesc = "" +
 	"\x0fmemory_used_mib\x18\x13 \x01(\x03B\x04\xe2A\x01\x03R\rmemoryUsedMib\x12%\n" +
 	"\x0einstall_recipe\x18\x14 \x01(\tR\rinstallRecipe\x12,\n" +
 	"\x12install_script_url\x18\x15 \x01(\tR\x10installScriptUrl\x122\n" +
-	"\x15template_download_url\x18\x16 \x01(\tR\x13templateDownloadUrl:\\\xeaAY\n" +
+	"\x15template_download_url\x18\x16 \x01(\tR\x13templateDownloadUrl\x12$\n" +
+	"\vnet_rx_rate\x18\x17 \x01(\x03B\x04\xe2A\x01\x03R\tnetRxRate\x12$\n" +
+	"\vnet_tx_rate\x18\x18 \x01(\x03B\x04\xe2A\x01\x03R\tnetTxRate\x12&\n" +
+	"\fnet_rx_bytes\x18\x19 \x01(\x03B\x04\xe2A\x01\x03R\n" +
+	"netRxBytes\x12&\n" +
+	"\fnet_tx_bytes\x18\x1a \x01(\x03B\x04\xe2A\x01\x03R\n" +
+	"netTxBytes:\\\xeaAY\n" +
 	"\x1bnas.sigxcpu.io/LxcContainer\x12\x1dlxcContainers/{lxc_container}*\rlxcContainers2\flxcContainer\"n\n" +
 	"\x18ListLxcContainersRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +

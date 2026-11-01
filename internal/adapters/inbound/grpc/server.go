@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -39,6 +40,7 @@ const (
 	patternWebdavShare     = "webdavShares/{webdav_share}"
 	patternUser            = "users/{user}"
 	patternGroup           = "groups/{group}"
+	patternCronJob         = "cronJobs/{cron_job}"
 )
 
 type Server struct {
@@ -56,7 +58,13 @@ type Server struct {
 	identity   *application.IdentityService
 	catalog    *application.CatalogService
 	registry   *application.DockerRegistryService
+	cron       *application.CronJobService
 	eventBus   *application.EventBus
+}
+
+// SetCronJobService enables the native scheduled tasks / CronJob RPCs.
+func (s *Server) SetCronJobService(svc *application.CronJobService) {
+	s.cron = svc
 }
 
 // SetEventBus enables real-time gRPC streaming and reactive watch notifications.
@@ -1739,6 +1747,24 @@ func (s *Server) UpgradeDockerApp(ctx context.Context, req *nasv1.UpgradeDockerA
 		return nil, err
 	}
 	slog.Info("[app] upgrade requested", "app_id", id, "take_snapshot", req.GetTakeSnapshot())
+
+	// If the app is backed by a catalog entry with a newer version/image tag,
+	// update pinned image references and x-nas-catalog-version in compose.yaml before pulling.
+	if currentApp, getErr := s.dockerApp.GetApp(ctx, id); getErr == nil && currentApp != nil && currentApp.ComposeFilePath != "" {
+		protoCurrent := dockerAppToProto(currentApp)
+		s.enrichDockerAppsWithCatalog(ctx, []*nasv1.DockerApp{protoCurrent}, []domain.DockerApp{*currentApp})
+		if protoCurrent.UpdateAvailable && (protoCurrent.LatestImage != "" || protoCurrent.LatestVersion != "") {
+			if rawBytes, readErr := os.ReadFile(currentApp.ComposeFilePath); readErr == nil {
+				updatedYAML := applyCatalogUpgradeToComposeYAML(string(rawBytes), protoCurrent.LatestImage, protoCurrent.LatestVersion)
+				if updatedYAML != string(rawBytes) {
+					if writeErr := os.WriteFile(currentApp.ComposeFilePath, []byte(updatedYAML), 0644); writeErr == nil {
+						slog.Info("[app] updated compose.yaml for catalog upgrade", "app_id", id, "latest_image", protoCurrent.LatestImage, "latest_version", protoCurrent.LatestVersion)
+					}
+				}
+			}
+		}
+	}
+
 	app, err := s.dockerApp.UpgradeApp(ctx, id, req.GetTakeSnapshot())
 	if err != nil {
 		slog.Error("[app] upgrade failed", "app_id", id, "error", err)
@@ -1752,10 +1778,164 @@ func (s *Server) UpgradeDockerApp(ctx context.Context, req *nasv1.UpgradeDockerA
 
 func parseImageRepoTag(image string) (repo, tag string) {
 	image = strings.TrimSpace(image)
+	if at := strings.Index(image, "@"); at != -1 {
+		image = image[:at]
+	}
 	if idx := strings.LastIndex(image, ":"); idx != -1 {
-		return image[:idx], image[idx+1:]
+		if slash := strings.LastIndex(image, "/"); idx > slash {
+			return image[:idx], image[idx+1:]
+		}
 	}
 	return image, "latest"
+}
+
+func isVersionLikeTag(tag string) bool {
+	nums, _ := parseVersionNumbers(tag)
+	return len(nums) > 0
+}
+
+func parseVersionNumbers(tag string) ([]int, string) {
+	tag = strings.TrimSpace(strings.TrimPrefix(tag, "v"))
+	if tag == "" || tag == "latest" || strings.HasPrefix(tag, "latest-") || strings.HasPrefix(tag, "sha-") {
+		return nil, ""
+	}
+	var suffix string
+	if idx := strings.IndexByte(tag, '-'); idx != -1 {
+		suffix = tag[idx+1:]
+		tag = tag[:idx]
+	}
+	parts := strings.Split(tag, ".")
+	nums := make([]int, 0, len(parts))
+	for _, p := range parts {
+		if p == "" {
+			return nil, ""
+		}
+		n := 0
+		for i := 0; i < len(p); i++ {
+			if p[i] < '0' || p[i] > '9' {
+				return nil, ""
+			}
+			n = n*10 + int(p[i]-'0')
+		}
+		nums = append(nums, n)
+	}
+	return nums, suffix
+}
+
+func isNewerVersionTag(installedTag, catalogTag string) bool {
+	instNums, instSuffix := parseVersionNumbers(installedTag)
+	catNums, catSuffix := parseVersionNumbers(catalogTag)
+	if len(instNums) == 0 || len(catNums) == 0 {
+		return false
+	}
+	if instSuffix != "" && catSuffix != "" && !strings.EqualFold(instSuffix, catSuffix) {
+		return false
+	}
+	maxLen := len(instNums)
+	if len(catNums) > maxLen {
+		maxLen = len(catNums)
+	}
+	for i := 0; i < maxLen; i++ {
+		var a, b int
+		if i < len(instNums) {
+			a = instNums[i]
+		}
+		if i < len(catNums) {
+			b = catNums[i]
+		}
+		if b > a {
+			return true
+		}
+		if b < a {
+			return false
+		}
+	}
+	return false
+}
+
+func extractComposeServiceImages(composeYAML string) []string {
+	var images []string
+	seen := make(map[string]bool)
+	// Match both YAML `image: ...` and JSON `"image": "..."`
+	for _, line := range strings.Split(composeYAML, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "image:") {
+			img := strings.TrimSpace(strings.TrimPrefix(trimmed, "image:"))
+			img = strings.Trim(img, `"'`)
+			if img != "" && !seen[img] {
+				seen[img] = true
+				images = append(images, img)
+			}
+		}
+	}
+	// Also scan JSON-formatted compose files for `"image": "..."`
+	search := composeYAML
+	for {
+		idx := strings.Index(search, `"image":`)
+		if idx == -1 {
+			break
+		}
+		search = search[idx+len(`"image":`):]
+		q1 := strings.Index(search, `"`)
+		if q1 == -1 {
+			break
+		}
+		rest := search[q1+1:]
+		q2 := strings.Index(rest, `"`)
+		if q2 == -1 {
+			break
+		}
+		img := strings.TrimSpace(rest[:q2])
+		if img != "" && !seen[img] {
+			seen[img] = true
+			images = append(images, img)
+		}
+		search = rest[q2+1:]
+	}
+	return images
+}
+
+func applyCatalogUpgradeToComposeYAML(composeYAML, latestImage, latestVersion string) string {
+	res := composeYAML
+	if latestImage != "" {
+		targetRepo, targetTag := parseImageRepoTag(latestImage)
+		if targetRepo != "" && targetTag != "" {
+			for _, img := range extractComposeServiceImages(composeYAML) {
+				cRepo, _ := parseImageRepoTag(img)
+				if cRepo == targetRepo && img != latestImage {
+					res = strings.ReplaceAll(res, img, latestImage)
+				}
+			}
+		}
+	}
+	if latestVersion != "" && strings.Contains(res, "x-nas-catalog-version:") {
+		lines := strings.Split(res, "\n")
+		for i, line := range lines {
+			if strings.HasPrefix(strings.TrimSpace(line), "x-nas-catalog-version:") {
+				lines[i] = fmt.Sprintf(`x-nas-catalog-version: "%s"`, latestVersion)
+			}
+		}
+		res = strings.Join(lines, "\n")
+	}
+	return res
+}
+
+func catalogEntryPriority(ca domain.CatalogApp, isSuffix bool) int {
+	score := 50
+	switch strings.ToLower(ca.Train) {
+	case "stable":
+		score = 100
+	case "community":
+		score = 90
+	case "casaos":
+		score = 80
+	case "dokploy":
+		score = 70
+	}
+	if isSuffix {
+		score -= 40
+	}
+	return score
 }
 
 func (s *Server) enrichDockerAppsWithCatalog(ctx context.Context, protoApps []*nasv1.DockerApp, domainApps []domain.DockerApp) {
@@ -1766,17 +1946,38 @@ func (s *Server) enrichDockerAppsWithCatalog(ctx context.Context, protoApps []*n
 	if err != nil || len(catApps) == 0 {
 		return
 	}
+	byTrainAndID := make(map[string]domain.CatalogApp, len(catApps))
 	byID := make(map[string]domain.CatalogApp, len(catApps))
+	byIDScore := make(map[string]int, len(catApps))
 	byTitle := make(map[string]domain.CatalogApp, len(catApps))
+	byTitleScore := make(map[string]int, len(catApps))
 	for _, ca := range catApps {
 		if ca.AppID != "" {
-			byID[strings.ToLower(ca.AppID)] = ca
+			if ca.Train != "" {
+				byTrainAndID[strings.ToLower(ca.Train+"/"+ca.AppID)] = ca
+			}
+			key := strings.ToLower(ca.AppID)
+			p := catalogEntryPriority(ca, false)
+			if p >= byIDScore[key] {
+				byID[key] = ca
+				byIDScore[key] = p
+			}
 			if idx := strings.LastIndex(ca.AppID, "."); idx != -1 {
-				byID[strings.ToLower(ca.AppID[idx+1:])] = ca
+				shortKey := strings.ToLower(ca.AppID[idx+1:])
+				sp := catalogEntryPriority(ca, true)
+				if sp >= byIDScore[shortKey] {
+					byID[shortKey] = ca
+					byIDScore[shortKey] = sp
+				}
 			}
 		}
 		if ca.Title != "" {
-			byTitle[strings.ToLower(ca.Title)] = ca
+			tKey := strings.ToLower(ca.Title)
+			tp := catalogEntryPriority(ca, false)
+			if tp >= byTitleScore[tKey] {
+				byTitle[tKey] = ca
+				byTitleScore[tKey] = tp
+			}
 		}
 	}
 
@@ -1785,17 +1986,23 @@ func (s *Server) enrichDockerAppsWithCatalog(ctx context.Context, protoApps []*n
 		if i < len(domainApps) {
 			da = &domainApps[i]
 		}
-		s.enrichSingleDockerApp(pa, da, byID, byTitle)
+		s.enrichSingleDockerApp(pa, da, byTrainAndID, byID, byTitle)
 	}
 }
 
-func (s *Server) enrichSingleDockerApp(pa *nasv1.DockerApp, da *domain.DockerApp, byID, byTitle map[string]domain.CatalogApp) {
+func (s *Server) enrichSingleDockerApp(pa *nasv1.DockerApp, da *domain.DockerApp, byTrainAndID, byID, byTitle map[string]domain.CatalogApp) {
 	if pa == nil {
 		return
 	}
 	var ca domain.CatalogApp
 	var ok bool
-	if pa.CatalogAppId != "" {
+	if pa.CatalogSource != "" && pa.CatalogAppId != "" {
+		ca, ok = byTrainAndID[strings.ToLower(pa.CatalogSource+"/"+pa.CatalogAppId)]
+	}
+	if !ok && pa.CatalogSource != "" && pa.AppId != "" {
+		ca, ok = byTrainAndID[strings.ToLower(pa.CatalogSource+"/"+pa.AppId)]
+	}
+	if !ok && pa.CatalogAppId != "" {
 		ca, ok = byID[strings.ToLower(pa.CatalogAppId)]
 	}
 	if !ok {
@@ -1814,9 +2021,9 @@ func (s *Server) enrichSingleDockerApp(pa *nasv1.DockerApp, da *domain.DockerApp
 	if pa.CatalogSource == "" {
 		pa.CatalogSource = ca.Train
 	}
-	catVer := ca.Version
+	catVer := ca.AppVersion
 	if catVer == "" {
-		catVer = ca.AppVersion
+		catVer = ca.Version
 	}
 	if catVer != "" {
 		pa.LatestVersion = catVer
@@ -1825,19 +2032,63 @@ func (s *Server) enrichSingleDockerApp(pa *nasv1.DockerApp, da *domain.DockerApp
 		pa.LatestImage = ca.ContainerImage
 	}
 
-	if pa.CatalogVersion != "" && catVer != "" && pa.CatalogVersion != catVer {
-		pa.UpdateAvailable = true
-	} else if ca.ContainerImage != "" && da != nil {
-		for _, c := range da.Containers {
-			if c.Image != "" && ca.ContainerImage != "" {
-				cRepo, cTag := parseImageRepoTag(c.Image)
-				catRepo, catTag := parseImageRepoTag(ca.ContainerImage)
-				if cRepo == catRepo && cTag != "" && catTag != "" && cTag != catTag && catTag != "latest" {
-					pa.UpdateAvailable = true
-					break
+	if da != nil {
+		var candidateImages []string
+		seenImg := make(map[string]bool)
+		for _, img := range extractComposeServiceImages(da.ComposeYAML) {
+			if !seenImg[img] {
+				seenImg[img] = true
+				candidateImages = append(candidateImages, img)
+			}
+		}
+		if len(candidateImages) == 0 {
+			for _, c := range da.Containers {
+				if c.Image != "" && !seenImg[c.Image] {
+					seenImg[c.Image] = true
+					candidateImages = append(candidateImages, c.Image)
 				}
 			}
 		}
+
+		if ca.AppVersion != "" && isVersionLikeTag(ca.AppVersion) {
+			appSlug := strings.ToLower(pa.AppId)
+			for _, img := range candidateImages {
+				cRepo, cTag := parseImageRepoTag(img)
+				if strings.Contains(cRepo, "container-utils") || strings.Contains(cRepo, "postgres-upgrade") {
+					continue
+				}
+				if len(candidateImages) > 1 && appSlug != "" && !strings.Contains(strings.ToLower(cRepo), appSlug) {
+					continue
+				}
+				if !isVersionLikeTag(cTag) {
+					continue
+				}
+				newTag := ca.AppVersion
+				if strings.HasPrefix(cTag, "v") && !strings.HasPrefix(newTag, "v") {
+					newTag = "v" + newTag
+				} else if !strings.HasPrefix(cTag, "v") && strings.HasPrefix(newTag, "v") {
+					newTag = strings.TrimPrefix(newTag, "v")
+				}
+				pa.LatestImage = cRepo + ":" + newTag
+				pa.LatestVersion = ca.AppVersion
+				if isNewerVersionTag(cTag, ca.AppVersion) {
+					pa.UpdateAvailable = true
+					if pa.CatalogVersion == "" {
+						pa.CatalogVersion = cTag
+					}
+					return
+				}
+				// Image tag is already >= ca.AppVersion
+				if pa.CatalogVersion == "" {
+					pa.CatalogVersion = cTag
+				}
+				return
+			}
+		}
+	}
+
+	if pa.CatalogVersion != "" && catVer != "" && isNewerVersionTag(pa.CatalogVersion, catVer) {
+		pa.UpdateAvailable = true
 	}
 }
 
@@ -3123,6 +3374,10 @@ func toProtoVM(vm domain.VirtualMachine) *nasv1.VirtualMachine {
 		GuestOsName:         vm.GuestOSName,
 		GuestCpuPercent:     vm.GuestCPUPercent,
 		GuestMemoryUsedMib:  vm.GuestMemoryUsedMiB,
+		NetRxRate:           vm.NetRxRate,
+		NetTxRate:           vm.NetTxRate,
+		NetRxBytes:          vm.NetRxBytes,
+		NetTxBytes:          vm.NetTxBytes,
 		StartupDelaySeconds: vm.StartupDelaySeconds,
 		BootOrder:           vm.BootOrder,
 		WatchdogModel:       vm.WatchdogModel,
@@ -3316,6 +3571,10 @@ func toProtoLxc(c domain.LxcContainer) *nasv1.LxcContainer {
 		NetworkBridge:   c.NetworkBridge,
 		CpuPercent:      c.CPUPercent,
 		MemoryUsedMib:   c.MemoryUsedMiB,
+		NetRxRate:       c.NetRxRate,
+		NetTxRate:       c.NetTxRate,
+		NetRxBytes:      c.NetRxBytes,
+		NetTxBytes:      c.NetTxBytes,
 		InstallRecipe:       c.InstallRecipe,
 		InstallScriptUrl:    c.InstallScriptURL,
 		TemplateDownloadUrl: c.TemplateDownloadURL,
@@ -3486,6 +3745,245 @@ func (s *Server) SyncCatalog(ctx context.Context, req *nasv1.SyncCatalogRequest)
 		TotalApps:    int32(count),
 		LastSyncTime: syncTime.Format(time.RFC3339),
 	}, nil
+}
+
+// -----------------------------------------------------------------------------
+// Native Scheduled Tasks / CronJobs
+// -----------------------------------------------------------------------------
+
+func (s *Server) ListCronJobs(ctx context.Context, req *nasv1.ListCronJobsRequest) (*nasv1.ListCronJobsResponse, error) {
+	if s.cron == nil {
+		return &nasv1.ListCronJobsResponse{}, nil
+	}
+	jobs, err := s.cron.ListJobs(ctx)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	var out []*nasv1.CronJob
+	for _, j := range jobs {
+		out = append(out, toProtoCronJob(j))
+	}
+	return &nasv1.ListCronJobsResponse{
+		CronJobs:  out,
+		TotalSize: int32(len(out)),
+	}, nil
+}
+
+func (s *Server) GetCronJob(ctx context.Context, req *nasv1.GetCronJobRequest) (*nasv1.CronJob, error) {
+	if s.cron == nil {
+		return nil, status.Errorf(codes.Unavailable, "cron service is not initialized")
+	}
+	id := domain.CleanCronJobID(req.GetName())
+	job, err := s.cron.GetJob(ctx, id)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoCronJob(*job), nil
+}
+
+func (s *Server) CreateCronJob(ctx context.Context, req *nasv1.CreateCronJobRequest) (*nasv1.CronJob, error) {
+	if s.cron == nil {
+		return nil, status.Errorf(codes.Unavailable, "cron service is not initialized")
+	}
+	dJob := toDomainCronJob(req.GetCronJob())
+	if req.GetCronJobId() != "" {
+		dJob.ID = domain.CleanCronJobID(req.GetCronJobId())
+	}
+	if dJob.ID == "" && req.GetCronJob() != nil {
+		dJob.ID = domain.CleanCronJobID(req.GetCronJob().GetId())
+		if dJob.ID == "" {
+			dJob.ID = domain.CleanCronJobID(req.GetCronJob().GetName())
+		}
+	}
+	created, err := s.cron.CreateJob(ctx, dJob)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	out := toProtoCronJob(*created)
+	if s.eventBus != nil {
+		s.eventBus.Publish(domain.NewEvent("cron", "CREATE", out.GetName(), "Cron job created"))
+	}
+	return out, nil
+}
+
+func (s *Server) UpdateCronJob(ctx context.Context, req *nasv1.UpdateCronJobRequest) (*nasv1.CronJob, error) {
+	if s.cron == nil {
+		return nil, status.Errorf(codes.Unavailable, "cron service is not initialized")
+	}
+	dJob := toDomainCronJob(req.GetCronJob())
+	var fields []string
+	if mask := req.GetUpdateMask(); mask != nil {
+		fields = mask.GetPaths()
+	}
+	updated, err := s.cron.UpdateJob(ctx, dJob, fields)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	out := toProtoCronJob(*updated)
+	if s.eventBus != nil {
+		s.eventBus.Publish(domain.NewEvent("cron", "UPDATE", out.GetName(), "Cron job updated"))
+	}
+	return out, nil
+}
+
+func (s *Server) DeleteCronJob(ctx context.Context, req *nasv1.DeleteCronJobRequest) (*emptypb.Empty, error) {
+	if s.cron == nil {
+		return nil, status.Errorf(codes.Unavailable, "cron service is not initialized")
+	}
+	id := domain.CleanCronJobID(req.GetName())
+	if err := s.cron.DeleteJob(ctx, id); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	if s.eventBus != nil {
+		s.eventBus.Publish(domain.NewEvent("cron", "DELETE", req.GetName(), "Cron job deleted"))
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *Server) RunCronJob(ctx context.Context, req *nasv1.RunCronJobRequest) (*nasv1.CronJobRun, error) {
+	if s.cron == nil {
+		return nil, status.Errorf(codes.Unavailable, "cron service is not initialized")
+	}
+	id := domain.CleanCronJobID(req.GetName())
+	run, err := s.cron.RunJob(ctx, id)
+	if err != nil && run == nil {
+		return nil, ToGRPCError(err)
+	}
+	out := toProtoCronJobRun(*run)
+	if s.eventBus != nil {
+		s.eventBus.Publish(domain.NewEvent("cron", "RUN", req.GetName(), "Cron job triggered"))
+	}
+	return out, nil
+}
+
+func (s *Server) GetCronJobLogs(ctx context.Context, req *nasv1.GetCronJobLogsRequest) (*nasv1.GetCronJobLogsResponse, error) {
+	if s.cron == nil {
+		return nil, status.Errorf(codes.Unavailable, "cron service is not initialized")
+	}
+	id := domain.CleanCronJobID(req.GetName())
+	logs, run, err := s.cron.GetJobLogs(ctx, id, req.GetRunId(), int(req.GetLines()))
+	if err != nil && run == nil {
+		return nil, ToGRPCError(err)
+	}
+	resp := &nasv1.GetCronJobLogsResponse{
+		Logs: logs,
+	}
+	if run != nil {
+		resp.RunId = run.RunID
+		resp.Status = run.Status
+		resp.ExitCode = run.ExitCode
+	}
+	return resp, nil
+}
+
+func toProtoCronJob(j domain.CronJob) *nasv1.CronJob {
+	var envs []*nasv1.EnvVar
+	for _, e := range j.Env {
+		envs = append(envs, &nasv1.EnvVar{
+			Name:  e.Name,
+			Value: e.Value,
+		})
+	}
+	var vols []*nasv1.VolumeMount
+	for _, v := range j.Volumes {
+		vols = append(vols, &nasv1.VolumeMount{
+			HostPath:  v.HostPath,
+			MountPath: v.MountPath,
+			ReadOnly:  v.ReadOnly,
+		})
+	}
+
+	protoJob := &nasv1.CronJob{
+		Name:              resourcename.Sprint(patternCronJob, j.ID),
+		Id:                j.ID,
+		Title:             j.Title,
+		Description:       j.Description,
+		Schedule:          j.Schedule,
+		Image:             j.Image,
+		Command:           j.Command,
+		Args:              j.Args,
+		Env:               envs,
+		Volumes:           vols,
+		Enabled:           j.Enabled,
+		ConcurrencyPolicy: j.ConcurrencyPolicy,
+		RestartPolicy:     j.RestartPolicy,
+		TimeoutSeconds:    j.TimeoutSeconds,
+		State:             j.State,
+		LastRunDuration:   j.LastRunDuration,
+		LastRunStatus:     j.LastRunStatus,
+		LastRunExitCode:   j.LastRunExitCode,
+		LastRunError:      j.LastRunError,
+		CreateTime:        timestamppb.New(j.CreatedAt),
+		UpdateTime:        timestamppb.New(j.UpdatedAt),
+	}
+	if j.LastScheduleTime != nil {
+		protoJob.LastScheduleTime = timestamppb.New(*j.LastScheduleTime)
+	}
+	if j.LastSuccessfulTime != nil {
+		protoJob.LastSuccessfulTime = timestamppb.New(*j.LastSuccessfulTime)
+	}
+	if j.NextScheduleTime != nil {
+		protoJob.NextScheduleTime = timestamppb.New(*j.NextScheduleTime)
+	}
+	return protoJob
+}
+
+func toDomainCronJob(p *nasv1.CronJob) domain.CronJob {
+	if p == nil {
+		return domain.CronJob{}
+	}
+	var envs []domain.EnvVar
+	for _, e := range p.GetEnv() {
+		envs = append(envs, domain.EnvVar{
+			Name:  e.GetName(),
+			Value: e.GetValue(),
+		})
+	}
+	var vols []domain.VolumeMount
+	for _, v := range p.GetVolumes() {
+		vols = append(vols, domain.VolumeMount{
+			HostPath:  v.GetHostPath(),
+			MountPath: v.GetMountPath(),
+			ReadOnly:  v.GetReadOnly(),
+		})
+	}
+	id := p.GetId()
+	if id == "" {
+		id = domain.CleanCronJobID(p.GetName())
+	}
+	return domain.CronJob{
+		Name:              p.GetName(),
+		ID:                id,
+		Title:             p.GetTitle(),
+		Description:       p.GetDescription(),
+		Schedule:          p.GetSchedule(),
+		Image:             p.GetImage(),
+		Command:           p.GetCommand(),
+		Args:              p.GetArgs(),
+		Env:               envs,
+		Volumes:           vols,
+		Enabled:           p.GetEnabled(),
+		ConcurrencyPolicy: p.GetConcurrencyPolicy(),
+		RestartPolicy:     p.GetRestartPolicy(),
+		TimeoutSeconds:    p.GetTimeoutSeconds(),
+	}
+}
+
+func toProtoCronJobRun(r domain.CronJobRun) *nasv1.CronJobRun {
+	protoRun := &nasv1.CronJobRun{
+		RunId:      r.RunID,
+		JobName:    r.JobName,
+		StartTime:  timestamppb.New(r.StartTime),
+		Duration:   r.Duration,
+		Status:     r.Status,
+		ExitCode:   r.ExitCode,
+		Error:      r.Error,
+		LogSnippet: r.LogSnippet,
+	}
+	if r.EndTime != nil {
+		protoRun.EndTime = timestamppb.New(*r.EndTime)
+	}
+	return protoRun
 }
 
 func domainCatalogAppToPB(a domain.CatalogApp) *nasv1.CatalogApp {
@@ -4027,6 +4525,11 @@ func (s *Server) WatchResources(req *nasv1.WatchResourcesRequest, stream nasv1.N
 			_ = sendChange("telemetry", nasv1.WatchResourceChange_SNAPSHOT, "telemetry", telem)
 		}
 	}
+	if match("cronJobs") {
+		if resp, err := s.ListCronJobs(ctx, &nasv1.ListCronJobsRequest{}); err == nil && resp != nil {
+			_ = sendChange("cronJobs", nasv1.WatchResourceChange_SNAPSHOT, "cronJobs", resp.GetCronJobs())
+		}
+	}
 
 	if s.eventBus == nil {
 		<-ctx.Done()
@@ -4042,6 +4545,14 @@ func (s *Server) WatchResources(req *nasv1.WatchResourcesRequest, stream nasv1.N
 		telemChan = telemTicker.C
 	}
 
+	var workloadTicker *time.Ticker
+	var workloadChan <-chan time.Time
+	if match("dockerApps") || match("dockerContainers") || match("virtualMachines") || match("lxcContainers") {
+		workloadTicker = time.NewTicker(3 * time.Second)
+		defer workloadTicker.Stop()
+		workloadChan = workloadTicker.C
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -4049,6 +4560,27 @@ func (s *Server) WatchResources(req *nasv1.WatchResourcesRequest, stream nasv1.N
 		case <-telemChan:
 			if telem, err := s.GetSystemTelemetry(ctx, &nasv1.GetSystemTelemetryRequest{}); err == nil && telem != nil {
 				_ = sendChange("telemetry", nasv1.WatchResourceChange_MODIFIED, "telemetry", telem)
+			}
+		case <-workloadChan:
+			if match("dockerApps") {
+				if resp, err := s.ListDockerApps(ctx, &nasv1.ListDockerAppsRequest{}); err == nil && resp != nil {
+					_ = sendChange("dockerApps", nasv1.WatchResourceChange_SNAPSHOT, "dockerApps", resp.GetDockerApps())
+				}
+			}
+			if match("dockerContainers") {
+				if resp, err := s.ListDockerContainers(ctx, &nasv1.ListDockerContainersRequest{}); err == nil && resp != nil {
+					_ = sendChange("dockerContainers", nasv1.WatchResourceChange_SNAPSHOT, "dockerContainers", resp.GetDockerContainers())
+				}
+			}
+			if match("virtualMachines") {
+				if resp, err := s.ListVirtualMachines(ctx, &nasv1.ListVirtualMachinesRequest{}); err == nil && resp != nil {
+					_ = sendChange("virtualMachines", nasv1.WatchResourceChange_SNAPSHOT, "virtualMachines", resp.GetVirtualMachines())
+				}
+			}
+			if match("lxcContainers") {
+				if resp, err := s.ListLxcContainers(ctx, &nasv1.ListLxcContainersRequest{}); err == nil && resp != nil {
+					_ = sendChange("lxcContainers", nasv1.WatchResourceChange_SNAPSHOT, "lxcContainers", resp.GetLxcContainers())
+				}
 			}
 		case evt, ok := <-eventsCh:
 			if !ok {
@@ -4132,6 +4664,21 @@ func (s *Server) WatchResources(req *nasv1.WatchResourcesRequest, stream nasv1.N
 								evtType = nasv1.WatchResourceChange_ADDED
 							}
 							_ = sendChange("lxcContainers", evtType, evt.Resource, c)
+						}
+					}
+				}
+			case "cron":
+				if match("cronJobs") && strings.HasPrefix(evt.Resource, "cronJobs/") {
+					act := strings.ToUpper(evt.Action)
+					if act == "DELETE" {
+						_ = sendChange("cronJobs", nasv1.WatchResourceChange_DELETED, evt.Resource, map[string]string{"name": evt.Resource})
+					} else {
+						if c, err := s.GetCronJob(ctx, &nasv1.GetCronJobRequest{Name: evt.Resource}); err == nil && c != nil {
+							evtType := nasv1.WatchResourceChange_MODIFIED
+							if act == "CREATE" {
+								evtType = nasv1.WatchResourceChange_ADDED
+							}
+							_ = sendChange("cronJobs", evtType, evt.Resource, c)
 						}
 					}
 				}

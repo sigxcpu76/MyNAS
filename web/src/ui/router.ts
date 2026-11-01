@@ -15,6 +15,7 @@ export const TAB_ROUTES: Record<NavTab, string> = {
   shares: '/shares',
   'shares-cifs': '/shares/cifs',
   'shares-webdav': '/shares/webdav',
+  cron: '/cron',
   identity: '/users',
   terminal: '/terminal',
   'vnc-console': '/vnc-console',
@@ -61,6 +62,9 @@ export const ROUTE_ALIASES: Record<string, NavTab> = {
   '/users': 'identity',
   '/identity': 'identity',
   '/groups': 'identity',
+  '/cron': 'cron',
+  '/tasks': 'cron',
+  '/scheduled': 'cron',
 };
 
 export function getPathFromTab(tab: NavTab): string {

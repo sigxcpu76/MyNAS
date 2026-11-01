@@ -5,6 +5,8 @@ import { mapLxcContainer, mapLxcCatalogItem, HttpLxcAdapter } from '../src/adapt
 import type { AipClient } from '../src/adapters/http/aipClient';
 import type { LxcCatalogItem } from '../src/domain/models';
 import LxcView from '../src/ui/views/LxcView.vue';
+import LxcDetailView from '../src/ui/views/LxcDetailView.vue';
+import ActionRibbon from '../src/ui/components/ActionRibbon.vue';
 import { nasState } from '../src/ui/store';
 import { services } from '../src/container';
 
@@ -156,94 +158,89 @@ describe('LXC Feature Parity with VMs and Apps', () => {
       nasState.lxcTemplates = [];
     });
 
-    it('renders Autostart column and clickable toggle badge', async () => {
+    it('renders realtime CPU, Memory, and Network columns without redundant State and Autostart columns', async () => {
       vi.spyOn(services.lxc, 'listContainers').mockResolvedValue(nasState.lxcContainers);
-      const updateSpy = vi.spyOn(services.lxc, 'updateContainer').mockResolvedValue({
-        ...nasState.lxcContainers[0],
-        autostart: false,
+
+      const wrapper = mount(LxcView);
+      await nextTick();
+
+      // Check realtime metric column headers
+      expect(wrapper.text()).toContain('CPU');
+      expect(wrapper.text()).toContain('Memory');
+      expect(wrapper.text()).toContain('Network');
+
+      // Verify redundant columns are eliminated from overview table
+      const thead = wrapper.find('thead');
+      expect(thead.text()).not.toContain('State');
+      expect(thead.text()).not.toContain('Autostart');
+
+      // Check values rendered
+      expect(wrapper.text()).toContain('Media Server');
+      expect(wrapper.text()).toContain('0.0%');
+      expect(wrapper.text()).toContain('0 MiB');
+      expect(wrapper.text()).toContain('0 B/s ↓ · 0 B/s ↑');
+    });
+
+    it('renders quick power toggle in table and navigates to LxcDetailView on row click', async () => {
+      vi.spyOn(services.lxc, 'listContainers').mockResolvedValue(nasState.lxcContainers);
+      const stopSpy = vi.spyOn(services.lxc, 'stopContainer').mockResolvedValue(nasState.lxcContainers[0]);
+
+      const wrapper = mount(LxcView);
+      await nextTick();
+
+      // Quick Stop button in the row
+      const stopBtn = wrapper.find('button[title="Stop Container"]');
+      expect(stopBtn.exists()).toBe(true);
+      await stopBtn.trigger('click');
+      expect(stopSpy).toHaveBeenCalledWith('lxcContainers/ct-media');
+
+      // Clicking the row opens the unified detail view
+      const row = wrapper.find('tbody tr');
+      await row.trigger('click');
+      expect(nasState.selectedResourceId).toBe('lxc:ct-media');
+    });
+
+    it('renders unified Configuration tab in LxcDetailView with CPU, RAM, GPU, and Bind Mounts', async () => {
+      nasState.selectedResourceId = 'lxc:ct-media';
+      const wrapper = mount(LxcDetailView, {
+        props: {
+          containerName: 'ct-media',
+          activeSubTab: 'configuration',
+        },
       });
-
-      const wrapper = mount(LxcView);
       await nextTick();
 
-      // Find Autostart column header
-      expect(wrapper.text()).toContain('Autostart');
-
-      // Find the On Boot badge
-      const autostartBtn = wrapper.find('button[title*="autostart"]');
-      expect(autostartBtn.exists()).toBe(true);
-      expect(autostartBtn.text()).toContain('On Boot');
-
-      // Click to toggle autostart
-      await autostartBtn.trigger('click');
-      expect(updateSpy).toHaveBeenCalledWith(
-        'lxcContainers/ct-media',
-        { autostart: false },
-        ['autostart']
-      );
-    });
-
-    it('renders action buttons: restart, terminal, logs, edit, inspect', async () => {
-      vi.spyOn(services.lxc, 'listContainers').mockResolvedValue(nasState.lxcContainers);
-      const restartSpy = vi.spyOn(services.lxc, 'restartContainer').mockResolvedValue(nasState.lxcContainers[0]);
-
-      const wrapper = mount(LxcView);
-      await nextTick();
-
-      // Find restart button and trigger
-      const restartBtn = wrapper.find('button[title="Restart Container"]');
-      expect(restartBtn.exists()).toBe(true);
-      await restartBtn.trigger('click');
-      expect(restartSpy).toHaveBeenCalledWith('lxcContainers/ct-media');
-
-      // Check terminal button
-      const terminalBtn = wrapper.find('button[title="Open Web Terminal Console"]');
-      expect(terminalBtn.exists()).toBe(true);
-
-      // Check logs button
-      const logsBtn = wrapper.find('button[title="View Container Logs"]');
-      expect(logsBtn.exists()).toBe(true);
-
-      // Check edit button
-      const editBtn = wrapper.find('button[title="Edit Hardware & Settings"]');
-      expect(editBtn.exists()).toBe(true);
-
-      // Check inspect button
-      const inspectBtn = wrapper.find('button[title="Inspect Container Details"]');
-      expect(inspectBtn.exists()).toBe(true);
-    });
-
-    it('opens Edit Container modal when clicking edit button', async () => {
-      vi.spyOn(services.lxc, 'listContainers').mockResolvedValue(nasState.lxcContainers);
-
-      const wrapper = mount(LxcView);
-      await nextTick();
-
-      const editBtn = wrapper.find('button[title="Edit Hardware & Settings"]');
-      await editBtn.trigger('click');
-
-      expect(wrapper.text()).toContain('Edit Container: Media Server');
-      expect(wrapper.text()).toContain('GPU Passthrough (/dev/dri, nvidia)');
+      expect(wrapper.text()).toContain('Container Settings & Resources');
+      expect(wrapper.text()).toContain('CPU Cores');
+      expect(wrapper.text()).toContain('Memory Limit (MiB)');
+      expect(wrapper.text()).toContain('GPU Acceleration Passthrough');
       expect(wrapper.text()).toContain('Storage Bind Mounts');
-      const hostPathInput = wrapper.find<HTMLInputElement>('input[placeholder*="Host Path"]');
-      expect(hostPathInput.element.value).toBe('/mnt/tank/media');
+      expect(wrapper.text()).toContain('/mnt/tank/media');
+      expect(wrapper.text()).toContain('/media');
     });
 
-    it('opens Container Inspector modal when clicking inspect button', async () => {
-      vi.spyOn(services.lxc, 'listContainers').mockResolvedValue(nasState.lxcContainers);
+    it('renders unified ActionRibbon and Logs tab in LxcDetailView', async () => {
       vi.spyOn(services.lxc, 'getContainerLogs').mockResolvedValue('[lxc-status] Container RUNNING');
 
-      const wrapper = mount(LxcView);
+      nasState.selectedResourceId = 'lxc:ct-media';
+      const ribbon = mount(ActionRibbon);
+      expect(ribbon.text()).toContain('Media Server');
+      expect(ribbon.text()).toContain('Summary');
+      expect(ribbon.text()).toContain('Console');
+      expect(ribbon.text()).toContain('Configuration');
+      expect(ribbon.text()).toContain('Logs');
+      expect(ribbon.find('[aria-label="Freeze"]').exists()).toBe(true);
+      expect(ribbon.find('[aria-label="Stop"]').exists()).toBe(true);
+      expect(ribbon.find('[aria-label="Reboot"]').exists()).toBe(true);
+
+      const detail = mount(LxcDetailView, {
+        props: {
+          containerName: 'ct-media',
+          activeSubTab: 'logs',
+        },
+      });
       await nextTick();
-
-      const inspectBtn = wrapper.find('button[title="Inspect Container Details"]');
-      await inspectBtn.trigger('click');
-
-      expect(wrapper.text()).toContain('Overview');
-      expect(wrapper.text()).toContain('Mount Points (1)');
-      expect(wrapper.text()).toContain('Logs');
-      expect(wrapper.text()).toContain('Plex and media services');
-      expect(wrapper.text()).toContain('Enabled (/dev/dri, nvidia)');
+      expect(detail.text()).toContain('Container Console Logs');
     });
   });
 

@@ -3,7 +3,9 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import {
   mdiApps,
   mdiArchiveOutline,
+  mdiCircle,
   mdiClose,
+  mdiChevronDoubleDown,
   mdiConsole,
   mdiContentCopy,
   mdiDownload,
@@ -34,6 +36,7 @@ import SortableTh from '../components/SortableTh.vue';
 import FileDropzone from '../components/FileDropzone.vue';
 import PathSelector from '../components/PathSelector.vue';
 import DockerTerminalModal, { type TerminalContainerOption } from '../components/DockerTerminalModal.vue';
+import { useAutoScroll } from '../composables/useAutoScroll';
 import { useTableSort } from '../composables/useTableSort';
 import { services } from '../../container';
 import { nasState, notify, refreshLxcTemplates as storeRefreshTemplates, selectResource } from '../store';
@@ -205,15 +208,29 @@ function bridgeOptionsFor(current: string): BridgeOption[] {
 
 const lxcSort = useTableSort(() => nasState.lxcContainers, {
   name: (lx) => lx.containerName,
-  state: (lx) => lx.state,
-  autostart: (lx) => (lx.autostart ? 1 : 0),
   distro: (lx) => `${lx.distribution} / ${lx.release} (${lx.architecture})`,
   ipv4: (lx) => ipv4ToNumber(lx.ipv4Address),
-  // Primary key: CPU cores, secondary: memory limit (MiB)
-  resources: (lx) => lx.cpuCores * 1e9 + lx.memoryLimitMib,
-  cpu: (lx) => lx.cpuPercent ?? 0,
-  memory: (lx) => lx.memoryUsedMib ?? 0,
+  cpu: (lx) => (lx.state === 'RUNNING' ? Number(lx.cpuPercent) || 0 : -1),
+  memory: (lx) => (lx.state === 'RUNNING' ? Number(lx.memoryUsedMib) || 0 : -1),
+  network: (lx) => (lx.state === 'RUNNING' ? (Number(lx.netRxRate) || 0) + (Number(lx.netTxRate) || 0) : -1),
 });
+
+function formatNetworkRate(lx: LxcContainer): string {
+  if (lx.state !== 'RUNNING') return '—';
+  const rx = lx.netRxRate || 0;
+  const tx = lx.netTxRate || 0;
+  const rxStr = formatBytes(rx) + '/s ↓';
+  const txStr = formatBytes(tx) + '/s ↑';
+  return `${rxStr} · ${txStr}`;
+}
+
+function formatNetworkTotal(lx: LxcContainer): string {
+  if (lx.state !== 'RUNNING') return '';
+  const rx = lx.netRxBytes || 0;
+  const tx = lx.netTxBytes || 0;
+  if (rx + tx === 0) return '';
+  return `(${formatBytes(rx + tx)})`;
+}
 
 const templateSort = useTableSort(() => nasState.lxcTemplates, {
   name: (t) => t.name,
@@ -419,7 +436,8 @@ function openDeployModal(item: LxcCatalogItem) {
     const matched = nasState.lxcTemplates.find(
       (t) =>
         t.name.toLowerCase().includes(item.id.toLowerCase()) ||
-        t.name.toLowerCase().includes(item.baseDistribution.toLowerCase())
+        (item.baseDistribution && t.name.toLowerCase().includes(item.baseDistribution.toLowerCase())) ||
+        (item.title && t.name.toLowerCase().includes(toZfsSafeSlug(item.title).toLowerCase()))
     );
     if (matched) {
       form.templateArchive = matched.path;
@@ -470,11 +488,11 @@ async function handleCreate() {
     // Start container automatically upon deployment
     try {
       await services.lxc.startContainer(created.name);
-    } catch {
-      // Ignored if start requires manual configuration
+      notify('success', `Deployed and initialized LXC container ${created.containerName || targetId}`);
+    } catch (startErr: any) {
+      notify('warning', `Container created, but failed to start: ${startErr?.message || startErr}`);
     }
 
-    notify('success', `Deployed and initialized LXC container ${created.containerName || targetId}`);
     form.containerName = '';
     form.containerId = '';
     form.templateArchive = '';
@@ -659,26 +677,66 @@ const inspectActiveTab = ref<'overview' | 'mounts' | 'logs'>('overview');
 const logTail = ref(100);
 const logsContent = ref('');
 const isLoadingLogs = ref(false);
+let logPollTimer: any = null;
+
+const {
+  containerRef: logContainerRef,
+  autoScroll,
+  scrollToBottom,
+  onScroll: onLogScroll,
+  toggleAutoScroll,
+} = useAutoScroll();
+
+function startLogPolling() {
+  stopLogPolling();
+  logPollTimer = setInterval(() => {
+    if (isInspectModalOpen.value && inspectActiveTab.value === 'logs') {
+      fetchLogs(true);
+    } else {
+      stopLogPolling();
+    }
+  }, 2500);
+}
+
+function stopLogPolling() {
+  if (logPollTimer) {
+    clearInterval(logPollTimer);
+    logPollTimer = null;
+  }
+}
+
+function closeInspectModal() {
+  isInspectModalOpen.value = false;
+  stopLogPolling();
+}
 
 function openInspectModal(lx: LxcContainer, defaultTab: 'overview' | 'mounts' | 'logs' = 'overview') {
   inspectedContainer.value = lx;
   inspectActiveTab.value = defaultTab;
   isInspectModalOpen.value = true;
   if (defaultTab === 'logs') {
-    fetchLogs();
+    autoScroll.value = true;
+    fetchLogs(false);
+    startLogPolling();
+  } else {
+    stopLogPolling();
   }
 }
 
-async function fetchLogs() {
+async function fetchLogs(silent = false) {
   if (!inspectedContainer.value) return;
-  isLoadingLogs.value = true;
+  if (!silent) isLoadingLogs.value = true;
   try {
     const logs = await services.lxc.getContainerLogs(inspectedContainer.value.name, logTail.value);
     logsContent.value = logs || 'No log entries available for this container.';
+    scrollToBottom();
   } catch (err: any) {
-    logsContent.value = `Failed to fetch logs: ${err?.message || 'Unknown error'}`;
+    if (!silent) logsContent.value = `Failed to fetch logs: ${err?.message || 'Unknown error'}`;
   } finally {
-    isLoadingLogs.value = false;
+    if (!silent) {
+      isLoadingLogs.value = false;
+      scrollToBottom();
+    }
   }
 }
 
@@ -686,6 +744,10 @@ function copyLogs() {
   navigator.clipboard.writeText(logsContent.value);
   notify('info', 'Logs copied to clipboard');
 }
+
+onUnmounted(() => {
+  stopLogPolling();
+});
 
 // =============================================================================
 // Interactive Web Terminal Modal
@@ -823,11 +885,21 @@ async function handleDeleteTemplate(tmpl: StorageImage) {
 }
 
 function useTemplateForContainer(tmpl: StorageImage) {
-  form.templateArchive = tmpl.path;
   if (!showCreate.value) {
     toggleCreate();
-    form.templateArchive = tmpl.path;
   }
+  form.templateArchive = tmpl.path;
+  const baseName = tmpl.name.toLowerCase();
+  for (const distro of ['alpine', 'debian', 'ubuntu', 'fedora', 'rocky', 'alma', 'arch', 'centos']) {
+    if (baseName.includes(distro)) {
+      form.distribution = distro === 'rocky' ? 'rockylinux' : distro === 'alma' ? 'almalinux' : distro;
+      form.containerName = `${distro.charAt(0).toUpperCase() + distro.slice(1)} Container`;
+      form.containerId = toZfsSafeSlug(form.containerName);
+      break;
+    }
+  }
+  showCreate.value = true;
+  switchTab('containers');
   notify('info', `Selected template: ${tmpl.name}`);
 }
 
@@ -1081,11 +1153,11 @@ function copyTemplatePath(path: string) {
           <thead>
             <tr>
               <SortableTh :sort="lxcSort" sort-key="name">Name</SortableTh>
-              <SortableTh :sort="lxcSort" sort-key="state">State</SortableTh>
-              <SortableTh :sort="lxcSort" sort-key="autostart" class="col-desktop-only">Autostart</SortableTh>
               <SortableTh :sort="lxcSort" sort-key="distro" class="col-desktop-only">Distro / Release / Arch</SortableTh>
               <SortableTh :sort="lxcSort" sort-key="ipv4">IPv4 Address</SortableTh>
-              <SortableTh :sort="lxcSort" sort-key="resources" class="col-desktop-only">Resource Usage</SortableTh>
+              <SortableTh :sort="lxcSort" sort-key="cpu" class="col-desktop-only">CPU</SortableTh>
+              <SortableTh :sort="lxcSort" sort-key="memory" class="col-desktop-only">Memory</SortableTh>
+              <SortableTh :sort="lxcSort" sort-key="network" class="col-desktop-only">Network</SortableTh>
               <th style="text-align: right">Actions</th>
             </tr>
           </thead>
@@ -1099,11 +1171,11 @@ function copyTemplatePath(path: string) {
                     <SkeletonBox width="90px" height="11px" />
                   </div>
                 </td>
-                <td><SkeletonBox width="65px" height="20px" rounded="10px" /></td>
-                <td class="col-desktop-only"><SkeletonBox width="60px" height="20px" rounded="10px" /></td>
                 <td class="col-desktop-only"><SkeletonBox width="100px" height="14px" /></td>
                 <td><SkeletonBox width="95px" height="14px" /></td>
-                <td class="col-desktop-only"><SkeletonBox width="110px" height="14px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="60px" height="14px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="70px" height="14px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="140px" height="14px" /></td>
                 <td style="text-align: right">
                   <div style="display: inline-flex; gap: 6px">
                     <SkeletonBox width="26px" height="26px" rounded="4px" />
@@ -1119,78 +1191,54 @@ function copyTemplatePath(path: string) {
               </td>
             </tr>
 
-            <tr v-for="lx in lxcSort.sorted.value" :key="lx.name">
-              <!-- Name & ID -->
+            <tr
+              v-for="lx in lxcSort.sorted.value"
+              :key="lx.name"
+              style="cursor: pointer"
+              title="Click to open container details"
+              @click="openLxcDetail(lx)"
+            >
+              <!-- Name & Status Bullet -->
               <td>
-                <div
-                  style="font-weight: 600; cursor: pointer; color: var(--text-primary)"
-                  title="Open Container Details"
-                  @click="openLxcDetail(lx)"
-                >
-                  {{ lx.containerName }}
+                <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text-primary); flex-wrap: wrap">
+                  <MdiIcon
+                    :path="transitioningContainers[lx.name] ? mdiLoading : mdiCircle"
+                    :size="transitioningContainers[lx.name] ? 12 : 9"
+                    :class="{ 'spin-icon': Boolean(transitioningContainers[lx.name]) }"
+                    :style="{
+                      color: transitioningContainers[lx.name]
+                        ? 'var(--warning)'
+                        : lx.state === 'RUNNING'
+                        ? 'var(--success)'
+                        : lx.state === 'FROZEN'
+                        ? 'var(--warning)'
+                        : 'var(--text-muted)',
+                      flexShrink: 0,
+                    }"
+                  />
+                  <span>{{ lx.containerName }}</span>
+                  <span
+                    v-if="transitioningContainers[lx.name]"
+                    class="badge badge-warning pulse-anim"
+                    style="display: inline-flex; align-items: center; gap: 4px; font-size: 10px; padding: 1px 6px"
+                  >
+                    <MdiIcon :path="mdiLoading" size="10" class="spin-icon" />
+                    {{ transitioningContainers[lx.name].toUpperCase() }}...
+                  </span>
+                  <span v-if="lx.unprivileged" class="badge badge-info" style="font-size: 10px; padding: 1px 6px" title="Unprivileged user namespace">
+                    Unpriv
+                  </span>
+                  <span v-if="lx.gpuEnabled" class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 10px; padding: 1px 6px" title="GPU Acceleration Enabled">
+                    GPU
+                  </span>
                 </div>
-                <div class="mono" style="font-size: 11px; color: var(--text-muted)">
-                  {{ lx.name.replace('lxcContainers/', '') }}
-                </div>
-                <div v-if="lx.description" style="font-size: 11px; color: var(--text-secondary); margin-top: 2px">
+                <div v-if="lx.description" style="font-size: 11px; color: var(--text-secondary); margin-top: 2px; padding-left: 17px">
                   {{ lx.description }}
                 </div>
               </td>
 
-              <!-- State & Badges -->
-              <td>
-                <div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap">
-                  <span
-                    v-if="transitioningContainers[lx.name]"
-                    class="badge badge-warning pulse-anim"
-                    style="display: inline-flex; align-items: center; gap: 4px"
-                  >
-                    <MdiIcon :path="mdiLoading" size="12" class="spin-icon" />
-                    {{ transitioningContainers[lx.name].toUpperCase() }}...
-                  </span>
-                  <span
-                    v-else
-                    class="badge"
-                    :class="
-                      lx.state === 'RUNNING'
-                        ? 'badge-success'
-                        : lx.state === 'FROZEN'
-                        ? 'badge-warning'
-                        : 'badge-neutral'
-                    "
-                  >
-                    {{ lx.state }}
-                  </span>
-                  <span v-if="lx.unprivileged" class="badge badge-info" title="Unprivileged user namespace">
-                    Unpriv
-                  </span>
-                  <span v-if="lx.gpuEnabled" class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3)" title="GPU Acceleration Enabled">
-                    GPU
-                  </span>
-                </div>
-              </td>
-
-              <!-- Autostart Toggle Badge -->
-              <td class="col-desktop-only">
-                <button
-                  type="button"
-                  class="badge"
-                  :class="lx.autostart ? 'badge-success' : 'badge-neutral'"
-                  style="cursor: pointer; border: 1px solid var(--border-subtle); display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px; transition: all 0.15s ease"
-                  :title="`Click to ${lx.autostart ? 'disable' : 'enable'} autostart on host boot`"
-                  :disabled="togglingAutostart[lx.name]"
-                  @click="toggleAutostart(lx)"
-                >
-                  <span
-                    style="display: inline-block; width: 6px; height: 6px; border-radius: 50%"
-                    :style="{ background: lx.autostart ? 'var(--success)' : 'var(--text-muted)' }"
-                  ></span>
-                  {{ lx.autostart ? 'On Boot' : 'Manual' }}
-                </button>
-              </td>
-
               <!-- Distro / Release / Arch -->
-              <td class="mono col-desktop-only">
+              <td class="col-desktop-only">
                 {{ lx.distribution }} / {{ lx.release }} ({{ lx.architecture }})
               </td>
 
@@ -1199,157 +1247,72 @@ function copyTemplatePath(path: string) {
                 {{ lx.ipv4Address || '—' }}
               </td>
 
-              <!-- Resource Usage -->
-              <td class="mono col-desktop-only" style="font-size: 12px">
-                <div v-if="lx.state === 'RUNNING'">
-                  <span :style="{ color: (lx.cpuPercent || 0) > 85 ? 'var(--danger-text)' : 'var(--text-primary)' }">
-                    {{ (lx.cpuPercent || 0).toFixed(1) }}% CPU
-                  </span>
-                  <span style="color: var(--text-muted); margin: 0 4px">·</span>
-                  <span style="color: var(--text-primary)">
-                    {{ lx.memoryUsedMib || 0 }} MiB RAM
-                  </span>
+              <!-- CPU -->
+              <td class="col-desktop-only" style="padding: 10px 14px; width: 85px; min-width: 85px; max-width: 85px; box-sizing: border-box; white-space: nowrap">
+                <div v-if="lx.state === 'RUNNING'" style="font-size: 12.5px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums">
+                  {{ (Number(lx.cpuPercent) || 0).toFixed(1) }}%
                 </div>
-                <div v-else style="color: var(--text-muted)">—</div>
-                <div v-if="lx.mountPoints && lx.mountPoints.length > 0" style="font-size: 11px; color: var(--text-muted); margin-top: 2px">
-                  {{ lx.mountPoints.length }} bind mount{{ lx.mountPoints.length > 1 ? 's' : '' }}
-                </div>
+                <div v-else style="color: var(--text-muted); font-size: 12.5px">—</div>
               </td>
 
-              <!-- Actions Toolbar -->
-              <td style="text-align: right">
+              <!-- Memory -->
+              <td class="col-desktop-only" style="padding: 10px 14px; width: 105px; min-width: 105px; max-width: 105px; box-sizing: border-box; white-space: nowrap">
+                <div v-if="lx.state === 'RUNNING'" style="font-size: 12.5px; color: var(--text-primary); font-variant-numeric: tabular-nums">
+                  {{ lx.memoryUsedMib || 0 }} MiB
+                </div>
+                <div v-else style="color: var(--text-muted); font-size: 12.5px">—</div>
+              </td>
+
+              <!-- Network (1s Live) -->
+              <td class="col-desktop-only" style="padding: 10px 14px; width: 210px; min-width: 210px; max-width: 210px; box-sizing: border-box; white-space: nowrap">
+                <div v-if="lx.state === 'RUNNING'" style="font-size: 11.5px; font-variant-numeric: tabular-nums">
+                  <div style="color: var(--text-primary); font-weight: 500">
+                    {{ formatNetworkRate(lx) }}
+                  </div>
+                  <div style="font-size: 10.5px; color: var(--text-secondary); min-height: 14px">
+                    {{ formatNetworkTotal(lx) || ' ' }}
+                  </div>
+                </div>
+                <div v-else style="color: var(--text-muted); font-size: 12.5px">—</div>
+              </td>
+
+              <!-- Quick Power Toggle Action -->
+              <td style="text-align: right" @click.stop>
                 <div style="display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end">
-                  <!-- Start Button -->
+                  <!-- Start / Unfreeze Button -->
                   <button
                     v-if="lx.state !== 'RUNNING' || transitioningContainers[lx.name] === 'starting'"
                     class="btn btn-xs btn-success"
                     :class="{ 'btn-loading': transitioningContainers[lx.name] === 'starting' }"
                     :disabled="Boolean(transitioningContainers[lx.name])"
-                    :title="transitioningContainers[lx.name] === 'starting' ? 'Starting container...' : 'Start Container'"
-                    @click="handleAction(lx.name, 'start')"
+                    :title="transitioningContainers[lx.name] === 'starting' ? 'Starting container...' : lx.state === 'FROZEN' ? 'Unfreeze Container' : 'Start Container'"
+                    @click.stop="handleAction(lx.name, 'start')"
                   >
                     <MdiIcon
                       :path="transitioningContainers[lx.name] === 'starting' ? mdiLoading : mdiPlay"
                       size="13"
                       :class="{ 'spin-icon': transitioningContainers[lx.name] === 'starting' }"
+                      style="margin-right: 4px"
                     />
-                  </button>
-
-                  <!-- Restart Button -->
-                  <button
-                    v-if="lx.state === 'RUNNING' || transitioningContainers[lx.name] === 'restarting'"
-                    class="btn btn-xs"
-                    :class="{ 'btn-loading': transitioningContainers[lx.name] === 'restarting' }"
-                    :disabled="Boolean(transitioningContainers[lx.name])"
-                    :title="transitioningContainers[lx.name] === 'restarting' ? 'Restarting container...' : 'Restart Container'"
-                    @click="handleRestart(lx)"
-                  >
-                    <MdiIcon
-                      :path="transitioningContainers[lx.name] === 'restarting' ? mdiLoading : mdiRestart"
-                      size="13"
-                      :class="{ 'spin-icon': transitioningContainers[lx.name] === 'restarting' }"
-                    />
-                  </button>
-
-                  <!-- Freeze / Unfreeze -->
-                  <button
-                    v-if="lx.state === 'RUNNING'"
-                    class="btn btn-xs"
-                    :class="{ 'btn-loading': transitioningContainers[lx.name] === 'freezing' }"
-                    :disabled="Boolean(transitioningContainers[lx.name])"
-                    :title="transitioningContainers[lx.name] === 'freezing' ? 'Freezing container...' : 'Freeze Container (pause execution)'"
-                    @click="handleAction(lx.name, 'freeze')"
-                  >
-                    <MdiIcon
-                      :path="transitioningContainers[lx.name] === 'freezing' ? mdiLoading : mdiPause"
-                      size="13"
-                      :class="{ 'spin-icon': transitioningContainers[lx.name] === 'freezing' }"
-                    />
-                  </button>
-                  <button
-                    v-else-if="lx.state === 'FROZEN'"
-                    class="btn btn-xs btn-success"
-                    :class="{ 'btn-loading': transitioningContainers[lx.name] === 'starting' }"
-                    :disabled="Boolean(transitioningContainers[lx.name])"
-                    title="Unfreeze Container"
-                    @click="handleAction(lx.name, 'start')"
-                  >
-                    <MdiIcon
-                      :path="transitioningContainers[lx.name] === 'starting' ? mdiLoading : mdiPlay"
-                      size="13"
-                      :class="{ 'spin-icon': transitioningContainers[lx.name] === 'starting' }"
-                    />
+                    {{ transitioningContainers[lx.name] === 'starting' ? 'Starting...' : lx.state === 'FROZEN' ? 'Resume' : 'Start' }}
                   </button>
 
                   <!-- Stop Button -->
                   <button
-                    v-if="lx.state !== 'STOPPED' || transitioningContainers[lx.name] === 'stopping'"
+                    v-if="lx.state === 'RUNNING' || transitioningContainers[lx.name] === 'stopping'"
                     class="btn btn-xs"
                     :class="{ 'btn-loading': transitioningContainers[lx.name] === 'stopping' }"
                     :disabled="Boolean(transitioningContainers[lx.name])"
                     :title="transitioningContainers[lx.name] === 'stopping' ? 'Stopping container...' : 'Stop Container'"
-                    @click="handleAction(lx.name, 'stop')"
+                    @click.stop="handleAction(lx.name, 'stop')"
                   >
                     <MdiIcon
                       :path="transitioningContainers[lx.name] === 'stopping' ? mdiLoading : mdiStop"
                       size="13"
                       :class="{ 'spin-icon': transitioningContainers[lx.name] === 'stopping' }"
+                      style="margin-right: 4px"
                     />
-                  </button>
-
-                  <!-- Details Button -->
-                  <button
-                    class="btn btn-xs btn-secondary"
-                    title="Open Container Details & Management"
-                    @click="openLxcDetail(lx)"
-                  >
-                    <MdiIcon :path="mdiInformationOutline" size="13" />
-                  </button>
-
-                  <!-- Terminal Button -->
-                  <button
-                    class="btn btn-xs btn-primary"
-                    :disabled="lx.state !== 'RUNNING'"
-                    title="Open Web Terminal Console"
-                    @click="openTerminal(lx)"
-                  >
-                    <MdiIcon :path="mdiConsole" size="13" />
-                  </button>
-
-                  <!-- Logs Button -->
-                  <button
-                    class="btn btn-xs"
-                    title="View Container Logs"
-                    @click="openInspectModal(lx, 'logs')"
-                  >
-                    <MdiIcon :path="mdiFileDocumentOutline" size="13" />
-                  </button>
-
-                  <!-- Edit Button -->
-                  <button
-                    class="btn btn-xs"
-                    title="Edit Hardware & Settings"
-                    @click="openEditModal(lx)"
-                  >
-                    <MdiIcon :path="mdiPencil" size="13" />
-                  </button>
-
-                  <!-- Inspect Button -->
-                  <button
-                    class="btn btn-xs"
-                    title="Inspect Container Details"
-                    @click="openInspectModal(lx, 'overview')"
-                  >
-                    <MdiIcon :path="mdiInformationOutline" size="13" />
-                  </button>
-
-                  <!-- Delete Button -->
-                  <button
-                    class="btn btn-xs btn-danger"
-                    title="Delete Container"
-                    @click="handleDelete(lx)"
-                  >
-                    <MdiIcon :path="mdiTrashCan" size="13" />
+                    {{ transitioningContainers[lx.name] === 'stopping' ? 'Stopping...' : 'Stop' }}
                   </button>
                 </div>
               </td>
@@ -1695,8 +1658,8 @@ function copyTemplatePath(path: string) {
                   <span class="mono" :title="tmpl.path">{{ tmpl.name }}</span>
                 </div>
               </td>
-              <td class="mono">{{ tmpl.sizeFormatted }}</td>
-              <td class="mono" style="font-size: 11px; color: var(--text-muted)">
+              <td>{{ tmpl.sizeFormatted }}</td>
+              <td style="font-size: 11px; color: var(--text-muted)">
                 {{ tmpl.modTime ? new Date(tmpl.modTime).toLocaleString() : '—' }}
               </td>
               <td style="text-align: right">
@@ -1720,7 +1683,7 @@ function copyTemplatePath(path: string) {
                     title="Delete Template"
                     @click="handleDeleteTemplate(tmpl)"
                   >
-                    <MdiIcon :path="mdiTrashCan" size="13" />
+                    <MdiIcon :path="mdiTrashCanOutline" size="13" />
                   </button>
                 </div>
               </td>
@@ -1862,7 +1825,7 @@ function copyTemplatePath(path: string) {
   <!-- ======================================================================= -->
   <!-- MODAL 2: LXC Container Inspector (Overview, Mounts, Logs)               -->
   <!-- ======================================================================= -->
-  <div v-if="isInspectModalOpen && inspectedContainer" class="modal-backdrop">
+  <div v-if="isInspectModalOpen && inspectedContainer" class="modal-backdrop" @click.self="closeInspectModal">
     <div class="modal-card modal-card-large">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-shrink: 0">
         <div>
@@ -1968,7 +1931,7 @@ function copyTemplatePath(path: string) {
           >
             <MdiIcon :path="mdiConsole" size="14" style="margin-right: 4px" /> Terminal
           </button>
-          <button class="btn btn-sm" style="padding: 2px 6px" @click="isInspectModalOpen = false">
+          <button class="btn btn-sm" style="padding: 2px 6px" @click="closeInspectModal">
             <MdiIcon :path="mdiClose" size="18" />
           </button>
         </div>
@@ -1995,7 +1958,7 @@ function copyTemplatePath(path: string) {
         <button
           class="btn btn-sm"
           :class="inspectActiveTab === 'logs' ? 'btn-primary' : ''"
-          @click="inspectActiveTab = 'logs'; fetchLogs()"
+          @click="openInspectModal(inspectedContainer, 'logs')"
         >
           <MdiIcon :path="mdiFileDocumentOutline" size="14" style="margin-right: 4px" />
           Logs
@@ -2107,7 +2070,7 @@ function copyTemplatePath(path: string) {
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px">
           <div style="display: flex; gap: 8px; align-items: center">
             <span style="font-size: 12px; color: var(--text-muted)">Lines:</span>
-            <select v-model.number="logTail" class="select" style="padding: 2px 8px; font-size: 12px; height: 28px" @change="fetchLogs">
+            <select v-model.number="logTail" class="select" style="padding: 2px 8px; font-size: 12px; height: 28px" @change="fetchLogs(false)">
               <option :value="50">50</option>
               <option :value="100">100</option>
               <option :value="200">200</option>
@@ -2115,8 +2078,17 @@ function copyTemplatePath(path: string) {
             </select>
           </div>
           <div style="display: flex; gap: 8px">
-            <button class="btn btn-sm" @click="fetchLogs" :disabled="isLoadingLogs">
-              <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" />
+            <button
+              class="btn btn-sm"
+              :class="autoScroll ? 'btn-primary' : ''"
+              :title="autoScroll ? 'Auto-scroll enabled (click to pause)' : 'Click to follow logs automatically'"
+              @click="toggleAutoScroll"
+            >
+              <MdiIcon :path="mdiChevronDoubleDown" size="14" style="margin-right: 4px" />
+              Auto-scroll
+            </button>
+            <button class="btn btn-sm" @click="fetchLogs(false)" :disabled="isLoadingLogs">
+              <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" :class="{ 'spin-icon': isLoadingLogs }" />
               {{ isLoadingLogs ? 'Refreshing...' : 'Refresh' }}
             </button>
             <button class="btn btn-sm" @click="copyLogs">
@@ -2126,6 +2098,7 @@ function copyTemplatePath(path: string) {
         </div>
 
         <pre
+          ref="logContainerRef"
           class="mono"
           style="
             flex: 1;
@@ -2140,6 +2113,7 @@ function copyTemplatePath(path: string) {
             white-space: pre-wrap;
             margin: 0;
           "
+          @scroll="onLogScroll"
         >{{ logsContent }}</pre>
       </div>
     </div>

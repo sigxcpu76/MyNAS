@@ -434,7 +434,8 @@ function getPoolFragChartOptions(fragPercent: number): echarts.EChartsOption {
   background: var(--bg-surface);
   color: var(--accent-primary);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-subtle);
+  box-shadow: none;
 }
 
 .pool-chart-legend {

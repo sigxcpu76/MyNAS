@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/sigxcpu/nas/internal/domain"
 	nasv1 "github.com/sigxcpu/nas/internal/gen/nas/v1"
@@ -2076,6 +2077,166 @@ func newSystemCmd(rootOpts *RootOptions) *cobra.Command {
 	}
 
 	cmd.AddCommand(statusCmd, selectPoolCmd, discoverCmd)
+	return cmd
+}
+
+func newCronCmd(rootOpts *RootOptions) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "cron",
+		Aliases: []string{"cronjob", "cronjobs", "task", "tasks"},
+		Short:   "Manage native scheduled tasks and CronJobs",
+	}
+
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List all scheduled tasks and CronJobs",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			resp, err := client.ListCronJobs(cmd.Context(), &nasv1.ListCronJobsRequest{})
+			if err != nil {
+				return err
+			}
+			if rootOpts.JSONOutput {
+				return rootOpts.printJSON(resp.GetCronJobs())
+			}
+
+			tw := tabwriter.NewWriter(rootOpts.Out, 0, 4, 2, ' ', 0)
+			fmt.Fprintln(tw, "ID\tTITLE\tSCHEDULE\tSTATE\tIMAGE\tLAST STATUS\tLAST DURATION")
+			for _, j := range resp.GetCronJobs() {
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+					j.GetId(), j.GetTitle(), j.GetSchedule(), j.GetState(), j.GetImage(), j.GetLastRunStatus(), j.GetLastRunDuration())
+			}
+			return tw.Flush()
+		},
+	}
+
+	getCmd := &cobra.Command{
+		Use:   "get <job-id>",
+		Short: "Get details and volume mounts of a CronJob",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			j, err := client.GetCronJob(cmd.Context(), &nasv1.GetCronJobRequest{
+				Name: "cronJobs/" + strings.TrimPrefix(args[0], "cronJobs/"),
+			})
+			if err != nil {
+				return err
+			}
+			if rootOpts.JSONOutput {
+				return rootOpts.printJSON(j)
+			}
+
+			fmt.Fprintf(rootOpts.Out, "ID:                  %s\n", j.GetId())
+			fmt.Fprintf(rootOpts.Out, "Title:               %s\n", j.GetTitle())
+			fmt.Fprintf(rootOpts.Out, "Schedule:            %s\n", j.GetSchedule())
+			fmt.Fprintf(rootOpts.Out, "State:               %s\n", j.GetState())
+			fmt.Fprintf(rootOpts.Out, "Enabled:             %t\n", j.GetEnabled())
+			fmt.Fprintf(rootOpts.Out, "Image:               %s\n", j.GetImage())
+			fmt.Fprintf(rootOpts.Out, "Concurrency:         %s\n", j.GetConcurrencyPolicy())
+			if j.GetTimeoutSeconds() > 0 {
+				fmt.Fprintf(rootOpts.Out, "Timeout:             %s\n", (time.Duration(j.GetTimeoutSeconds()) * time.Second).String())
+			} else {
+				fmt.Fprintf(rootOpts.Out, "Timeout:             unlimited\n")
+			}
+			fmt.Fprintf(rootOpts.Out, "Last Run Status:     %s\n", j.GetLastRunStatus())
+			fmt.Fprintf(rootOpts.Out, "Last Run Duration:   %s\n", j.GetLastRunDuration())
+			if len(j.GetVolumes()) > 0 {
+				fmt.Fprintf(rootOpts.Out, "Volumes:\n")
+				for _, v := range j.GetVolumes() {
+					fmt.Fprintf(rootOpts.Out, "  - %s -> %s (ro: %t)\n", v.GetHostPath(), v.GetMountPath(), v.GetReadOnly())
+				}
+			}
+			return nil
+		},
+	}
+
+	runCmd := &cobra.Command{
+		Use:   "run <job-id>",
+		Short: "Trigger an immediate run of a CronJob",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			res, err := client.RunCronJob(cmd.Context(), &nasv1.RunCronJobRequest{
+				Name: "cronJobs/" + strings.TrimPrefix(args[0], "cronJobs/"),
+			})
+			if err != nil {
+				return err
+			}
+			if rootOpts.JSONOutput {
+				return rootOpts.printJSON(res)
+			}
+
+			if res.GetStatus() == "RUNNING" {
+				fmt.Fprintf(rootOpts.Out, "Started run %s for %s\nUse 'nasctl cron logs %s' to view execution output\n",
+					res.GetRunId(), args[0], strings.TrimPrefix(args[0], "cronJobs/"))
+			} else {
+				fmt.Fprintf(rootOpts.Out, "Run %s finished with status %s in %s (exit code: %d)\n",
+					res.GetRunId(), res.GetStatus(), res.GetDuration(), res.GetExitCode())
+			}
+			return nil
+		},
+	}
+
+	logsCmd := &cobra.Command{
+		Use:   "logs <job-id>",
+		Short: "Fetch execution logs of a CronJob",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			res, err := client.GetCronJobLogs(cmd.Context(), &nasv1.GetCronJobLogsRequest{
+				Name: "cronJobs/" + strings.TrimPrefix(args[0], "cronJobs/"),
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Fprint(rootOpts.Out, res.GetLogs())
+			return nil
+		},
+	}
+
+	deleteCmd := &cobra.Command{
+		Use:   "delete <job-id>",
+		Short: "Delete a scheduled CronJob",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, conn, err := rootOpts.dialClient(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+
+			_, err = client.DeleteCronJob(cmd.Context(), &nasv1.DeleteCronJobRequest{
+				Name: "cronJobs/" + strings.TrimPrefix(args[0], "cronJobs/"),
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(rootOpts.Out, "CronJob %q deleted successfully\n", args[0])
+			return nil
+		},
+	}
+
+	cmd.AddCommand(listCmd, getCmd, runCmd, logsCmd, deleteCmd)
 	return cmd
 }
 

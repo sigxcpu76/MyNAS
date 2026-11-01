@@ -34,14 +34,21 @@ type vmMetricsSample struct {
 	sampleTime time.Time
 	cpuPercent float64
 	memUsedMiB int64
+	netRxBytes uint64
+	netTxBytes uint64
+	netRxRate  int64
+	netTxRate  int64
 	cachedAt   time.Time
 }
 
 type domstatEntry struct {
-	cpuNs  uint64
-	rssKiB uint64
-	hasCPU bool
-	hasRSS bool
+	cpuNs      uint64
+	rssKiB     uint64
+	netRxBytes uint64
+	netTxBytes uint64
+	hasCPU     bool
+	hasRSS     bool
+	hasNet     bool
 }
 
 func parseDomstatsOutput(output string) map[string]domstatEntry {
@@ -79,6 +86,22 @@ func parseDomstatsOutput(output string) map[string]domstatEntry {
 			if u, err := strconv.ParseUint(valStr, 10, 64); err == nil {
 				currentEntry.rssKiB = u
 				currentEntry.hasRSS = true
+			}
+		} else if strings.Contains(line, ".rx.bytes=") {
+			parts := strings.Split(line, "=")
+			if len(parts) == 2 {
+				if u, err := strconv.ParseUint(strings.TrimSpace(parts[1]), 10, 64); err == nil {
+					currentEntry.netRxBytes += u
+					currentEntry.hasNet = true
+				}
+			}
+		} else if strings.Contains(line, ".tx.bytes=") {
+			parts := strings.Split(line, "=")
+			if len(parts) == 2 {
+				if u, err := strconv.ParseUint(strings.TrimSpace(parts[1]), 10, 64); err == nil {
+					currentEntry.netTxBytes += u
+					currentEntry.hasNet = true
+				}
 			}
 		}
 	}
@@ -650,7 +673,7 @@ func (a *Adapter) sampleAllVMMetrics(ctx context.Context) map[string]vmMetricsSa
 	tctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(tctx, "virsh", "domstats", "--cpu-total", "--balloon", "--nowait")
+	cmd := exec.CommandContext(tctx, "virsh", "domstats", "--cpu-total", "--balloon", "--interface", "--nowait")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil
@@ -679,11 +702,24 @@ func (a *Adapter) sampleAllVMMetrics(ctx context.Context) map[string]vmMetricsSa
 					cpuPct = (float64(deltaNs) / float64(dt.Nanoseconds())) * 100.0
 					cpuPct = math.Round(cpuPct*10) / 10
 				}
+				var rxRate, txRate int64
+				if dt.Seconds() > 0 {
+					if entry.netRxBytes >= cached.netRxBytes {
+						rxRate = int64(float64(entry.netRxBytes-cached.netRxBytes) / dt.Seconds())
+					}
+					if entry.netTxBytes >= cached.netTxBytes {
+						txRate = int64(float64(entry.netTxBytes-cached.netTxBytes) / dt.Seconds())
+					}
+				}
 				sample := vmMetricsSample{
 					cpuNs:      entry.cpuNs,
 					sampleTime: now,
 					cpuPercent: cpuPct,
 					memUsedMiB: memMiB,
+					netRxBytes: entry.netRxBytes,
+					netTxBytes: entry.netTxBytes,
+					netRxRate:  rxRate,
+					netTxRate:  txRate,
 					cachedAt:   now,
 				}
 				a.metricsCache[vmName] = sample
@@ -695,6 +731,10 @@ func (a *Adapter) sampleAllVMMetrics(ctx context.Context) map[string]vmMetricsSa
 				sampleTime: cached.sampleTime,
 				cpuPercent: cached.cpuPercent,
 				memUsedMiB: memMiB,
+				netRxBytes: entry.netRxBytes,
+				netTxBytes: entry.netTxBytes,
+				netRxRate:  cached.netRxRate,
+				netTxRate:  cached.netTxRate,
 				cachedAt:   now,
 			}
 			a.metricsCache[vmName] = sample
@@ -707,14 +747,18 @@ func (a *Adapter) sampleAllVMMetrics(ctx context.Context) map[string]vmMetricsSa
 			sampleTime: now,
 			cpuPercent: 0,
 			memUsedMiB: memMiB,
+			netRxBytes: entry.netRxBytes,
+			netTxBytes: entry.netTxBytes,
+			netRxRate:  0,
+			netTxRate:  0,
 			cachedAt:   now,
 		}
 		a.metricsCache[vmName] = sample
 		results[vmName] = sample
 
-		go func(name string, baseNs uint64, baseTime time.Time) {
+		go func(name string, baseNs, baseRx, baseTx uint64, baseTime time.Time) {
 			time.Sleep(200 * time.Millisecond)
-			bCmd := exec.Command("virsh", "domstats", "--cpu-total", "--balloon", "--nowait", name)
+			bCmd := exec.Command("virsh", "domstats", "--cpu-total", "--balloon", "--interface", "--nowait", name)
 			bOut, bErr := bCmd.Output()
 			if bErr != nil {
 				return
@@ -726,62 +770,82 @@ func (a *Adapter) sampleAllVMMetrics(ctx context.Context) map[string]vmMetricsSa
 			}
 			t2 := time.Now()
 			dt := t2.Sub(baseTime)
-			if dt > 0 && bEntry.cpuNs >= baseNs {
-				pct := (float64(bEntry.cpuNs-baseNs) / float64(dt.Nanoseconds())) * 100.0
-				pct = math.Round(pct*10) / 10
+			if dt > 0 {
+				pct := 0.0
+				if bEntry.cpuNs >= baseNs {
+					pct = (float64(bEntry.cpuNs-baseNs) / float64(dt.Nanoseconds())) * 100.0
+					pct = math.Round(pct*10) / 10
+				}
+				var rxR, txR int64
+				if dt.Seconds() > 0 {
+					if bEntry.netRxBytes >= baseRx {
+						rxR = int64(float64(bEntry.netRxBytes-baseRx) / dt.Seconds())
+					}
+					if bEntry.netTxBytes >= baseTx {
+						txR = int64(float64(bEntry.netTxBytes-baseTx) / dt.Seconds())
+					}
+				}
 				a.metricsMu.Lock()
 				a.metricsCache[name] = vmMetricsSample{
 					cpuNs:      bEntry.cpuNs,
 					sampleTime: t2,
 					cpuPercent: pct,
 					memUsedMiB: int64(bEntry.rssKiB / 1024),
+					netRxBytes: bEntry.netRxBytes,
+					netTxBytes: bEntry.netTxBytes,
+					netRxRate:  rxR,
+					netTxRate:  txR,
 					cachedAt:   t2,
 				}
 				a.metricsMu.Unlock()
 			}
-		}(vmName, entry.cpuNs, now)
+		}(vmName, entry.cpuNs, entry.netRxBytes, entry.netTxBytes, now)
 	}
 
 	return results
 }
 
-func (a *Adapter) sampleSingleVMMetrics(ctx context.Context, vmName string) (float64, int64) {
+func (a *Adapter) sampleSingleVMMetrics(ctx context.Context, vmName string) (float64, int64, int64, int64, int64, int64) {
 	now := time.Now()
 	a.metricsMu.Lock()
 	cached, hasCache := a.metricsCache[vmName]
 	if hasCache && now.Sub(cached.cachedAt) < 1500*time.Millisecond {
 		cpuPct := cached.cpuPercent
 		memMiB := cached.memUsedMiB
+		rxRate := cached.netRxRate
+		txRate := cached.netTxRate
+		rxBytes := int64(cached.netRxBytes)
+		txBytes := int64(cached.netTxBytes)
 		a.metricsMu.Unlock()
-		return cpuPct, memMiB
+		return cpuPct, memMiB, rxRate, txRate, rxBytes, txBytes
 	}
 	a.metricsMu.Unlock()
 
 	if !a.hasVirsh() {
 		if hasCache {
-			return cached.cpuPercent, cached.memUsedMiB
+			return cached.cpuPercent, cached.memUsedMiB, cached.netRxRate, cached.netTxRate, int64(cached.netRxBytes), int64(cached.netTxBytes)
 		}
-		return 0, 0
+		return 0, 0, 0, 0, 0, 0
 	}
 
 	tctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(tctx, "virsh", "domstats", "--cpu-total", "--balloon", "--nowait", vmName)
+	cmd := exec.CommandContext(tctx, "virsh", "domstats", "--cpu-total", "--balloon", "--interface", "--nowait", vmName)
 	out, err := cmd.Output()
 	if err != nil {
 		if hasCache {
-			return cached.cpuPercent, cached.memUsedMiB
+			return cached.cpuPercent, cached.memUsedMiB, cached.netRxRate, cached.netTxRate, int64(cached.netRxBytes), int64(cached.netTxBytes)
 		}
-		return 0, 0
+		return 0, 0, 0, 0, 0, 0
 	}
 
 	stats := parseDomstatsOutput(string(out))
 	entry, ok := stats[vmName]
 	if !ok {
 		if hasCache {
-			return cached.cpuPercent, cached.memUsedMiB
+			return cached.cpuPercent, cached.memUsedMiB, cached.netRxRate, cached.netTxRate, int64(cached.netRxBytes), int64(cached.netTxBytes)
 		}
-		return 0, 0
+		return 0, 0, 0, 0, 0, 0
 	}
 
 	memMiB := int64(entry.rssKiB / 1024)
@@ -798,23 +862,40 @@ func (a *Adapter) sampleSingleVMMetrics(ctx context.Context, vmName string) (flo
 				cpuPct = (float64(deltaNs) / float64(dt.Nanoseconds())) * 100.0
 				cpuPct = math.Round(cpuPct*10) / 10
 			}
+			var rxRate, txRate int64
+			if dt.Seconds() > 0 {
+				if entry.netRxBytes >= cached.netRxBytes {
+					rxRate = int64(float64(entry.netRxBytes-cached.netRxBytes) / dt.Seconds())
+				}
+				if entry.netTxBytes >= cached.netTxBytes {
+					txRate = int64(float64(entry.netTxBytes-cached.netTxBytes) / dt.Seconds())
+				}
+			}
 			a.metricsCache[vmName] = vmMetricsSample{
 				cpuNs:      entry.cpuNs,
 				sampleTime: now,
 				cpuPercent: cpuPct,
 				memUsedMiB: memMiB,
+				netRxBytes: entry.netRxBytes,
+				netTxBytes: entry.netTxBytes,
+				netRxRate:  rxRate,
+				netTxRate:  txRate,
 				cachedAt:   now,
 			}
-			return cpuPct, memMiB
+			return cpuPct, memMiB, rxRate, txRate, int64(entry.netRxBytes), int64(entry.netTxBytes)
 		}
 		a.metricsCache[vmName] = vmMetricsSample{
 			cpuNs:      cached.cpuNs,
 			sampleTime: cached.sampleTime,
 			cpuPercent: cached.cpuPercent,
 			memUsedMiB: memMiB,
+			netRxBytes: entry.netRxBytes,
+			netTxBytes: entry.netTxBytes,
+			netRxRate:  cached.netRxRate,
+			netTxRate:  cached.netTxRate,
 			cachedAt:   now,
 		}
-		return cached.cpuPercent, memMiB
+		return cached.cpuPercent, memMiB, cached.netRxRate, cached.netTxRate, int64(entry.netRxBytes), int64(entry.netTxBytes)
 	}
 
 	a.metricsCache[vmName] = vmMetricsSample{
@@ -822,12 +903,16 @@ func (a *Adapter) sampleSingleVMMetrics(ctx context.Context, vmName string) (flo
 		sampleTime: now,
 		cpuPercent: 0,
 		memUsedMiB: memMiB,
+		netRxBytes: entry.netRxBytes,
+		netTxBytes: entry.netTxBytes,
+		netRxRate:  0,
+		netTxRate:  0,
 		cachedAt:   now,
 	}
 
-	go func(name string, baseNs uint64, baseTime time.Time) {
+	go func(name string, baseNs, baseRx, baseTx uint64, baseTime time.Time) {
 		time.Sleep(200 * time.Millisecond)
-		bCmd := exec.Command("virsh", "domstats", "--cpu-total", "--balloon", "--nowait", name)
+		bCmd := exec.Command("virsh", "domstats", "--cpu-total", "--balloon", "--interface", "--nowait", name)
 		bOut, bErr := bCmd.Output()
 		if bErr != nil {
 			return
@@ -839,22 +924,38 @@ func (a *Adapter) sampleSingleVMMetrics(ctx context.Context, vmName string) (flo
 		}
 		t2 := time.Now()
 		dt := t2.Sub(baseTime)
-		if dt > 0 && bEntry.cpuNs >= baseNs {
-			pct := (float64(bEntry.cpuNs-baseNs) / float64(dt.Nanoseconds())) * 100.0
-			pct = math.Round(pct*10) / 10
+		if dt > 0 {
+			pct := 0.0
+			if bEntry.cpuNs >= baseNs {
+				pct = (float64(bEntry.cpuNs-baseNs) / float64(dt.Nanoseconds())) * 100.0
+				pct = math.Round(pct*10) / 10
+			}
+			var rxR, txR int64
+			if dt.Seconds() > 0 {
+				if bEntry.netRxBytes >= baseRx {
+					rxR = int64(float64(bEntry.netRxBytes-baseRx) / dt.Seconds())
+				}
+				if bEntry.netTxBytes >= baseTx {
+					txR = int64(float64(bEntry.netTxBytes-baseTx) / dt.Seconds())
+				}
+			}
 			a.metricsMu.Lock()
 			a.metricsCache[name] = vmMetricsSample{
 				cpuNs:      bEntry.cpuNs,
 				sampleTime: t2,
 				cpuPercent: pct,
 				memUsedMiB: int64(bEntry.rssKiB / 1024),
+				netRxBytes: bEntry.netRxBytes,
+				netTxBytes: bEntry.netTxBytes,
+				netRxRate:  rxR,
+				netTxRate:  txR,
 				cachedAt:   t2,
 			}
 			a.metricsMu.Unlock()
 		}
-	}(vmName, entry.cpuNs, now)
+	}(vmName, entry.cpuNs, entry.netRxBytes, entry.netTxBytes, now)
 
-	return 0, memMiB
+	return 0, memMiB, 0, 0, int64(entry.netRxBytes), int64(entry.netTxBytes)
 }
 
 func (a *Adapter) ListVMs(ctx context.Context) ([]domain.VirtualMachine, error) {
@@ -877,12 +978,20 @@ func (a *Adapter) ListVMs(ctx context.Context) ([]domain.VirtualMachine, error) 
 						if m, ok := metricsMap[name]; ok {
 							vm.GuestCPUPercent = m.cpuPercent
 							vm.GuestMemoryUsedMiB = m.memUsedMiB
+							vm.NetRxRate = m.netRxRate
+							vm.NetTxRate = m.netTxRate
+							vm.NetRxBytes = int64(m.netRxBytes)
+							vm.NetTxBytes = int64(m.netTxBytes)
 						} else {
-							vm.GuestCPUPercent, vm.GuestMemoryUsedMiB = a.sampleSingleVMMetrics(ctx, name)
+							vm.GuestCPUPercent, vm.GuestMemoryUsedMiB, vm.NetRxRate, vm.NetTxRate, vm.NetRxBytes, vm.NetTxBytes = a.sampleSingleVMMetrics(ctx, name)
 						}
 					} else {
 						vm.GuestCPUPercent = 0
 						vm.GuestMemoryUsedMiB = 0
+						vm.NetRxRate = 0
+						vm.NetTxRate = 0
+						vm.NetRxBytes = 0
+						vm.NetTxBytes = 0
 					}
 					vms = append(vms, *vm)
 				}
@@ -901,10 +1010,14 @@ func (a *Adapter) GetVM(ctx context.Context, id string) (*domain.VirtualMachine,
 	vm, err := a.getDomainFromVirsh(ctx, id)
 	if err == nil {
 		if vm.State == "RUNNING" {
-			vm.GuestCPUPercent, vm.GuestMemoryUsedMiB = a.sampleSingleVMMetrics(ctx, id)
+			vm.GuestCPUPercent, vm.GuestMemoryUsedMiB, vm.NetRxRate, vm.NetTxRate, vm.NetRxBytes, vm.NetTxBytes = a.sampleSingleVMMetrics(ctx, id)
 		} else {
 			vm.GuestCPUPercent = 0
 			vm.GuestMemoryUsedMiB = 0
+			vm.NetRxRate = 0
+			vm.NetTxRate = 0
+			vm.NetRxBytes = 0
+			vm.NetTxBytes = 0
 		}
 		return vm, nil
 	}

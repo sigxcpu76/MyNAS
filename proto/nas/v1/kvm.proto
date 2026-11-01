@@ -154,6 +154,10 @@ message VirtualMachine {
   bool is_template = 45;
   repeated string qemu_commandline_args = 46;
   string serial_console_url = 47;
+  int64 net_rx_rate = 49 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 net_tx_rate = 50 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 net_rx_bytes = 51 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 net_tx_bytes = 52 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message ListVirtualMachinesRequest {

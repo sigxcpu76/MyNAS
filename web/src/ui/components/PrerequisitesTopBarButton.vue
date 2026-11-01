@@ -67,11 +67,7 @@ const tooltipText = computed(() => {
       />
     </span>
 
-    <span class="btn-text">
-      Prerequisites
-    </span>
-
-    <span class="status-pill" :class="`pill-${statusLevel}`">
+    <span class="status-pill sr-only" :class="`pill-${statusLevel}`">
       {{ statusLevel === 'green' ? 'OK' : `${missingCount} Missing` }}
     </span>
   </button>
@@ -81,15 +77,25 @@ const tooltipText = computed(() => {
 .prereq-topbar-btn {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 10px;
-  border-radius: 8px;
-  font-size: 12.5px;
-  font-weight: 600;
+  justify-content: center;
+  padding: 5px 7px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
   user-select: none;
   border: 1px solid transparent;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .prereq-topbar-btn:hover {

@@ -44,7 +44,7 @@ import { confirmDelete } from '../modal';
 const props = withDefaults(
   defineProps<{
     vmName: string;
-    activeSubTab?: 'summary' | 'hardware' | 'console' | 'snapshots';
+    activeSubTab?: 'summary' | 'console' | 'configuration' | 'hardware' | 'snapshots';
   }>(),
   {
     activeSubTab: 'summary',
@@ -53,6 +53,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'back'): void;
+  (e: 'update:activeSubTab', tab: 'summary' | 'console' | 'configuration' | 'hardware' | 'snapshots'): void;
 }>();
 
 const isBusy = ref(false);
@@ -204,6 +205,307 @@ async function handleDeleteVm() {
   }
 }
 
+const isTogglingAutostart = ref(false);
+
+async function toggleAutostart() {
+  if (!vm.value || isTogglingAutostart.value) return;
+  isTogglingAutostart.value = true;
+  try {
+    const updated = await services.kvm.updateVirtualMachine(
+      vm.value.name,
+      { autostart: !vm.value.autostart },
+      ['autostart']
+    );
+    vm.value.autostart = updated.autostart;
+    hwForm.autostart = updated.autostart;
+    notify('success', `Autostart ${updated.autostart ? 'enabled' : 'disabled'} for ${cleanVmName.value}`);
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to toggle autostart');
+  } finally {
+    isTogglingAutostart.value = false;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// VM Hardware & Cloud-Init Configuration
+// -----------------------------------------------------------------------------
+const isSavingConfig = ref(false);
+const hwForm = reactive({
+  vmName: '',
+  description: '',
+  autostart: false,
+  sockets: 1,
+  cores: 2,
+  cpuType: 'host',
+  numa: false,
+  memoryMib: 4096,
+  hugepages: 'off',
+  machineType: 'i440fx',
+  biosType: 'seabios',
+  tpmVersion: 'none',
+  secureBoot: false,
+  bootOrder: 'hd,cdrom',
+  displayType: 'virtio-gpu',
+});
+
+const isSavingCloudInit = ref(false);
+const ciForm = reactive({
+  user: '',
+  password: '',
+  ipConfig: '',
+  sshPublicKeys: '',
+});
+
+watch(
+  vm,
+  (v) => {
+    if (v) {
+      hwForm.vmName = v.vmName || cleanVmName.value;
+      hwForm.description = v.description || '';
+      hwForm.autostart = Boolean(v.autostart);
+      hwForm.sockets = v.sockets || 1;
+      hwForm.cores = v.cores || v.vcpus || 2;
+      hwForm.cpuType = v.cpuType || 'host';
+      hwForm.numa = Boolean(v.numa);
+      hwForm.memoryMib = v.memoryMib || 2048;
+      hwForm.hugepages = v.hugepages || 'off';
+      let mach = v.machineType || 'i440fx';
+      if (mach === 'pc' || mach.startsWith('pc-i440fx')) mach = 'i440fx';
+      else if (mach.startsWith('pc-q35')) mach = 'q35';
+      hwForm.machineType = mach;
+      hwForm.biosType = v.biosType || 'seabios';
+      hwForm.tpmVersion = v.tpmVersion || 'none';
+      hwForm.secureBoot = Boolean(v.secureBoot);
+      hwForm.bootOrder = v.bootOrder || 'hd,cdrom';
+      hwForm.displayType = v.displayType || 'virtio-gpu';
+
+      ciForm.user = v.cloudInit?.user || '';
+      ciForm.password = v.cloudInit?.password || '';
+      ciForm.ipConfig = v.cloudInit?.ipConfig || '';
+      ciForm.sshPublicKeys = (v.cloudInit?.sshPublicKeys || []).join('\n');
+    }
+  },
+  { immediate: true }
+);
+
+async function handleSaveHardwareConfig() {
+  if (!vm.value || isSavingConfig.value) return;
+  isSavingConfig.value = true;
+  const vcpus = Math.max(1, Number(hwForm.sockets) || 1) * Math.max(1, Number(hwForm.cores) || 1);
+  try {
+    await runTrackedTask(`VM "${cleanVmName.value}": Save Configuration`, async () => {
+      await services.kvm.updateVirtualMachine(
+        vm.value!.name,
+        {
+          vmName: hwForm.vmName.trim() || cleanVmName.value,
+          description: hwForm.description.trim(),
+          autostart: hwForm.autostart,
+          vcpus,
+          sockets: hwForm.sockets,
+          cores: hwForm.cores,
+          cpuType: hwForm.cpuType,
+          numa: hwForm.numa,
+          memoryMib: hwForm.memoryMib,
+          balloonMinMib: hwForm.memoryMib,
+          hugepages: hwForm.hugepages,
+          machineType: hwForm.machineType,
+          biosType: hwForm.biosType,
+          tpmVersion: hwForm.tpmVersion,
+          secureBoot: hwForm.secureBoot,
+          bootOrder: hwForm.bootOrder,
+          displayType: hwForm.displayType,
+        },
+        [
+          'vm_name',
+          'description',
+          'autostart',
+          'vcpus',
+          'sockets',
+          'cores',
+          'cpu_type',
+          'numa',
+          'memory_mib',
+          'balloon_min_mib',
+          'hugepages',
+          'machine_type',
+          'bios_type',
+          'tpm_version',
+          'secure_boot',
+          'boot_order',
+          'display_type',
+        ]
+      );
+    });
+    notify('success', `Saved configuration for "${cleanVmName.value}"`);
+    await refreshAllData();
+  } catch (err: any) {
+    notify('error', `Failed to save configuration: ${err.message}`);
+  } finally {
+    isSavingConfig.value = false;
+  }
+}
+
+async function handleSaveCloudInit() {
+  if (!vm.value || isSavingCloudInit.value) return;
+  isSavingCloudInit.value = true;
+  const sshKeys = ciForm.sshPublicKeys
+    .split('\n')
+    .map((k) => k.trim())
+    .filter(Boolean);
+  try {
+    await runTrackedTask(`VM "${cleanVmName.value}": Save Cloud-Init`, async () => {
+      await services.kvm.updateVirtualMachine(
+        vm.value!.name,
+        {
+          cloudInit: {
+            user: ciForm.user.trim(),
+            password: ciForm.password,
+            ipConfig: ciForm.ipConfig.trim(),
+            sshPublicKeys: sshKeys,
+          },
+        },
+        ['cloud_init']
+      );
+    });
+    notify('success', `Saved Cloud-Init settings for "${cleanVmName.value}"`);
+    await refreshAllData();
+  } catch (err: any) {
+    notify('error', `Failed to save Cloud-Init: ${err.message}`);
+  } finally {
+    isSavingCloudInit.value = false;
+  }
+}
+
+// Add Hardware Modals (Disk / NIC / CD-ROM)
+const showAddDiskModal = ref(false);
+const newDisk = reactive({
+  bus: 'scsi',
+  diskPath: '',
+  sizeGib: 32,
+  cacheMode: 'none',
+  discard: true,
+});
+
+function openAddDisk() {
+  const idx = (vm.value?.disks || []).length;
+  const pool = (nasState.systemConfig?.mainPool || nasState.pools[0]?.poolName || 'tank').replace(/^zfsPools\//, '');
+  newDisk.bus = 'scsi';
+  newDisk.diskPath = `/dev/zvol/${pool}/vm-${cleanVmName.value}-disk-${idx}`;
+  newDisk.sizeGib = 32;
+  newDisk.cacheMode = 'none';
+  newDisk.discard = true;
+  showAddDiskModal.value = true;
+}
+
+async function submitAddDisk() {
+  if (!vm.value || !newDisk.diskPath.trim() || isBusy.value) return;
+  isBusy.value = true;
+  const existing = vm.value.disks || [];
+  const nextId = `sd${String.fromCharCode(97 + existing.length)}`;
+  const updated = [
+    ...existing,
+    {
+      id: nextId,
+      bus: newDisk.bus,
+      diskPath: newDisk.diskPath.trim(),
+      sizeBytes: newDisk.sizeGib * 1024 * 1024 * 1024,
+      cacheMode: newDisk.cacheMode,
+      discard: newDisk.discard,
+      iothread: true,
+      backup: true,
+    },
+  ];
+  try {
+    await runTrackedTask(`VM "${cleanVmName.value}": Attach Disk`, async () => {
+      await services.kvm.updateVirtualMachine(vm.value!.name, { disks: updated }, ['disks']);
+    });
+    notify('success', `Attached virtual disk (${newDisk.sizeGib} GiB)`);
+    showAddDiskModal.value = false;
+    await refreshAllData();
+  } catch (err: any) {
+    notify('error', `Failed to attach disk: ${err.message}`);
+  } finally {
+    isBusy.value = false;
+  }
+}
+
+async function handleRemoveDisk(idx: number) {
+  if (!vm.value || isBusy.value) return;
+  const target = (vm.value.disks || [])[idx];
+  if (!target) return;
+  const confirmed = await confirmDelete({
+    kind: 'Virtual Disk Attachment',
+    name: target.diskPath,
+    details: 'The disk mapping will be detached from this virtual machine.',
+    confirmText: 'Detach Disk',
+  });
+  if (!confirmed.confirmed) return;
+  isBusy.value = true;
+  const updated = (vm.value.disks || []).filter((_, i) => i !== idx);
+  try {
+    await runTrackedTask(`VM "${cleanVmName.value}": Detach Disk`, async () => {
+      await services.kvm.updateVirtualMachine(vm.value!.name, { disks: updated }, ['disks']);
+    });
+    notify('info', `Detached disk ${target.diskPath}`);
+    await refreshAllData();
+  } catch (err: any) {
+    notify('error', `Failed to detach disk: ${err.message}`);
+  } finally {
+    isBusy.value = false;
+  }
+}
+
+const showAddNicModal = ref(false);
+const newNic = reactive({
+  model: 'virtio',
+  bridge: 'br0',
+  vlanTag: 0,
+});
+
+async function submitAddNic() {
+  if (!vm.value || isBusy.value) return;
+  isBusy.value = true;
+  const existing = vm.value.networkInterfaces || [];
+  const updated = [
+    ...existing,
+    {
+      id: `net${existing.length}`,
+      model: newNic.model,
+      bridge: newNic.bridge.trim() || 'br0',
+      vlanTag: newNic.vlanTag > 0 ? newNic.vlanTag : undefined,
+    },
+  ];
+  try {
+    await runTrackedTask(`VM "${cleanVmName.value}": Add NIC`, async () => {
+      await services.kvm.updateVirtualMachine(vm.value!.name, { networkInterfaces: updated }, ['network_interfaces']);
+    });
+    notify('success', `Added network interface net${existing.length}`);
+    showAddNicModal.value = false;
+    await refreshAllData();
+  } catch (err: any) {
+    notify('error', `Failed to add network interface: ${err.message}`);
+  } finally {
+    isBusy.value = false;
+  }
+}
+
+async function handleRemoveNic(idx: number) {
+  if (!vm.value || isBusy.value) return;
+  const updated = (vm.value.networkInterfaces || []).filter((_, i) => i !== idx);
+  isBusy.value = true;
+  try {
+    await runTrackedTask(`VM "${cleanVmName.value}": Remove NIC`, async () => {
+      await services.kvm.updateVirtualMachine(vm.value!.name, { networkInterfaces: updated }, ['network_interfaces']);
+    });
+    notify('info', 'Removed network interface');
+    await refreshAllData();
+  } catch (err: any) {
+    notify('error', `Failed to remove network interface: ${err.message}`);
+  } finally {
+    isBusy.value = false;
+  }
+}
+
 // -----------------------------------------------------------------------------
 // Snapshots Management
 // -----------------------------------------------------------------------------
@@ -314,7 +616,7 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
               <div class="metric-item">
                 <span class="metric-label">Power State</span>
                 <span
-                  class="badge mono font-xs"
+                  class="badge font-xs"
                   :class="vm?.state === 'RUNNING' ? 'badge-success' : 'badge-neutral'"
                   style="align-self: flex-start"
                 >
@@ -323,19 +625,19 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
               </div>
               <div class="metric-item">
                 <span class="metric-label">Real CPU Usage</span>
-                <span class="metric-val mono">
+                <span class="metric-val">
                   {{ vm?.state === 'RUNNING' && vm?.guestCpuPercent !== undefined ? vm.guestCpuPercent.toFixed(1) + '%' : '-' }}
                 </span>
               </div>
               <div class="metric-item">
                 <span class="metric-label">Real Memory Used (RSS)</span>
-                <span class="metric-val mono">
+                <span class="metric-val">
                   {{ vm?.state === 'RUNNING' && vm?.guestMemoryUsedMib ? (vm.guestMemoryUsedMib >= 1024 ? (vm.guestMemoryUsedMib / 1024).toFixed(2) + ' GiB' : vm.guestMemoryUsedMib + ' MiB') : '-' }}
                 </span>
               </div>
               <div class="metric-item">
                 <span class="metric-label">Guest Agent</span>
-                <span class="metric-val mono" :style="{ color: vm?.agentRunning ? 'var(--success-text)' : 'var(--text-muted)' }">
+                <span class="metric-val" :style="{ color: vm?.agentRunning ? 'var(--success-text)' : 'var(--text-muted)' }">
                   {{ vm?.agentRunning ? 'Active & Responding' : 'Not installed / Inactive' }}
                 </span>
               </div>
@@ -345,7 +647,16 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
               </div>
               <div class="metric-item">
                 <span class="metric-label">Autostart on Boot</span>
-                <span class="metric-val mono">{{ vm?.autostart ? 'Enabled' : 'Disabled' }}</span>
+                <button
+                  type="button"
+                  class="badge interactive font-xs"
+                  :class="vm?.autostart ? 'badge-success' : 'badge-neutral'"
+                  style="align-self: flex-start; cursor: pointer"
+                  :disabled="isTogglingAutostart"
+                  @click="toggleAutostart"
+                >
+                  {{ vm?.autostart ? 'Enabled (On Boot)' : 'Disabled (Manual)' }}
+                </button>
               </div>
             </div>
 
@@ -366,8 +677,11 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
 
         <!-- Disks & Attached Storage Summary Card -->
         <div class="card detail-card">
-          <div class="card-header">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center">
             <h3 class="card-title">Virtual Disks & Storage</h3>
+            <button class="btn btn-xs btn-secondary" @click="emit('update:activeSubTab', 'configuration')">
+              Edit Configuration
+            </button>
           </div>
           <div class="card-body">
             <div v-if="!vm?.disks || vm.disks.length === 0" class="empty-state">
@@ -384,10 +698,10 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
               </thead>
               <tbody>
                 <tr v-for="(d, idx) in vm.disks" :key="idx">
-                  <td class="mono font-xs"><span class="badge badge-neutral mono">{{ d.bus }}</span></td>
+                  <td class="font-xs"><span class="badge badge-neutral">{{ d.bus }}</span></td>
                   <td class="mono font-sm" style="font-weight: 600">{{ d.diskPath }}</td>
-                  <td class="mono font-sm">{{ Math.round((d.sizeBytes || 0) / (1024 * 1024 * 1024)) }} GiB</td>
-                  <td class="mono font-xs text-muted">{{ d.cacheMode || 'none' }}</td>
+                  <td class="font-sm">{{ Math.round((d.sizeBytes || 0) / (1024 * 1024 * 1024)) }} GiB</td>
+                  <td class="font-xs text-muted">{{ d.cacheMode || 'none' }}</td>
                 </tr>
               </tbody>
             </table>
@@ -396,20 +710,172 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
       </div>
     </div>
 
-    <!-- Subtab 2: Hardware -->
-    <div v-else-if="props.activeSubTab === 'hardware'" class="vm-tab-content">
+    <!-- Subtab 2: Configuration (Hardware, Devices & Cloud-Init) -->
+    <div v-else-if="props.activeSubTab === 'configuration' || props.activeSubTab === 'hardware'" class="vm-tab-content">
+      <div class="grid-2">
+        <!-- Card 1: Compute, Memory, Boot & Platform Configuration -->
+        <div class="card detail-card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Compute, Memory & Platform</h3>
+              <p class="card-subtitle">Configure processors, RAM allocation, firmware and boot settings</p>
+            </div>
+          </div>
+          <div class="card-body">
+            <form style="display: flex; flex-direction: column; gap: 14px" @submit.prevent="handleSaveHardwareConfig">
+              <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 12px">
+                <div class="form-group">
+                  <label class="form-label">VM Name</label>
+                  <input v-model="hwForm.vmName" type="text" class="form-input" required />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Description</label>
+                  <input v-model="hwForm.description" type="text" class="form-input" placeholder="Optional notes" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">CPU Sockets</label>
+                  <input v-model.number="hwForm.sockets" type="number" min="1" max="8" class="form-input" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Cores per Socket</label>
+                  <input v-model.number="hwForm.cores" type="number" min="1" max="64" class="form-input" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">CPU Model</label>
+                  <select v-model="hwForm.cpuType" class="form-input">
+                    <option value="host">host (Passthrough)</option>
+                    <option value="kvm64">kvm64 (Compatible)</option>
+                    <option value="max">max (All Features)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Memory (MiB)</label>
+                  <input v-model.number="hwForm.memoryMib" type="number" min="256" step="256" class="form-input" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Machine Type</label>
+                  <select v-model="hwForm.machineType" class="form-input">
+                    <option value="i440fx">i440fx (Standard PC)</option>
+                    <option value="q35">q35 (PCIe Native)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">BIOS / Firmware</label>
+                  <select v-model="hwForm.biosType" class="form-input">
+                    <option value="seabios">SeaBIOS (Legacy BIOS)</option>
+                    <option value="ovmf">OVMF (UEFI)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Boot Order</label>
+                  <select v-model="hwForm.bootOrder" class="form-input">
+                    <option value="hd,cdrom">Hard Disk, then CD-ROM</option>
+                    <option value="cdrom,hd">CD-ROM, then Hard Disk</option>
+                    <option value="network,hd,cdrom">Network (PXE), then Hard Disk</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Display Adapter</label>
+                  <select v-model="hwForm.displayType" class="form-input">
+                    <option value="virtio-gpu">VirtIO-GPU</option>
+                    <option value="std">Standard VGA</option>
+                    <option value="qxl">SPICE QXL</option>
+                    <option value="none">Headless (Serial Only)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style="display: flex; gap: 18px; flex-wrap: wrap; margin-top: 4px">
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer">
+                  <input v-model="hwForm.autostart" type="checkbox" />
+                  <span>Autostart on Boot</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer">
+                  <input v-model="hwForm.numa" type="checkbox" />
+                  <span>Enable NUMA</span>
+                </label>
+                <label
+                  v-if="hwForm.biosType === 'ovmf'"
+                  style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer"
+                >
+                  <input v-model="hwForm.secureBoot" type="checkbox" />
+                  <span>UEFI Secure Boot</span>
+                </label>
+              </div>
+
+              <div style="display: flex; justify-content: flex-end; padding-top: 10px; border-top: 1px solid var(--border-subtle)">
+                <button type="submit" class="btn btn-sm btn-primary" :disabled="isSavingConfig">
+                  {{ isSavingConfig ? 'Saving...' : 'Save Configuration' }}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- Card 2: Cloud-Init Provisioning -->
+        <div class="card detail-card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Cloud-Init Guest Provisioning</h3>
+              <p class="card-subtitle">Automated user credentials, SSH keys and network configuration</p>
+            </div>
+          </div>
+          <div class="card-body">
+            <form style="display: flex; flex-direction: column; gap: 14px" @submit.prevent="handleSaveCloudInit">
+              <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 12px">
+                <div class="form-group">
+                  <label class="form-label">Default User</label>
+                  <input v-model="ciForm.user" type="text" class="form-input" placeholder="e.g. ubuntu, debian, root" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Password</label>
+                  <input v-model="ciForm.password" type="password" class="form-input" placeholder="Leave blank to keep unchanged" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">IP Configuration</label>
+                <input v-model="ciForm.ipConfig" type="text" class="form-input mono" placeholder="ip=dhcp or ip=192.168.1.50/24,gw=192.168.1.1" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">SSH Public Keys (one per line)</label>
+                <textarea v-model="ciForm.sshPublicKeys" rows="4" class="form-input mono" placeholder="ssh-ed25519 AAAA..."></textarea>
+              </div>
+              <div style="display: flex; justify-content: flex-end; padding-top: 10px; border-top: 1px solid var(--border-subtle)">
+                <button type="submit" class="btn btn-sm btn-primary" :disabled="isSavingCloudInit">
+                  {{ isSavingCloudInit ? 'Saving...' : 'Save Cloud-Init' }}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Attached Storage & Network Hardware Inventory -->
       <div class="card">
-        <div class="card-header">
-          <h3 class="card-title">Hardware Inventory</h3>
-          <p class="card-subtitle">Attached hardware components, network interfaces and controller buses</p>
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px">
+          <div>
+            <h3 class="card-title">Attached Disks, Media & Network Interfaces</h3>
+            <p class="card-subtitle">Manage virtual block devices, ISO drives and network adapters</p>
+          </div>
+          <div style="display: flex; gap: 8px">
+            <button class="btn btn-sm btn-secondary" @click="openAddDisk">
+              <MdiIcon :path="mdiPlus" size="14" />
+              <span>Add Disk</span>
+            </button>
+            <button class="btn btn-sm btn-secondary" @click="showAddNicModal = true">
+              <MdiIcon :path="mdiPlus" size="14" />
+              <span>Add NIC</span>
+            </button>
+          </div>
         </div>
         <div class="table-wrap">
           <table class="data-table">
             <thead>
               <tr>
-                <th style="width: 140px">Component</th>
+                <th style="width: 160px">Component</th>
                 <th>Configuration & Details</th>
-                <th style="width: 120px">Bus / Interface</th>
+                <th style="width: 120px">Bus / Model</th>
+                <th style="width: 90px; text-align: right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -421,10 +887,15 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
                     <span>Hard Disk ({{ idx }})</span>
                   </div>
                 </td>
-                <td class="mono font-sm">
-                  {{ d.diskPath }} ({{ Math.round((d.sizeBytes || 0) / (1024 * 1024 * 1024)) }} GiB, cache: {{ d.cacheMode || 'none' }}{{ d.discard ? ', discard: on' : '' }})
+                <td class="font-sm">
+                  <span class="mono">{{ d.diskPath }}</span> ({{ Math.round((d.sizeBytes || 0) / (1024 * 1024 * 1024)) }} GiB, cache: {{ d.cacheMode || 'none' }}{{ d.discard ? ', discard: on' : '' }})
                 </td>
-                <td><span class="badge badge-neutral mono font-xs">{{ d.bus }}</span></td>
+                <td><span class="badge badge-neutral font-xs">{{ d.bus }}</span></td>
+                <td style="text-align: right">
+                  <button class="btn btn-xs btn-danger" title="Detach Disk" @click="handleRemoveDisk(idx)">
+                    <MdiIcon :path="mdiTrashCanOutline" size="13" />
+                  </button>
+                </td>
               </tr>
 
               <!-- CD-ROM / ISO -->
@@ -438,7 +909,8 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
                 <td class="mono font-sm">
                   {{ cd.isoPath || 'empty (no media)' }}
                 </td>
-                <td><span class="badge badge-neutral mono font-xs">{{ cd.bus || 'ide' }}</span></td>
+                <td><span class="badge badge-neutral font-xs">{{ cd.bus || 'ide' }}</span></td>
+                <td style="text-align: right">—</td>
               </tr>
 
               <!-- Network Interfaces -->
@@ -449,10 +921,15 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
                     <span>Network (net{{ idx }})</span>
                   </div>
                 </td>
-                <td class="mono font-sm">
-                  mac={{ nic.macAddress }}, bridge={{ nic.bridge }}
+                <td class="font-sm">
+                  Bridge: <span class="mono">{{ nic.bridge }}</span><span v-if="nic.macAddress"> · MAC: <span class="mono">{{ nic.macAddress }}</span></span>
                 </td>
-                <td><span class="badge badge-neutral mono font-xs">{{ nic.model || 'virtio' }}</span></td>
+                <td><span class="badge badge-neutral font-xs">{{ nic.model || 'virtio' }}</span></td>
+                <td style="text-align: right">
+                  <button class="btn btn-xs btn-danger" title="Remove Network Interface" @click="handleRemoveNic(idx)">
+                    <MdiIcon :path="mdiTrashCanOutline" size="13" />
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -475,7 +952,7 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
       </div>
       <div v-else-if="consoleSession" class="card embedded-vnc-card">
         <div class="vnc-toolbar">
-          <span class="font-sm mono" style="font-weight: 600">{{ cleanVmName }} Console (Port: {{ consoleSession.vncPort }})</span>
+          <span class="font-sm" style="font-weight: 600">{{ cleanVmName }} Console (Port: {{ consoleSession.vncPort }})</span>
           <button class="btn btn-xs btn-primary" @click="popoutConsole">
             <MdiIcon :path="mdiOpenInNew" size="13" style="margin-right: 4px" />
             Pop-out Window
@@ -526,11 +1003,11 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
                 <td style="font-weight: 600">
                   <div style="display: flex; align-items: center; gap: 6px">
                     <MdiIcon :path="mdiCamera" size="14" style="color: var(--accent-primary)" />
-                    <span class="mono">{{ snap.snapshotId }}</span>
+                    <span>{{ snap.snapshotId }}</span>
                   </div>
                 </td>
                 <td class="text-secondary font-sm">{{ snap.description || '-' }}</td>
-                <td class="mono font-sm text-muted">{{ snap.createTime || '-' }}</td>
+                <td class="font-sm text-muted">{{ snap.createTime || '-' }}</td>
                 <td>
                   <span class="badge font-xs" :class="snap.includeRam ? 'badge-success' : 'badge-neutral'">
                     {{ snap.includeRam ? 'Memory Dump' : 'Disk Only' }}
@@ -541,14 +1018,84 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
                     <button class="btn btn-xs btn-secondary" title="Rollback" @click="handleRollbackSnapshot(snap)">
                       Rollback
                     </button>
-                    <button class="btn btn-xs btn-ghost" title="Delete" @click="handleDeleteSnapshot(snap)">
-                      <MdiIcon :path="mdiDelete" size="13" style="color: var(--danger-text)" />
+                    <button class="btn btn-xs btn-danger" title="Delete" @click="handleDeleteSnapshot(snap)">
+                      <MdiIcon :path="mdiTrashCanOutline" size="13" />
                     </button>
                   </div>
                 </td>
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Disk Modal -->
+    <div v-if="showAddDiskModal" class="modal-overlay" @click.self="showAddDiskModal = false">
+      <div class="modal-container" style="max-width: 480px">
+        <div class="modal-header">
+          <h3 class="modal-title">Add Virtual Disk: {{ cleanVmName }}</h3>
+          <button class="btn btn-xs btn-ghost" @click="showAddDiskModal = false">
+            <MdiIcon :path="mdiClose" size="16" />
+          </button>
+        </div>
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; padding: 16px 20px">
+          <div class="form-group">
+            <label class="form-label">Disk Device / ZVol Path</label>
+            <input v-model="newDisk.diskPath" type="text" class="form-input mono" required />
+          </div>
+          <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 12px">
+            <div class="form-group">
+              <label class="form-label">Size (GiB)</label>
+              <input v-model.number="newDisk.sizeGib" type="number" min="1" class="form-input" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Controller Bus</label>
+              <select v-model="newDisk.bus" class="form-input">
+                <option value="scsi">VirtIO SCSI</option>
+                <option value="virtio">VirtIO Block</option>
+                <option value="sata">SATA</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="padding: 12px 20px; display: flex; justify-content: flex-end; gap: 8px">
+          <button class="btn btn-secondary btn-sm" @click="showAddDiskModal = false">Cancel</button>
+          <button class="btn btn-primary btn-sm" :disabled="!newDisk.diskPath.trim() || isBusy" @click="submitAddDisk">
+            Attach Disk
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add NIC Modal -->
+    <div v-if="showAddNicModal" class="modal-overlay" @click.self="showAddNicModal = false">
+      <div class="modal-container" style="max-width: 440px">
+        <div class="modal-header">
+          <h3 class="modal-title">Add Network Interface: {{ cleanVmName }}</h3>
+          <button class="btn btn-xs btn-ghost" @click="showAddNicModal = false">
+            <MdiIcon :path="mdiClose" size="16" />
+          </button>
+        </div>
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; padding: 16px 20px">
+          <div class="form-group">
+            <label class="form-label">Host Network Bridge</label>
+            <input v-model="newNic.bridge" type="text" class="form-input mono" placeholder="br0" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Adapter Model</label>
+            <select v-model="newNic.model" class="form-input">
+              <option value="virtio">VirtIO (Paravirtualized)</option>
+              <option value="e1000e">Intel e1000e</option>
+              <option value="rtl8139">Realtek RTL8139</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer" style="padding: 12px 20px; display: flex; justify-content: flex-end; gap: 8px">
+          <button class="btn btn-secondary btn-sm" @click="showAddNicModal = false">Cancel</button>
+          <button class="btn btn-primary btn-sm" :disabled="isBusy" @click="submitAddNic">
+            Add NIC
+          </button>
         </div>
       </div>
     </div>

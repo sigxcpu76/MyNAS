@@ -75,7 +75,7 @@ describe('DatasetHierarchyTree Component', () => {
     ];
   });
 
-  it('renders dataset hierarchy tree with pools and datasets', () => {
+  it('starts collapsed by default and renders dataset hierarchy tree when expanded', async () => {
     const wrapper = mount(DatasetHierarchyTree, {
       props: {
         modelValue: '',
@@ -85,6 +85,13 @@ describe('DatasetHierarchyTree Component', () => {
     expect(wrapper.text()).toContain('ZFS Dataset Hierarchy');
     expect(wrapper.text()).toContain('tank');
     expect(wrapper.text()).toContain('/nas/tank');
+    // Starts collapsed by default
+    expect(wrapper.text()).not.toContain('apps');
+    expect(wrapper.text()).not.toContain('media');
+
+    const expandBtn = wrapper.find('button[title="Expand All Folders"]');
+    await expandBtn.trigger('click');
+
     expect(wrapper.text()).toContain('apps');
     expect(wrapper.text()).toContain('media');
 
@@ -96,6 +103,7 @@ describe('DatasetHierarchyTree Component', () => {
       props: {
         modelValue: '',
         returnType: 'path',
+        autoExpandAll: true,
       },
     });
 
@@ -118,6 +126,7 @@ describe('DatasetHierarchyTree Component', () => {
       props: {
         modelValue: '',
         returnType: 'mountpoint',
+        autoExpandAll: true,
       },
     });
 
@@ -137,6 +146,7 @@ describe('DatasetHierarchyTree Component', () => {
     const wrapper = mount(DatasetHierarchyTree, {
       props: {
         modelValue: '',
+        autoExpandAll: true,
       },
     });
 
@@ -174,6 +184,7 @@ describe('DatasetHierarchyTree Component', () => {
     const wrapper = mount(DatasetHierarchyTree, {
       props: {
         poolFilter: 'fastpool',
+        autoExpandAll: true,
       },
     });
 
@@ -191,7 +202,14 @@ describe('DatasetHierarchyTree Component', () => {
       },
     });
 
-    // Both apps and media are visible because autoExpandAll is true
+    // Starts collapsed by default
+    expect(wrapper.text()).toContain('tank');
+    expect(wrapper.text()).not.toContain('apps');
+
+    // Click expand all
+    const expandBtn = wrapper.find('button[title="Expand All Folders"]');
+    await expandBtn.trigger('click');
+
     expect(wrapper.text()).toContain('apps');
     expect(wrapper.text()).toContain('media');
 
@@ -202,13 +220,6 @@ describe('DatasetHierarchyTree Component', () => {
     // Now only root pool node is visible in flat visible list
     expect(wrapper.text()).toContain('tank');
     expect(wrapper.text()).not.toContain('apps');
-
-    // Click expand all
-    const expandBtn = wrapper.find('button[title="Expand All Folders"]');
-    await expandBtn.trigger('click');
-
-    expect(wrapper.text()).toContain('apps');
-    expect(wrapper.text()).toContain('media');
 
     wrapper.unmount();
   });

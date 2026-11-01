@@ -2,6 +2,8 @@
 import { computed, reactive, ref, watch } from 'vue';
 import {
   mdiAlertCircleOutline,
+  mdiArrowLeft,
+  mdiArrowRight,
   mdiCheck,
   mdiClose,
   mdiCodeBraces,
@@ -75,6 +77,31 @@ const showPassword = reactive<Record<string, boolean>>({});
 // Tab navigation state
 const groups = computed<CatalogQuestionGroup[]>(() => organizeQuestionGroups(props.app));
 const activeTab = ref<string>(groups.value[0]?.name || 'Network & Web Portal');
+
+const activeStepIndex = computed(() => {
+  const idx = groups.value.findIndex((g) => g.name === activeTab.value);
+  return idx >= 0 ? idx : 0;
+});
+
+function goToStep(index: number) {
+  if (index >= 0 && index < groups.value.length) {
+    activeTab.value = groups.value[index].name;
+  }
+}
+
+function handleNextStep() {
+  if (activeStepIndex.value < groups.value.length - 1) {
+    activeTab.value = groups.value[activeStepIndex.value + 1].name;
+  } else {
+    handleDeploy();
+  }
+}
+
+function handlePrevStep() {
+  if (activeStepIndex.value > 0) {
+    activeTab.value = groups.value[activeStepIndex.value - 1].name;
+  }
+}
 
 // Split preview state
 const showLivePreview = ref(true);
@@ -221,42 +248,69 @@ watch(
               class="app-icon-img"
               @error="($event.target as HTMLElement).style.display = 'none'"
             />
-            <MdiIcon :path="mdiDocker" size="28" style="color: var(--accent-primary)" />
+            <MdiIcon :path="mdiDocker" size="26" style="color: var(--accent-primary)" />
           </div>
 
           <div>
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
-              <h2 style="font-size: 19px; font-weight: 700; color: var(--text-primary); margin: 0">
+              <h2 style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin: 0; letter-spacing: -0.01em">
                 {{ app.title || app.appId }}
               </h2>
-              <span class="badge badge-info" style="font-size: 11px">
+              <span class="badge badge-info" style="font-size: 10.5px">
                 {{ app.train || 'community' }}
               </span>
-              <span v-if="app.appVersion || app.version" class="badge badge-neutral" style="font-size: 11px">
+              <span v-if="app.appVersion || app.version" class="badge badge-neutral" style="font-size: 10.5px">
                 v{{ app.appVersion || app.version }}
               </span>
-              <span v-if="activeWebPort" class="badge badge-info" style="font-size: 11px">
-                Portal Port: {{ activeWebPort }}
+              <span v-if="activeWebPort" class="badge badge-info" style="font-size: 10.5px">
+                Port: {{ activeWebPort }}
               </span>
+            </div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px">
+              Step {{ activeStepIndex + 1 }} of {{ groups.length }}: <strong style="color: var(--text-primary); font-weight: 600">{{ activeTab }}</strong>
             </div>
           </div>
         </div>
 
-        <div style="display: flex; align-items: center; gap: 8px">
+        <div style="display: flex; align-items: center; gap: 10px">
           <button
-            class="btn btn-sm"
+            class="btn btn-sm btn-secondary"
             :class="{ 'btn-primary': showLivePreview }"
             style="font-size: 12px; display: inline-flex; align-items: center; gap: 6px"
             title="Toggle YAML preview"
             @click="showLivePreview = !showLivePreview"
           >
-            <MdiIcon :path="mdiCodeBraces" size="16" />
+            <MdiIcon :path="mdiCodeBraces" size="15" />
             <span class="hide-mobile">{{ showLivePreview ? 'Hide YAML Preview' : 'Show YAML Preview' }}</span>
             <span class="show-mobile-only">{{ showLivePreview ? 'Form' : 'YAML' }}</span>
           </button>
-          <button class="btn btn-sm btn-icon" style="padding: 4px" @click="emit('close')">
-            <MdiIcon :path="mdiClose" size="18" />
-          </button>
+
+          <!-- Stepper Circles Navigation -->
+          <div class="stepper-nav">
+            <button
+              v-for="(grp, idx) in groups"
+              :key="grp.name"
+              type="button"
+              class="step-circle"
+              :class="{
+                active: activeStepIndex === idx,
+                completed: activeStepIndex > idx,
+                upcoming: activeStepIndex < idx,
+              }"
+              :title="`${idx + 1}. ${grp.name}`"
+              @click="goToStep(idx)"
+            >
+              {{ idx + 1 }}
+            </button>
+            <div class="stepper-divider"></div>
+            <button
+              class="modal-close-btn"
+              title="Close wizard"
+              @click="emit('close')"
+            >
+              <MdiIcon :path="mdiClose" size="16" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -499,9 +553,21 @@ watch(
 
       <!-- Modal Footer Action Bar -->
       <div class="wizard-footer">
-        <div style="display: flex; align-items: center; gap: 16px">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+          <button class="btn btn-sm btn-secondary" @click="emit('close')">
+            Cancel
+          </button>
           <button
-            class="btn btn-sm"
+            v-if="activeStepIndex > 0"
+            class="btn btn-sm btn-secondary"
+            style="display: inline-flex; align-items: center; gap: 4px"
+            @click="handlePrevStep"
+          >
+            <MdiIcon :path="mdiArrowLeft" size="14" />
+            <span>Back</span>
+          </button>
+          <button
+            class="btn btn-sm btn-secondary"
             style="font-size: 12px; color: var(--text-secondary)"
             title="Bypass configuration wizard and load raw Compose template directly"
             @click="emit('skipWizard')"
@@ -509,37 +575,59 @@ watch(
             Skip Wizard & Open Raw YAML
           </button>
 
-          <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; user-select: none; margin: 0">
+          <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; user-select: none; margin: 0; color: var(--text-secondary)">
             <input v-model="autoStartOnBoot" type="checkbox" />
             <span>Autostart on boot</span>
           </label>
         </div>
 
-        <div style="display: flex; align-items: center; gap: 10px">
-          <button class="btn btn-sm" @click="emit('close')">
-            Cancel
-          </button>
+        <div style="display: flex; align-items: center; gap: 8px">
           <button
-            class="btn btn-sm"
+            class="btn btn-sm btn-secondary"
             style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px"
             title="Open generated stack in visual Compose Editor to customize services, environment, or labels"
             @click="handleOpenInEditor"
           >
-            <MdiIcon :path="mdiPencil" size="15" />
+            <MdiIcon :path="mdiPencil" size="14" />
             <span>Customize in Editor</span>
           </button>
+
+          <!-- Deploy App Now button (direct deployment) -->
           <button
+            v-if="activeStepIndex < groups.length - 1"
+            class="btn btn-sm btn-secondary hide-mobile"
+            :disabled="isDeploying"
+            @click="handleDeploy"
+          >
+            Deploy App Now
+          </button>
+
+          <!-- Continue button advances to next step -->
+          <button
+            v-if="activeStepIndex < groups.length - 1"
+            class="btn btn-sm btn-primary"
+            style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; padding: 6px 16px"
+            @click="handleNextStep"
+          >
+            <span>Continue</span>
+            <MdiIcon :path="mdiArrowRight" size="15" />
+          </button>
+
+          <!-- On last step, primary is Deploy App Now with rocket icon -->
+          <button
+            v-else
             class="btn btn-sm btn-primary"
             :disabled="isDeploying"
-            style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; padding: 6px 14px"
+            style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; padding: 6px 16px"
             @click="handleDeploy"
           >
             <MdiIcon
               :path="isDeploying ? mdiRefresh : mdiRocketLaunchOutline"
-              size="16"
+              size="15"
               :class="{ 'spin-icon': isDeploying }"
             />
             <span>{{ isDeploying ? 'Deploying Stack...' : 'Deploy App Now' }}</span>
+            <MdiIcon v-if="!isDeploying" :path="mdiArrowRight" size="15" />
           </button>
         </div>
       </div>
@@ -566,11 +654,11 @@ watch(
 }
 
 .app-icon-wrap {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  background: rgba(56, 189, 248, 0.1);
-  border: 1px solid rgba(56, 189, 248, 0.2);
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -589,7 +677,7 @@ watch(
 }
 
 .wizard-desc-banner {
-  background: rgba(15, 23, 42, 0.65);
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   padding: 8px 12px;
@@ -615,15 +703,15 @@ watch(
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
 }
 
 .wizard-nav-tabs {
   display: flex;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--bg-elevated);
   border-bottom: 1px solid var(--border-subtle);
   overflow-x: auto;
   flex-shrink: 0;
@@ -647,28 +735,30 @@ watch(
 
 .nav-tab-btn:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-hover);
 }
 
 .nav-tab-btn.active {
   color: var(--accent-primary);
   border-bottom-color: var(--accent-primary);
-  background: rgba(56, 189, 248, 0.06);
+  background: var(--accent-bg-subtle);
   font-weight: 600;
 }
 
 .tab-badge {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-surface);
   color: var(--text-secondary);
   font-size: 10.5px;
   font-weight: 600;
   padding: 1px 6px;
   border-radius: 10px;
+  border: 1px solid var(--border-subtle);
 }
 
 .nav-tab-btn.active .tab-badge {
-  background: rgba(56, 189, 248, 0.2);
-  color: var(--accent-primary);
+  background: var(--accent-primary);
+  color: var(--accent-contrast, #ffffff);
+  border-color: var(--accent-primary);
 }
 
 .group-info-bar {
@@ -676,7 +766,7 @@ watch(
   justify-content: space-between;
   align-items: center;
   padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.015);
+  background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
@@ -691,7 +781,7 @@ watch(
 }
 
 .question-card {
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   padding: 12px 14px;
@@ -699,7 +789,7 @@ watch(
 }
 
 .question-card:hover {
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: var(--border-strong);
 }
 
 .question-header {

@@ -126,6 +126,7 @@ describe('Hidden Dot Datasets Filtering', () => {
           searchQuery: '',
           selectedPool: 'all',
           selectedDatasetPath: null,
+          autoExpandAll: true,
         },
       });
 

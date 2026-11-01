@@ -7,6 +7,7 @@ import { AipClient } from './adapters/http/aipClient';
 import {
   HttpAuthAdapter,
   HttpCatalogAdapter,
+  HttpCronJobAdapter,
   HttpDiskAdapter,
   HttpDockerAdapter,
   HttpDockerAppAdapter,
@@ -47,6 +48,7 @@ export const lxcPort = new HttpLxcAdapter(aipClient);
 export const sharePort = new HttpShareAdapter(aipClient);
 export const identityPort = new HttpIdentityAdapter(aipClient);
 export const catalogPort = new HttpCatalogAdapter(aipClient);
+export const cronPort = new HttpCronJobAdapter(aipClient);
 
 export const services = {
   auth: new AuthService(authPort),
@@ -61,4 +63,5 @@ export const services = {
   shares: new ShareService(sharePort),
   identity: new IdentityService(identityPort),
   catalog: new CatalogService(catalogPort),
+  cron: cronPort,
 };

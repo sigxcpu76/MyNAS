@@ -126,39 +126,39 @@ async function copySystemSummary() {
                 {{ host?.architecture || 'x86_64' }}
               </span>
             </div>
-            <p class="mono" style="font-size: 11.5px; color: var(--text-secondary); margin-top: 3px; margin-bottom: 0">
+            <p class="mono" style="font-size: 11.5px; color: var(--text-secondary); margin-top: 3px; margin-bottom: 0; white-space: nowrap">
               {{ host?.osName || 'Linux' }} {{ host?.osVersion || '' }} · Kernel {{ host?.kernelVersion || '' }}
             </p>
           </div>
         </div>
 
-        <div style="display: flex; align-items: center; gap: 8px">
+        <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0">
           <button
-            class="btn btn-sm"
+            class="btn btn-sm btn-icon"
             :disabled="isRefreshing"
             title="Refresh System Telemetry"
+            aria-label="Refresh System Telemetry"
             @click="handleRefresh"
           >
-            <MdiIcon :path="mdiRefresh" size="14" :class="{ 'spin-icon': isRefreshing }" style="margin-right: 4px" />
-            {{ isRefreshing ? 'Refreshing...' : 'Refresh' }}
+            <MdiIcon :path="mdiRefresh" size="16" :class="{ 'spin-icon': isRefreshing }" />
           </button>
           <button
-            class="btn btn-sm btn-secondary"
+            class="btn btn-sm btn-icon"
             title="Open interactive host shell terminal"
+            aria-label="Host Shell"
             @click="emit('openTerminal')"
           >
-            <MdiIcon :path="mdiConsole" size="14" style="margin-right: 4px" />
-            Host Shell
+            <MdiIcon :path="mdiConsole" size="16" />
           </button>
           <button
-            class="btn btn-sm btn-secondary"
-            title="Copy system specifications to clipboard"
+            class="btn btn-sm btn-icon"
+            :title="copied ? 'Copied to clipboard!' : 'Copy system specifications to clipboard'"
+            aria-label="Copy Summary"
             @click="copySystemSummary"
           >
-            <MdiIcon :path="copied ? mdiCheck : mdiContentCopy" size="14" style="margin-right: 4px" />
-            {{ copied ? 'Copied!' : 'Copy Summary' }}
+            <MdiIcon :path="copied ? mdiCheck : mdiContentCopy" size="16" />
           </button>
-          <button class="btn btn-sm btn-icon" title="Close" aria-label="Close" @click="emit('close')">
+          <button class="modal-close-btn" title="Close" aria-label="Close" @click="emit('close')">
             <MdiIcon :path="mdiClose" size="18" />
           </button>
         </div>
@@ -419,6 +419,16 @@ async function copySystemSummary() {
 </template>
 
 <style scoped>
+.modal-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+
 .system-modal {
   max-width: 840px;
   width: 95vw;

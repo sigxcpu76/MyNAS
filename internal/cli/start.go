@@ -18,6 +18,7 @@ import (
 	grpcadapter "github.com/sigxcpu/nas/internal/adapters/inbound/grpc"
 	httpadapter "github.com/sigxcpu/nas/internal/adapters/inbound/http"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/catalog"
+	"github.com/sigxcpu/nas/internal/adapters/outbound/cron"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/disk"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/docker"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/identity"
@@ -194,10 +195,12 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	lxcUnitsDir := filepath.Join(stateDir, "lxc")
 	vmUnitsDir := filepath.Join(stateDir, "vm")
 	sharesDir := filepath.Join(stateDir, "shares")
+	cronUnitsDir := filepath.Join(stateDir, "cron")
 	_ = os.MkdirAll(dockerUnitsDir, 0755)
 	_ = os.MkdirAll(lxcUnitsDir, 0755)
 	_ = os.MkdirAll(vmUnitsDir, 0755)
 	_ = os.MkdirAll(sharesDir, 0755)
+	_ = os.MkdirAll(cronUnitsDir, 0755)
 
 	// Clean up any legacy seeded mock units from older hybrid mode runs
 	for _, legacyApp := range []string{"jellyfin", "nextcloud"} {
@@ -234,6 +237,10 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	catalogCacheDir := filepath.Join(stateDir, "catalog")
 	catalogAdapter := catalog.NewAdapter(catalogCacheDir)
 	step("catalog adapter initialized (cache load)")
+
+	cronAdapter := cron.NewAdapter(cronUnitsDir)
+	cronAdapter.SetLogger(logger.With("subsystem", "cron"))
+	step("cron adapter initialized")
 
 	dockerAdapter.SetZfsPort(zfsAdapter)
 	lxcAdapter.SetZfsPort(zfsAdapter)
@@ -280,11 +287,21 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	}
 	catalogSvc := application.NewCatalogService(catalogAdapter)
 
+	cronAdapter.SetEventCallback(func(action, jobID, message string) {
+		eventBus.Publish(domain.NewEvent("cron", action, domain.FormatCronJobResourceName(jobID), message))
+	})
+	cronSvc := application.NewCronJobService(cronAdapter)
+	if err := cronSvc.Start(ctx); err != nil {
+		logger.Warn("could not start cron scheduler service", "error", err)
+	}
+	defer cronSvc.Stop()
+
 	step("application services constructed")
 
 	// 3. Inbound Adapters (Driving Ports: gRPC + gRPC-Gateway + noVNC WS + WebDAV + Embedded Vue UI + SSE Events)
 	nasGRPC := grpcadapter.NewServer(systemSvc, prereqSvc, diskSvc, zfsSvc, kvmSvc, dockerSvc, dockerAppSvc, lxcSvc, shareSvc, identitySvc, catalogSvc)
 	nasGRPC.SetRegistryService(application.NewDockerRegistryService(dockerAdapter))
+	nasGRPC.SetCronJobService(cronSvc)
 	nasGRPC.SetEventBus(eventBus)
 
 	lxcCatalogCacheDir := filepath.Join(stateDir, "lxc-catalog")

@@ -27,6 +27,7 @@ import { useTableSort } from '../composables/useTableSort';
 import { generateNanosecondId, generateVMDiskFilePath, generateVMDiskName, generateZvolDiskPath, toZfsSafeSlug } from '../../domain/id';
 import {
   mdiAlertCircleOutline,
+  mdiCircle,
   mdiClose,
   mdiCog,
   mdiConsole,
@@ -53,6 +54,7 @@ import {
   mdiSpeedometer,
   mdiStop,
   mdiTrashCan,
+  mdiTrashCanOutline,
   mdiUpload,
 } from '@mdi/js';
 
@@ -339,12 +341,28 @@ function visibleGuestIps(vm: { guestIpAddresses?: string[] }): string[] {
 
 const vmSort = useTableSort(filteredVms, {
   name: (vm) => vm.vmName,
-  cpu: (vm) => vm.guestCpuPercent ?? 0,
-  vcpus: (vm) => vm.guestCpuPercent ?? 0,
-  memory: (vm) => vm.guestMemoryUsedMib ?? 0,
-  ip: (vm) => visibleGuestIps(vm)[0],
-  autostart: (vm) => (vm.autostart ? 1 : 0),
+  ip: (vm) => visibleGuestIps(vm)[0] || '',
+  cpu: (vm) => (vm.state === 'RUNNING' ? Number(vm.guestCpuPercent) || 0 : -1),
+  memory: (vm) => (vm.state === 'RUNNING' ? Number(vm.guestMemoryUsedMib) || 0 : -1),
+  network: (vm) => (vm.state === 'RUNNING' ? (Number(vm.netRxRate) || 0) + (Number(vm.netTxRate) || 0) : -1),
 });
+
+function formatNetworkRate(vm: VirtualMachine): string {
+  if (vm.state !== 'RUNNING') return '—';
+  const rx = vm.netRxRate || 0;
+  const tx = vm.netTxRate || 0;
+  const rxStr = formatBytes(rx) + '/s ↓';
+  const txStr = formatBytes(tx) + '/s ↑';
+  return `${rxStr} · ${txStr}`;
+}
+
+function formatNetworkTotal(vm: VirtualMachine): string {
+  if (vm.state !== 'RUNNING') return '';
+  const rx = vm.netRxBytes || 0;
+  const tx = vm.netTxBytes || 0;
+  if (rx + tx === 0) return '';
+  return `(${formatBytes(rx + tx)})`;
+}
 
 const isoSort = useTableSort(() => nasState.isos, {
   name: (iso) => iso.name,
@@ -1838,7 +1856,7 @@ async function handleWizardSubmit() {
           <MdiIcon :path="mdiMagnify" size="16" class="search-icon" />
           <input
             v-model="searchQuery"
-            class="input input-sm mono"
+            class="input input-sm"
             placeholder="Filter VMs..."
             style="padding-left: 28px; width: 100%; max-width: 220px"
           />
@@ -1851,10 +1869,10 @@ async function handleWizardSubmit() {
           <thead>
             <tr>
               <SortableTh :sort="vmSort" sort-key="name">Name</SortableTh>
-              <SortableTh :sort="vmSort" sort-key="cpu" class="col-desktop-only">CPU Usage</SortableTh>
-              <SortableTh :sort="vmSort" sort-key="memory">Memory Usage</SortableTh>
               <SortableTh :sort="vmSort" sort-key="ip" class="col-desktop-only">IP Addresses</SortableTh>
-              <SortableTh :sort="vmSort" sort-key="autostart" class="col-desktop-only" style="width: 100px; min-width: 100px">Autostart</SortableTh>
+              <SortableTh :sort="vmSort" sort-key="cpu" class="col-desktop-only">CPU</SortableTh>
+              <SortableTh :sort="vmSort" sort-key="memory" class="col-desktop-only">Memory</SortableTh>
+              <SortableTh :sort="vmSort" sort-key="network" class="col-desktop-only">Network</SortableTh>
               <th style="text-align: right">Actions</th>
             </tr>
           </thead>
@@ -1863,14 +1881,12 @@ async function handleWizardSubmit() {
             <template v-if="nasState.loading && nasState.vms.length === 0">
               <tr v-for="r in 4" :key="r">
                 <td><SkeletonBox width="140px" height="15px" /></td>
-                <td class="col-desktop-only"><SkeletonBox width="30px" height="14px" /></td>
-                <td><SkeletonBox width="60px" height="14px" /></td>
                 <td class="col-desktop-only"><SkeletonBox width="110px" height="14px" /></td>
                 <td class="col-desktop-only"><SkeletonBox width="60px" height="14px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="70px" height="14px" /></td>
+                <td class="col-desktop-only"><SkeletonBox width="140px" height="14px" /></td>
                 <td style="text-align: right">
                   <div style="display: inline-flex; gap: 6px; justify-content: flex-end">
-                    <SkeletonBox width="26px" height="26px" rounded="4px" />
-                    <SkeletonBox width="65px" height="26px" rounded="4px" />
                     <SkeletonBox width="26px" height="26px" rounded="4px" />
                   </div>
                 </td>
@@ -1891,54 +1907,45 @@ async function handleWizardSubmit() {
             <tr
               v-for="vm in vmSort.sorted.value"
               :key="vm.name"
-              class="vm-row"
-              :class="`vm-row-${(vm.state || 'unknown').toLowerCase()}`"
-              :title="vm.state"
+              style="cursor: pointer"
+              title="Click to open VM details"
+              @click="openVmDetail(vm)"
             >
-              <!-- Name (row tint conveys power state) -->
+              <!-- Name with unified status bullet -->
               <td>
-                <div class="font-semibold" style="color: var(--text-primary); cursor: pointer" title="Open VM Details" @click="openVmDetail(vm)">
-                  {{ vm.vmName }}
-                  <span v-if="vm.isTemplate" class="badge badge-warning" style="font-size: 9px; margin-left: 4px">TEMPLATE</span>
-                  <span
-                    v-if="transitioningVms[vm.name]"
-                    class="badge mono badge-warning pulse-anim"
-                    style="font-size: 9px; margin-left: 6px; display: inline-flex; align-items: center; gap: 4px"
-                  >
-                    <MdiIcon :path="mdiLoading" size="10" class="spin-icon" />
-                    {{ transitioningVms[vm.name] === 'stopping' ? 'SHUTTING DOWN' : transitioningVms[vm.name] === 'starting' ? 'STARTING' : 'REBOOTING' }}
-                  </span>
-                  <span
-                    v-else-if="vm.state === 'STOPPED'"
-                    class="badge mono badge-neutral"
-                    style="font-size: 9px; margin-left: 6px"
-                  >
-                    STOPPED
-                  </span>
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <MdiIcon
+                    :path="transitioningVms[vm.name] ? mdiLoading : mdiCircle"
+                    :size="transitioningVms[vm.name] ? 12 : 9"
+                    :class="{ 'spin-icon': Boolean(transitioningVms[vm.name]) }"
+                    :style="{
+                      color:
+                        transitioningVms[vm.name]
+                          ? 'var(--warning)'
+                          : vm.state === 'RUNNING'
+                          ? 'var(--success)'
+                          : vm.state === 'PAUSED'
+                          ? 'var(--warning)'
+                          : 'var(--text-muted)',
+                      flexShrink: 0,
+                    }"
+                    :title="`Status: ${(vm.state || 'STOPPED').toLowerCase()}`"
+                  />
+                  <div>
+                    <div class="font-semibold" style="color: var(--text-primary); display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
+                      <span>{{ vm.vmName }}</span>
+                      <span v-if="vm.isTemplate" class="badge badge-warning" style="font-size: 9px">TEMPLATE</span>
+                      <span
+                        v-if="transitioningVms[vm.name]"
+                        class="badge badge-warning pulse-anim"
+                        style="font-size: 9px; display: inline-flex; align-items: center; gap: 4px"
+                      >
+                        <MdiIcon :path="mdiLoading" size="10" class="spin-icon" />
+                        {{ transitioningVms[vm.name] === 'stopping' ? 'Shutting down' : transitioningVms[vm.name] === 'starting' ? 'Starting' : 'Rebooting' }}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div
-                  v-if="vm.name.replace('virtualMachines/', '') !== vm.vmName"
-                  class="mono text-muted"
-                  style="font-size: 11px"
-                >
-                  {{ vm.name.replace('virtualMachines/', '') }}
-                </div>
-              </td>
-
-              <!-- CPU Usage -->
-              <td class="mono col-desktop-only" style="font-size: 12px">
-                <span v-if="vm.state === 'RUNNING'" :style="{ color: (vm.guestCpuPercent || 0) > 85 ? 'var(--danger-text)' : 'var(--text-primary)' }">
-                  {{ (vm.guestCpuPercent || 0).toFixed(1) }}%
-                </span>
-                <span v-else style="color: var(--text-muted)">—</span>
-              </td>
-
-              <!-- Memory Usage -->
-              <td class="mono" style="font-size: 12px; white-space: nowrap">
-                <span v-if="vm.state === 'RUNNING'" style="color: var(--text-primary)">
-                  {{ vm.guestMemoryUsedMib ? formatBytes(vm.guestMemoryUsedMib * 1024 * 1024) : '0 MiB' }}
-                </span>
-                <span v-else style="color: var(--text-muted)">—</span>
               </td>
 
               <!-- IP Addresses -->
@@ -1961,22 +1968,37 @@ async function handleWizardSubmit() {
                 </span>
               </td>
 
-              <!-- Autostart -->
-              <td class="col-desktop-only" style="vertical-align: middle">
-                <span
-                  class="badge"
-                  :class="vm.autostart ? 'badge-success' : 'badge-neutral'"
-                  :title="`Click to ${vm.autostart ? 'disable' : 'enable'} autostart on host boot`"
-                  style="cursor: pointer; user-select: none; font-size: 11px"
-                  @click.stop="handleToggleAutostart(vm)"
-                >
-                  <span class="status-dot" :style="{ background: vm.autostart ? 'var(--success)' : 'var(--text-muted)' }"></span>
-                  {{ vm.autostart ? 'On Boot' : 'Manual' }}
-                </span>
+              <!-- CPU -->
+              <td class="col-desktop-only" style="padding: 10px 14px; width: 85px; min-width: 85px; max-width: 85px; box-sizing: border-box; white-space: nowrap">
+                <div v-if="vm.state === 'RUNNING'" style="font-size: 12.5px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums">
+                  {{ (Number(vm.guestCpuPercent) || 0).toFixed(1) }}%
+                </div>
+                <div v-else style="color: var(--text-muted); font-size: 12.5px">—</div>
               </td>
 
-              <!-- Actions -->
-              <td style="text-align: right">
+              <!-- Memory -->
+              <td class="col-desktop-only" style="padding: 10px 14px; width: 105px; min-width: 105px; max-width: 105px; box-sizing: border-box; white-space: nowrap">
+                <div v-if="vm.state === 'RUNNING'" style="font-size: 12.5px; color: var(--text-primary); font-variant-numeric: tabular-nums">
+                  {{ vm.guestMemoryUsedMib || 0 }} MiB
+                </div>
+                <div v-else style="color: var(--text-muted); font-size: 12.5px">—</div>
+              </td>
+
+              <!-- Network (1s Live) -->
+              <td class="col-desktop-only" style="padding: 10px 14px; width: 210px; min-width: 210px; max-width: 210px; box-sizing: border-box; white-space: nowrap">
+                <div v-if="vm.state === 'RUNNING'" style="font-size: 11.5px; font-variant-numeric: tabular-nums">
+                  <div style="color: var(--text-primary); font-weight: 500">
+                    {{ formatNetworkRate(vm) }}
+                  </div>
+                  <div style="font-size: 10.5px; color: var(--text-secondary); min-height: 14px">
+                    {{ formatNetworkTotal(vm) || ' ' }}
+                  </div>
+                </div>
+                <div v-else style="color: var(--text-muted); font-size: 12.5px">—</div>
+              </td>
+
+              <!-- Actions (Quick Power Toggle) -->
+              <td style="text-align: right" @click.stop>
                 <div style="display: inline-flex; gap: 6px; align-items: center">
                   <!-- Start/Resume -->
                   <button
@@ -1995,7 +2017,7 @@ async function handleWizardSubmit() {
                   </button>
                   <button
                     v-else-if="vm.state === 'PAUSED'"
-                    class="btn btn-xs btn-primary"
+                    class="btn btn-xs btn-success"
                     :disabled="Boolean(transitioningVms[vm.name])"
                     title="Resume VM"
                     @click="handlePowerAction(vm, 'resume')"
@@ -2003,104 +2025,20 @@ async function handleWizardSubmit() {
                     <MdiIcon :path="mdiPlay" size="13" />
                   </button>
 
-                  <!-- Pause -->
-                  <button
-                    v-if="vm.state === 'RUNNING' && !transitioningVms[vm.name]"
-                    class="btn btn-xs"
-                    :disabled="Boolean(transitioningVms[vm.name])"
-                    title="Pause VM"
-                    @click="handlePowerAction(vm, 'pause')"
-                  >
-                    <MdiIcon :path="mdiPause" size="13" />
-                  </button>
-
-                  <!-- Reboot -->
-                  <button
-                    v-if="vm.state === 'RUNNING' || transitioningVms[vm.name] === 'rebooting'"
-                    class="btn btn-xs"
-                    :class="{ 'btn-loading': transitioningVms[vm.name] === 'rebooting' }"
-                    :disabled="Boolean(transitioningVms[vm.name])"
-                    :title="transitioningVms[vm.name] === 'rebooting' ? 'Rebooting VM...' : 'Reboot VM (Clean ACPI Restart)'"
-                    @click="handlePowerAction(vm, 'reboot')"
-                  >
-                    <MdiIcon
-                      :path="transitioningVms[vm.name] === 'rebooting' ? mdiLoading : mdiRestart"
-                      size="13"
-                      :class="{ 'spin-icon': transitioningVms[vm.name] === 'rebooting' }"
-                    />
-                  </button>
-
-                  <!-- Hard Reset -->
-                  <button
-                    v-if="vm.state === 'RUNNING'"
-                    class="btn btn-xs btn-danger"
-                    :disabled="Boolean(transitioningVms[vm.name])"
-                    title="Hard Reset VM (Power Cycle)"
-                    @click="handlePowerAction(vm, 'reset')"
-                  >
-                    <MdiIcon :path="mdiPowerCycle" size="13" />
-                  </button>
-
-                  <!-- Shutdown -->
+                  <!-- Stop / Shutdown -->
                   <button
                     v-if="vm.state === 'RUNNING' || transitioningVms[vm.name] === 'stopping'"
-                    class="btn btn-xs btn-warning"
+                    class="btn btn-xs btn-secondary"
                     :class="{ 'btn-loading': transitioningVms[vm.name] === 'stopping' }"
                     :disabled="Boolean(transitioningVms[vm.name])"
                     :title="transitioningVms[vm.name] === 'stopping' ? 'Shutting down VM...' : 'Shutdown VM (Hold Shift to Force Stop)'"
                     @click="handlePowerAction(vm, 'stop', $event)"
                   >
                     <MdiIcon
-                      :path="transitioningVms[vm.name] === 'stopping' ? mdiLoading : mdiPower"
+                      :path="transitioningVms[vm.name] === 'stopping' ? mdiLoading : mdiStop"
                       size="13"
                       :class="{ 'spin-icon': transitioningVms[vm.name] === 'stopping' }"
                     />
-                  </button>
-
-                  <!-- Console -->
-                  <button
-                    class="btn btn-xs btn-primary"
-                    :disabled="vm.state !== 'RUNNING'"
-                    title="Open Console"
-                    @click="handleOpenConsole(vm)"
-                  >
-                    <MdiIcon :path="mdiConsole" size="13" />
-                  </button>
-
-                  <!-- Details View -->
-                  <button
-                    class="btn btn-xs btn-secondary"
-                    title="Open Dedicated VM Detail View"
-                    @click="openVmDetail(vm)"
-                  >
-                    <MdiIcon :path="mdiInformationOutline" size="13" />
-                  </button>
-
-                  <!-- Clone -->
-                  <button
-                    class="btn btn-xs"
-                    title="Clone VM"
-                    @click="openCloneModal(vm)"
-                  >
-                    <MdiIcon :path="mdiContentCopy" size="13" />
-                  </button>
-
-                  <!-- Edit / Hardware Inspector -->
-                  <button
-                    class="btn btn-xs"
-                    title="Edit VM & Hardware"
-                    @click="openInspector(vm)"
-                  >
-                    <MdiIcon :path="mdiPencil" size="13" />
-                  </button>
-
-                  <!-- Delete -->
-                  <button
-                    class="btn btn-xs btn-danger"
-                    title="Delete VM"
-                    @click="handleDeleteVm(vm)"
-                  >
-                    <MdiIcon :path="mdiTrashCan" size="13" />
                   </button>
                 </div>
               </td>
@@ -2218,7 +2156,7 @@ async function handleWizardSubmit() {
                       title="Delete ISO"
                       @click="handleDeleteIso(iso)"
                     >
-                      <MdiIcon :path="mdiTrashCan" size="13" />
+                      <MdiIcon :path="mdiTrashCanOutline" size="13" />
                     </button>
                   </div>
                 </td>
@@ -4210,35 +4148,7 @@ async function handleWizardSubmit() {
 </template>
 
 <style scoped>
-/* VM power state is conveyed by a faded row tint instead of a Status column */
-.vm-row td:first-child {
-  box-shadow: inset 3px 0 0 var(--vm-state-color, transparent);
-}
-
-.vm-row {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--vm-state-color, transparent) 16%, transparent) 0%,
-    color-mix(in srgb, var(--vm-state-color, transparent) 5%, transparent) 45%,
-    transparent 100%
-  );
-}
-
-.vm-row-running {
-  --vm-state-color: var(--success, #22c55e);
-}
-
-.vm-row-stopped,
-.vm-row-shutoff,
-.vm-row-crashed {
-  --vm-state-color: var(--danger, #ef4444);
-}
-
-.vm-row-paused {
-  --vm-state-color: var(--warning, #f59e0b);
-}
-
-.vm-row td:last-child {
+.data-table td:last-child {
   white-space: nowrap;
 }
 

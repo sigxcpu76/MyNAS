@@ -142,14 +142,18 @@ describe('Proxmox-Style Resource Detail Views (VM, LXC, Docker)', () => {
     nasState.selectedResourceId = 'vm:debian-server';
     const ribbon = mount(ActionRibbon);
     expect(ribbon.text()).toContain('debian-server');
-    expect(ribbon.text()).toContain('VM');
-    expect(ribbon.text()).toContain('RUNNING');
+    expect(ribbon.text()).toContain('Summary');
+    expect(ribbon.text()).toContain('Console');
+    expect(ribbon.text()).toContain('Configuration');
+    expect(ribbon.text()).toContain('Snapshots');
     expect(ribbon.text()).toContain('12.5%');
     expect(ribbon.text()).toContain('1.50 GiB');
-    expect(ribbon.text()).toContain('Shutdown');
-    expect(ribbon.text()).toContain('Stop');
-    expect(ribbon.text()).toContain('Reboot');
-    expect(ribbon.text()).toContain('Console Pop-out');
+    expect(ribbon.find('[aria-label="Pause"]').exists()).toBe(true);
+    expect(ribbon.find('[aria-label="Shutdown"]').exists()).toBe(true);
+    expect(ribbon.find('[aria-label="Stop"]').exists()).toBe(true);
+    expect(ribbon.find('[aria-label="Reboot"]').exists()).toBe(true);
+    expect(ribbon.find('[aria-label="Clone"]').exists()).toBe(true);
+    expect(ribbon.find('[aria-label="Console Pop-out"]').exists()).toBe(true);
 
     const wrapper = mount(VmDetailView, {
       props: {
@@ -169,14 +173,16 @@ describe('Proxmox-Style Resource Detail Views (VM, LXC, Docker)', () => {
     nasState.selectedResourceId = 'lxc:alpine-app';
     const ribbon = mount(ActionRibbon);
     expect(ribbon.text()).toContain('alpine-app');
-    expect(ribbon.text()).toContain('LXC');
-    expect(ribbon.text()).toContain('RUNNING');
+    expect(ribbon.text()).toContain('Summary');
+    expect(ribbon.text()).toContain('Console');
+    expect(ribbon.text()).toContain('Configuration');
+    expect(ribbon.text()).toContain('Logs');
     expect(ribbon.text()).toContain('3.4%');
     expect(ribbon.text()).toContain('256 MiB');
-    expect(ribbon.text()).toContain('Stop');
-    expect(ribbon.text()).toContain('Reboot');
-    expect(ribbon.text()).toContain('Freeze');
-    expect(ribbon.text()).toContain('Terminal');
+    expect(ribbon.find('[aria-label="Stop"]').exists()).toBe(true);
+    expect(ribbon.find('[aria-label="Reboot"]').exists()).toBe(true);
+    expect(ribbon.find('[aria-label="Freeze"]').exists()).toBe(true);
+    expect(ribbon.find('[aria-label="Console Pop-out"]').exists()).toBe(true);
 
     const wrapper = mount(LxcDetailView, {
       props: {
@@ -197,15 +203,18 @@ describe('Proxmox-Style Resource Detail Views (VM, LXC, Docker)', () => {
     nasState.selectedResourceId = 'docker:nextcloud';
     const ribbon = mount(ActionRibbon);
     expect(ribbon.text()).toContain('Nextcloud Hub');
-    expect(ribbon.text()).toContain('APP');
-    expect(ribbon.text()).toContain('RUNNING');
+    expect(ribbon.text()).toContain('Summary');
+    expect(ribbon.text()).toContain('Console');
+    expect(ribbon.text()).toContain('Configuration');
+    expect(ribbon.text()).toContain('Containers');
+    expect(ribbon.text()).toContain('Logs');
     expect(ribbon.text()).toContain('8.2%');
     expect(ribbon.text()).toContain('512 MiB');
-    expect(ribbon.text()).toContain('Stop');
-    expect(ribbon.text()).toContain('Restart');
-    expect(ribbon.text()).toContain('Web UI');
-    expect(ribbon.text()).toContain('Upgrade');
-    expect(ribbon.text()).toContain('Delete');
+    expect(ribbon.find('[aria-label="Stop"]').exists()).toBe(true);
+    expect(ribbon.find('[aria-label="Restart"]').exists()).toBe(true);
+    expect(ribbon.find('[aria-label="Web UI"]').exists()).toBe(true);
+    expect(ribbon.find('[aria-label="Upgrade"]').exists()).toBe(true);
+    expect(ribbon.find('[aria-label="Delete"]').exists()).toBe(true);
 
     const wrapper = mount(DockerDetailView, {
       props: {
@@ -219,14 +228,29 @@ describe('Proxmox-Style Resource Detail Views (VM, LXC, Docker)', () => {
     expect(wrapper.text()).toContain('nextcloud-app-1');
   });
 
-  it('ResourceTree includes Overview nodes for VMs, Containers, and Docker Apps without dockerApps prefix', () => {
+  it('ResourceTree includes Overview header nodes for VMs, Containers, and Docker Apps without dockerApps prefix', async () => {
     const wrapper = mount(ResourceTree);
-    expect(wrapper.text()).toContain('VMs Overview');
-    expect(wrapper.text()).toContain('Containers Overview');
-    expect(wrapper.text()).toContain('Apps Overview');
+    expect(wrapper.text()).toContain('Virtual Machines');
+    expect(wrapper.text()).toContain('LXC Containers');
+    expect(wrapper.text()).toContain('Docker Apps');
     expect(wrapper.text()).toContain('debian-server');
     expect(wrapper.text()).toContain('alpine-app');
     expect(wrapper.text()).toContain('Nextcloud Hub');
     expect(wrapper.text()).not.toContain('dockerApps/');
+
+    // Clicking top level menu entry navigates to overview
+    const lxcHeader = wrapper.findAll('.tree-header-row').find((w) => w.text().includes('LXC Containers'));
+    expect(lxcHeader).toBeDefined();
+    await lxcHeader!.trigger('click');
+    expect(nasState.selectedResourceId).toBe('node:lxc');
+    expect(nasState.activeTab).toBe('lxc');
+
+    // Clicking chevron only toggles collapse/expand without changing selection
+    const vmsHeader = wrapper.findAll('.tree-header-row').find((w) => w.text().includes('Virtual Machines'));
+    const chevron = vmsHeader!.find('.chevron-btn');
+    await chevron.trigger('click');
+    // Selection should remain node:lxc, not changed to vms
+    expect(nasState.selectedResourceId).toBe('node:lxc');
+    expect(nasState.activeTab).toBe('lxc');
   });
 });

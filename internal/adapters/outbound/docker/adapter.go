@@ -1938,6 +1938,10 @@ func deriveWebUIURL(ports []string, preferredContainerPort string) string {
 func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []dockerContainerSummary) (*domain.DockerApp, error) {
 	composePath := filepath.Join(a.unitsDir, appID, "compose.yaml")
 	var composeYAML string
+	modTime := time.Now().UTC()
+	if fi, err := os.Stat(composePath); err == nil {
+		modTime = fi.ModTime().UTC()
+	}
 	if data, err := os.ReadFile(composePath); err == nil {
 		composeYAML = prettifyComposeYAML(string(data))
 	}
@@ -2223,8 +2227,8 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 		TotalNetTxBytes: totalNetTx,
 		TotalNetRxRate:  totalNetRxRate,
 		TotalNetTxRate:  totalNetTxRate,
-		CreatedAt:       time.Now().UTC(),
-		UpdatedAt:       time.Now().UTC(),
+		CreatedAt:       modTime,
+		UpdatedAt:       modTime,
 	}, nil
 }
 
@@ -2248,6 +2252,40 @@ func (a *Adapter) StartEventWatcher(ctx context.Context, onEvent func(domain.Eve
 		return
 	}
 	go a.watchDockerEvents(ctx, onEvent)
+	go a.pollContainerStatsLoop(ctx)
+}
+
+func (a *Adapter) pollContainerStatsLoop(ctx context.Context) {
+	refreshRunningStats := func() {
+		liveContainers := a.fetchLiveContainers(ctx)
+		for _, c := range liveContainers {
+			if !strings.EqualFold(c.State, "running") || c.ID == "" {
+				continue
+			}
+			id := c.ID
+			a.statsCacheMu.Lock()
+			if a.statsInFlight == nil {
+				a.statsInFlight = make(map[string]bool)
+			}
+			if !a.statsInFlight[id] {
+				a.statsInFlight[id] = true
+				go a.fetchStatsAsync(id)
+			}
+			a.statsCacheMu.Unlock()
+		}
+	}
+
+	refreshRunningStats()
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			refreshRunningStats()
+		}
+	}
 }
 
 // SetEventSink assigns an event sink callback for programmatic event notifications.
@@ -3305,20 +3343,28 @@ func (a *Adapter) snapshotAppVolumes(ctx context.Context, id string, volumes []s
 					}
 				}
 			}
-			for _, v := range volumes {
-				hostPath, _ := parsePortMapping(v)
-				if hostPath == "" {
-					parts := strings.Split(v, ":")
-					hostPath = parts[0]
-				}
-				cleanHost := filepath.Clean(hostPath)
+		}
+		for _, v := range volumes {
+			hostPath, _ := parsePortMapping(v)
+			if hostPath == "" {
+				parts := strings.Split(v, ":")
+				hostPath = parts[0]
+			}
+			cleanHost := filepath.Clean(hostPath)
+			var bestDS string
+			var bestMountLen int
+			for _, d := range datasets {
 				if d.Mountpoint != "" && (cleanHost == d.Mountpoint || strings.HasPrefix(cleanHost, d.Mountpoint+"/")) {
-					if !snapshotted[dsPath] {
-						if _, err := a.zfsPort.SnapshotDataset(ctx, poolName, dsPath, snapSuffix); err == nil {
-							slog.Info("[docker] created pre-upgrade zfs snapshot for mounted dataset", "app", cleanID, "dataset", dsPath, "snapshot", snapSuffix)
-							snapshotted[dsPath] = true
-						}
+					if len(d.Mountpoint) > bestMountLen {
+						bestMountLen = len(d.Mountpoint)
+						bestDS = d.DatasetPath
 					}
+				}
+			}
+			if bestDS != "" && !snapshotted[bestDS] {
+				if _, err := a.zfsPort.SnapshotDataset(ctx, poolName, bestDS, snapSuffix); err == nil {
+					slog.Info("[docker] created pre-upgrade zfs snapshot for mounted dataset", "app", strings.TrimSpace(id), "dataset", bestDS, "snapshot", snapSuffix)
+					snapshotted[bestDS] = true
 				}
 			}
 		}

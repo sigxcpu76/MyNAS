@@ -61,6 +61,10 @@ type lxcMetricsSample struct {
 	sampleTime time.Time
 	cpuPercent float64
 	memUsedMiB int64
+	netRxBytes uint64
+	netTxBytes uint64
+	netRxRate  int64
+	netTxRate  int64
 	cachedAt   time.Time
 }
 
@@ -203,34 +207,94 @@ func readCgroupMetrics(cgDir string) (cpuUsec uint64, memBytes int64, err error)
 	return cpuUsec, memBytes, nil
 }
 
-func (a *Adapter) sampleContainerMetrics(id string) (float64, int64) {
+func readCgroupPid(cgDir string) int {
+	for _, filename := range []string{"cgroup.procs", "tasks"} {
+		f, err := os.Open(filepath.Join(cgDir, filename))
+		if err != nil {
+			continue
+		}
+		scanner := bufio.NewScanner(f)
+		if scanner.Scan() {
+			txt := strings.TrimSpace(scanner.Text())
+			_ = f.Close()
+			if pid, parseErr := strconv.Atoi(txt); parseErr == nil && pid > 0 {
+				return pid
+			}
+		}
+		_ = f.Close()
+	}
+	return 0
+}
+
+func readContainerNetBytes(cgDir string) (uint64, uint64) {
+	pid := readCgroupPid(cgDir)
+	if pid <= 0 {
+		return 0, 0
+	}
+	path := fmt.Sprintf("/proc/%d/net/dev", pid)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, 0
+	}
+	var totalRx, totalTx uint64
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.Contains(line, ":") {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		iface := strings.TrimSpace(parts[0])
+		if iface == "lo" || strings.HasPrefix(iface, "lo:") {
+			continue
+		}
+		fields := strings.Fields(parts[1])
+		if len(fields) >= 9 {
+			rx, _ := strconv.ParseUint(fields[0], 10, 64)
+			tx, _ := strconv.ParseUint(fields[8], 10, 64)
+			totalRx += rx
+			totalTx += tx
+		}
+	}
+	return totalRx, totalTx
+}
+
+func (a *Adapter) sampleContainerMetrics(id string) (float64, int64, int64, int64, int64, int64) {
 	now := time.Now()
 	a.metricsMu.Lock()
 	cached, hasCache := a.metricsCache[id]
 	if hasCache && now.Sub(cached.sampleTime) < 150*time.Millisecond {
 		cpuPct := cached.cpuPercent
 		memMiB := cached.memUsedMiB
+		rxRate := cached.netRxRate
+		txRate := cached.netTxRate
+		rxBytes := int64(cached.netRxBytes)
+		txBytes := int64(cached.netTxBytes)
 		a.metricsMu.Unlock()
-		return cpuPct, memMiB
+		return cpuPct, memMiB, rxRate, txRate, rxBytes, txBytes
 	}
 	a.metricsMu.Unlock()
 
 	cgDir := a.findCgroupDir(id)
 	if cgDir == "" {
 		if hasCache {
-			return cached.cpuPercent, cached.memUsedMiB
+			return cached.cpuPercent, cached.memUsedMiB, cached.netRxRate, cached.netTxRate, int64(cached.netRxBytes), int64(cached.netTxBytes)
 		}
-		return 0, 0
+		return 0, 0, 0, 0, 0, 0
 	}
 
 	currUsec, memBytes, err := readCgroupMetrics(cgDir)
 	if err != nil {
 		if hasCache {
-			return cached.cpuPercent, cached.memUsedMiB
+			return cached.cpuPercent, cached.memUsedMiB, cached.netRxRate, cached.netTxRate, int64(cached.netRxBytes), int64(cached.netTxBytes)
 		}
-		return 0, 0
+		return 0, 0, 0, 0, 0, 0
 	}
 
+	currRx, currTx := readContainerNetBytes(cgDir)
 	memMiB := memBytes / (1024 * 1024)
 
 	a.metricsMu.Lock()
@@ -246,24 +310,41 @@ func (a *Adapter) sampleContainerMetrics(id string) (float64, int64) {
 				cpuPct = (float64(deltaUsec) / float64(dt.Microseconds())) * 100.0
 				cpuPct = math.Round(cpuPct*10) / 10
 			}
+			var rxRate, txRate int64
+			if dt.Seconds() > 0 {
+				if currRx >= cached.netRxBytes {
+					rxRate = int64(float64(currRx-cached.netRxBytes) / dt.Seconds())
+				}
+				if currTx >= cached.netTxBytes {
+					txRate = int64(float64(currTx-cached.netTxBytes) / dt.Seconds())
+				}
+			}
 			a.metricsCache[id] = lxcMetricsSample{
 				cpuUsec:    currUsec,
 				sampleTime: now,
 				cpuPercent: cpuPct,
 				memUsedMiB: memMiB,
+				netRxBytes: currRx,
+				netTxBytes: currTx,
+				netRxRate:  rxRate,
+				netTxRate:  txRate,
 				cachedAt:   now,
 			}
-			return cpuPct, memMiB
+			return cpuPct, memMiB, rxRate, txRate, int64(currRx), int64(currTx)
 		}
-		// If interval too short, update memory and keep previous cpuPercent
+		// If interval too short, update memory and counters, keep previous rates
 		a.metricsCache[id] = lxcMetricsSample{
 			cpuUsec:    cached.cpuUsec,
 			sampleTime: cached.sampleTime,
 			cpuPercent: cached.cpuPercent,
 			memUsedMiB: memMiB,
+			netRxBytes: currRx,
+			netTxBytes: currTx,
+			netRxRate:  cached.netRxRate,
+			netTxRate:  cached.netTxRate,
 			cachedAt:   now,
 		}
-		return cached.cpuPercent, memMiB
+		return cached.cpuPercent, memMiB, cached.netRxRate, cached.netTxRate, int64(currRx), int64(currTx)
 	}
 
 	// Cold start: record baseline sample and warm up in background
@@ -272,33 +353,54 @@ func (a *Adapter) sampleContainerMetrics(id string) (float64, int64) {
 		sampleTime: now,
 		cpuPercent: 0,
 		memUsedMiB: memMiB,
+		netRxBytes: currRx,
+		netTxBytes: currTx,
+		netRxRate:  0,
+		netTxRate:  0,
 		cachedAt:   now,
 	}
 
-	go func(ctId, dir string, baseUsec uint64, baseTime time.Time) {
+	go func(ctId, dir string, baseUsec, baseRx, baseTx uint64, baseTime time.Time) {
 		time.Sleep(200 * time.Millisecond)
 		u, m, err := readCgroupMetrics(dir)
 		if err != nil {
 			return
 		}
+		r2, t2Net := readContainerNetBytes(dir)
 		t2 := time.Now()
 		dt := t2.Sub(baseTime)
-		if dt > 0 && u >= baseUsec {
-			pct := (float64(u-baseUsec) / float64(dt.Microseconds())) * 100.0
-			pct = math.Round(pct*10) / 10
+		if dt > 0 {
+			pct := 0.0
+			if u >= baseUsec {
+				pct = (float64(u-baseUsec) / float64(dt.Microseconds())) * 100.0
+				pct = math.Round(pct*10) / 10
+			}
+			var rxR, txR int64
+			if dt.Seconds() > 0 {
+				if r2 >= baseRx {
+					rxR = int64(float64(r2-baseRx) / dt.Seconds())
+				}
+				if t2Net >= baseTx {
+					txR = int64(float64(t2Net-baseTx) / dt.Seconds())
+				}
+			}
 			a.metricsMu.Lock()
 			a.metricsCache[ctId] = lxcMetricsSample{
 				cpuUsec:    u,
 				sampleTime: t2,
 				cpuPercent: pct,
 				memUsedMiB: m / (1024 * 1024),
+				netRxBytes: r2,
+				netTxBytes: t2Net,
+				netRxRate:  rxR,
+				netTxRate:  txR,
 				cachedAt:   t2,
 			}
 			a.metricsMu.Unlock()
 		}
-	}(id, cgDir, currUsec, now)
+	}(id, cgDir, currUsec, currRx, currTx, now)
 
-	return 0, memMiB
+	return 0, memMiB, 0, 0, int64(currRx), int64(currTx)
 }
 
 func (a *Adapter) SetZfsPort(zfsPort ports.ZfsEnginePort) {
@@ -538,10 +640,14 @@ func (a *Adapter) ListContainers(ctx context.Context) ([]domain.LxcContainer, er
 	out := make([]domain.LxcContainer, 0, len(a.containers))
 	for _, c := range a.containers {
 		if c.State == "RUNNING" {
-			c.CPUPercent, c.MemoryUsedMiB = a.sampleContainerMetrics(c.ID)
+			c.CPUPercent, c.MemoryUsedMiB, c.NetRxRate, c.NetTxRate, c.NetRxBytes, c.NetTxBytes = a.sampleContainerMetrics(c.ID)
 		} else {
 			c.CPUPercent = 0
 			c.MemoryUsedMiB = 0
+			c.NetRxRate = 0
+			c.NetTxRate = 0
+			c.NetRxBytes = 0
+			c.NetTxBytes = 0
 		}
 		out = append(out, c)
 	}
@@ -570,10 +676,14 @@ func (a *Adapter) GetContainer(ctx context.Context, id string) (*domain.LxcConta
 	}
 
 	if c.State == "RUNNING" {
-		c.CPUPercent, c.MemoryUsedMiB = a.sampleContainerMetrics(c.ID)
+		c.CPUPercent, c.MemoryUsedMiB, c.NetRxRate, c.NetTxRate, c.NetRxBytes, c.NetTxBytes = a.sampleContainerMetrics(c.ID)
 	} else {
 		c.CPUPercent = 0
 		c.MemoryUsedMiB = 0
+		c.NetRxRate = 0
+		c.NetTxRate = 0
+		c.NetRxBytes = 0
+		c.NetTxBytes = 0
 	}
 
 	cp := c
@@ -591,6 +701,100 @@ func generateRandomMAC() string {
 	buf := make([]byte, 3)
 	_, _ = rand.Read(buf)
 	return fmt.Sprintf("00:16:3e:%02x:%02x:%02x", buf[0], buf[1], buf[2])
+}
+
+func hasInitBinary(rootfsPath string) bool {
+	if rootfsPath == "" {
+		return false
+	}
+	for _, initCandidate := range []string{
+		"sbin/init",
+		"bin/init",
+		"usr/lib/systemd/systemd",
+		"lib/systemd/systemd",
+		"bin/sh",
+		"bin/bash",
+		"bin/busybox",
+	} {
+		if _, err := os.Stat(filepath.Join(rootfsPath, initCandidate)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func findMatchingLocalTemplate(tmplDir, distro, containerID string) string {
+	entries, err := os.ReadDir(tmplDir)
+	if err != nil || len(entries) == 0 {
+		return ""
+	}
+	lowerDistro := strings.ToLower(strings.TrimSpace(distro))
+	lowerID := strings.ToLower(strings.TrimSpace(containerID))
+	lowerID = strings.TrimPrefix(lowerID, "ct-")
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := strings.ToLower(entry.Name())
+		if !strings.HasSuffix(name, ".tar.xz") && !strings.HasSuffix(name, ".tar.gz") && !strings.HasSuffix(name, ".tar.zst") && !strings.HasSuffix(name, ".tar") && !strings.HasSuffix(name, ".tgz") {
+			continue
+		}
+		if (lowerDistro != "" && strings.Contains(name, lowerDistro)) || (lowerID != "" && strings.Contains(name, lowerID)) {
+			fullPath := filepath.Join(tmplDir, entry.Name())
+			if fi, err := os.Stat(fullPath); err == nil && fi.Size() > 0 {
+				return fullPath
+			}
+		}
+	}
+	return ""
+}
+
+func (a *Adapter) resolveLatestLinuxContainersURL(ctx context.Context, distro string) string {
+	d := strings.ToLower(strings.TrimSpace(distro))
+	if d == "" {
+		d = "debian"
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://images.linuxcontainers.org/meta/1.0/index-system", nil)
+	if err != nil {
+		return ""
+	}
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	scanner := bufio.NewScanner(resp.Body)
+	var latestPath string
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.Split(line, ";")
+		if len(parts) < 6 {
+			continue
+		}
+		if strings.ToLower(parts[0]) == d && parts[2] == "amd64" && parts[3] == "default" {
+			latestPath = parts[5]
+		}
+	}
+	if latestPath != "" {
+		return fmt.Sprintf("https://images.linuxcontainers.org%srootfs.tar.xz", latestPath)
+	}
+	return ""
+}
+
+func (a *Adapter) cleanupFailedCreation(ctx context.Context, pool, containerID, rootfsPath string) {
+	if rootfsPath != "" {
+		_ = os.RemoveAll(rootfsPath)
+		containerDir := filepath.Dir(rootfsPath)
+		_ = os.RemoveAll(containerDir)
+	}
+	_ = os.RemoveAll(fmt.Sprintf("/var/lib/lxc/%s", containerID))
+	if pool != "" && a.zfsPort != nil {
+		datasetID := fmt.Sprintf("containers/%s", containerID)
+		_ = a.zfsPort.DeleteDataset(ctx, pool, datasetID, true)
+	}
 }
 
 func (a *Adapter) ensureTemplateArchive(ctx context.Context, sourceURL, targetPath, mainPool, containerID, distro string) (string, error) {
@@ -657,35 +861,50 @@ func (a *Adapter) ensureTemplateArchive(ctx context.Context, sourceURL, targetPa
 		return destPath, nil
 	}
 
+	// If destPath doesn't exist, check whether another template matching distro/containerID is already available
+	if localMatched := findMatchingLocalTemplate(tmplDir, distro, containerID); localMatched != "" {
+		return localMatched, nil
+	}
+
 	_ = os.MkdirAll(filepath.Dir(destPath), 0755)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("create download request for %s: %w", sourceURL, err)
 	}
 	resp, err := a.httpClient.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("download template from %s failed: %w", sourceURL, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("download template failed with status %d", resp.StatusCode)
+		// If 404 on linuxcontainers, attempt to resolve latest index
+		if resp.StatusCode == http.StatusNotFound && strings.Contains(sourceURL, "linuxcontainers.org") {
+			if resolved := a.resolveLatestLinuxContainersURL(ctx, distro); resolved != "" && resolved != sourceURL {
+				slog.Info("[lxc] retrying download with resolved linuxcontainers URL", "old", sourceURL, "new", resolved)
+				return a.ensureTemplateArchive(ctx, resolved, targetPath, mainPool, containerID, distro)
+			}
+		}
+		return "", fmt.Errorf("download template from %s failed with HTTP status %d", sourceURL, resp.StatusCode)
 	}
 
 	partPath := destPath + ".download"
 	out, err := os.Create(partPath)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("create download file: %w", err)
 	}
 	_, err = io.Copy(out, resp.Body)
 	_ = out.Close()
 	if err != nil {
 		_ = os.Remove(partPath)
-		return "", err
+		return "", fmt.Errorf("write template file: %w", err)
 	}
 
-	_ = os.Rename(partPath, destPath)
+	if err := os.Rename(partPath, destPath); err != nil {
+		_ = os.Remove(partPath)
+		return "", fmt.Errorf("save template archive: %w", err)
+	}
 	return destPath, nil
 }
 
@@ -1129,13 +1348,21 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 		}
 	}
 
+	tmplDir := fmt.Sprintf("/mnt/%s/lxc-templates", cleanMainPool)
+	if tmplToUnpack == "" && cleanMainPool != "" {
+		if localMatched := findMatchingLocalTemplate(tmplDir, c.Distribution, c.ID); localMatched != "" {
+			tmplToUnpack = localMatched
+			c.TemplateArchive = localMatched
+		}
+	}
+
 	if tmplToUnpack == "" {
 		sourceURL := c.TemplateDownloadURL
 		if sourceURL == "" && (strings.HasPrefix(c.TemplateArchive, "http://") || strings.HasPrefix(c.TemplateArchive, "https://")) {
 			sourceURL = c.TemplateArchive
 		}
 
-		if sourceURL == "" {
+		if sourceURL == "" && c.TemplateArchive == "" {
 			sourceURL = resolveDefaultLinuxContainersURL(c.Distribution, c.Release)
 		}
 
@@ -1145,7 +1372,14 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 				downloadTarget = ""
 			}
 			downloadedPath, err := a.ensureTemplateArchive(ctx, sourceURL, downloadTarget, cleanMainPool, c.ID, c.Distribution)
-			if err == nil && downloadedPath != "" {
+			if err != nil {
+				slog.Error("[lxc] template download failed", "source_url", sourceURL, "err", err)
+				// If download failed and rootfs does not have an existing init binary, fail immediately
+				if !hasInitBinary(c.RootfsPath) && (c.TemplateArchive != "" || c.TemplateDownloadURL != "") {
+					a.cleanupFailedCreation(ctx, cleanMainPool, c.ID, c.RootfsPath)
+					return nil, fmt.Errorf("failed to download template from %s: %w", sourceURL, err)
+				}
+			} else if downloadedPath != "" {
 				tmplToUnpack = downloadedPath
 				c.TemplateArchive = downloadedPath
 			}
@@ -1153,9 +1387,23 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 	}
 
 	if tmplToUnpack != "" {
-		if fi, err := os.Stat(tmplToUnpack); err == nil && fi.Size() > 0 {
-			tarCmd := exec.CommandContext(ctx, "tar", "-xf", tmplToUnpack, "-C", c.RootfsPath)
-			_ = tarCmd.Run()
+		fi, err := os.Stat(tmplToUnpack)
+		if err != nil || fi.Size() == 0 {
+			a.cleanupFailedCreation(ctx, cleanMainPool, c.ID, c.RootfsPath)
+			return nil, fmt.Errorf("template archive %q not found or empty: %w", tmplToUnpack, err)
+		}
+		tarCmd := exec.CommandContext(ctx, "tar", "-xf", tmplToUnpack, "-C", c.RootfsPath)
+		if out, err := tarCmd.CombinedOutput(); err != nil {
+			a.cleanupFailedCreation(ctx, cleanMainPool, c.ID, c.RootfsPath)
+			return nil, fmt.Errorf("failed to extract template %q into rootfs %q: %v (%s)", tmplToUnpack, c.RootfsPath, err, strings.TrimSpace(string(out)))
+		}
+	}
+
+	// Verify rootfs has valid init or shell binary when running on host with lxc-start as root
+	if _, err := exec.LookPath("lxc-start"); err == nil && os.Geteuid() == 0 {
+		if !hasInitBinary(c.RootfsPath) {
+			a.cleanupFailedCreation(ctx, cleanMainPool, c.ID, c.RootfsPath)
+			return nil, fmt.Errorf("container rootfs at %q is invalid: no init binary (/sbin/init, /bin/sh) found after unpacking template", c.RootfsPath)
 		}
 	}
 
@@ -1175,23 +1423,39 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 	// Write LXC config files
 	a.writeLxcConfig(c)
 
-	c.State = "RUNNING"
+	c.State = "STOPPED"
 	c.IPv4Address = ""
 
-	// Attempt real lxc-start if binary exists and rootfs has an init binary
-	if _, err := exec.LookPath("lxc-start"); err == nil {
-		hasInit := false
-		for _, initCandidate := range []string{"sbin/init", "bin/init", "usr/lib/systemd/systemd", "bin/sh", "bin/bash"} {
-			if _, err := os.Stat(filepath.Join(c.RootfsPath, initCandidate)); err == nil {
-				hasInit = true
-				break
+	hasHostConfig := false
+	if _, err := os.Stat(fmt.Sprintf("/var/lib/lxc/%s/config", c.ID)); err == nil {
+		hasHostConfig = true
+	}
+
+	// Attempt real lxc-start if host config exists and binary exists and rootfs has an init binary
+	if hasHostConfig {
+		if _, err := exec.LookPath("lxc-start"); err == nil {
+			if hasInitBinary(c.RootfsPath) {
+				startCmd := exec.CommandContext(ctx, "lxc-start", "-n", c.ID, "-d")
+				if out, err := startCmd.CombinedOutput(); err != nil {
+					slog.Warn("[lxc] initial lxc-start failed", "container_id", c.ID, "err", err, "out", strings.TrimSpace(string(out)))
+					c.State = "STOPPED"
+				} else {
+					time.Sleep(300 * time.Millisecond)
+					if st := a.fetchSingleContainerStatus(ctx, c.ID); st != nil {
+						c.State = st.state
+						c.IPv4Address = st.ipv4
+					} else {
+						c.State = "RUNNING"
+					}
+				}
+			} else {
+				slog.Warn("[lxc] rootfs has no init binary, skipped initial lxc-start", "container_id", c.ID, "rootfs", c.RootfsPath)
+				c.State = "STOPPED"
 			}
 		}
-		if hasInit {
-			_ = exec.CommandContext(ctx, "lxc-start", "-n", c.ID, "-d").Run()
-		} else {
-			slog.Warn("[lxc] rootfs has no init binary, skipped initial lxc-start", "container_id", c.ID, "rootfs", c.RootfsPath)
-		}
+	} else {
+		// Mock test mode without host config
+		c.State = "RUNNING"
 	}
 
 	// Trigger installer recipe if present
@@ -1371,14 +1635,7 @@ func (a *Adapter) StartContainer(ctx context.Context, id string) (*domain.LxcCon
 	if hasHostConfig {
 		// Verify container rootfs has an init or shell binary before spawning
 		if c.RootfsPath != "" {
-			hasInit := false
-			for _, initCandidate := range []string{"sbin/init", "bin/init", "usr/lib/systemd/systemd", "bin/sh", "bin/bash"} {
-				if _, err := os.Stat(filepath.Join(c.RootfsPath, initCandidate)); err == nil {
-					hasInit = true
-					break
-				}
-			}
-			if !hasInit {
+			if !hasInitBinary(c.RootfsPath) {
 				slog.Error("[lxc] cannot start container: rootfs has no init binary", "container_id", id, "rootfs", c.RootfsPath)
 				return nil, fmt.Errorf("%w: rootfs for container %q at %s has no init binary (/sbin/init) - template rootfs was not unpacked or download failed", domain.ErrFailedPrecondition, id, c.RootfsPath)
 			}

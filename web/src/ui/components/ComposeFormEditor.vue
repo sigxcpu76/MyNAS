@@ -43,13 +43,19 @@ import {
   mdiStar,
 } from '@mdi/js';
 
-const props = defineProps<{
-  initialAppId?: string;
-  initialTitle?: string;
-  initialComposeYaml?: string;
-  isEditMode?: boolean;
-  isSaving?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    initialAppId?: string;
+    initialTitle?: string;
+    initialComposeYaml?: string;
+    isEditMode?: boolean;
+    isSaving?: boolean;
+    showCancel?: boolean;
+  }>(),
+  {
+    showCancel: false,
+  }
+);
 
 const emit = defineEmits<{
   (e: 'save', data: { appId: string; title: string; composeYaml: string }): void;
@@ -252,6 +258,9 @@ watch(editorMode, (newMode) => {
       form.services = parsed.services;
       form.networks = parsed.networks;
       form.volumes = parsed.volumes;
+      form.catalogId = parsed.catalogId;
+      form.catalogSource = parsed.catalogSource;
+      form.catalogVersion = parsed.catalogVersion;
       if (!form.services.some((s) => s.id === activeServiceId.value)) {
         activeServiceId.value = form.services[0]?.id || '';
       }
@@ -1878,7 +1887,7 @@ function copyYaml() {
 
     <!-- Action Buttons -->
     <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; border-top: 1px solid var(--border-subtle); padding-top: 14px; flex-wrap: wrap">
-      <button class="btn" :disabled="props.isSaving || isSubmitting" @click="emit('cancel')">Cancel</button>
+      <button v-if="props.showCancel" class="btn" :disabled="props.isSaving || isSubmitting" @click="emit('cancel')">Cancel</button>
       <button
         class="btn btn-primary"
         :disabled="props.isSaving || isSubmitting"

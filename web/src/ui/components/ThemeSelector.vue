@@ -57,9 +57,10 @@ onBeforeUnmount(() => {
   <div ref="dropdownRef" class="theme-selector-container">
     <button
       type="button"
-      class="btn btn-sm theme-toggle-btn"
+      class="btn btn-sm btn-icon theme-toggle-btn"
       :class="{ 'btn-open': isOpen }"
-      :title="`Current theme: ${activeTheme.name} (${activeTheme.mode}). Click to change.`"
+      :title="`Theme: ${activeTheme.name} (${activeTheme.mode}) — Click to switch theme`"
+      aria-label="Select Color Theme"
       @click="toggleDropdown"
     >
       <MdiIcon
@@ -67,13 +68,7 @@ onBeforeUnmount(() => {
         size="15"
         class="theme-icon"
       />
-      <span class="theme-active-name">{{ activeTheme.name }}</span>
-      <MdiIcon
-        :path="mdiChevronDown"
-        size="14"
-        class="theme-chevron"
-        :class="{ rotated: isOpen }"
-      />
+      <span class="theme-active-name sr-only">{{ activeTheme.name }}</span>
     </button>
 
     <!-- Theme Dropdown Popover -->
@@ -173,17 +168,27 @@ onBeforeUnmount(() => {
 .theme-toggle-btn {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 11px;
+  justify-content: center;
+  padding: 5px 7px;
   background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border-subtle);
   color: var(--text-primary);
-  border-radius: 7px;
-  font-size: 12.5px;
-  font-weight: 500;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
   user-select: none;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .theme-toggle-btn:hover,

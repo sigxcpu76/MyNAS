@@ -26,6 +26,7 @@ test:
 
 build: web
 	go build -o bin/nasctl ./cmd/nasctl
+	objcopy --remove-section .note.gnu.property bin/nasctl 2>/dev/null || true
 
 COMP ?= lz4
 

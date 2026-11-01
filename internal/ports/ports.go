@@ -197,3 +197,16 @@ type DockerRegistryPort interface {
 type FileSystemPort interface {
 	ListDirectories(ctx context.Context, path string) (*domain.DirectoryList, error)
 }
+
+// CronJobPort manages scheduled tasks and ephemeral container job runs.
+type CronJobPort interface {
+	ListJobs(ctx context.Context) ([]domain.CronJob, error)
+	GetJob(ctx context.Context, id string) (*domain.CronJob, error)
+	CreateJob(ctx context.Context, job domain.CronJob) (*domain.CronJob, error)
+	UpdateJob(ctx context.Context, job domain.CronJob, fields []string) (*domain.CronJob, error)
+	DeleteJob(ctx context.Context, id string) error
+	RunJob(ctx context.Context, id string) (*domain.CronJobRun, error)
+	GetJobLogs(ctx context.Context, id string, runID string, lines int) (string, *domain.CronJobRun, error)
+	Start(ctx context.Context) error
+	Stop() error
+}

@@ -1,17 +1,28 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import {
-  mdiAlertCircle,
+  mdiAccountGroup,
+  mdiArrowLeft,
   mdiCamera,
-  mdiCheckCircle,
+  mdiCircle,
+  mdiClose,
+  mdiCogOutline,
   mdiConsole,
+  mdiContentCopy,
   mdiCubeOutline,
   mdiDatabase,
   mdiDatabaseCheck,
   mdiDatabaseSync,
+  mdiExport,
+  mdiFileDocumentOutline,
+  mdiFolderNetwork,
+  mdiFolderOutline,
+  mdiHarddisk,
+  mdiInformationOutline,
   mdiLayers,
   mdiMonitor,
   mdiOpenInNew,
+  mdiPause,
   mdiPlay,
   mdiPower,
   mdiRefresh,
@@ -21,17 +32,21 @@ import {
   mdiStop,
   mdiTrashCanOutline,
   mdiUpdate,
+  mdiWeb,
 } from '@mdi/js';
 import MdiIcon from './MdiIcon.vue';
 import { services } from '../../container';
 import {
   nasState,
+  type NavTab,
   notify,
   refreshAllData,
   runTrackedTask,
   selectResource,
 } from '../store';
+import { navigateTo } from '../router';
 import { confirmDelete } from '../modal';
+import { toZfsSafeSlug } from '../../domain/id';
 import type { VirtualMachine, LxcContainer, ZfsPool, DockerApp } from '../../domain/models';
 
 const emit = defineEmits<{
@@ -213,6 +228,101 @@ function popoutVmConsole() {
     `vnc_${clean}`,
     'width=1024,height=768,location=no,toolbar=no,menubar=no,status=no,resizable=yes'
   );
+}
+
+async function pauseVm() {
+  if (!currentVm.value || isBusy.value) return;
+  const vm = currentVm.value;
+  isBusy.value = true;
+  try {
+    await runTrackedTask(`VM "${vm.vmName}": Pause`, async () => {
+      await services.kvm.pauseVirtualMachine(vm.name);
+    });
+    notify('info', `Virtual machine "${vm.vmName}" paused`);
+    await refreshAllData();
+  } catch (err: any) {
+    notify('error', `Failed to pause VM: ${err.message}`);
+  } finally {
+    isBusy.value = false;
+  }
+}
+
+async function resumeVm() {
+  if (!currentVm.value || isBusy.value) return;
+  const vm = currentVm.value;
+  isBusy.value = true;
+  try {
+    await runTrackedTask(`VM "${vm.vmName}": Resume`, async () => {
+      await services.kvm.resumeVirtualMachine(vm.name);
+    });
+    notify('success', `Virtual machine "${vm.vmName}" resumed`);
+    await refreshAllData();
+  } catch (err: any) {
+    notify('error', `Failed to resume VM: ${err.message}`);
+  } finally {
+    isBusy.value = false;
+  }
+}
+
+// Clone VM Modal State
+const showCloneVmModal = ref(false);
+const cloneForm = reactive({
+  targetVmName: '',
+  targetVmId: '',
+  fullClone: true,
+});
+
+function openCloneVm() {
+  if (!currentVm.value) return;
+  cloneForm.targetVmName = `${currentVm.value.vmName}-clone`;
+  cloneForm.targetVmId = toZfsSafeSlug(`${currentVm.value.vmName}-clone`);
+  cloneForm.fullClone = true;
+  showCloneVmModal.value = true;
+}
+
+async function submitCloneVm() {
+  if (!currentVm.value || !cloneForm.targetVmName.trim() || isBusy.value) return;
+  const vm = currentVm.value;
+  const targetId = toZfsSafeSlug(cloneForm.targetVmId.trim() || cloneForm.targetVmName.trim());
+  isBusy.value = true;
+  try {
+    await runTrackedTask(`VM "${vm.vmName}": Clone to "${cloneForm.targetVmName}"`, async () => {
+      const targetPool =
+        nasState.systemConfig?.mainPool ||
+        nasState.pools[0]?.poolName ||
+        nasState.pools[0]?.name.replace(/^zfsPools\//, '') ||
+        'tank';
+      await services.kvm.cloneVirtualMachine(
+        vm.name,
+        targetId,
+        cloneForm.targetVmName.trim(),
+        targetPool,
+        !cloneForm.fullClone
+      );
+    });
+    notify('success', `Cloned VM "${vm.vmName}" to "${cloneForm.targetVmName}"`);
+    showCloneVmModal.value = false;
+    await refreshAllData();
+  } catch (err: any) {
+    notify('error', `Clone failed: ${err.message}`);
+  } finally {
+    isBusy.value = false;
+  }
+}
+
+function popoutLxcTerminal() {
+  if (!currentLxc.value) return;
+  const clean = currentLxc.value.name.replace(/^lxcContainers\//, '');
+  const url = `/terminal?lxc=${encodeURIComponent(clean)}`;
+  window.open(
+    url,
+    `lxc_terminal_${clean}`,
+    'width=1000,height=650,location=no,toolbar=no,menubar=no,status=no,resizable=yes'
+  );
+}
+
+function handleNav(tab: NavTab) {
+  navigateTo(tab);
 }
 
 // -----------------------------------------------------------------------------
@@ -529,28 +639,41 @@ function popoutHostTerminal() {
 
 <template>
   <div class="action-ribbon">
-    <!-- Ribbon Left: Resource Identity & Live Badges -->
+    <!-- Ribbon Left: Resource Identity, Status Bullet & Live Telemetry -->
     <div class="ribbon-identity">
       <!-- VM Identity -->
       <template v-if="currentVm">
-        <MdiIcon :path="mdiMonitor" size="18" style="color: var(--accent-primary)" />
-        <span class="ribbon-name">{{ currentVm.vmName }}</span>
-        <span class="ribbon-type-tag mono">VM</span>
-        <span
-          class="badge mono font-xs"
-          :class="currentVm.state === 'RUNNING' ? 'badge-success' : 'badge-neutral'"
+        <button
+          class="btn btn-xs btn-ghost ribbon-back-btn"
+          title="Back to Virtual Machines"
+          @click="selectResource('node:vms'); handleNav('kvm')"
         >
-          {{ currentVm.state }}
-        </span>
+          <MdiIcon :path="mdiArrowLeft" size="15" />
+        </button>
+        <MdiIcon :path="mdiMonitor" size="16" style="color: var(--accent-primary)" />
+        <MdiIcon
+          :path="mdiCircle"
+          size="9"
+          :style="{
+            color:
+              currentVm.state === 'RUNNING'
+                ? 'var(--success)'
+                : currentVm.state === 'PAUSED'
+                ? 'var(--warning)'
+                : 'var(--text-muted)',
+          }"
+          :title="`Status: ${(currentVm.state || 'STOPPED').toLowerCase()}`"
+        />
+        <span class="ribbon-name">{{ currentVm.vmName }}</span>
         <span
           v-if="currentVm.state === 'RUNNING' && currentVm.guestCpuPercent !== undefined"
-          class="ribbon-metric mono font-xs"
+          class="ribbon-metric font-xs"
         >
           CPU: {{ currentVm.guestCpuPercent.toFixed(1) }}%
         </span>
         <span
           v-if="currentVm.state === 'RUNNING' && currentVm.guestMemoryUsedMib"
-          class="ribbon-metric mono font-xs"
+          class="ribbon-metric font-xs"
         >
           RAM: {{ currentVm.guestMemoryUsedMib >= 1024 ? (currentVm.guestMemoryUsedMib / 1024).toFixed(2) + ' GiB' : currentVm.guestMemoryUsedMib + ' MiB' }}
         </span>
@@ -558,24 +681,40 @@ function popoutHostTerminal() {
 
       <!-- LXC Identity -->
       <template v-else-if="currentLxc">
-        <MdiIcon :path="mdiCubeOutline" size="18" style="color: var(--accent-secondary)" />
-        <span class="ribbon-name">{{ currentLxc.containerName || currentLxc.name.replace('lxcContainers/', '') }}</span>
-        <span class="ribbon-type-tag mono">LXC</span>
-        <span
-          class="badge mono font-xs"
-          :class="currentLxc.state === 'RUNNING' ? 'badge-success' : 'badge-neutral'"
+        <button
+          class="btn btn-xs btn-ghost ribbon-back-btn"
+          title="Back to LXC Containers"
+          @click="selectResource('node:lxc'); handleNav('lxc')"
         >
-          {{ currentLxc.state }}
-        </span>
+          <MdiIcon :path="mdiArrowLeft" size="15" />
+        </button>
+        <MdiIcon :path="mdiCubeOutline" size="16" style="color: var(--accent-secondary)" />
+        <MdiIcon
+          v-if="currentLxc.state === 'FROZEN'"
+          :path="mdiSnowflake"
+          size="11"
+          style="color: var(--info)"
+          title="Status: frozen"
+        />
+        <MdiIcon
+          v-else
+          :path="mdiCircle"
+          size="9"
+          :style="{
+            color: currentLxc.state === 'RUNNING' ? 'var(--success)' : 'var(--text-muted)',
+          }"
+          :title="`Status: ${(currentLxc.state || 'STOPPED').toLowerCase()}`"
+        />
+        <span class="ribbon-name">{{ currentLxc.containerName || currentLxc.name.replace('lxcContainers/', '') }}</span>
         <span
           v-if="currentLxc.state === 'RUNNING' && currentLxc.cpuPercent !== undefined"
-          class="ribbon-metric mono font-xs"
+          class="ribbon-metric font-xs"
         >
           CPU: {{ currentLxc.cpuPercent.toFixed(1) }}%
         </span>
         <span
           v-if="currentLxc.state === 'RUNNING' && currentLxc.memoryUsedMib"
-          class="ribbon-metric mono font-xs"
+          class="ribbon-metric font-xs"
         >
           RAM: {{ currentLxc.memoryUsedMib >= 1024 ? (currentLxc.memoryUsedMib / 1024).toFixed(2) + ' GiB' : currentLxc.memoryUsedMib + ' MiB' }}
         </span>
@@ -583,236 +722,546 @@ function popoutHostTerminal() {
 
       <!-- Pool Identity -->
       <template v-else-if="currentPool">
-        <MdiIcon :path="mdiDatabase" size="18" style="color: var(--warning-text)" />
-        <span class="ribbon-name">{{ currentPool.poolName || currentPool.name }}</span>
-        <span class="ribbon-type-tag mono">ZFS POOL</span>
-        <span
-          class="badge mono font-xs"
-          :class="currentPool.state === 'ONLINE' ? 'badge-success' : 'badge-danger'"
+        <button
+          class="btn btn-xs btn-ghost ribbon-back-btn"
+          title="Back to Storage Pools"
+          @click="selectResource('node:pools'); handleNav('storage-pools')"
         >
-          {{ currentPool.state || 'ONLINE' }}
-        </span>
+          <MdiIcon :path="mdiArrowLeft" size="15" />
+        </button>
+        <MdiIcon :path="mdiDatabase" size="16" style="color: var(--warning-text)" />
+        <MdiIcon
+          :path="mdiCircle"
+          size="9"
+          :style="{
+            color: currentPool.state === 'ONLINE' ? 'var(--success)' : 'var(--danger)',
+          }"
+          :title="`Status: ${(currentPool.state || 'ONLINE').toLowerCase()}`"
+        />
+        <span class="ribbon-name">{{ currentPool.poolName || currentPool.name }}</span>
       </template>
 
       <!-- Docker Identity -->
       <template v-else-if="currentDocker">
-        <MdiIcon :path="mdiLayers" size="18" style="color: var(--info-text)" />
-        <span class="ribbon-name">{{ currentDocker.title || currentDocker.appId || currentDocker.name.replace(/^dockerApps\//, '') }}</span>
-        <span class="ribbon-type-tag mono">APP</span>
-        <span
-          class="badge mono font-xs"
-          :class="
-            currentDocker.state === 'RUNNING'
-              ? 'badge-success'
-              : currentDocker.state === 'PARTIALLY_RUNNING'
-              ? 'badge-warning'
-              : 'badge-neutral'
-          "
+        <button
+          class="btn btn-xs btn-ghost ribbon-back-btn"
+          title="Back to Docker Applications"
+          @click="selectResource('node:docker'); handleNav('docker')"
         >
-          {{ currentDocker.state || 'STOPPED' }}
-        </span>
+          <MdiIcon :path="mdiArrowLeft" size="15" />
+        </button>
+        <MdiIcon :path="mdiLayers" size="16" style="color: var(--info-text)" />
+        <MdiIcon
+          :path="mdiCircle"
+          size="9"
+          :style="{
+            color:
+              currentDocker.state === 'RUNNING'
+                ? 'var(--success)'
+                : currentDocker.state === 'PARTIALLY_RUNNING'
+                ? 'var(--warning)'
+                : 'var(--text-muted)',
+          }"
+          :title="`Status: ${(currentDocker.state || 'STOPPED').toLowerCase()}`"
+        />
+        <span class="ribbon-name">{{ currentDocker.title || currentDocker.appId || currentDocker.name.replace(/^dockerApps\//, '') }}</span>
         <span
           v-if="currentDocker.state === 'RUNNING' && currentDocker.totalCpuPercent !== undefined"
-          class="ribbon-metric mono font-xs"
+          class="ribbon-metric font-xs"
         >
           CPU: {{ currentDocker.totalCpuPercent.toFixed(1) }}%
         </span>
         <span
           v-if="currentDocker.state === 'RUNNING' && currentDocker.totalMemoryMib"
-          class="ribbon-metric mono font-xs"
+          class="ribbon-metric font-xs"
         >
           RAM: {{ currentDocker.totalMemoryMib >= 1024 ? (currentDocker.totalMemoryMib / 1024).toFixed(2) + ' GiB' : currentDocker.totalMemoryMib + ' MiB' }}
         </span>
       </template>
 
-      <!-- Node Default Identity -->
+      <!-- Collection / Node Section Identity -->
+      <template v-else-if="nasState.activeTab === 'kvm'">
+        <MdiIcon :path="mdiMonitor" size="16" style="color: var(--accent-primary)" />
+        <span class="ribbon-name">Virtual Machines</span>
+      </template>
+      <template v-else-if="nasState.activeTab === 'lxc'">
+        <MdiIcon :path="mdiCubeOutline" size="16" style="color: var(--accent-secondary)" />
+        <span class="ribbon-name">LXC Containers</span>
+      </template>
+      <template v-else-if="nasState.activeTab === 'docker'">
+        <MdiIcon :path="mdiLayers" size="16" style="color: var(--info-text)" />
+        <span class="ribbon-name">Applications</span>
+      </template>
+      <template
+        v-else-if="
+          nasState.activeTab === 'storage-pools' ||
+          nasState.activeTab === 'storage-disks' ||
+          nasState.activeTab === 'storage-datasets' ||
+          nasState.activeTab === 'storage-volumes' ||
+          nasState.activeTab === 'zfs'
+        "
+      >
+        <MdiIcon :path="mdiDatabase" size="16" style="color: var(--warning-text)" />
+        <span class="ribbon-name">Storage</span>
+      </template>
+      <template
+        v-else-if="
+          nasState.activeTab === 'shares' ||
+          nasState.activeTab === 'shares-cifs' ||
+          nasState.activeTab === 'shares-webdav'
+        "
+      >
+        <MdiIcon :path="mdiFolderNetwork" size="16" style="color: var(--accent-primary)" />
+        <span class="ribbon-name">Network Shares</span>
+      </template>
+      <template v-else-if="nasState.activeTab === 'identity'">
+        <MdiIcon :path="mdiAccountGroup" size="16" style="color: var(--accent-secondary)" />
+        <span class="ribbon-name">Users & Groups</span>
+      </template>
       <template v-else>
-        <MdiIcon :path="mdiServer" size="18" style="color: var(--accent-primary)" />
+        <MdiIcon :path="mdiServer" size="16" style="color: var(--accent-primary)" />
+        <MdiIcon :path="mdiCircle" size="9" style="color: var(--success)" title="Node Online" />
         <span class="ribbon-name">{{ nasState.systemTelemetry?.host?.hostname || 'nas01' }}</span>
-        <span class="ribbon-type-tag mono">NODE</span>
-        <span class="badge badge-success mono font-xs">ONLINE</span>
-        <span v-if="nasState.systemTelemetry?.host?.uptimeSeconds" class="ribbon-metric mono font-xs">
+        <span v-if="nasState.systemTelemetry?.host?.uptimeSeconds" class="ribbon-metric font-xs">
           Uptime: {{ Math.floor(nasState.systemTelemetry.host.uptimeSeconds / 86400) }}d {{ Math.floor((nasState.systemTelemetry.host.uptimeSeconds % 86400) / 3600) }}h
         </span>
       </template>
     </div>
 
-    <!-- Ribbon Right: Contextual Action Buttons -->
+    <!-- Ribbon Center: Unified Component & Section Tabs -->
+    <div class="ribbon-tabs">
+      <!-- VM Subtabs -->
+      <template v-if="currentVm">
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.vmSubTab === 'summary' }"
+          @click="nasState.vmSubTab = 'summary'"
+        >
+          <MdiIcon :path="mdiInformationOutline" size="14" />
+          <span>Summary</span>
+        </button>
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.vmSubTab === 'console' }"
+          @click="nasState.vmSubTab = 'console'"
+        >
+          <MdiIcon :path="mdiConsole" size="14" />
+          <span>Console</span>
+        </button>
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.vmSubTab === 'configuration' || nasState.vmSubTab === 'hardware' }"
+          @click="nasState.vmSubTab = 'configuration'"
+        >
+          <MdiIcon :path="mdiCogOutline" size="14" />
+          <span>Configuration</span>
+        </button>
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.vmSubTab === 'snapshots' }"
+          @click="nasState.vmSubTab = 'snapshots'"
+        >
+          <MdiIcon :path="mdiCamera" size="14" />
+          <span>Snapshots</span>
+        </button>
+      </template>
+
+      <!-- LXC Subtabs -->
+      <template v-else-if="currentLxc">
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.lxcSubTab === 'summary' }"
+          @click="nasState.lxcSubTab = 'summary'"
+        >
+          <MdiIcon :path="mdiInformationOutline" size="14" />
+          <span>Summary</span>
+        </button>
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.lxcSubTab === 'console' || nasState.lxcSubTab === 'terminal' }"
+          @click="nasState.lxcSubTab = 'console'"
+        >
+          <MdiIcon :path="mdiConsole" size="14" />
+          <span>Console</span>
+        </button>
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.lxcSubTab === 'configuration' || nasState.lxcSubTab === 'mounts' }"
+          @click="nasState.lxcSubTab = 'configuration'"
+        >
+          <MdiIcon :path="mdiCogOutline" size="14" />
+          <span>Configuration</span>
+        </button>
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.lxcSubTab === 'logs' }"
+          @click="nasState.lxcSubTab = 'logs'"
+        >
+          <MdiIcon :path="mdiFileDocumentOutline" size="14" />
+          <span>Logs</span>
+        </button>
+      </template>
+
+      <!-- Docker App Subtabs -->
+      <template v-else-if="currentDocker">
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.dockerSubTab === 'summary' }"
+          @click="nasState.dockerSubTab = 'summary'"
+        >
+          <MdiIcon :path="mdiInformationOutline" size="14" />
+          <span>Summary</span>
+        </button>
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.dockerSubTab === 'console' }"
+          @click="nasState.dockerSubTab = 'console'"
+        >
+          <MdiIcon :path="mdiConsole" size="14" />
+          <span>Console</span>
+        </button>
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.dockerSubTab === 'configuration' || nasState.dockerSubTab === 'compose' }"
+          @click="nasState.dockerSubTab = 'configuration'"
+        >
+          <MdiIcon :path="mdiCogOutline" size="14" />
+          <span>Configuration</span>
+        </button>
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.dockerSubTab === 'containers' }"
+          @click="nasState.dockerSubTab = 'containers'"
+        >
+          <MdiIcon :path="mdiLayers" size="14" />
+          <span>Containers</span>
+        </button>
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.dockerSubTab === 'logs' }"
+          @click="nasState.dockerSubTab = 'logs'"
+        >
+          <MdiIcon :path="mdiFileDocumentOutline" size="14" />
+          <span>Logs</span>
+        </button>
+      </template>
+
+      <!-- Pool Subtabs -->
+      <template v-else-if="currentPool">
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.poolSubTab === 'summary' }"
+          @click="nasState.poolSubTab = 'summary'"
+        >
+          <MdiIcon :path="mdiInformationOutline" size="14" />
+          <span>Summary</span>
+        </button>
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.poolSubTab === 'datasets' }"
+          @click="nasState.poolSubTab = 'datasets'"
+        >
+          <MdiIcon :path="mdiFolderOutline" size="14" />
+          <span>Datasets</span>
+        </button>
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.poolSubTab === 'volumes' }"
+          @click="nasState.poolSubTab = 'volumes'"
+        >
+          <MdiIcon :path="mdiHarddisk" size="14" />
+          <span>Volumes</span>
+        </button>
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.poolSubTab === 'topology' }"
+          @click="nasState.poolSubTab = 'topology'"
+        >
+          <MdiIcon :path="mdiLayers" size="14" />
+          <span>Topology</span>
+        </button>
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.poolSubTab === 'config' }"
+          @click="nasState.poolSubTab = 'config'"
+        >
+          <MdiIcon :path="mdiCogOutline" size="14" />
+          <span>Configuration</span>
+        </button>
+      </template>
+
+      <!-- Storage Collection Subtabs -->
+      <template
+        v-else-if="
+          nasState.activeTab === 'storage-pools' ||
+          nasState.activeTab === 'storage-disks' ||
+          nasState.activeTab === 'storage-datasets' ||
+          nasState.activeTab === 'storage-volumes' ||
+          nasState.activeTab === 'zfs'
+        "
+      >
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.activeTab === 'storage-pools' || nasState.activeTab === 'zfs' }"
+          @click="handleNav('storage-pools')"
+        >
+          <span>Pools ({{ nasState.pools.length }})</span>
+        </button>
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.activeTab === 'storage-disks' }"
+          @click="handleNav('storage-disks')"
+        >
+          <span>Disks ({{ nasState.disks.length }})</span>
+        </button>
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.activeTab === 'storage-datasets' }"
+          @click="handleNav('storage-datasets')"
+        >
+          <span>Datasets</span>
+        </button>
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.activeTab === 'storage-volumes' }"
+          @click="handleNav('storage-volumes')"
+        >
+          <span>Volumes</span>
+        </button>
+      </template>
+
+      <!-- Shares Collection Subtabs -->
+      <template
+        v-else-if="
+          nasState.activeTab === 'shares' ||
+          nasState.activeTab === 'shares-cifs' ||
+          nasState.activeTab === 'shares-webdav'
+        "
+      >
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.activeTab === 'shares' || nasState.activeTab === 'shares-cifs' }"
+          @click="handleNav('shares-cifs')"
+        >
+          <span>SMB / CIFS ({{ nasState.cifsShares.length }})</span>
+        </button>
+        <button
+          class="ribbon-tab-btn"
+          :class="{ active: nasState.activeTab === 'shares-webdav' }"
+          @click="handleNav('shares-webdav')"
+        >
+          <span>WebDAV ({{ nasState.webdavShares.length }})</span>
+        </button>
+      </template>
+    </div>
+
+    <!-- Ribbon Right: Unified Contextual Action Buttons (Icon-Only with Tooltips) -->
     <div class="ribbon-actions">
       <!-- VM Action Buttons -->
       <template v-if="currentVm">
         <button
-          v-if="currentVm.state !== 'RUNNING'"
-          class="btn btn-sm btn-success"
+          v-if="currentVm.state === 'PAUSED'"
+          class="btn btn-sm btn-icon btn-success"
+          :disabled="isBusy"
+          title="Resume Virtual Machine"
+          aria-label="Resume"
+          @click="resumeVm"
+        >
+          <MdiIcon :path="mdiPlay" size="15" />
+        </button>
+        <button
+          v-else-if="currentVm.state !== 'RUNNING'"
+          class="btn btn-sm btn-icon btn-success"
           :disabled="isBusy"
           title="Start Virtual Machine"
+          aria-label="Start"
           @click="startVm"
         >
-          <MdiIcon :path="mdiPlay" size="14" />
-          <span>Start</span>
+          <MdiIcon :path="mdiPlay" size="15" />
         </button>
 
         <button
           v-if="currentVm.state === 'RUNNING'"
-          class="btn btn-sm btn-secondary"
+          class="btn btn-sm btn-icon btn-secondary"
           :disabled="isBusy"
-          title="Send ACPI Shutdown Signal"
+          title="Pause Virtual Machine"
+          aria-label="Pause"
+          @click="pauseVm"
+        >
+          <MdiIcon :path="mdiPause" size="15" />
+        </button>
+
+        <button
+          v-if="currentVm.state === 'RUNNING'"
+          class="btn btn-sm btn-icon btn-secondary"
+          :disabled="isBusy"
+          title="Shutdown (Send ACPI Signal)"
+          aria-label="Shutdown"
           @click="shutdownVm"
         >
-          <MdiIcon :path="mdiPower" size="14" />
-          <span>Shutdown</span>
+          <MdiIcon :path="mdiPower" size="15" />
         </button>
 
         <button
           v-if="currentVm.state === 'RUNNING'"
-          class="btn btn-sm btn-danger"
+          class="btn btn-sm btn-icon btn-secondary"
           :disabled="isBusy"
-          title="Force Power Off (Hard Stop)"
+          title="Stop (Force Power Off)"
+          aria-label="Stop"
           @click="forceStopVm"
         >
-          <MdiIcon :path="mdiStop" size="14" />
-          <span>Stop</span>
+          <MdiIcon :path="mdiStop" size="15" />
         </button>
 
         <button
           v-if="currentVm.state === 'RUNNING'"
-          class="btn btn-sm btn-secondary"
+          class="btn btn-sm btn-icon btn-secondary"
           :disabled="isBusy"
-          title="Reboot VM"
+          title="Reboot Virtual Machine"
+          aria-label="Reboot"
           @click="rebootVm"
         >
-          <MdiIcon :path="mdiRestart" size="14" />
-          <span>Reboot</span>
+          <MdiIcon :path="mdiRestart" size="15" />
         </button>
 
-        <!-- Pop-out Console -->
         <button
-          class="btn btn-sm btn-primary"
-          title="Open Live noVNC Console in New Dedicated Window"
+          class="btn btn-sm btn-icon btn-secondary"
+          :disabled="isBusy"
+          title="Clone Virtual Machine"
+          aria-label="Clone"
+          @click="openCloneVm"
+        >
+          <MdiIcon :path="mdiContentCopy" size="15" />
+        </button>
+
+        <button
+          class="btn btn-sm btn-icon btn-secondary"
+          title="Console Pop-out (Open Live noVNC in New Window)"
+          aria-label="Console Pop-out"
           @click="popoutVmConsole"
         >
-          <MdiIcon :path="mdiOpenInNew" size="14" />
-          <span>Console Pop-out</span>
+          <MdiIcon :path="mdiOpenInNew" size="15" />
         </button>
 
         <button
-          class="btn btn-sm btn-danger"
+          class="btn btn-sm btn-icon btn-danger"
           :disabled="isBusy"
           title="Delete Virtual Machine"
+          aria-label="Delete"
           @click="deleteVm"
         >
-          <MdiIcon :path="mdiTrashCanOutline" size="14" />
-          <span>Delete</span>
+          <MdiIcon :path="mdiTrashCanOutline" size="15" />
         </button>
       </template>
 
       <!-- LXC Action Buttons -->
       <template v-else-if="currentLxc">
         <button
-          v-if="currentLxc.state !== 'RUNNING'"
-          class="btn btn-sm btn-success"
+          v-if="currentLxc.state !== 'RUNNING' && currentLxc.state !== 'FROZEN'"
+          class="btn btn-sm btn-icon btn-success"
           :disabled="isBusy"
           title="Start LXC Container"
+          aria-label="Start"
           @click="startLxc"
         >
-          <MdiIcon :path="mdiPlay" size="14" />
-          <span>Start</span>
-        </button>
-
-        <button
-          v-if="currentLxc.state === 'RUNNING'"
-          class="btn btn-sm btn-secondary"
-          :disabled="isBusy"
-          title="Stop LXC Container"
-          @click="stopLxc"
-        >
-          <MdiIcon :path="mdiStop" size="14" />
-          <span>Stop</span>
-        </button>
-
-        <button
-          v-if="currentLxc.state === 'RUNNING'"
-          class="btn btn-sm btn-secondary"
-          :disabled="isBusy"
-          title="Restart Container"
-          @click="restartLxc"
-        >
-          <MdiIcon :path="mdiRestart" size="14" />
-          <span>Reboot</span>
+          <MdiIcon :path="mdiPlay" size="15" />
         </button>
 
         <button
           v-if="currentLxc.state === 'RUNNING' || currentLxc.state === 'FROZEN'"
-          class="btn btn-sm btn-secondary"
+          class="btn btn-sm btn-icon btn-secondary"
           :disabled="isBusy"
           :title="currentLxc.state === 'FROZEN' ? 'Unfreeze Container' : 'Freeze Container'"
+          :aria-label="currentLxc.state === 'FROZEN' ? 'Unfreeze' : 'Freeze'"
           @click="toggleFreezeLxc"
         >
-          <MdiIcon :path="mdiSnowflake" size="14" />
-          <span>{{ currentLxc.state === 'FROZEN' ? 'Unfreeze' : 'Freeze' }}</span>
+          <MdiIcon :path="currentLxc.state === 'FROZEN' ? mdiPlay : mdiPause" size="15" />
+        </button>
+
+        <button
+          v-if="currentLxc.state === 'RUNNING' || currentLxc.state === 'FROZEN'"
+          class="btn btn-sm btn-icon btn-secondary"
+          :disabled="isBusy"
+          title="Stop LXC Container"
+          aria-label="Stop"
+          @click="stopLxc"
+        >
+          <MdiIcon :path="mdiStop" size="15" />
         </button>
 
         <button
           v-if="currentLxc.state === 'RUNNING'"
-          class="btn btn-sm btn-primary"
-          title="Open Interactive Shell Terminal"
-          @click="emit('open-lxc-terminal', currentLxc)"
+          class="btn btn-sm btn-icon btn-secondary"
+          :disabled="isBusy"
+          title="Reboot LXC Container"
+          aria-label="Reboot"
+          @click="restartLxc"
         >
-          <MdiIcon :path="mdiConsole" size="14" />
-          <span>Terminal</span>
+          <MdiIcon :path="mdiRestart" size="15" />
         </button>
 
         <button
-          class="btn btn-sm btn-danger"
+          v-if="currentLxc.state === 'RUNNING'"
+          class="btn btn-sm btn-icon btn-secondary"
+          title="Console Pop-out (Open Detached Shell Terminal Window)"
+          aria-label="Console Pop-out"
+          @click="popoutLxcTerminal"
+        >
+          <MdiIcon :path="mdiOpenInNew" size="15" />
+        </button>
+
+        <button
+          class="btn btn-sm btn-icon btn-danger"
           :disabled="isBusy"
           title="Delete LXC Container"
+          aria-label="Delete"
           @click="deleteLxc"
         >
-          <MdiIcon :path="mdiTrashCanOutline" size="14" />
-          <span>Delete</span>
+          <MdiIcon :path="mdiTrashCanOutline" size="15" />
         </button>
       </template>
 
       <!-- Storage Pool Action Buttons -->
       <template v-else-if="currentPool">
         <button
-          class="btn btn-sm btn-secondary"
+          class="btn btn-sm btn-icon btn-secondary"
           :disabled="isBusy"
-          title="Start ZFS Pool Data Integrity Scrub"
+          title="Scrub Pool (Start Data Integrity Scrub)"
+          aria-label="Scrub"
           @click="scrubPool"
         >
-          <MdiIcon :path="mdiDatabaseSync" size="14" />
-          <span>Scrub</span>
+          <MdiIcon :path="mdiDatabaseSync" size="15" />
         </button>
 
         <button
           v-if="!isMainPool"
-          class="btn btn-sm btn-secondary"
+          class="btn btn-sm btn-icon btn-secondary"
           :disabled="isBusy"
-          title="Designate this pool as the system Main Pool"
+          title="Set as Main Pool"
+          aria-label="Set Main Pool"
           @click="setMainPool"
         >
-          <MdiIcon :path="mdiDatabaseCheck" size="14" />
-          <span>Set Main Pool</span>
+          <MdiIcon :path="mdiDatabaseCheck" size="15" />
         </button>
 
         <button
-          class="btn btn-sm btn-secondary"
+          class="btn btn-sm btn-icon btn-secondary"
           :disabled="isBusy"
-          title="Safely unmount and export pool"
+          title="Export Pool (Safely Unmount and Export)"
+          aria-label="Export"
           @click="exportPool"
         >
-          <span>Export</span>
+          <MdiIcon :path="mdiExport" size="15" />
         </button>
 
         <button
-          class="btn btn-sm btn-danger"
+          class="btn btn-sm btn-icon btn-danger"
           :disabled="isBusy"
-          title="Permanently destroy pool"
+          title="Destroy Pool Permanently"
+          aria-label="Destroy"
           @click="destroyPool"
         >
-          <MdiIcon :path="mdiTrashCanOutline" size="14" />
-          <span>Destroy</span>
+          <MdiIcon :path="mdiTrashCanOutline" size="15" />
         </button>
       </template>
 
@@ -820,35 +1269,35 @@ function popoutHostTerminal() {
       <template v-else-if="currentDocker">
         <button
           v-if="currentDocker.state !== 'RUNNING'"
-          class="btn btn-sm btn-success"
+          class="btn btn-sm btn-icon btn-success"
           :disabled="isBusy"
           title="Start Application Stack"
+          aria-label="Start"
           @click="startDocker"
         >
-          <MdiIcon :path="mdiPlay" size="14" />
-          <span>Start</span>
+          <MdiIcon :path="mdiPlay" size="15" />
         </button>
 
         <button
           v-if="currentDocker.state === 'RUNNING' || currentDocker.state === 'PARTIALLY_RUNNING'"
-          class="btn btn-sm btn-secondary"
+          class="btn btn-sm btn-icon btn-secondary"
           :disabled="isBusy"
           title="Stop Application Stack"
+          aria-label="Stop"
           @click="stopDocker"
         >
-          <MdiIcon :path="mdiStop" size="14" />
-          <span>Stop</span>
+          <MdiIcon :path="mdiStop" size="15" />
         </button>
 
         <button
           v-if="currentDocker.state === 'RUNNING' || currentDocker.state === 'PARTIALLY_RUNNING'"
-          class="btn btn-sm btn-secondary"
+          class="btn btn-sm btn-icon btn-secondary"
           :disabled="isBusy"
           title="Restart Application Stack"
+          aria-label="Restart"
           @click="restartDocker"
         >
-          <MdiIcon :path="mdiRestart" size="14" />
-          <span>Restart</span>
+          <MdiIcon :path="mdiRestart" size="15" />
         </button>
 
         <a
@@ -856,86 +1305,74 @@ function popoutHostTerminal() {
           :href="currentDocker.webUiUrl"
           target="_blank"
           rel="noopener noreferrer"
-          class="btn btn-sm btn-primary"
+          class="btn btn-sm btn-icon btn-primary"
           title="Open Web UI Portal"
+          aria-label="Web UI"
         >
-          <MdiIcon :path="mdiOpenInNew" size="14" />
-          <span>Web UI</span>
+          <MdiIcon :path="mdiOpenInNew" size="15" />
         </a>
 
         <button
-          class="btn btn-sm btn-secondary"
+          class="btn btn-sm btn-icon btn-secondary"
           :disabled="isBusy"
-          title="Pull latest images and update app"
+          title="Upgrade Application (Pull Latest Images & Redeploy)"
+          aria-label="Upgrade"
           @click="upgradeDocker"
         >
-          <MdiIcon :path="mdiUpdate" size="14" />
-          <span>Upgrade</span>
+          <MdiIcon :path="mdiUpdate" size="15" />
         </button>
 
         <button
-          class="btn btn-sm btn-danger"
+          class="btn btn-sm btn-icon btn-danger"
           :disabled="isBusy"
           title="Delete Application Stack"
+          aria-label="Delete"
           @click="deleteDocker"
         >
-          <MdiIcon :path="mdiTrashCanOutline" size="14" />
-          <span>Delete</span>
+          <MdiIcon :path="mdiTrashCanOutline" size="15" />
         </button>
       </template>
+    </div>
 
-      <!-- Node / Default Action Buttons -->
-      <template v-else>
-        <button
-          class="btn btn-sm btn-secondary"
-          title="Open Host Shell Terminal"
-          @click="emit('open-host-terminal')"
-        >
-          <MdiIcon :path="mdiConsole" size="14" />
-          <span class="hide-mobile">Shell</span>
-        </button>
-
-        <button
-          class="btn btn-sm btn-secondary"
-          title="Open Detached Host Terminal Window"
-          @click="popoutHostTerminal"
-        >
-          <MdiIcon :path="mdiOpenInNew" size="14" />
-          <span class="hide-mobile">Shell Pop-out</span>
-        </button>
-
-        <button
-          class="btn btn-sm btn-secondary"
-          title="Inspect Host Specs & Hardware"
-          @click="emit('open-system-details')"
-        >
-          <span class="hide-mobile">Host Specs</span>
-        </button>
-
-        <button
-          class="btn btn-sm btn-secondary"
-          title="Inspect Host System Prerequisites"
-          @click="emit('open-prerequisites')"
-        >
-          <span class="hide-mobile">Prerequisites</span>
-        </button>
-
-        <button
-          class="btn btn-sm btn-ghost"
-          :disabled="nasState.loading"
-          title="Refresh All Telemetry"
-          @click="refreshAllData"
-        >
-          <MdiIcon :path="mdiRefresh" size="14" :class="{ 'spin-icon': nasState.loading }" />
-        </button>
-      </template>
+    <!-- Clone VM Modal -->
+    <div v-if="showCloneVmModal && currentVm" class="modal-overlay" @click.self="showCloneVmModal = false">
+      <div class="modal-container" style="max-width: 460px">
+        <div class="modal-header">
+          <h3 class="modal-title">Clone VM: {{ currentVm.vmName }}</h3>
+          <button class="btn btn-xs btn-ghost" @click="showCloneVmModal = false">
+            <MdiIcon :path="mdiClose" size="16" />
+          </button>
+        </div>
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; padding: 16px 20px">
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary)">Target VM Name</label>
+            <input
+              v-model="cloneForm.targetVmName"
+              type="text"
+              class="input"
+              placeholder="e.g. debian-server-clone"
+              @input="cloneForm.targetVmId = toZfsSafeSlug(cloneForm.targetVmName)"
+            />
+          </div>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer">
+            <input v-model="cloneForm.fullClone" type="checkbox" />
+            <span>Full Clone (independent copy of virtual disks)</span>
+          </label>
+        </div>
+        <div class="modal-footer" style="padding: 12px 20px; display: flex; justify-content: flex-end; gap: 8px">
+          <button class="btn btn-sm btn-secondary" @click="showCloneVmModal = false">Cancel</button>
+          <button class="btn btn-sm btn-primary" :disabled="!cloneForm.targetVmName.trim() || isBusy" @click="submitCloneVm">
+            Clone VM
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
 .action-ribbon {
-  height: 42px;
+  min-height: 44px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
@@ -943,7 +1380,8 @@ function popoutHostTerminal() {
   justify-content: space-between;
   padding: 0 16px;
   flex-shrink: 0;
-  gap: 12px;
+  gap: 14px;
+  flex-wrap: wrap;
 }
 
 .ribbon-identity {
@@ -951,7 +1389,11 @@ function popoutHostTerminal() {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  overflow: hidden;
+}
+
+.ribbon-back-btn {
+  padding: 3px 5px;
+  color: var(--text-secondary);
 }
 
 .ribbon-name {
@@ -963,21 +1405,50 @@ function popoutHostTerminal() {
   text-overflow: ellipsis;
 }
 
-.ribbon-type-tag {
-  font-size: 10px;
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-subtle);
-  border-radius: 3px;
-  padding: 1px 5px;
-}
-
 .ribbon-metric {
   color: var(--text-secondary);
   background: var(--bg-base);
   border: 1px solid var(--border-subtle);
-  border-radius: 3px;
-  padding: 1px 6px;
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ribbon-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  flex: 1;
+}
+
+.ribbon-tab-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 5px 11px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+}
+
+.ribbon-tab-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.ribbon-tab-btn.active {
+  background: var(--accent-bg-subtle);
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  font-weight: 600;
 }
 
 .ribbon-actions {
@@ -985,9 +1456,10 @@ function popoutHostTerminal() {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .font-xs {
-  font-size: 10.5px;
+  font-size: 11px;
 }
 </style>

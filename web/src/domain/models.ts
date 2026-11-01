@@ -408,6 +408,10 @@ export interface VirtualMachine {
   guestOsName?: string;
   guestCpuPercent?: number;
   guestMemoryUsedMib?: number;
+  netRxRate?: number;
+  netTxRate?: number;
+  netRxBytes?: number;
+  netTxBytes?: number;
 
   // Lifecycle, Boot Order & Consoles
   startupDelaySeconds?: number;
@@ -658,6 +662,10 @@ export interface LxcContainer {
   networkBridge?: string;
   cpuPercent?: number;
   memoryUsedMib?: number;
+  netRxRate?: number;
+  netTxRate?: number;
+  netRxBytes?: number;
+  netTxBytes?: number;
   installRecipe?: string;
   installScriptUrl?: string;
   templateDownloadUrl?: string;
@@ -1188,3 +1196,60 @@ services:
 `,
   },
 ];
+
+// ---------------------------------------------------------------------------
+// Native Scheduled Tasks / CronJobs (`cronJobs/{cron_job}`)
+// ---------------------------------------------------------------------------
+
+export interface CronVolumeMount {
+  hostPath: string;
+  mountPath: string;
+  readOnly?: boolean;
+}
+
+export interface CronEnvVar {
+  name: string;
+  value: string;
+}
+
+export interface CronJobRun {
+  runId: string;
+  jobName: string;
+  startTime: string;
+  endTime?: string;
+  duration?: string;
+  status: string; // 'RUNNING' | 'SUCCESS' | 'FAILED'
+  exitCode: number;
+  error?: string;
+  logSnippet?: string;
+}
+
+export interface CronJob {
+  name: string; // cronJobs/{cron_job}
+  id: string;
+  title: string;
+  description: string;
+  schedule: string; // e.g. "0 23 * * *"
+  image: string;    // e.g. "rclone/rclone:1"
+  command?: string[];
+  args?: string[];
+  env?: CronEnvVar[];
+  volumes?: CronVolumeMount[];
+  enabled: boolean;
+  concurrencyPolicy: 'Forbid' | 'Allow' | 'Replace' | string;
+  restartPolicy?: 'Never' | 'OnFailure' | string;
+  timeoutSeconds?: number;
+  state: 'IDLE' | 'RUNNING' | 'ERROR' | string;
+
+  lastScheduleTime?: string;
+  lastSuccessfulTime?: string;
+  nextScheduleTime?: string;
+
+  lastRunDuration?: string;
+  lastRunStatus?: string;
+  lastRunExitCode?: number;
+  lastRunError?: string;
+
+  createTime?: string;
+  updateTime?: string;
+}

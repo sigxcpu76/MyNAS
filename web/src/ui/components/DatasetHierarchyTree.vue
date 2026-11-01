@@ -54,7 +54,7 @@ const props = withDefaults(
     selectablePoolRoot: true,
     title: 'ZFS Dataset Hierarchy',
     maxHeight: '400px',
-    autoExpandAll: true,
+    autoExpandAll: false,
   }
 );
 
@@ -241,7 +241,7 @@ const hierarchyTree = computed<DatasetTreeNode[]>(() => {
   return rootNodes;
 });
 
-// Watch hierarchyTree to initialize expansion
+// Watch hierarchyTree to initialize expansion (collapsed by default unless autoExpandAll is explicitly set)
 watch(
   hierarchyTree,
   (tree) => {
@@ -256,10 +256,6 @@ watch(
         }
       }
       addIds(tree);
-    } else {
-      for (const root of tree) {
-        set.add(root.id);
-      }
     }
     expandedNodeIds.value = set;
   },

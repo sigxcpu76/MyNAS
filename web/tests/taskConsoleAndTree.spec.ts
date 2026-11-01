@@ -144,9 +144,12 @@ describe('Proxmox-Style Task Console & Resource System', () => {
 
     const wrapper = mount(ActionRibbon);
     expect(wrapper.text()).toContain('debian-server');
-    expect(wrapper.text()).toContain('RUNNING');
-    expect(wrapper.text()).toContain('Shutdown');
-    expect(wrapper.text()).toContain('Stop');
-    expect(wrapper.text()).toContain('Console Pop-out');
+    expect(wrapper.text()).toContain('Summary');
+    expect(wrapper.text()).toContain('Console');
+    expect(wrapper.text()).toContain('Configuration');
+    expect(wrapper.text()).toContain('Snapshots');
+    expect(wrapper.find('[aria-label="Shutdown"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="Stop"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="Console Pop-out"]').exists()).toBe(true);
   });
 });

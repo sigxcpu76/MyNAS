@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import {
   mdiAlertCircle,
   mdiArrowLeft,
   mdiCheckCircle,
+  mdiChevronDoubleDown,
   mdiClose,
   mdiConsole,
   mdiContentCopy,
@@ -23,9 +24,12 @@ import {
   mdiUpdate,
 } from '@mdi/js';
 import MdiIcon from '../components/MdiIcon.vue';
-import CodeMirrorEditor from '../components/CodeMirrorEditor.vue';
+import ComposeFormEditor from '../components/ComposeFormEditor.vue';
+import EmbeddedTerminal from '../components/EmbeddedTerminal.vue';
 import DockerTerminalModal, { type TerminalContainerOption } from '../components/DockerTerminalModal.vue';
+import { useAutoScroll } from '../composables/useAutoScroll';
 import { services } from '../../container';
+import { composeYamlToForm, formToComposeYaml } from '../../domain/composeModel';
 import {
   formatBytes,
   type DockerApp,
@@ -42,7 +46,7 @@ import { confirmDelete } from '../modal';
 const props = withDefaults(
   defineProps<{
     appName: string;
-    activeSubTab?: 'summary' | 'containers' | 'compose' | 'logs';
+    activeSubTab?: 'summary' | 'console' | 'configuration' | 'containers' | 'compose' | 'logs';
   }>(),
   {
     activeSubTab: 'summary',
@@ -51,7 +55,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'back'): void;
-  (e: 'update:activeSubTab', tab: 'summary' | 'containers' | 'compose' | 'logs'): void;
+  (e: 'update:activeSubTab', tab: 'summary' | 'console' | 'configuration' | 'containers' | 'compose' | 'logs'): void;
 }>();
 const isBusy = ref(false);
 
@@ -183,12 +187,18 @@ async function toggleAutostart() {
   if (!app.value || isTogglingAutostart.value) return;
   isTogglingAutostart.value = true;
   try {
-    // In Docker apps, autostart is managed in compose/config
-    const newSetting = !app.value.autoStart;
-    await services.apps.updateApp(app.value.name, app.value.composeYaml, app.value.title);
+    const parsed = composeYamlToForm(app.value.composeYaml || '');
+    const newAutoStart = !app.value.autoStart;
+    parsed.autoStart = newAutoStart;
+    const targetRestart = newAutoStart ? 'unless-stopped' : 'no';
+    for (const s of parsed.services) {
+      s.restart = targetRestart;
+    }
+    const newYaml = formToComposeYaml(parsed);
+    await services.apps.updateApp(app.value.name, newYaml, app.value.title);
     notify(
       'success',
-      `Autostart setting updated for ${app.value.title || cleanAppName.value}`
+      `Autostart ${newAutoStart ? 'enabled' : 'disabled'} for ${app.value.title || cleanAppName.value}`
     );
     await refreshAllData();
   } catch (err: any) {
@@ -218,60 +228,48 @@ function openTerminal(containerId?: string) {
   if (containerId) {
     terminalDefaultContainerId.value = containerId;
   } else {
-    const running = terminalContainerOptions.value.find((c) => c.state === 'RUNNING');
+    const running = terminalContainerOptions.value.find((c) => c.state === 'RUNNING' || c.state === 'running');
     terminalDefaultContainerId.value = running?.id || terminalContainerOptions.value[0]?.id || '';
   }
-  showTerminalModal.value = true;
+  emit('update:activeSubTab', 'console');
+}
+
+const activeConsoleContainerId = computed(() => {
+  if (terminalDefaultContainerId.value) return terminalDefaultContainerId.value;
+  const running = terminalContainerOptions.value.find((c) => c.state === 'RUNNING' || c.state === 'running');
+  return running?.id || terminalContainerOptions.value[0]?.id || '';
+});
+
+function popoutDockerTerminal() {
+  const cid = activeConsoleContainerId.value;
+  if (!cid) return;
+  const url = `/terminal?container=${encodeURIComponent(cid)}`;
+  window.open(
+    url,
+    `docker_terminal_${cid}`,
+    'width=1000,height=650,location=no,toolbar=no,menubar=no,status=no,resizable=yes'
+  );
 }
 
 // -----------------------------------------------------------------------------
-// Compose YAML Editor
+// Compose Configuration & Form/YAML Editor
 // -----------------------------------------------------------------------------
-const isEditMode = ref(false);
-const editableYaml = ref('');
-const isSavingYaml = ref(false);
+const isSavingConfig = ref(false);
 
-watch(
-  app,
-  (a) => {
-    if (a && !isEditMode.value) {
-      editableYaml.value = a.composeYaml || '';
-    }
-  },
-  { immediate: true }
-);
-
-function toggleEditMode() {
-  if (isEditMode.value) {
-    // Cancel edit
-    editableYaml.value = app.value?.composeYaml || '';
-    isEditMode.value = false;
-  } else {
-    editableYaml.value = app.value?.composeYaml || '';
-    isEditMode.value = true;
-  }
-}
-
-async function handleSaveYaml() {
-  if (!app.value || isSavingYaml.value) return;
-  isSavingYaml.value = true;
+async function handleSaveFormConfig(data: { appId: string; title: string; composeYaml: string }) {
+  if (!app.value || isSavingConfig.value) return;
+  isSavingConfig.value = true;
   try {
-    await runTrackedTask(`App "${app.value.title || cleanAppName.value}": Redeploy Compose`, async () => {
-      await services.apps.updateApp(app.value!.name, editableYaml.value, app.value!.title);
+    await runTrackedTask(`App "${data.title || cleanAppName.value}": Update Configuration`, async () => {
+      await services.apps.updateApp(app.value!.name, data.composeYaml, data.title);
     });
-    notify('success', `Saved Compose specification and re-deployed stack`);
-    isEditMode.value = false;
+    notify('success', `Configuration saved and stack re-deployed`);
     await refreshAllData();
   } catch (err: any) {
-    notify('error', `Failed to update Compose: ${err.message}`);
+    notify('error', `Failed to update configuration: ${err.message}`);
   } finally {
-    isSavingYaml.value = false;
+    isSavingConfig.value = false;
   }
-}
-
-function copyYaml() {
-  navigator.clipboard.writeText(editableYaml.value);
-  notify('info', 'Compose YAML copied to clipboard');
 }
 
 // -----------------------------------------------------------------------------
@@ -281,10 +279,37 @@ const logTail = ref(100);
 const selectedService = ref('');
 const logsContent = ref('');
 const isLoadingLogs = ref(false);
+let logPollTimer: any = null;
 
-async function fetchLogs() {
+const {
+  containerRef: logContainerRef,
+  autoScroll,
+  scrollToBottom,
+  onScroll: onLogScroll,
+  toggleAutoScroll,
+} = useAutoScroll();
+
+function startLogPolling() {
+  stopLogPolling();
+  logPollTimer = setInterval(() => {
+    if (props.activeSubTab === 'logs') {
+      fetchLogs(true);
+    } else {
+      stopLogPolling();
+    }
+  }, 2500);
+}
+
+function stopLogPolling() {
+  if (logPollTimer) {
+    clearInterval(logPollTimer);
+    logPollTimer = null;
+  }
+}
+
+async function fetchLogs(silent = false) {
   if (!app.value) return;
-  isLoadingLogs.value = true;
+  if (!silent) isLoadingLogs.value = true;
   try {
     const res = await services.apps.getAppLogs(
       app.value.name,
@@ -292,10 +317,14 @@ async function fetchLogs() {
       selectedService.value || undefined
     );
     logsContent.value = res.logs || 'No log entries recorded for this application.';
+    scrollToBottom();
   } catch (err: any) {
-    logsContent.value = `Failed to fetch logs: ${err.message || 'Unknown error'}`;
+    if (!silent) logsContent.value = `Failed to fetch logs: ${err.message || 'Unknown error'}`;
   } finally {
-    isLoadingLogs.value = false;
+    if (!silent) {
+      isLoadingLogs.value = false;
+      scrollToBottom();
+    }
   }
 }
 
@@ -307,11 +336,20 @@ function copyLogs() {
 watch(
   () => props.activeSubTab,
   (tab) => {
-    if (tab === 'logs' && !logsContent.value) {
-      fetchLogs();
+    if (tab === 'logs') {
+      autoScroll.value = true;
+      fetchLogs(false);
+      startLogPolling();
+    } else {
+      stopLogPolling();
     }
-  }
+  },
+  { immediate: true }
 );
+
+onUnmounted(() => {
+  stopLogPolling();
+});
 </script>
 
 <template>
@@ -329,7 +367,7 @@ watch(
               <div class="metric-item">
                 <span class="metric-label">Status</span>
                 <span
-                  class="badge mono font-xs"
+                  class="badge font-xs"
                   :class="
                     app?.state === 'RUNNING'
                       ? 'badge-success'
@@ -344,13 +382,13 @@ watch(
               </div>
               <div class="metric-item">
                 <span class="metric-label">Total Real CPU</span>
-                <span class="metric-val mono">
+                <span class="metric-val">
                   {{ app?.state === 'RUNNING' && app?.totalCpuPercent != null ? (Number(app.totalCpuPercent) || 0).toFixed(1) + '%' : '-' }}
                 </span>
               </div>
               <div class="metric-item">
                 <span class="metric-label">Total Real Memory (RSS)</span>
-                <span class="metric-val mono">
+                <span class="metric-val">
                   {{
                     app?.state === 'RUNNING' && app?.totalMemoryMib
                       ? (Number(app.totalMemoryMib) || 0) >= 1024
@@ -362,15 +400,24 @@ watch(
               </div>
               <div class="metric-item">
                 <span class="metric-label">Containers</span>
-                <span class="metric-val mono">{{ app?.containers?.length || 0 }}</span>
+                <span class="metric-val">{{ app?.containers?.length || 0 }}</span>
               </div>
               <div class="metric-item">
                 <span class="metric-label">Services</span>
-                <span class="metric-val mono">{{ app?.services?.length || 0 }}</span>
+                <span class="metric-val">{{ app?.services?.length || 0 }}</span>
               </div>
               <div class="metric-item">
                 <span class="metric-label">Autostart on Boot</span>
-                <span class="metric-val mono">{{ app?.autoStart ? 'Enabled' : 'Manual' }}</span>
+                <button
+                  type="button"
+                  class="badge interactive font-xs"
+                  :class="app?.autoStart ? 'badge-success' : 'badge-neutral'"
+                  style="align-self: flex-start; cursor: pointer"
+                  :disabled="isTogglingAutostart"
+                  @click="toggleAutostart"
+                >
+                  {{ app?.autoStart ? 'Enabled (On Boot)' : 'Disabled (Manual)' }}
+                </button>
               </div>
             </div>
 
@@ -391,7 +438,7 @@ watch(
             <div v-if="app?.services && app.services.length > 0" style="margin-top: 14px">
               <span class="form-label" style="display: block; margin-bottom: 8px">Stack Services</span>
               <div style="display: flex; flex-wrap: wrap; gap: 6px">
-                <span v-for="s in app.services" :key="s" class="badge badge-neutral mono font-xs">
+                <span v-for="s in app.services" :key="s" class="badge badge-neutral font-xs">
                   {{ s }}
                 </span>
               </div>
@@ -418,34 +465,34 @@ watch(
                   <th>State</th>
                   <th>CPU</th>
                   <th>RAM</th>
-                  <th style="text-align: right">Terminal</th>
+                  <th style="text-align: right">Console</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="c in app.containers" :key="c.containerId || c.name">
                   <td>
-                    <div class="mono font-sm" style="font-weight: 600">{{ c.name }}</div>
-                    <div class="text-muted font-xs mono">{{ c.serviceName }}</div>
+                    <div class="font-sm" style="font-weight: 600">{{ c.name }}</div>
+                    <div class="text-muted font-xs">{{ c.serviceName }}</div>
                   </td>
                   <td>
                     <span
-                      class="badge font-xs mono"
+                      class="badge font-xs"
                       :class="c.state === 'running' || c.state === 'RUNNING' ? 'badge-success' : 'badge-neutral'"
                     >
                       {{ c.state }}
                     </span>
                   </td>
-                  <td class="mono font-xs">
+                  <td class="font-xs">
                     {{ (c.cpuPercent || 0).toFixed(1) }}%
                   </td>
-                  <td class="mono font-xs">
+                  <td class="font-xs">
                     {{ c.memoryMib ? c.memoryMib + ' MiB' : '-' }}
                   </td>
                   <td style="text-align: right">
                     <button
                       class="btn btn-xs btn-secondary"
                       :disabled="c.state !== 'running' && c.state !== 'RUNNING'"
-                      title="Attach web terminal"
+                      title="Open interactive shell console"
                       @click="openTerminal(c.containerId || c.name)"
                     >
                       <MdiIcon :path="mdiConsole" size="13" />
@@ -459,7 +506,47 @@ watch(
       </div>
     </div>
 
-    <!-- Subtab 2: Containers Table -->
+    <!-- Subtab 2: Console / Interactive Shell -->
+    <div v-else-if="props.activeSubTab === 'console'" class="docker-tab-content">
+      <div v-if="app?.state !== 'RUNNING' && app?.state !== 'PARTIALLY_RUNNING'" class="card detail-card" style="padding: 48px; text-align: center">
+        <MdiIcon :path="mdiAlertCircle" size="48" style="color: var(--warning-text); margin-bottom: 12px" />
+        <h4 style="font-size: 16px; font-weight: 600; margin-bottom: 6px">Application is not running</h4>
+        <p class="text-muted" style="font-size: 13px; max-width: 400px; margin: 0 auto 16px">
+          Start the application stack to attach an interactive container shell.
+        </p>
+        <button class="btn btn-success" :disabled="isBusy" @click="handleStart">
+          <MdiIcon :path="mdiPlay" size="14" style="margin-right: 4px" />
+          Start Application
+        </button>
+      </div>
+      <div v-else class="card detail-card" style="padding: 0; overflow: hidden">
+        <div
+          v-if="terminalContainerOptions.length > 1"
+          style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--bg-surface); border-bottom: 1px solid var(--border-subtle)"
+        >
+          <span class="font-xs" style="font-weight: 600; color: var(--text-secondary)">Target Container:</span>
+          <select
+            :value="activeConsoleContainerId"
+            class="form-select font-xs"
+            @change="terminalDefaultContainerId = ($event.target as HTMLSelectElement).value"
+          >
+            <option v-for="opt in terminalContainerOptions" :key="opt.id" :value="opt.id">
+              {{ opt.name }} ({{ opt.serviceName || 'service' }})
+            </option>
+          </select>
+        </div>
+        <EmbeddedTerminal
+          v-if="activeConsoleContainerId"
+          :key="activeConsoleContainerId"
+          :container-id="activeConsoleContainerId"
+          :container-name="app?.title || cleanAppName"
+          endpoint-type="docker"
+          @popout="popoutDockerTerminal"
+        />
+      </div>
+    </div>
+
+    <!-- Subtab 3: Containers Table -->
     <div v-else-if="props.activeSubTab === 'containers'" class="docker-tab-content">
       <div class="card detail-card">
         <div class="card-header">
@@ -487,23 +574,23 @@ watch(
               <tbody>
                 <tr v-for="c in app.containers" :key="c.containerId || c.name">
                   <td>
-                    <div class="mono font-sm" style="font-weight: 600">{{ c.name }}</div>
+                    <div class="font-sm" style="font-weight: 600">{{ c.name }}</div>
                     <div class="text-muted font-xs mono" style="opacity: 0.7">{{ c.containerId?.slice(0, 12) }}</div>
                   </td>
-                  <td><span class="badge badge-neutral mono font-xs">{{ c.serviceName }}</span></td>
+                  <td><span class="badge badge-neutral font-xs">{{ c.serviceName }}</span></td>
                   <td class="mono font-xs" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap" :title="c.image">
                     {{ c.image }}
                   </td>
                   <td>
                     <span
-                      class="badge font-xs mono"
+                      class="badge font-xs"
                       :class="c.state === 'running' || c.state === 'RUNNING' ? 'badge-success' : 'badge-neutral'"
                     >
                       {{ c.state }}
                     </span>
                   </td>
-                  <td class="mono font-xs">{{ (c.cpuPercent || 0).toFixed(1) }}%</td>
-                  <td class="mono font-xs">{{ c.memoryMib ? c.memoryMib + ' MiB' : '-' }}</td>
+                  <td class="font-xs">{{ (c.cpuPercent || 0).toFixed(1) }}%</td>
+                  <td class="font-xs">{{ c.memoryMib ? c.memoryMib + ' MiB' : '-' }}</td>
                   <td class="mono font-xs">
                     <span v-if="c.ports && c.ports.length > 0">{{ c.ports.join(', ') }}</span>
                     <span v-else class="text-muted">—</span>
@@ -512,11 +599,11 @@ watch(
                     <button
                       class="btn btn-xs btn-primary"
                       :disabled="c.state !== 'running' && c.state !== 'RUNNING'"
-                      title="Attach interactive web terminal"
+                      title="Open interactive web console"
                       @click="openTerminal(c.containerId || c.name)"
                     >
                       <MdiIcon :path="mdiConsole" size="13" style="margin-right: 4px" />
-                      <span>Attach</span>
+                      <span>Console</span>
                     </button>
                   </td>
                 </tr>
@@ -527,48 +614,23 @@ watch(
       </div>
     </div>
 
-    <!-- Subtab 3: Compose YAML -->
-    <div v-else-if="props.activeSubTab === 'compose'" class="docker-tab-content">
-      <div class="card detail-card">
-        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center">
-          <div>
-            <h3 class="card-title">Docker Compose Specification</h3>
-            <p class="card-subtitle">Source docker-compose.yml defining services, volumes and network topology</p>
-          </div>
-          <div style="display: flex; gap: 8px">
-            <button class="btn btn-sm btn-secondary" @click="copyYaml">
-              <MdiIcon :path="mdiContentCopy" size="14" style="margin-right: 4px" />
-              <span>Copy YAML</span>
-            </button>
-            <button
-              class="btn btn-sm"
-              :class="isEditMode ? 'btn-secondary' : 'btn-primary'"
-              @click="toggleEditMode"
-            >
-              <span>{{ isEditMode ? 'Cancel Edit' : 'Edit Compose' }}</span>
-            </button>
-            <button
-              v-if="isEditMode"
-              class="btn btn-sm btn-success"
-              :disabled="isSavingYaml"
-              @click="handleSaveYaml"
-            >
-              <span>{{ isSavingYaml ? 'Applying Changes...' : 'Save & Redeploy' }}</span>
-            </button>
-          </div>
-        </div>
-        <div class="card-body" style="padding: 0; min-height: 440px">
-          <CodeMirrorEditor
-            v-model="editableYaml"
-            :read-only="!isEditMode"
-            language="yaml"
-            style="min-height: 440px; border-radius: 0 0 6px 6px"
-          />
-        </div>
+    <!-- Subtab 4: Configuration (Form & YAML) -->
+    <div v-else-if="props.activeSubTab === 'configuration' || props.activeSubTab === 'compose'" class="docker-tab-content">
+      <div class="card detail-card" style="padding: 16px">
+        <ComposeFormEditor
+          v-if="app"
+          :key="app.name"
+          :initial-app-id="app.appId || cleanAppName"
+          :initial-title="app.title"
+          :initial-compose-yaml="app.composeYaml"
+          :is-edit-mode="true"
+          :is-saving="isSavingConfig"
+          @save="handleSaveFormConfig"
+        />
       </div>
     </div>
 
-    <!-- Subtab 4: Logs -->
+    <!-- Subtab 5: Logs -->
     <div v-else-if="props.activeSubTab === 'logs'" class="docker-tab-content">
       <div class="card detail-card">
         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center">
@@ -578,18 +640,27 @@ watch(
           </div>
           <div style="display: flex; align-items: center; gap: 8px">
             <!-- Service Selector -->
-            <select v-if="app?.services && app.services.length > 0" v-model="selectedService" class="form-select font-xs" @change="fetchLogs">
+            <select v-if="app?.services && app.services.length > 0" v-model="selectedService" class="form-select font-xs" @change="fetchLogs(false)">
               <option value="">All Services</option>
               <option v-for="s in app.services" :key="s" :value="s">{{ s }}</option>
             </select>
-            <select v-model.number="logTail" class="form-select font-xs" @change="fetchLogs">
+            <select v-model.number="logTail" class="form-select font-xs" @change="fetchLogs(false)">
               <option :value="50">Last 50 lines</option>
               <option :value="100">Last 100 lines</option>
               <option :value="250">Last 250 lines</option>
               <option :value="500">Last 500 lines</option>
             </select>
-            <button class="btn btn-sm btn-secondary" :disabled="isLoadingLogs" @click="fetchLogs">
-              <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" />
+            <button
+              class="btn btn-sm"
+              :class="autoScroll ? 'btn-primary' : 'btn-secondary'"
+              :title="autoScroll ? 'Auto-scroll enabled (click to pause)' : 'Click to follow logs automatically'"
+              @click="toggleAutoScroll"
+            >
+              <MdiIcon :path="mdiChevronDoubleDown" size="14" style="margin-right: 4px" />
+              <span>Auto-scroll</span>
+            </button>
+            <button class="btn btn-sm btn-secondary" :disabled="isLoadingLogs" @click="fetchLogs(false)">
+              <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" :class="{ 'spin-icon': isLoadingLogs }" />
               <span>Refresh</span>
             </button>
             <button class="btn btn-sm btn-secondary" :disabled="!logsContent" @click="copyLogs">
@@ -600,6 +671,7 @@ watch(
         </div>
         <div class="card-body">
           <pre
+            ref="logContainerRef"
             class="mono font-xs"
             style="
               background: var(--bg-base);
@@ -612,6 +684,7 @@ watch(
               white-space: pre-wrap;
               word-break: break-all;
             "
+            @scroll="onLogScroll"
           >{{ isLoadingLogs ? 'Loading logs...' : logsContent }}</pre>
         </div>
       </div>

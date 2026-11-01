@@ -75,6 +75,7 @@ import DockerDetailView from './views/DockerDetailView.vue';
 import LxcView from './views/LxcView.vue';
 import LxcDetailView from './views/LxcDetailView.vue';
 import SharesView from './views/SharesView.vue';
+import CronJobsView from './views/CronJobsView.vue';
 import IdentityView from './views/IdentityView.vue';
 
 const showPoolModal = ref(false);
@@ -360,9 +361,9 @@ onMounted(() => {
           <MdiIcon :path="mdiMenu" size="20" />
         </button>
 
-        <NanLogo :size="26" subtitle="Proxmox-Style Hypervisor & Storage" />
+        <NanLogo :size="26" subtitle="Enterprise Hypervisor & Storage" />
 
-        <span class="appliance-node-chip hide-mobile mono">
+        <span class="appliance-node-chip hide-mobile">
           {{ nasState.systemTelemetry?.host?.hostname || 'nas01' }}
         </span>
 
@@ -374,7 +375,7 @@ onMounted(() => {
           @click="showPoolModal = true"
         >
           <MdiIcon :path="mdiDatabaseCheck" size="13" style="color: var(--accent-primary)" />
-          <span>MAIN POOL: {{ nasState.systemConfig.mainPool.replace(/^zfsPools\//, '') }}</span>
+          <span>Main Pool: {{ nasState.systemConfig.mainPool.replace(/^zfsPools\//, '') }}</span>
           <MdiIcon :path="mdiMenuDown" size="12" style="opacity: 0.75" />
         </button>
         <button
@@ -390,21 +391,21 @@ onMounted(() => {
 
       <!-- Right: Quick Shell, Specs, Theme & User -->
       <div class="header-right">
-        <span v-if="hasFallbackPrereqs" class="badge badge-warning hide-mobile mono font-xs">
-          FALLBACK
+        <span v-if="hasFallbackPrereqs" class="badge badge-warning hide-mobile font-xs">
+          Fallback
         </span>
 
-        <span v-if="nasState.lastRefreshed" class="header-sync-text mono hide-mobile font-xs">
+        <span v-if="nasState.lastRefreshed" class="header-sync-text hide-mobile font-xs">
           Synced {{ nasState.lastRefreshed }}
         </span>
 
         <button
-          class="btn btn-xs btn-secondary hide-mobile"
-          title="Open Root Host Shell Terminal"
+          class="btn btn-xs btn-icon btn-secondary hide-mobile"
+          title="Host Shell (Open Root Host Terminal)"
+          aria-label="Host Shell"
           @click="showHostTerminalModal = true"
         >
-          <MdiIcon :path="mdiConsole" size="13" style="margin-right: 4px" />
-          <span>Host Shell</span>
+          <MdiIcon :path="mdiConsole" size="14" />
         </button>
 
         <SystemDetailsTopBarButton class="hide-mobile" @click="showSystemDetailsModal = true" />
@@ -421,7 +422,7 @@ onMounted(() => {
         </button>
 
         <template v-if="nasState.authenticated && nasState.currentUser">
-          <span class="badge badge-info hide-mobile mono font-xs">
+          <span class="badge badge-info hide-mobile font-xs">
             {{ nasState.currentUser.username }}
           </span>
           <button class="btn btn-xs btn-ghost hide-mobile" title="Sign Out" @click="handleLogout">
@@ -457,7 +458,7 @@ onMounted(() => {
 
       <!-- Center: Contextual Master-Detail Workspace -->
       <div class="center-workspace">
-        <!-- Top Action Ribbon -->
+        <!-- Unified Top Header & Tab Bar -->
         <ActionRibbon
           @open-host-terminal="showHostTerminalModal = true"
           @open-system-details="showSystemDetailsModal = true"
@@ -465,319 +466,6 @@ onMounted(() => {
           @open-vm-console="openEmbeddedVmConsole"
           @open-lxc-terminal="handleOpenLxcTerminal"
         />
-
-        <!-- Contextual Subtabs Bar -->
-        <div class="workspace-subtabs-bar">
-          <!-- Overview Tab -->
-          <template v-if="nasState.activeTab === 'overview'">
-            <button class="subtab-btn active">Summary Dashboard</button>
-          </template>
-
-          <!-- Storage Subtabs -->
-          <template
-            v-else-if="
-              nasState.activeTab === 'storage-pools' ||
-              nasState.activeTab === 'storage-disks' ||
-              nasState.activeTab === 'storage-datasets' ||
-              nasState.activeTab === 'storage-volumes' ||
-              nasState.activeTab === 'zfs'
-            "
-          >
-            <template v-if="activeSelectedPool && (nasState.activeTab === 'storage-pools' || nasState.activeTab === 'zfs')">
-              <button
-                class="subtab-btn"
-                title="Back to all storage pools"
-                @click="selectResource('node:pools'); handleNav('storage-pools')"
-              >
-                <MdiIcon :path="mdiArrowLeft" size="14" />
-                All Pools
-              </button>
-              <div class="subtab-divider"></div>
-              <button
-                class="subtab-btn"
-                :class="{ active: poolActiveSubTab === 'summary' }"
-                @click="poolActiveSubTab = 'summary'"
-              >
-                <MdiIcon :path="mdiInformationOutline" size="14" />
-                Summary
-              </button>
-              <button
-                class="subtab-btn"
-                :class="{ active: poolActiveSubTab === 'datasets' }"
-                @click="poolActiveSubTab = 'datasets'"
-              >
-                <MdiIcon :path="mdiFolderOutline" size="14" />
-                Datasets
-              </button>
-              <button
-                class="subtab-btn"
-                :class="{ active: poolActiveSubTab === 'volumes' }"
-                @click="poolActiveSubTab = 'volumes'"
-              >
-                <MdiIcon :path="mdiHarddisk" size="14" />
-                Volumes
-              </button>
-              <button
-                class="subtab-btn"
-                :class="{ active: poolActiveSubTab === 'topology' }"
-                @click="poolActiveSubTab = 'topology'"
-              >
-                <MdiIcon :path="mdiLayers" size="14" />
-                Topology & Disks
-              </button>
-              <button
-                class="subtab-btn"
-                :class="{ active: poolActiveSubTab === 'config' }"
-                @click="poolActiveSubTab = 'config'"
-              >
-                <MdiIcon :path="mdiCogOutline" size="14" />
-                Configuration
-              </button>
-            </template>
-            <template v-else>
-              <button
-                class="subtab-btn"
-                :class="{ active: nasState.activeTab === 'storage-pools' || nasState.activeTab === 'zfs' }"
-                @click="handleNav('storage-pools')"
-              >
-                Pools ({{ nasState.pools.length }})
-              </button>
-              <button
-                class="subtab-btn"
-                :class="{ active: nasState.activeTab === 'storage-disks' }"
-                @click="handleNav('storage-disks')"
-              >
-                Disks ({{ nasState.disks.length }})
-              </button>
-              <button
-                class="subtab-btn"
-                :class="{ active: nasState.activeTab === 'storage-datasets' }"
-                @click="handleNav('storage-datasets')"
-              >
-                Datasets
-              </button>
-              <button
-                class="subtab-btn"
-                :class="{ active: nasState.activeTab === 'storage-volumes' }"
-                @click="handleNav('storage-volumes')"
-              >
-                Volumes
-              </button>
-            </template>
-          </template>
-
-          <!-- KVM Subtabs -->
-          <template v-else-if="nasState.activeTab === 'kvm'">
-            <template v-if="activeSelectedVm">
-              <button
-                class="subtab-btn"
-                title="Back to all virtual machines"
-                @click="selectResource('node:vms'); handleNav('kvm')"
-              >
-                <MdiIcon :path="mdiArrowLeft" size="14" />
-                All VMs
-              </button>
-              <div class="subtab-divider"></div>
-              <button
-                class="subtab-btn"
-                :class="{ active: vmActiveSubTab === 'summary' }"
-                @click="vmActiveSubTab = 'summary'"
-              >
-                <MdiIcon :path="mdiInformationOutline" size="14" />
-                Summary
-              </button>
-              <button
-                class="subtab-btn"
-                :class="{ active: vmActiveSubTab === 'hardware' }"
-                @click="vmActiveSubTab = 'hardware'"
-              >
-                <MdiIcon :path="mdiHarddisk" size="14" />
-                Hardware & Disks
-              </button>
-              <button
-                class="subtab-btn"
-                :class="{ active: vmActiveSubTab === 'console' }"
-                @click="vmActiveSubTab = 'console'"
-              >
-                <MdiIcon :path="mdiMonitor" size="14" />
-                Console
-              </button>
-              <button
-                class="subtab-btn"
-                :class="{ active: vmActiveSubTab === 'snapshots' }"
-                @click="vmActiveSubTab = 'snapshots'"
-              >
-                <MdiIcon :path="mdiCamera" size="14" />
-                Snapshots
-              </button>
-            </template>
-            <template v-else>
-              <button
-                class="subtab-btn"
-                :class="{ active: vmWorkspaceMode === 'view' }"
-                @click="vmWorkspaceMode = 'view'"
-              >
-                Virtual Machines ({{ nasState.vms.length }})
-              </button>
-              <button
-                v-if="embeddedConsoleSession"
-                class="subtab-btn"
-                :class="{ active: vmWorkspaceMode === 'console' }"
-                @click="vmWorkspaceMode = 'console'"
-              >
-                <MdiIcon :path="mdiMonitor" size="14" />
-                Console: {{ embeddedConsoleSession.vmName }}
-              </button>
-            </template>
-          </template>
-
-          <!-- LXC Subtabs -->
-          <template v-else-if="nasState.activeTab === 'lxc'">
-            <template v-if="activeSelectedLxc">
-              <button
-                class="subtab-btn"
-                title="Back to all LXC containers"
-                @click="selectResource('node:lxc'); handleNav('lxc')"
-              >
-                <MdiIcon :path="mdiArrowLeft" size="14" />
-                All Containers
-              </button>
-              <div class="subtab-divider"></div>
-              <button
-                class="subtab-btn"
-                :class="{ active: lxcActiveSubTab === 'summary' }"
-                @click="lxcActiveSubTab = 'summary'"
-              >
-                <MdiIcon :path="mdiInformationOutline" size="14" />
-                Summary
-              </button>
-              <button
-                class="subtab-btn"
-                :class="{ active: lxcActiveSubTab === 'terminal' }"
-                @click="lxcActiveSubTab = 'terminal'"
-              >
-                <MdiIcon :path="mdiConsole" size="14" />
-                Terminal
-              </button>
-              <button
-                class="subtab-btn"
-                :class="{ active: lxcActiveSubTab === 'mounts' }"
-                @click="lxcActiveSubTab = 'mounts'"
-              >
-                <MdiIcon :path="mdiFolderOutline" size="14" />
-                Storage Mounts
-              </button>
-              <button
-                class="subtab-btn"
-                :class="{ active: lxcActiveSubTab === 'configuration' }"
-                @click="lxcActiveSubTab = 'configuration'"
-              >
-                <MdiIcon :path="mdiPencil" size="14" />
-                Configuration
-              </button>
-              <button
-                class="subtab-btn"
-                :class="{ active: lxcActiveSubTab === 'logs' }"
-                @click="lxcActiveSubTab = 'logs'"
-              >
-                <MdiIcon :path="mdiFileDocumentOutline" size="14" />
-                Logs
-              </button>
-            </template>
-            <template v-else>
-              <button class="subtab-btn active">
-                LXC Containers ({{ nasState.lxcContainers.length }})
-              </button>
-            </template>
-          </template>
-
-          <!-- Docker Apps Subtabs -->
-          <template v-else-if="nasState.activeTab === 'docker'">
-            <template v-if="activeSelectedDocker">
-              <button
-                class="subtab-btn"
-                title="Back to all Docker applications"
-                @click="selectResource('node:docker'); handleNav('docker')"
-              >
-                <MdiIcon :path="mdiArrowLeft" size="14" />
-                All Apps
-              </button>
-              <div class="subtab-divider"></div>
-              <button
-                class="subtab-btn"
-                :class="{ active: dockerActiveSubTab === 'summary' }"
-                @click="dockerActiveSubTab = 'summary'"
-              >
-                <MdiIcon :path="mdiInformationOutline" size="14" />
-                Summary
-              </button>
-              <button
-                class="subtab-btn"
-                :class="{ active: dockerActiveSubTab === 'containers' }"
-                @click="dockerActiveSubTab = 'containers'"
-              >
-                <MdiIcon :path="mdiLayers" size="14" />
-                Containers
-              </button>
-              <button
-                class="subtab-btn"
-                :class="{ active: dockerActiveSubTab === 'compose' }"
-                @click="dockerActiveSubTab = 'compose'"
-              >
-                <MdiIcon :path="mdiFileDocumentOutline" size="14" />
-                Compose YAML
-              </button>
-              <button
-                class="subtab-btn"
-                :class="{ active: dockerActiveSubTab === 'logs' }"
-                @click="dockerActiveSubTab = 'logs'"
-              >
-                <MdiIcon :path="mdiDocker" size="14" />
-                Logs
-              </button>
-            </template>
-            <template v-else>
-              <button class="subtab-btn active">
-                Docker Applications ({{ nasState.dockerApps.length }})
-              </button>
-            </template>
-          </template>
-
-          <!-- Shares Subtabs -->
-          <template
-            v-else-if="
-              nasState.activeTab === 'shares' ||
-              nasState.activeTab === 'shares-cifs' ||
-              nasState.activeTab === 'shares-webdav'
-            "
-          >
-            <button
-              class="subtab-btn"
-              :class="{ active: nasState.activeTab !== 'shares-webdav' }"
-              @click="handleNav('shares-cifs')"
-            >
-              CIFS (SMB) ({{ nasState.cifsShares.length }})
-            </button>
-            <button
-              class="subtab-btn"
-              :class="{ active: nasState.activeTab === 'shares-webdav' }"
-              @click="handleNav('shares-webdav')"
-            >
-              WebDAV ({{ nasState.webdavShares.length }})
-            </button>
-          </template>
-
-          <!-- Identity Subtabs -->
-          <template v-else-if="nasState.activeTab === 'identity'">
-            <button class="subtab-btn active">
-              Users & Groups ({{ nasState.users.length }})
-            </button>
-          </template>
-
-          <template v-else>
-            <button class="subtab-btn active">View</button>
-          </template>
-        </div>
 
         <!-- Detail Viewport Area (Internal scrolling only) -->
         <main class="workspace-viewport">
@@ -884,8 +572,8 @@ onMounted(() => {
                 <PoolDetailView
                   v-if="(nasState.activeTab === 'storage-pools' || nasState.activeTab === 'zfs') && activeSelectedPool"
                   :pool-name="activeSelectedPool"
-                  :active-sub-tab="poolActiveSubTab"
-                  @update:active-sub-tab="poolActiveSubTab = $event"
+                  :active-sub-tab="nasState.poolSubTab"
+                  @update:active-sub-tab="nasState.poolSubTab = $event"
                   @back="selectResource('node:pools')"
                 />
                 <PoolsView v-else-if="nasState.activeTab === 'storage-pools' || nasState.activeTab === 'zfs'" />
@@ -894,24 +582,24 @@ onMounted(() => {
                 <VmDetailView
                   v-if="nasState.activeTab === 'kvm' && activeSelectedVm"
                   :vm-name="activeSelectedVm"
-                  :active-sub-tab="vmActiveSubTab"
-                  @update:active-sub-tab="vmActiveSubTab = $event"
+                  :active-sub-tab="nasState.vmSubTab"
+                  @update:active-sub-tab="nasState.vmSubTab = $event"
                   @back="selectResource('node:vms')"
                 />
                 <KvmView v-else-if="nasState.activeTab === 'kvm'" />
                 <DockerDetailView
                   v-if="nasState.activeTab === 'docker' && activeSelectedDocker"
                   :app-name="activeSelectedDocker"
-                  :active-sub-tab="dockerActiveSubTab"
-                  @update:active-sub-tab="dockerActiveSubTab = $event"
+                  :active-sub-tab="nasState.dockerSubTab"
+                  @update:active-sub-tab="nasState.dockerSubTab = $event"
                   @back="selectResource('node:docker')"
                 />
                 <DockerView v-else-if="nasState.activeTab === 'docker'" />
                 <LxcDetailView
                   v-if="nasState.activeTab === 'lxc' && activeSelectedLxc"
                   :container-name="activeSelectedLxc"
-                  :active-sub-tab="lxcActiveSubTab"
-                  @update:active-sub-tab="lxcActiveSubTab = $event"
+                  :active-sub-tab="nasState.lxcSubTab"
+                  @update:active-sub-tab="nasState.lxcSubTab = $event"
                   @back="selectResource('node:lxc')"
                 />
                 <LxcView v-else-if="nasState.activeTab === 'lxc'" />
@@ -919,6 +607,7 @@ onMounted(() => {
                   v-else-if="nasState.activeTab === 'shares' || nasState.activeTab === 'shares-cifs' || nasState.activeTab === 'shares-webdav'"
                   :active-subtab="nasState.activeTab === 'shares-webdav' ? 'webdav' : 'cifs'"
                 />
+                <CronJobsView v-else-if="nasState.activeTab === 'cron'" />
                 <IdentityView v-else-if="nasState.activeTab === 'identity'" />
               </template>
             </template>
@@ -998,11 +687,11 @@ onMounted(() => {
 
 .appliance-node-chip {
   font-size: 11px;
-  background: var(--bg-elevated);
+  background: var(--bg-surface);
   color: var(--text-secondary);
   border: 1px solid var(--border-subtle);
-  border-radius: 4px;
-  padding: 2px 7px;
+  border-radius: 6px;
+  padding: 2px 8px;
 }
 
 .header-right {
@@ -1042,13 +731,13 @@ onMounted(() => {
 }
 
 .workspace-subtabs-bar {
-  height: 32px;
+  height: 36px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   padding: 0 12px;
-  gap: 2px;
+  gap: 4px;
   flex-shrink: 0;
 }
 
@@ -1063,16 +752,16 @@ onMounted(() => {
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
-  padding: 4px 10px;
-  font-size: 12px;
+  padding: 4px 12px;
+  font-size: 12.5px;
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.12s ease;
   height: 100%;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
 
 .subtab-btn:hover {
@@ -1100,10 +789,10 @@ onMounted(() => {
   gap: 16px;
   background: var(--warning-bg);
   border: 1px solid var(--warning-border);
-  border-left: 4px solid var(--warning);
-  border-radius: 6px;
-  padding: 10px 14px;
-  margin-bottom: 14px;
+  border-left: 3px solid var(--warning);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
 }
 
 .initial-skeleton-wrap {

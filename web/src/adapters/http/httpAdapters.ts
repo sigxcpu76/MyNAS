@@ -12,6 +12,10 @@ import type {
   CatalogQuestionGroup,
   CifsShare,
   CifsGlobalConfig,
+  CronJob,
+  CronVolumeMount,
+  CronEnvVar,
+  CronJobRun,
   DirectoryList,
   Disk,
   DiskPartition,
@@ -564,6 +568,10 @@ export function mapVirtualMachine(raw: any): VirtualMachine {
     guestOsName: raw?.guestOsName ?? raw?.guest_os_name ?? '',
     guestCpuPercent: Number(raw?.guestCpuPercent ?? raw?.guest_cpu_percent ?? 0),
     guestMemoryUsedMib: normalizeInt64(raw?.guestMemoryUsedMib ?? raw?.guest_memory_used_mib),
+    netRxRate: normalizeInt64(raw?.netRxRate ?? raw?.net_rx_rate ?? 0),
+    netTxRate: normalizeInt64(raw?.netTxRate ?? raw?.net_tx_rate ?? 0),
+    netRxBytes: normalizeInt64(raw?.netRxBytes ?? raw?.net_rx_bytes ?? 0),
+    netTxBytes: normalizeInt64(raw?.netTxBytes ?? raw?.net_tx_bytes ?? 0),
 
     startupDelaySeconds: Number(raw?.startupDelaySeconds ?? raw?.startup_delay_seconds ?? 0),
     bootOrder: raw?.bootOrder ?? raw?.boot_order ?? '',
@@ -685,6 +693,10 @@ export function mapLxcContainer(raw: any): LxcContainer {
     networkBridge: raw?.networkBridge ?? raw?.network_bridge ?? '',
     cpuPercent: Number(raw?.cpuPercent ?? raw?.cpu_percent ?? 0),
     memoryUsedMib: normalizeInt64(raw?.memoryUsedMib ?? raw?.memory_used_mib ?? 0),
+    netRxRate: normalizeInt64(raw?.netRxRate ?? raw?.net_rx_rate ?? 0),
+    netTxRate: normalizeInt64(raw?.netTxRate ?? raw?.net_tx_rate ?? 0),
+    netRxBytes: normalizeInt64(raw?.netRxBytes ?? raw?.net_rx_bytes ?? 0),
+    netTxBytes: normalizeInt64(raw?.netTxBytes ?? raw?.net_tx_bytes ?? 0),
     installRecipe: raw?.installRecipe ?? raw?.install_recipe ?? undefined,
     installScriptUrl: raw?.installScriptUrl ?? raw?.install_script_url ?? undefined,
     templateDownloadUrl: raw?.templateDownloadUrl ?? raw?.template_download_url ?? undefined,
@@ -2220,4 +2232,147 @@ function mapDockerRegistry(raw: any): DockerRegistry {
     lastLoginStatus: String(raw?.lastLoginStatus ?? raw?.last_login_status ?? ''),
     lastLoginTime: String(raw?.lastLoginTime ?? raw?.last_login_time ?? ''),
   };
+}
+
+export function mapCronJob(raw: any): CronJob {
+  return {
+    name: String(raw?.name ?? ''),
+    id: String(raw?.id ?? raw?.name?.replace(/^cronJobs\//, '') ?? ''),
+    title: String(raw?.title ?? ''),
+    description: String(raw?.description ?? ''),
+    schedule: String(raw?.schedule ?? ''),
+    image: String(raw?.image ?? ''),
+    command: Array.isArray(raw?.command) ? raw.command : [],
+    args: Array.isArray(raw?.args) ? raw.args : [],
+    env: (raw?.env ?? []).map((e: any) => ({ name: String(e?.name ?? ''), value: String(e?.value ?? '') })),
+    volumes: (raw?.volumes ?? []).map((v: any) => ({
+      hostPath: String(v?.hostPath ?? v?.host_path ?? ''),
+      mountPath: String(v?.mountPath ?? v?.mount_path ?? ''),
+      readOnly: Boolean(v?.readOnly ?? v?.read_only ?? false),
+    })),
+    enabled: Boolean(raw?.enabled ?? true),
+    concurrencyPolicy: String(raw?.concurrencyPolicy ?? raw?.concurrency_policy ?? 'Forbid'),
+    restartPolicy: String(raw?.restartPolicy ?? raw?.restart_policy ?? 'Never'),
+    timeoutSeconds: Number(raw?.timeoutSeconds ?? raw?.timeout_seconds ?? 0),
+    state: String(raw?.state ?? 'IDLE'),
+    lastScheduleTime: raw?.lastScheduleTime ?? raw?.last_schedule_time,
+    lastSuccessfulTime: raw?.lastSuccessfulTime ?? raw?.last_successful_time,
+    nextScheduleTime: raw?.nextScheduleTime ?? raw?.next_schedule_time,
+    lastRunDuration: String(raw?.lastRunDuration ?? raw?.last_run_duration ?? ''),
+    lastRunStatus: String(raw?.lastRunStatus ?? raw?.last_run_status ?? ''),
+    lastRunExitCode: Number(raw?.lastRunExitCode ?? raw?.last_run_exit_code ?? 0),
+    lastRunError: String(raw?.lastRunError ?? raw?.last_run_error ?? ''),
+    createTime: raw?.createTime ?? raw?.create_time,
+    updateTime: raw?.updateTime ?? raw?.update_time,
+  };
+}
+
+export class HttpCronJobAdapter {
+  constructor(private readonly client: AipClient) {}
+
+  async listCronJobs(): Promise<CronJob[]> {
+    const res = await this.client.get<any>('cronJobs');
+    const items = res.cronJobs ?? res.cron_jobs ?? [];
+    return items.map(mapCronJob);
+  }
+
+  async getCronJob(nameOrId: string): Promise<CronJob> {
+    const path = nameOrId.startsWith('cronJobs/') ? nameOrId : `cronJobs/${nameOrId}`;
+    const raw = await this.client.get<any>(path);
+    return mapCronJob(raw);
+  }
+
+  async createCronJob(jobId: string, job: Partial<CronJob>): Promise<CronJob> {
+    const payload = {
+      name: `cronJobs/${jobId}`,
+      id: jobId,
+      title: job.title || jobId,
+      description: job.description ?? '',
+      schedule: job.schedule ?? '',
+      image: job.image ?? '',
+      command: job.command ?? [],
+      args: job.args ?? [],
+      env: (job.env ?? []).map((e) => ({
+        name: e.name,
+        value: e.value,
+      })),
+      volumes: (job.volumes ?? []).map((v) => ({
+        hostPath: v.hostPath,
+        mountPath: v.mountPath,
+        readOnly: Boolean(v.readOnly),
+      })),
+      enabled: job.enabled ?? true,
+      concurrencyPolicy: job.concurrencyPolicy ?? 'Forbid',
+      restartPolicy: job.restartPolicy ?? 'Never',
+      timeoutSeconds: job.timeoutSeconds ?? 0,
+    };
+    const raw = await this.client.post<any>('cronJobs', payload, {
+      cronJobId: jobId,
+    });
+    return mapCronJob(raw);
+  }
+
+  async updateCronJob(name: string, job: Partial<CronJob>, updateMask?: string[]): Promise<CronJob> {
+    const path = name.startsWith('cronJobs/') ? name : `cronJobs/${name}`;
+    const payload: any = {
+      name: path,
+      id: path.replace(/^cronJobs\//, ''),
+      title: job.title,
+      description: job.description,
+      schedule: job.schedule,
+      image: job.image,
+      command: job.command,
+      args: job.args,
+      env: (job.env ?? []).map((e) => ({
+        name: e.name,
+        value: e.value,
+      })),
+      volumes: (job.volumes ?? []).map((v) => ({
+        hostPath: v.hostPath,
+        mountPath: v.mountPath,
+        readOnly: Boolean(v.readOnly),
+      })),
+      enabled: job.enabled,
+      concurrencyPolicy: job.concurrencyPolicy,
+      restartPolicy: job.restartPolicy,
+      timeoutSeconds: job.timeoutSeconds,
+    };
+    const raw = await this.client.patch<any>(path, payload, updateMask);
+    return mapCronJob(raw);
+  }
+
+  async deleteCronJob(name: string): Promise<void> {
+    const path = name.startsWith('cronJobs/') ? name : `cronJobs/${name}`;
+    await this.client.delete(path);
+  }
+
+  async runCronJob(name: string): Promise<CronJobRun> {
+    const path = name.startsWith('cronJobs/') ? name : `cronJobs/${name}`;
+    const raw = await this.client.customMethod<any>(path, 'run', {});
+    return {
+      runId: String(raw?.runId ?? raw?.run_id ?? ''),
+      jobName: String(raw?.jobName ?? raw?.job_name ?? path),
+      startTime: String(raw?.startTime ?? raw?.start_time ?? ''),
+      endTime: raw?.endTime ?? raw?.end_time,
+      duration: String(raw?.duration ?? ''),
+      status: String(raw?.status ?? ''),
+      exitCode: Number(raw?.exitCode ?? raw?.exit_code ?? 0),
+      error: String(raw?.error ?? ''),
+      logSnippet: String(raw?.logSnippet ?? raw?.log_snippet ?? ''),
+    };
+  }
+
+  async getCronJobLogs(name: string, runId?: string, lines?: number): Promise<{ logs: string; runId?: string; status?: string; exitCode?: number }> {
+    const path = name.startsWith('cronJobs/') ? name : `cronJobs/${name}`;
+    const params: Record<string, string> = {};
+    if (runId) params.run_id = runId;
+    if (lines) params.lines = String(lines);
+    const raw = await this.client.get<any>(`${path}:logs`, params);
+    return {
+      logs: String(raw?.logs ?? ''),
+      runId: raw?.runId ?? raw?.run_id,
+      status: raw?.status,
+      exitCode: raw?.exitCode != null ? Number(raw.exitCode) : undefined,
+    };
+  }
 }

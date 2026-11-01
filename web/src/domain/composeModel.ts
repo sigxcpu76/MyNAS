@@ -78,6 +78,9 @@ export interface ComposeAppFormModel {
   volumes: ComposeTopLevelVolume[];
   managementPort?: string; // Container internal port used for Open Web UI (e.g. "81")
   portals?: ComposePortalModel[];
+  catalogId?: string;
+  catalogSource?: string;
+  catalogVersion?: string;
 }
 
 // =============================================================================
@@ -638,6 +641,15 @@ export function composeYamlToForm(
   }
 
   model.managementPort = mgmtPort;
+  if (parsed['x-nas-catalog-id']) {
+    model.catalogId = String(parsed['x-nas-catalog-id']).trim();
+  }
+  if (parsed['x-nas-catalog-source']) {
+    model.catalogSource = String(parsed['x-nas-catalog-source']).trim();
+  }
+  if (parsed['x-nas-catalog-version']) {
+    model.catalogVersion = String(parsed['x-nas-catalog-version']).trim();
+  }
   if (mgmtPort) {
     for (const s of model.services) {
       for (const p of s.ports) {
@@ -665,6 +677,16 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
   const rootObj: any = {
     services: {},
   };
+
+  if (form.catalogId) {
+    rootObj['x-nas-catalog-id'] = form.catalogId;
+  }
+  if (form.catalogSource) {
+    rootObj['x-nas-catalog-source'] = form.catalogSource;
+  }
+  if (form.catalogVersion) {
+    rootObj['x-nas-catalog-version'] = form.catalogVersion;
+  }
 
   const mgmtPort = form.managementPort?.trim() || '';
   if (mgmtPort) {

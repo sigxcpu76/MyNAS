@@ -374,14 +374,14 @@ function onDragEnd() {
 .dashboard-edit-banner {
   background: var(--bg-surface);
   border: 1px solid var(--accent-primary);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 12px 18px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  box-shadow: none;
 }
 
 .edit-banner-info {
@@ -394,7 +394,8 @@ function onDragEnd() {
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  background: rgba(122, 162, 247, 0.12);
+  background: var(--accent-bg-subtle);
+  border: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: center;

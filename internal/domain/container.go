@@ -75,6 +75,10 @@ type LxcContainer struct {
 	NetworkBridge   string
 	CPUPercent      float64
 	MemoryUsedMiB   int64
+	NetRxRate       int64
+	NetTxRate       int64
+	NetRxBytes      int64
+	NetTxBytes      int64
 	InstallRecipe   string
 	InstallScriptURL string
 	TemplateDownloadURL string

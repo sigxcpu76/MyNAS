@@ -1,0 +1,137 @@
+syntax = "proto3";
+
+package nas.v1;
+
+import "google/api/field_behavior.proto";
+import "google/api/resource.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1";
+
+// =============================================================================
+// CronJob Resource & Models
+// =============================================================================
+
+message VolumeMount {
+  string host_path = 1 [(google.api.field_behavior) = REQUIRED];
+  string mount_path = 2 [(google.api.field_behavior) = REQUIRED];
+  bool read_only = 3;
+}
+
+message EnvVar {
+  string name = 1 [(google.api.field_behavior) = REQUIRED];
+  string value = 2;
+}
+
+message CronJobRun {
+  string run_id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string job_name = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp start_time = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp end_time = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string duration = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string status = 6 [(google.api.field_behavior) = OUTPUT_ONLY]; // RUNNING, SUCCESS, FAILED
+  int32 exit_code = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string error = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string log_snippet = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+message CronJob {
+  option (google.api.resource) = {
+    type: "nas.sigxcpu.io/CronJob"
+    pattern: "cronJobs/{cron_job}"
+    singular: "cronJob"
+    plural: "cronJobs"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string id = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string title = 3;
+  string description = 4;
+  string schedule = 5 [(google.api.field_behavior) = REQUIRED]; // standard 5-part cron syntax or @daily, @hourly
+  string image = 6 [(google.api.field_behavior) = REQUIRED];    // docker container image
+  repeated string command = 7;
+  repeated string args = 8;
+  repeated EnvVar env = 9;
+  repeated VolumeMount volumes = 10;
+  bool enabled = 11;
+  string concurrency_policy = 12; // "Forbid", "Allow", "Replace"
+  string restart_policy = 13;     // "Never", "OnFailure"
+  string state = 14 [(google.api.field_behavior) = OUTPUT_ONLY]; // IDLE, RUNNING, ERROR
+
+  google.protobuf.Timestamp last_schedule_time = 15 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp last_successful_time = 16 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp next_schedule_time = 17 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  string last_run_duration = 18 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string last_run_status = 19 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int32 last_run_exit_code = 20 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string last_run_error = 21 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  google.protobuf.Timestamp create_time = 22 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp update_time = 23 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  int32 timeout_seconds = 24; // 0 = no timeout (unlimited), >0 = max execution duration in seconds
+}
+
+// =============================================================================
+// RPC Request & Response Messages
+// =============================================================================
+
+message ListCronJobsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListCronJobsResponse {
+  repeated CronJob cron_jobs = 1;
+  string next_page_token = 2;
+  int32 total_size = 3;
+}
+
+message GetCronJobRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference).type = "nas.sigxcpu.io/CronJob"
+  ];
+}
+
+message CreateCronJobRequest {
+  string cron_job_id = 1 [(google.api.field_behavior) = REQUIRED];
+  CronJob cron_job = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message UpdateCronJobRequest {
+  CronJob cron_job = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteCronJobRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference).type = "nas.sigxcpu.io/CronJob"
+  ];
+}
+
+message RunCronJobRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference).type = "nas.sigxcpu.io/CronJob"
+  ];
+}
+
+message GetCronJobLogsRequest {
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference).type = "nas.sigxcpu.io/CronJob"
+  ];
+  string run_id = 2;
+  int32 lines = 3;
+}
+
+message GetCronJobLogsResponse {
+  string logs = 1;
+  string run_id = 2;
+  string status = 3;
+  int32 exit_code = 4;
+}

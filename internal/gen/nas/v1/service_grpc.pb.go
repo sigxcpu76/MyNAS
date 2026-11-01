@@ -146,6 +146,13 @@ const (
 	NasService_ListCatalogApps_FullMethodName                = "/nas.v1.NasService/ListCatalogApps"
 	NasService_GetCatalogApp_FullMethodName                  = "/nas.v1.NasService/GetCatalogApp"
 	NasService_SyncCatalog_FullMethodName                    = "/nas.v1.NasService/SyncCatalog"
+	NasService_ListCronJobs_FullMethodName                   = "/nas.v1.NasService/ListCronJobs"
+	NasService_GetCronJob_FullMethodName                     = "/nas.v1.NasService/GetCronJob"
+	NasService_CreateCronJob_FullMethodName                  = "/nas.v1.NasService/CreateCronJob"
+	NasService_UpdateCronJob_FullMethodName                  = "/nas.v1.NasService/UpdateCronJob"
+	NasService_DeleteCronJob_FullMethodName                  = "/nas.v1.NasService/DeleteCronJob"
+	NasService_RunCronJob_FullMethodName                     = "/nas.v1.NasService/RunCronJob"
+	NasService_GetCronJobLogs_FullMethodName                 = "/nas.v1.NasService/GetCronJobLogs"
 )
 
 // NasServiceClient is the client API for NasService service.
@@ -284,6 +291,13 @@ type NasServiceClient interface {
 	ListCatalogApps(ctx context.Context, in *ListCatalogAppsRequest, opts ...grpc.CallOption) (*ListCatalogAppsResponse, error)
 	GetCatalogApp(ctx context.Context, in *GetCatalogAppRequest, opts ...grpc.CallOption) (*CatalogApp, error)
 	SyncCatalog(ctx context.Context, in *SyncCatalogRequest, opts ...grpc.CallOption) (*SyncCatalogResponse, error)
+	ListCronJobs(ctx context.Context, in *ListCronJobsRequest, opts ...grpc.CallOption) (*ListCronJobsResponse, error)
+	GetCronJob(ctx context.Context, in *GetCronJobRequest, opts ...grpc.CallOption) (*CronJob, error)
+	CreateCronJob(ctx context.Context, in *CreateCronJobRequest, opts ...grpc.CallOption) (*CronJob, error)
+	UpdateCronJob(ctx context.Context, in *UpdateCronJobRequest, opts ...grpc.CallOption) (*CronJob, error)
+	DeleteCronJob(ctx context.Context, in *DeleteCronJobRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	RunCronJob(ctx context.Context, in *RunCronJobRequest, opts ...grpc.CallOption) (*CronJobRun, error)
+	GetCronJobLogs(ctx context.Context, in *GetCronJobLogsRequest, opts ...grpc.CallOption) (*GetCronJobLogsResponse, error)
 }
 
 type nasServiceClient struct {
@@ -1608,6 +1622,76 @@ func (c *nasServiceClient) SyncCatalog(ctx context.Context, in *SyncCatalogReque
 	return out, nil
 }
 
+func (c *nasServiceClient) ListCronJobs(ctx context.Context, in *ListCronJobsRequest, opts ...grpc.CallOption) (*ListCronJobsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListCronJobsResponse)
+	err := c.cc.Invoke(ctx, NasService_ListCronJobs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) GetCronJob(ctx context.Context, in *GetCronJobRequest, opts ...grpc.CallOption) (*CronJob, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CronJob)
+	err := c.cc.Invoke(ctx, NasService_GetCronJob_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) CreateCronJob(ctx context.Context, in *CreateCronJobRequest, opts ...grpc.CallOption) (*CronJob, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CronJob)
+	err := c.cc.Invoke(ctx, NasService_CreateCronJob_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) UpdateCronJob(ctx context.Context, in *UpdateCronJobRequest, opts ...grpc.CallOption) (*CronJob, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CronJob)
+	err := c.cc.Invoke(ctx, NasService_UpdateCronJob_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) DeleteCronJob(ctx context.Context, in *DeleteCronJobRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, NasService_DeleteCronJob_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) RunCronJob(ctx context.Context, in *RunCronJobRequest, opts ...grpc.CallOption) (*CronJobRun, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CronJobRun)
+	err := c.cc.Invoke(ctx, NasService_RunCronJob_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) GetCronJobLogs(ctx context.Context, in *GetCronJobLogsRequest, opts ...grpc.CallOption) (*GetCronJobLogsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetCronJobLogsResponse)
+	err := c.cc.Invoke(ctx, NasService_GetCronJobLogs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NasServiceServer is the server API for NasService service.
 // All implementations must embed UnimplementedNasServiceServer
 // for forward compatibility.
@@ -1744,6 +1828,13 @@ type NasServiceServer interface {
 	ListCatalogApps(context.Context, *ListCatalogAppsRequest) (*ListCatalogAppsResponse, error)
 	GetCatalogApp(context.Context, *GetCatalogAppRequest) (*CatalogApp, error)
 	SyncCatalog(context.Context, *SyncCatalogRequest) (*SyncCatalogResponse, error)
+	ListCronJobs(context.Context, *ListCronJobsRequest) (*ListCronJobsResponse, error)
+	GetCronJob(context.Context, *GetCronJobRequest) (*CronJob, error)
+	CreateCronJob(context.Context, *CreateCronJobRequest) (*CronJob, error)
+	UpdateCronJob(context.Context, *UpdateCronJobRequest) (*CronJob, error)
+	DeleteCronJob(context.Context, *DeleteCronJobRequest) (*emptypb.Empty, error)
+	RunCronJob(context.Context, *RunCronJobRequest) (*CronJobRun, error)
+	GetCronJobLogs(context.Context, *GetCronJobLogsRequest) (*GetCronJobLogsResponse, error)
 	mustEmbedUnimplementedNasServiceServer()
 }
 
@@ -2131,6 +2222,27 @@ func (UnimplementedNasServiceServer) GetCatalogApp(context.Context, *GetCatalogA
 }
 func (UnimplementedNasServiceServer) SyncCatalog(context.Context, *SyncCatalogRequest) (*SyncCatalogResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SyncCatalog not implemented")
+}
+func (UnimplementedNasServiceServer) ListCronJobs(context.Context, *ListCronJobsRequest) (*ListCronJobsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListCronJobs not implemented")
+}
+func (UnimplementedNasServiceServer) GetCronJob(context.Context, *GetCronJobRequest) (*CronJob, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetCronJob not implemented")
+}
+func (UnimplementedNasServiceServer) CreateCronJob(context.Context, *CreateCronJobRequest) (*CronJob, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateCronJob not implemented")
+}
+func (UnimplementedNasServiceServer) UpdateCronJob(context.Context, *UpdateCronJobRequest) (*CronJob, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateCronJob not implemented")
+}
+func (UnimplementedNasServiceServer) DeleteCronJob(context.Context, *DeleteCronJobRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteCronJob not implemented")
+}
+func (UnimplementedNasServiceServer) RunCronJob(context.Context, *RunCronJobRequest) (*CronJobRun, error) {
+	return nil, status.Error(codes.Unimplemented, "method RunCronJob not implemented")
+}
+func (UnimplementedNasServiceServer) GetCronJobLogs(context.Context, *GetCronJobLogsRequest) (*GetCronJobLogsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetCronJobLogs not implemented")
 }
 func (UnimplementedNasServiceServer) mustEmbedUnimplementedNasServiceServer() {}
 func (UnimplementedNasServiceServer) testEmbeddedByValue()                    {}
@@ -4379,6 +4491,132 @@ func _NasService_SyncCatalog_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NasService_ListCronJobs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListCronJobsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).ListCronJobs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_ListCronJobs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).ListCronJobs(ctx, req.(*ListCronJobsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_GetCronJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCronJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).GetCronJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_GetCronJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).GetCronJob(ctx, req.(*GetCronJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_CreateCronJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateCronJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).CreateCronJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_CreateCronJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).CreateCronJob(ctx, req.(*CreateCronJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_UpdateCronJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateCronJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).UpdateCronJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_UpdateCronJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).UpdateCronJob(ctx, req.(*UpdateCronJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_DeleteCronJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteCronJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).DeleteCronJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_DeleteCronJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).DeleteCronJob(ctx, req.(*DeleteCronJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_RunCronJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RunCronJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).RunCronJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_RunCronJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).RunCronJob(ctx, req.(*RunCronJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_GetCronJobLogs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCronJobLogsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).GetCronJobLogs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_GetCronJobLogs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).GetCronJobLogs(ctx, req.(*GetCronJobLogsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // NasService_ServiceDesc is the grpc.ServiceDesc for NasService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -4865,6 +5103,34 @@ var NasService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SyncCatalog",
 			Handler:    _NasService_SyncCatalog_Handler,
+		},
+		{
+			MethodName: "ListCronJobs",
+			Handler:    _NasService_ListCronJobs_Handler,
+		},
+		{
+			MethodName: "GetCronJob",
+			Handler:    _NasService_GetCronJob_Handler,
+		},
+		{
+			MethodName: "CreateCronJob",
+			Handler:    _NasService_CreateCronJob_Handler,
+		},
+		{
+			MethodName: "UpdateCronJob",
+			Handler:    _NasService_UpdateCronJob_Handler,
+		},
+		{
+			MethodName: "DeleteCronJob",
+			Handler:    _NasService_DeleteCronJob_Handler,
+		},
+		{
+			MethodName: "RunCronJob",
+			Handler:    _NasService_RunCronJob_Handler,
+		},
+		{
+			MethodName: "GetCronJobLogs",
+			Handler:    _NasService_GetCronJobLogs_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

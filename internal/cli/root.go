@@ -72,6 +72,7 @@ and Linux system users/groups.`,
 		newCatalogCmd(opts),
 		newLxcCmd(opts),
 		newShareCmd(opts),
+		newCronCmd(opts),
 		newUserCmd(opts),
 		newGroupCmd(opts),
 	)
