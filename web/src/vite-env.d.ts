@@ -15,6 +15,7 @@ declare module '@novnc/novnc' {
     dragViewport: boolean;
     focusOnClick: boolean;
     viewOnly: boolean;
+    background: string;
     addEventListener(event: string, listener: (...args: any[]) => void): void;
     removeEventListener(event: string, listener: (...args: any[]) => void): void;
     sendCtrlAltDel(): void;

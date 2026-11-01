@@ -87,6 +87,7 @@ export class RfbConsoleAdapter {
 
       this.rfb.resizeSession = false;
       this.rfb.focusOnClick = true;
+      this.rfb.background = '#000000';
 
       this.applyScaleMode();
 

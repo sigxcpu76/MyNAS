@@ -780,6 +780,8 @@ onMounted(() => {
   min-height: 0;
   overflow-y: auto;
   padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
 }
 
 .system-pool-banner {
@@ -827,7 +829,8 @@ onMounted(() => {
 .embedded-vnc-container {
   width: 100%;
   height: 100%;
-  min-height: 550px;
+  flex: 1;
+  min-height: max(560px, calc(100vh - 160px));
   display: flex;
   flex-direction: column;
 }

@@ -602,7 +602,7 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
 </script>
 
 <template>
-  <div class="vm-detail-view">
+  <div class="vm-detail-view" :class="{ 'is-console-tab': props.activeSubTab === 'console' }">
     <!-- Subtab 1: Summary -->
     <div v-if="props.activeSubTab === 'summary'" class="vm-tab-content">
       <div class="grid-2">
@@ -938,7 +938,7 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
     </div>
 
     <!-- Subtab 3: Integrated Console -->
-    <div v-else-if="props.activeSubTab === 'console'" class="vm-tab-content">
+    <div v-else-if="props.activeSubTab === 'console'" class="vm-tab-content vm-console-tab-content">
       <div v-if="isLoadingConsole" class="card" style="padding: 48px; text-align: center">
         <div class="spinner" style="width: 28px; height: 28px; border-width: 3px; margin: 0 auto"></div>
         <p style="margin-top: 12px; font-size: 13px; color: var(--text-secondary)">Connecting to live QEMU/noVNC console...</p>
@@ -965,6 +965,7 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
             :vnc-port="consoleSession.vncPort"
             :websocket-url="consoleSession.websocketUrl"
             :standalone="false"
+            @close="emit('update:activeSubTab', 'summary')"
             @detach="popoutConsole"
           />
         </div>
@@ -1152,6 +1153,13 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
   width: 100%;
 }
 
+.vm-detail-view.is-console-tab {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .vm-header-card {
   padding: 16px 20px;
   display: flex;
@@ -1262,10 +1270,18 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
   color: var(--text-primary);
 }
 
+.vm-console-tab-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .embedded-vnc-card {
   padding: 0;
   overflow: hidden;
-  height: 600px;
+  flex: 1;
+  min-height: max(560px, calc(100vh - 160px));
   display: flex;
   flex-direction: column;
 }
@@ -1278,11 +1294,15 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
   align-items: center;
   justify-content: space-between;
   padding: 0 14px;
+  flex-shrink: 0;
 }
 
 .vnc-body-wrap {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
 }
 
 .empty-state {

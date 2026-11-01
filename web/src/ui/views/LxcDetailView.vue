@@ -442,7 +442,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="lxc-detail-view">
+  <div class="lxc-detail-view" :class="{ 'is-console-tab': props.activeSubTab === 'console' || props.activeSubTab === 'terminal' }">
     <!-- Subtab 1: Summary -->
     <div v-if="props.activeSubTab === 'summary'" class="lxc-tab-content">
       <div class="grid-2">
@@ -574,7 +574,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Subtab 2: Console / Terminal -->
-    <div v-else-if="props.activeSubTab === 'console' || props.activeSubTab === 'terminal'" class="lxc-tab-content">
+    <div v-else-if="props.activeSubTab === 'console' || props.activeSubTab === 'terminal'" class="lxc-tab-content lxc-console-tab-content">
       <div v-if="container?.state !== 'RUNNING'" class="card detail-card" style="padding: 48px; text-align: center">
         <MdiIcon :path="mdiAlertCircle" size="48" style="color: var(--warning-text); margin-bottom: 12px" />
         <h4 style="font-size: 16px; font-weight: 600; margin-bottom: 6px">Container is not running</h4>
@@ -586,7 +586,7 @@ onBeforeUnmount(() => {
           Start Container
         </button>
       </div>
-      <div v-else class="card detail-card" style="padding: 0; overflow: hidden">
+      <div v-else class="card detail-card lxc-terminal-card" style="padding: 0; overflow: hidden">
         <EmbeddedTerminal
           :container-id="technicalContainerId"
           :container-name="container?.containerName || technicalContainerId"
@@ -837,6 +837,27 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 16px;
   width: 100%;
+}
+
+.lxc-detail-view.is-console-tab {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.lxc-console-tab-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.lxc-terminal-card {
+  flex: 1;
+  min-height: max(520px, calc(100vh - 160px));
+  display: flex;
+  flex-direction: column;
 }
 
 .lxc-header-card {

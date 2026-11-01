@@ -353,7 +353,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="docker-detail-view">
+  <div class="docker-detail-view" :class="{ 'is-console-tab': props.activeSubTab === 'console' }">
     <!-- Subtab 1: Summary -->
     <div v-if="props.activeSubTab === 'summary'" class="docker-tab-content">
       <div class="grid-2">
@@ -507,7 +507,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Subtab 2: Console / Interactive Shell -->
-    <div v-else-if="props.activeSubTab === 'console'" class="docker-tab-content">
+    <div v-else-if="props.activeSubTab === 'console'" class="docker-tab-content docker-console-tab-content">
       <div v-if="app?.state !== 'RUNNING' && app?.state !== 'PARTIALLY_RUNNING'" class="card detail-card" style="padding: 48px; text-align: center">
         <MdiIcon :path="mdiAlertCircle" size="48" style="color: var(--warning-text); margin-bottom: 12px" />
         <h4 style="font-size: 16px; font-weight: 600; margin-bottom: 6px">Application is not running</h4>
@@ -519,7 +519,7 @@ onUnmounted(() => {
           Start Application
         </button>
       </div>
-      <div v-else class="card detail-card" style="padding: 0; overflow: hidden">
+      <div v-else class="card detail-card docker-terminal-card" style="padding: 0; overflow: hidden">
         <div
           v-if="terminalContainerOptions.length > 1"
           style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--bg-surface); border-bottom: 1px solid var(--border-subtle)"
@@ -708,6 +708,27 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 16px;
   width: 100%;
+}
+
+.docker-detail-view.is-console-tab {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.docker-console-tab-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.docker-terminal-card {
+  flex: 1;
+  min-height: max(520px, calc(100vh - 160px));
+  display: flex;
+  flex-direction: column;
 }
 
 .docker-header-card {
