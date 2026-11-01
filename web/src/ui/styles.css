@@ -1532,6 +1532,15 @@ select option {
   z-index: 9999;
 }
 
+@media (max-width: 768px) {
+  .toast-stack {
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    left: 14px;
+    right: 14px;
+    align-items: stretch;
+  }
+}
+
 .toast {
   padding: 10px 16px;
   border-radius: 8px;

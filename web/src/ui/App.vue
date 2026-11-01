@@ -78,6 +78,23 @@ import LxcDetailView from './views/LxcDetailView.vue';
 import SharesView from './views/SharesView.vue';
 import CronJobsView from './views/CronJobsView.vue';
 import IdentityView from './views/IdentityView.vue';
+import { useDevice } from './composables/useDevice';
+import MobileShell from './mobile/MobileShell.vue';
+import MobileTerminal from './mobile/components/MobileTerminal.vue';
+
+const { isMobile } = useDevice();
+
+async function handleMobileVmConsole(vmName: string) {
+  try {
+    const s = await services.kvm.openConsole(vmName);
+    const tokenParam = s.token ? `&token=${encodeURIComponent(s.token)}` : '';
+    const portParam = s.vncPort ? `&port=${s.vncPort}` : '';
+    const url = `/vnc-console?vm=${encodeURIComponent(vmName)}${tokenParam}${portParam}`;
+    window.open(url, '_blank');
+  } catch (err: any) {
+    notify('error', `Failed to open console: ${err.message}`);
+  }
+}
 
 const showPoolModal = ref(false);
 const showPrerequisitesModal = ref(false);
@@ -334,19 +351,19 @@ onMounted(() => {
   <!-- Detached Standalone Console View (when ?vm=... is opened in its own window) -->
   <div v-if="nasState.activeTab === 'vnc-console'" class="detached-console-view">
     <VncConsoleStandalone />
-    <LoginModal v-if="!nasState.authenticated" />
-    <ConfirmModal />
-    <div class="toast-stack">
-      <div
-        v-for="t in nasState.toasts"
-        :key="t.id"
-        class="toast"
-        :class="`toast-${t.type}`"
-      >
-        {{ t.message }}
-      </div>
-    </div>
   </div>
+
+  <!-- Dedicated Mobile Shell (Phone / Tablet / Viewport <= 768px) -->
+  <MobileShell
+    v-else-if="isMobile"
+    @open-terminal="showHostTerminalModal = true"
+    @open-system-details="showSystemDetailsModal = true"
+    @open-prerequisites="showPrerequisitesModal = true"
+    @open-pool-modal="showPoolModal = true"
+    @open-vm-console="handleMobileVmConsole"
+    @open-lxc-terminal="handleOpenLxcTerminal"
+    @logout="handleLogout"
+  />
 
   <!-- Enterprise Fixed-Viewport Desktop Workbench (Proxmox-Style 100vh) -->
   <div v-else class="enterprise-workbench">
@@ -620,40 +637,49 @@ onMounted(() => {
 
     <!-- Docked Bottom Task & Audit Console (Proxmox-Style) -->
     <TaskConsoleDock />
+  </div>
 
-    <!-- Modals -->
-    <LoginModal v-if="!nasState.authenticated" />
-    <SystemPoolModal v-if="showPoolModal" @close="showPoolModal = false" />
-    <PrerequisitesModal v-if="showPrerequisitesModal" @close="showPrerequisitesModal = false" />
-    <SystemDetailsModal
-      v-if="showSystemDetailsModal"
-      @close="showSystemDetailsModal = false"
-      @open-terminal="showSystemDetailsModal = false; showHostTerminalModal = true"
-    />
-    <HostTerminalModal
-      v-if="showHostTerminalModal"
+  <!-- Shared Global Modals & Utilities (Accessible across Desktop & Mobile) -->
+  <LoginModal v-if="!nasState.authenticated" />
+  <SystemPoolModal v-if="showPoolModal" @close="showPoolModal = false" />
+  <PrerequisitesModal v-if="showPrerequisitesModal" @close="showPrerequisitesModal = false" />
+  <SystemDetailsModal
+    v-if="showSystemDetailsModal"
+    @close="showSystemDetailsModal = false"
+    @open-terminal="showSystemDetailsModal = false; showHostTerminalModal = true"
+  />
+
+  <!-- Host Terminal: Dedicated touch-enabled full screen on mobile, desktop modal on desktop -->
+  <template v-if="showHostTerminalModal">
+    <MobileTerminal
+      v-if="isMobile"
       @close="showHostTerminalModal = false"
     />
-    <DockerTerminalModal
-      v-if="activeLxcTerminal"
-      :app-title="`LXC Terminal: ${activeLxcTerminal.containerName || activeLxcTerminal.name.replace('lxcContainers/', '')}`"
-      :containers="lxcTerminalOptions"
-      :initial-container-id="activeLxcTerminal.name.replace('lxcContainers/', '')"
-      endpoint-type="lxc"
-      @close="activeLxcTerminal = null"
+    <HostTerminalModal
+      v-else
+      @close="showHostTerminalModal = false"
     />
-    <ConfirmModal />
+  </template>
 
-    <!-- Toast Notifications Stack -->
-    <div class="toast-stack">
-      <div
-        v-for="t in nasState.toasts"
-        :key="t.id"
-        class="toast"
-        :class="`toast-${t.type}`"
-      >
-        {{ t.message }}
-      </div>
+  <DockerTerminalModal
+    v-if="activeLxcTerminal"
+    :app-title="`LXC Terminal: ${activeLxcTerminal.containerName || activeLxcTerminal.name.replace('lxcContainers/', '')}`"
+    :containers="lxcTerminalOptions"
+    :initial-container-id="activeLxcTerminal.name.replace('lxcContainers/', '')"
+    endpoint-type="lxc"
+    @close="activeLxcTerminal = null"
+  />
+  <ConfirmModal />
+
+  <!-- Toast Notifications Stack -->
+  <div class="toast-stack">
+    <div
+      v-for="t in nasState.toasts"
+      :key="t.id"
+      class="toast"
+      :class="`toast-${t.type}`"
+    >
+      {{ t.message }}
     </div>
   </div>
 </template>

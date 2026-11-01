@@ -20,6 +20,15 @@ initTheme();
 initFontSize();
 initRouter();
 
+// Register PWA Service Worker
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      console.warn('[PWA] ServiceWorker registration failed:', err);
+    });
+  });
+}
+
 const app = createApp(App);
 app.config.errorHandler = (err, instance, info) => {
   console.error('[Vue Global Error]', err, info);
