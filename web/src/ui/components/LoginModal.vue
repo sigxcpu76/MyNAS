@@ -4,8 +4,8 @@ import { services } from '../../container';
 import { nasState, notify, refreshAllData, startEventStream } from '../store';
 import NanLogo from './NanLogo.vue';
 
-const username = ref('sigxcpu');
-const password = ref('admin123');
+const username = ref('');
+const password = ref('');
 const submitting = ref(false);
 const errorMsg = ref('');
 
@@ -51,22 +51,31 @@ async function handleLogin() {
         Sign in with your Linux system account.
       </div>
 
-      <form @submit.prevent="handleLogin" style="display: flex; flex-direction: column; gap: 14px">
+      <form
+        method="post"
+        action="#"
+        @submit.prevent="handleLogin"
+        style="display: flex; flex-direction: column; gap: 14px"
+      >
         <div class="form-group">
-          <label>Username</label>
+          <label for="login-username">Username</label>
           <input
+            id="login-username"
+            name="username"
             v-model="username"
             type="text"
             class="input mono"
-            placeholder="e.g. sigxcpu or root"
+            placeholder="e.g. root or your user"
             autocomplete="username"
             required
           />
         </div>
 
         <div class="form-group">
-          <label>Password</label>
+          <label for="login-password">Password</label>
           <input
+            id="login-password"
+            name="password"
             v-model="password"
             type="password"
             class="input"
