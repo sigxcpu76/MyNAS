@@ -1,8 +1,28 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
+function typographyScalePlugin() {
+  return {
+    name: 'typography-scale-plugin',
+    enforce: 'pre' as const,
+    transform(code: string, id: string) {
+      if (id.includes('node_modules')) return;
+      if (!id.endsWith('.vue') && !id.endsWith('.css')) return;
+
+      const transformed = code.replace(
+        /font-size:\s*([0-9]+(?:\.[0-9]+)?)px(?!\s*\*)/g,
+        'font-size: calc($1px * var(--fs-scale, 1))'
+      );
+      return {
+        code: transformed,
+        map: null,
+      };
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [typographyScalePlugin(), vue()],
   build: {
     target: 'esnext',
     rollupOptions: {
