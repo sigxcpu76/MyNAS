@@ -339,7 +339,7 @@ function switchDetailTab(tab: 'details' | 'logs') {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 12px;
+  padding: 12px 12px calc(40px + env(safe-area-inset-bottom, 0px)) 12px;
 }
 
 .filter-header {

@@ -277,7 +277,8 @@ const isDegraded = computed(() => {
   flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: 16px;
+  padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  scroll-padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
 }
 
 .mobile-fallback-wrap {
