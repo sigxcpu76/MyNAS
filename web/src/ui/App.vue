@@ -49,6 +49,7 @@ import MdiIcon from './components/MdiIcon.vue';
 import SortableTh from './components/SortableTh.vue';
 import { useTableSort } from './composables/useTableSort';
 import ThemeSelector from './components/ThemeSelector.vue';
+import FontSizeSelector from './components/FontSizeSelector.vue';
 import PrerequisitesTopBarButton from './components/PrerequisitesTopBarButton.vue';
 import PrerequisitesModal from './components/PrerequisitesModal.vue';
 import SystemDetailsTopBarButton from './components/SystemDetailsTopBarButton.vue';
@@ -411,6 +412,7 @@ onMounted(() => {
         <SystemDetailsTopBarButton class="hide-mobile" @click="showSystemDetailsModal = true" />
         <PrerequisitesTopBarButton class="hide-mobile" @click="showPrerequisitesModal = true" />
         <ThemeSelector class="hide-mobile" />
+        <FontSizeSelector class="hide-mobile" />
 
         <button
           class="btn btn-xs btn-ghost"

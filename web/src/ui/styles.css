@@ -602,6 +602,48 @@ html[data-theme="one-light"] {
 }
 
 /* ==========================================================================
+   Typography Scale Variables
+   Controls the overall UI font size dynamically without viewport zoom
+   ========================================================================== */
+:root {
+  --fs-scale: 1;
+  --fs-xs: calc(11.5px * var(--fs-scale));
+  --fs-sm: calc(13px * var(--fs-scale));
+  --fs-base: calc(14.5px * var(--fs-scale));
+  --fs-md: calc(14px * var(--fs-scale));
+  --fs-lg: calc(16px * var(--fs-scale));
+  --fs-xl: calc(18px * var(--fs-scale));
+  --fs-table-th: calc(12px * var(--fs-scale));
+  --fs-table-td: calc(13.5px * var(--fs-scale));
+  --fs-btn: calc(13.5px * var(--fs-scale));
+  --fs-btn-sm: calc(12.5px * var(--fs-scale));
+  --fs-btn-xs: calc(11.5px * var(--fs-scale));
+  --fs-input: calc(13.5px * var(--fs-scale));
+  --fs-badge: calc(12px * var(--fs-scale));
+  --fs-label: calc(12.5px * var(--fs-scale));
+}
+
+html[data-font-size="compact"] {
+  --fs-scale: 0.9;
+}
+
+html[data-font-size="default"] {
+  --fs-scale: 1;
+}
+
+html[data-font-size="medium"] {
+  --fs-scale: 1.1;
+}
+
+html[data-font-size="large"] {
+  --fs-scale: 1.2;
+}
+
+html[data-font-size="xlarge"] {
+  --fs-scale: 1.3;
+}
+
+/* ==========================================================================
    Global Reset & Base Typography
    ========================================================================== */
 * {
@@ -641,26 +683,26 @@ body {
   background-color: var(--bg-base);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 14.5px;
+  font-size: var(--fs-base);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .font-xs {
-  font-size: 11.5px;
+  font-size: var(--fs-xs) !important;
 }
 
 .font-sm {
-  font-size: 13px;
+  font-size: var(--fs-sm) !important;
 }
 
 .font-md {
-  font-size: 14px;
+  font-size: var(--fs-md) !important;
 }
 
 .font-lg {
-  font-size: 16px;
+  font-size: var(--fs-lg) !important;
 }
 
 code, pre, .mono {
@@ -716,7 +758,7 @@ code, pre, .mono {
 }
 
 .brand-subtitle {
-  font-size: 12px;
+  font-size: var(--fs-table-th);
   color: var(--text-secondary);
 }
 
@@ -738,7 +780,7 @@ code, pre, .mono {
   background: transparent;
   border: 1px solid transparent;
   cursor: pointer;
-  font-size: 13.5px;
+  font-size: var(--fs-btn);
   font-weight: 500;
   text-align: left;
   transition: all 0.15s ease;
@@ -758,7 +800,7 @@ code, pre, .mono {
 }
 
 .nav-badge {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-family: var(--font-mono);
   padding: 1px 7px;
   border-radius: 999px;
@@ -847,14 +889,14 @@ code, pre, .mono {
 }
 
 .card-title {
-  font-size: 16px;
+  font-size: var(--fs-lg);
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 
 .card-subtitle {
-  font-size: 12.5px;
+  font-size: var(--fs-btn-sm);
   color: var(--text-secondary);
   line-height: 1.4;
 }
@@ -866,7 +908,7 @@ code, pre, .mono {
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--border-subtle);
-  font-size: 12.5px;
+  font-size: var(--fs-btn-sm);
   color: var(--text-secondary);
 }
 
@@ -879,7 +921,7 @@ code, pre, .mono {
   gap: 5px;
   padding: 2px 9px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--fs-badge);
   font-weight: 600;
   font-family: var(--font-mono);
   line-height: 1.4;
@@ -947,7 +989,7 @@ code, pre, .mono {
   gap: 6px;
   padding: 8px 16px;
   border-radius: 8px;
-  font-size: 13.5px;
+  font-size: var(--fs-btn);
   font-weight: 600;
   cursor: pointer;
   border: 1px solid var(--btn-border);
@@ -1014,13 +1056,13 @@ code, pre, .mono {
 
 .btn-sm {
   padding: 5px 12px;
-  font-size: 12.5px;
+  font-size: var(--fs-btn-sm);
   border-radius: 6px;
 }
 
 .btn-xs {
   padding: 3px 8px;
-  font-size: 11.5px;
+  font-size: var(--fs-btn-xs);
   border-radius: 5px;
 }
 
@@ -1226,7 +1268,7 @@ table.data-table {
 }
 
 table.data-table th {
-  font-size: 12px;
+  font-size: var(--fs-table-th);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-secondary);
@@ -1239,7 +1281,7 @@ table.data-table th {
 table.data-table td {
   padding: 10px 12px;
   border-bottom: 1px solid var(--border-subtle);
-  font-size: 13.5px;
+  font-size: var(--fs-table-td);
   vertical-align: middle;
   color: var(--text-primary);
 }
@@ -1302,7 +1344,7 @@ th.sortable-th.is-sorted .sortable-th-icon {
 }
 
 .form-label, .form-group label {
-  font-size: 12.5px;
+  font-size: var(--fs-label);
   font-weight: 600;
   color: var(--text-secondary);
   display: block;
@@ -1321,7 +1363,7 @@ textarea,
   color: var(--input-text) !important;
   padding: 8px 12px;
   border-radius: 8px;
-  font-size: 13.5px;
+  font-size: var(--fs-input);
   font-family: inherit;
   width: 100%;
   box-sizing: border-box;

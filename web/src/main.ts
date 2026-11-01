@@ -3,6 +3,7 @@ import App from './ui/App.vue';
 import './ui/styles.css';
 import { initRouter } from './ui/router';
 import { initTheme } from './ui/theme';
+import { initFontSize } from './ui/fontSize';
 
 try {
   if (typeof document !== 'undefined') {
@@ -16,6 +17,7 @@ try {
 } catch {}
 
 initTheme();
+initFontSize();
 initRouter();
 
 const app = createApp(App);
