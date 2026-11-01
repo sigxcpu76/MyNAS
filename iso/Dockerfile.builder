@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     grub-common \
     grub-pc-bin \
     grub-efi-amd64-bin \
+    grub-efi-amd64-signed \
+    shim-signed \
     mtools \
     dosfstools \
     curl \

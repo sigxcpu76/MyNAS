@@ -273,7 +273,8 @@ mksquashfs "$CHROOT_DIR" "$ISO_ROOT/live/filesystem.squashfs" \
 
 # 6. Setup bootloaders in ISO root
 echo ">> [6/7] Configuring bootloader menus for UEFI and BIOS..."
-mkdir -p "$ISO_ROOT/.disk" "$ISO_ROOT/EFI/BOOT" "$ISO_ROOT/boot/grub/fonts" "$ISO_ROOT/isolinux" "$BUILD_DIR/efi"
+mkdir -p "$ISO_ROOT/.disk" "$ISO_ROOT/EFI/boot" "$ISO_ROOT/EFI/BOOT" "$ISO_ROOT/EFI/debian" \
+         "$ISO_ROOT/boot/grub/fonts" "$ISO_ROOT/boot/grub/x86_64-efi" "$ISO_ROOT/isolinux" "$BUILD_DIR/efi"
 echo "mynas Appliance Live Installer" > "$ISO_ROOT/.disk/info"
 touch "$ISO_ROOT/.disk/base_installable"
 
@@ -281,9 +282,20 @@ cp "$ISO_DIR/boot/grub/grub.cfg" "$ISO_ROOT/boot/grub/grub.cfg"
 cp "$ISO_DIR/boot/isolinux/isolinux.cfg" "$ISO_ROOT/isolinux/isolinux.cfg"
 
 # Copy GRUB font if available
-if [ -f /usr/share/grub/unicode.pf2 ]; then
-    cp /usr/share/grub/unicode.pf2 "$ISO_ROOT/boot/grub/fonts/"
-fi
+for f in /usr/share/grub/unicode.pf2 "$CHROOT_DIR/usr/share/grub/unicode.pf2"; do
+    if [ -f "$f" ]; then
+        cp "$f" "$ISO_ROOT/boot/grub/fonts/"
+        break
+    fi
+done
+
+# Copy GRUB x86_64-efi runtime modules if available
+for d in /usr/lib/grub/x86_64-efi "$CHROOT_DIR/usr/lib/grub/x86_64-efi"; do
+    if [ -d "$d" ]; then
+        cp -r "$d"/* "$ISO_ROOT/boot/grub/x86_64-efi/" 2>/dev/null || true
+        break
+    fi
+done
 
 # Copy syslinux/isolinux binaries if available
 for bin in /usr/lib/ISOLINUX/isolinux.bin /usr/lib/syslinux/modules/bios/vesamenu.c32 /usr/lib/syslinux/modules/bios/ldlinux.c32 /usr/lib/syslinux/modules/bios/libcom32.c32 /usr/lib/syslinux/modules/bios/libutil.c32; do
@@ -292,34 +304,60 @@ for bin in /usr/lib/ISOLINUX/isolinux.bin /usr/lib/syslinux/modules/bios/vesamen
     fi
 done
 
-# Build standalone GRUB UEFI binary (BOOTX64.EFI)
-echo ">> Building GRUB EFI binary (BOOTX64.EFI)..."
-cat << 'EOF' > "$BUILD_DIR/efi/grub-early.cfg"
-search --file --set=root /live/vmlinuz
+# Locate Microsoft-signed shim and Debian-signed GRUB for enterprise UEFI boot (HP ProLiant / Dell)
+SHIM_BIN=""
+for p in /usr/lib/shim/shimx64.efi.signed /usr/lib/shim/shimx64.efi "$CHROOT_DIR/usr/lib/shim/shimx64.efi.signed"; do
+    if [ -f "$p" ]; then SHIM_BIN="$p"; break; fi
+done
+
+GRUB_SIGNED_BIN=""
+for p in /usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed "$CHROOT_DIR/usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed"; do
+    if [ -f "$p" ]; then GRUB_SIGNED_BIN="$p"; break; fi
+done
+
+echo ">> Preparing enterprise signed UEFI bootloaders..."
+# Early grub.cfg for shim/grub to find root ISO
+cat << 'EOF' > "$BUILD_DIR/efi/grub.cfg"
+search --file --set=root /.disk/info
 set prefix=($root)/boot/grub
-configfile $prefix/grub.cfg
+source $prefix/grub.cfg
 EOF
+cp "$BUILD_DIR/efi/grub.cfg" "$ISO_ROOT/EFI/debian/grub.cfg"
 
-grub-mkimage \
-    -O x86_64-efi \
-    -o "$ISO_ROOT/EFI/BOOT/BOOTX64.EFI" \
-    -p /boot/grub \
-    -c "$BUILD_DIR/efi/grub-early.cfg" \
-    part_gpt part_msdos fat iso9660 ntfs normal chain boot configfile \
-    linux echo test all_video efi_gop efi_uga gfxterm font cat \
-    search search_fs_file search_fs_uuid search_label gfxmenu \
-    tar squash4 loopback loadenv reboot halt sleep
+if [ -n "$SHIM_BIN" ] && [ -n "$GRUB_SIGNED_BIN" ]; then
+    echo ">> Using Microsoft-signed shim ($SHIM_BIN) & Debian-signed GRUB ($GRUB_SIGNED_BIN)..."
+    cp "$SHIM_BIN" "$ISO_ROOT/EFI/boot/bootx64.efi"
+    cp "$SHIM_BIN" "$ISO_ROOT/EFI/BOOT/BOOTX64.EFI"
+    cp "$GRUB_SIGNED_BIN" "$ISO_ROOT/EFI/boot/grubx64.efi"
+    cp "$GRUB_SIGNED_BIN" "$ISO_ROOT/EFI/BOOT/grubx64.efi"
+else
+    echo ">> Fallback: Building standalone GRUB EFI binary (BOOTX64.EFI)..."
+    grub-mkimage \
+        -O x86_64-efi \
+        -o "$ISO_ROOT/EFI/boot/bootx64.efi" \
+        -p /boot/grub \
+        -c "$BUILD_DIR/efi/grub.cfg" \
+        part_gpt part_msdos fat iso9660 ntfs normal chain boot configfile \
+        linux echo test all_video efi_gop efi_uga gfxterm font cat \
+        search search_fs_file search_fs_uuid search_label gfxmenu \
+        tar squash4 loopback loadenv reboot halt sleep
+    cp "$ISO_ROOT/EFI/boot/bootx64.efi" "$ISO_ROOT/EFI/BOOT/BOOTX64.EFI"
+    cp "$ISO_ROOT/EFI/boot/bootx64.efi" "$ISO_ROOT/EFI/boot/grubx64.efi"
+fi
 
-# Create FAT12 El Torito EFI boot image (efi.img)
+# Create FAT12 El Torito EFI boot image (efi.img) matching Debian official layout
 echo ">> Creating El Torito EFI boot image (efi.img)..."
 rm -f "$ISO_ROOT/boot/grub/efi.img"
 truncate -s 8M "$ISO_ROOT/boot/grub/efi.img"
-mkfs.vfat -F 12 -n "MYNAS_EFI" "$ISO_ROOT/boot/grub/efi.img"
+mkfs.vfat -F 12 -n "EFI" "$ISO_ROOT/boot/grub/efi.img"
 mmd -i "$ISO_ROOT/boot/grub/efi.img" ::/EFI
-mmd -i "$ISO_ROOT/boot/grub/efi.img" ::/EFI/BOOT
-mcopy -i "$ISO_ROOT/boot/grub/efi.img" "$ISO_ROOT/EFI/BOOT/BOOTX64.EFI" ::/EFI/BOOT/BOOTX64.EFI
+mmd -i "$ISO_ROOT/boot/grub/efi.img" ::/EFI/boot
+mmd -i "$ISO_ROOT/boot/grub/efi.img" ::/EFI/debian
+mcopy -i "$ISO_ROOT/boot/grub/efi.img" "$ISO_ROOT/EFI/boot/bootx64.efi" ::/EFI/boot/bootx64.efi
+mcopy -i "$ISO_ROOT/boot/grub/efi.img" "$ISO_ROOT/EFI/boot/grubx64.efi" ::/EFI/boot/grubx64.efi
+mcopy -i "$ISO_ROOT/boot/grub/efi.img" "$BUILD_DIR/efi/grub.cfg" ::/EFI/debian/grub.cfg
 
-# 7. Create Enterprise Hybrid ISO with xorriso
+# 7. Create Enterprise Hybrid ISO with xorriso (Debian Standard Layout)
 echo ">> [7/7] Generating enterprise UEFI + BIOS hybrid ISO with xorriso..."
 ISOHDPFX="/usr/lib/ISOLINUX/isohdpfx.bin"
 [ -f "$ISOHDPFX" ] || ISOHDPFX="/usr/lib/syslinux/modules/bios/isohdpfx.bin"
@@ -329,13 +367,21 @@ xorriso -as mkisofs \
     -J -joliet-long -l \
     -iso-level 3 \
     -isohybrid-mbr "$ISOHDPFX" \
-    -b isolinux/isolinux.bin \
+    -partition_cyl_align on \
+    -partition_offset 0 \
+    -partition_hd_cyl 64 \
+    -partition_sec_hd 32 \
+    --mbr-force-bootable \
+    -apm-block-size 2048 \
+    -iso_mbr_part_type 0x00 \
     -c isolinux/boot.cat \
+    -b isolinux/isolinux.bin \
     -no-emul-boot -boot-load-size 4 -boot-info-table \
     -eltorito-alt-boot \
     -e boot/grub/efi.img \
     -no-emul-boot \
     -isohybrid-gpt-basdat \
+    -isohybrid-apm-hfsplus \
     -o "$OUTPUT_ISO" \
     "$ISO_ROOT"
 
