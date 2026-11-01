@@ -273,12 +273,17 @@ mksquashfs "$CHROOT_DIR" "$ISO_ROOT/live/filesystem.squashfs" \
 
 # 6. Setup bootloaders in ISO root
 echo ">> [6/7] Configuring bootloader menus for UEFI and BIOS..."
-mkdir -p "$ISO_ROOT/.disk"
+mkdir -p "$ISO_ROOT/.disk" "$ISO_ROOT/EFI/BOOT" "$ISO_ROOT/boot/grub/fonts" "$ISO_ROOT/isolinux" "$BUILD_DIR/efi"
 echo "mynas Appliance Live Installer" > "$ISO_ROOT/.disk/info"
 touch "$ISO_ROOT/.disk/base_installable"
 
 cp "$ISO_DIR/boot/grub/grub.cfg" "$ISO_ROOT/boot/grub/grub.cfg"
 cp "$ISO_DIR/boot/isolinux/isolinux.cfg" "$ISO_ROOT/isolinux/isolinux.cfg"
+
+# Copy GRUB font if available
+if [ -f /usr/share/grub/unicode.pf2 ]; then
+    cp /usr/share/grub/unicode.pf2 "$ISO_ROOT/boot/grub/fonts/"
+fi
 
 # Copy syslinux/isolinux binaries if available
 for bin in /usr/lib/ISOLINUX/isolinux.bin /usr/lib/syslinux/modules/bios/vesamenu.c32 /usr/lib/syslinux/modules/bios/ldlinux.c32 /usr/lib/syslinux/modules/bios/libcom32.c32 /usr/lib/syslinux/modules/bios/libutil.c32; do
@@ -287,21 +292,52 @@ for bin in /usr/lib/ISOLINUX/isolinux.bin /usr/lib/syslinux/modules/bios/vesamen
     fi
 done
 
-# 7. Create Hybrid ISO
-echo ">> [7/7] Generating hybrid bootable ISO image with grub-mkrescue / xorriso..."
-if command -v grub-mkrescue >/dev/null 2>&1; then
-    grub-mkrescue -o "$OUTPUT_ISO" "$ISO_ROOT" \
-        -- -volid "MYNAS_INSTALLER"
-elif command -v xorriso >/dev/null 2>&1; then
-    xorriso -as mkisofs \
-        -r -V "MYNAS_INSTALLER" \
-        -o "$OUTPUT_ISO" \
-        -graft-points \
-        "$ISO_ROOT"
-else
-    echo "Error: Neither grub-mkrescue nor xorriso is available." >&2
-    exit 1
-fi
+# Build standalone GRUB UEFI binary (BOOTX64.EFI)
+echo ">> Building GRUB EFI binary (BOOTX64.EFI)..."
+cat << 'EOF' > "$BUILD_DIR/efi/grub-early.cfg"
+search --file --set=root /live/vmlinuz
+set prefix=($root)/boot/grub
+configfile $prefix/grub.cfg
+EOF
+
+grub-mkimage \
+    -O x86_64-efi \
+    -o "$ISO_ROOT/EFI/BOOT/BOOTX64.EFI" \
+    -p /boot/grub \
+    -c "$BUILD_DIR/efi/grub-early.cfg" \
+    part_gpt part_msdos fat iso9660 ntfs normal chain boot configfile \
+    linux echo test all_video efi_gop efi_uga gfxterm font cat \
+    search search_fs_file search_fs_uuid search_label gfxmenu \
+    tar squash4 loopback loadenv reboot halt sleep
+
+# Create FAT12 El Torito EFI boot image (efi.img)
+echo ">> Creating El Torito EFI boot image (efi.img)..."
+rm -f "$ISO_ROOT/boot/grub/efi.img"
+truncate -s 8M "$ISO_ROOT/boot/grub/efi.img"
+mkfs.vfat -F 12 -n "MYNAS_EFI" "$ISO_ROOT/boot/grub/efi.img"
+mmd -i "$ISO_ROOT/boot/grub/efi.img" ::/EFI
+mmd -i "$ISO_ROOT/boot/grub/efi.img" ::/EFI/BOOT
+mcopy -i "$ISO_ROOT/boot/grub/efi.img" "$ISO_ROOT/EFI/BOOT/BOOTX64.EFI" ::/EFI/BOOT/BOOTX64.EFI
+
+# 7. Create Enterprise Hybrid ISO with xorriso
+echo ">> [7/7] Generating enterprise UEFI + BIOS hybrid ISO with xorriso..."
+ISOHDPFX="/usr/lib/ISOLINUX/isohdpfx.bin"
+[ -f "$ISOHDPFX" ] || ISOHDPFX="/usr/lib/syslinux/modules/bios/isohdpfx.bin"
+
+xorriso -as mkisofs \
+    -r -V "MYNAS_INSTALLER" \
+    -J -joliet-long -l \
+    -iso-level 3 \
+    -isohybrid-mbr "$ISOHDPFX" \
+    -b isolinux/isolinux.bin \
+    -c isolinux/boot.cat \
+    -no-emul-boot -boot-load-size 4 -boot-info-table \
+    -eltorito-alt-boot \
+    -e boot/grub/efi.img \
+    -no-emul-boot \
+    -isohybrid-gpt-basdat \
+    -o "$OUTPUT_ISO" \
+    "$ISO_ROOT"
 
 echo "=============================================================="
 echo ">> SUCCESS! mynas appliance ISO successfully built:"
