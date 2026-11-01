@@ -12,6 +12,9 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
+# Suppress kernel dmesg spam onto the console
+dmesg -n 1 2>/dev/null || true
+
 TITLE="mynas Appliance Installer"
 
 # ------------------------------------------------------------------------------
@@ -249,18 +252,17 @@ fi
 # Step 7: Execution Phase with Progress Gauge
 # ------------------------------------------------------------------------------
 INSTALL_LOG="/tmp/mynas-install.log"
-exec > >(tee -a "$INSTALL_LOG") 2>&1
-
 TARGET="/target"
 mkdir -p "$TARGET"
 
+# Pipe gauge updates over file descriptor 3
 run_step() {
     local pct=$1
     local msg=$2
-    echo "XXX"
-    echo "$pct"
-    echo "$msg"
-    echo "XXX"
+    echo "XXX" >&3
+    echo "$pct" >&3
+    echo "$msg" >&3
+    echo "XXX" >&3
 }
 
 {
@@ -480,6 +482,9 @@ EOF
     if [ -f "$TARGET/boot/efi/EFI/debian/grubx64.efi" ]; then
         cp "$TARGET/boot/efi/EFI/debian/grubx64.efi" "$TARGET/boot/efi/EFI/BOOT/BOOTX64.EFI"
     fi
+    if [ -f "$TARGET/boot/efi/EFI/debian/grub.cfg" ]; then
+        cp "$TARGET/boot/efi/EFI/debian/grub.cfg" "$TARGET/boot/efi/EFI/BOOT/grub.cfg"
+    fi
 
     # Optional secondary drive EFI mirror
     if [ -n "$ESP2" ]; then
@@ -489,6 +494,9 @@ EOF
         mkdir -p "$TARGET/boot/efi2/EFI/BOOT"
         if [ -f "$TARGET/boot/efi2/EFI/debian/grubx64.efi" ]; then
             cp "$TARGET/boot/efi2/EFI/debian/grubx64.efi" "$TARGET/boot/efi2/EFI/BOOT/BOOTX64.EFI"
+        fi
+        if [ -f "$TARGET/boot/efi2/EFI/debian/grub.cfg" ]; then
+            cp "$TARGET/boot/efi2/EFI/debian/grub.cfg" "$TARGET/boot/efi2/EFI/BOOT/grub.cfg"
         fi
         umount "$TARGET/boot/efi2" 2>/dev/null || true
         rmdir "$TARGET/boot/efi2" 2>/dev/null || true
@@ -514,7 +522,7 @@ EOF
 
     run_step 100 "Installation completed successfully!"
     sleep 2
-} | whiptail --title "$TITLE: Installing" --gauge "Beginning appliance deployment..." 8 70 0
+} 3>&1 >> "$INSTALL_LOG" 2>&1 | whiptail --title "$TITLE: Installing" --gauge "Beginning appliance deployment..." 8 70 0
 PIPE_STATUS="${PIPESTATUS[0]}"
 
 if [ "$PIPE_STATUS" -ne 0 ]; then
