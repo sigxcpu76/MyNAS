@@ -1934,11 +1934,11 @@ async function handleWizardSubmit() {
                   <div>
                     <div class="font-semibold" style="color: var(--text-primary); display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
                       <span>{{ vm.vmName }}</span>
-                      <span v-if="vm.isTemplate" class="badge badge-warning" style="font-size: 9px">TEMPLATE</span>
+                      <span v-if="vm.isTemplate" class="badge badge-warning" style="font-size: 11px">TEMPLATE</span>
                       <span
                         v-if="transitioningVms[vm.name]"
                         class="badge badge-warning pulse-anim"
-                        style="font-size: 9px; display: inline-flex; align-items: center; gap: 4px"
+                        style="font-size: 11px; display: inline-flex; align-items: center; gap: 4px"
                       >
                         <MdiIcon :path="mdiLoading" size="10" class="spin-icon" />
                         {{ transitioningVms[vm.name] === 'stopping' ? 'Shutting down' : transitioningVms[vm.name] === 'starting' ? 'Starting' : 'Rebooting' }}
@@ -1955,46 +1955,46 @@ async function handleWizardSubmit() {
                     v-for="ip in visibleGuestIps(vm).slice(0, 2)"
                     :key="ip"
                     class="badge mono badge-neutral"
-                    style="font-size: 10px; width: fit-content"
+                    style="font-size: 11.5px; width: fit-content"
                   >
                     {{ ip }}
                   </span>
-                  <span v-if="visibleGuestIps(vm).length > 2" class="text-muted" style="font-size: 10px">
+                  <span v-if="visibleGuestIps(vm).length > 2" class="text-muted" style="font-size: 11.5px">
                     +{{ visibleGuestIps(vm).length - 2 }} more
                   </span>
                 </div>
-                <span v-else class="text-muted" style="font-size: 11px">
+                <span v-else class="text-muted" style="font-size: 12px">
                   {{ vm.state !== 'RUNNING' ? 'Offline' : (vm.guestIpAddresses?.length ? '—' : 'Querying...') }}
                 </span>
               </td>
 
               <!-- CPU -->
               <td class="col-desktop-only" style="padding: 10px 14px; width: 85px; min-width: 85px; max-width: 85px; box-sizing: border-box; white-space: nowrap">
-                <div v-if="vm.state === 'RUNNING'" style="font-size: 12.5px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums">
+                <div v-if="vm.state === 'RUNNING'" style="font-size: 13.5px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums">
                   {{ (Number(vm.guestCpuPercent) || 0).toFixed(1) }}%
                 </div>
-                <div v-else style="color: var(--text-muted); font-size: 12.5px">—</div>
+                <div v-else style="color: var(--text-muted); font-size: 13.5px">—</div>
               </td>
 
               <!-- Memory -->
               <td class="col-desktop-only" style="padding: 10px 14px; width: 105px; min-width: 105px; max-width: 105px; box-sizing: border-box; white-space: nowrap">
-                <div v-if="vm.state === 'RUNNING'" style="font-size: 12.5px; color: var(--text-primary); font-variant-numeric: tabular-nums">
+                <div v-if="vm.state === 'RUNNING'" style="font-size: 13.5px; color: var(--text-primary); font-variant-numeric: tabular-nums">
                   {{ vm.guestMemoryUsedMib || 0 }} MiB
                 </div>
-                <div v-else style="color: var(--text-muted); font-size: 12.5px">—</div>
+                <div v-else style="color: var(--text-muted); font-size: 13.5px">—</div>
               </td>
 
               <!-- Network (1s Live) -->
               <td class="col-desktop-only" style="padding: 10px 14px; width: 210px; min-width: 210px; max-width: 210px; box-sizing: border-box; white-space: nowrap">
-                <div v-if="vm.state === 'RUNNING'" style="font-size: 11.5px; font-variant-numeric: tabular-nums">
+                <div v-if="vm.state === 'RUNNING'" style="font-size: 12.5px; font-variant-numeric: tabular-nums">
                   <div style="color: var(--text-primary); font-weight: 500">
                     {{ formatNetworkRate(vm) }}
                   </div>
-                  <div style="font-size: 10.5px; color: var(--text-secondary); min-height: 14px">
+                  <div style="font-size: 11.5px; color: var(--text-secondary); min-height: 14px">
                     {{ formatNetworkTotal(vm) || ' ' }}
                   </div>
                 </div>
-                <div v-else style="color: var(--text-muted); font-size: 12.5px">—</div>
+                <div v-else style="color: var(--text-muted); font-size: 13.5px">—</div>
               </td>
 
               <!-- Actions (Quick Power Toggle) -->

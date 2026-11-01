@@ -515,11 +515,11 @@ function copyLogs(task: TaskRecord) {
 }
 
 .font-sm {
-  font-size: 11.5px;
+  font-size: 12.5px;
 }
 
 .font-xs {
-  font-size: 10px;
+  font-size: 11px;
 }
 
 /* Inspector Modal / Slide-over */

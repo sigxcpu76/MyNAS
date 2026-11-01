@@ -268,10 +268,10 @@ function goToPool(poolName: string) {
 
               <!-- Capacity -->
               <td>
-                <div class="mono" style="font-weight: 700; font-size: 12px">
+                <div class="mono" style="font-weight: 700; font-size: 13px">
                   {{ formatBytes(d.sizeBytes) }}
                 </div>
-                <div class="mono" style="font-size: 10.5px; color: var(--text-secondary)">
+                <div class="mono" style="font-size: 11.5px; color: var(--text-secondary)">
                   {{ d.logicalBlockSize }}B / {{ d.physicalBlockSize }}B
                 </div>
               </td>
@@ -280,20 +280,20 @@ function goToPool(poolName: string) {
               <td class="col-desktop-only">
                 <div v-if="d.temperatureCelsius > 0" style="display: flex; align-items: center; gap: 4px">
                   <MdiIcon :path="mdiThermometer" size="14" style="color: var(--accent-primary)" />
-                  <span class="badge mono" :class="getTempBadgeClass(d.temperatureCelsius)" style="font-size: 11px">
+                  <span class="badge mono" :class="getTempBadgeClass(d.temperatureCelsius)" style="font-size: 11.5px">
                     {{ d.temperatureCelsius.toFixed(1) }}°C
                   </span>
                 </div>
-                <span v-else class="mono" style="color: var(--text-muted); font-size: 11px">-</span>
+                <span v-else class="mono" style="color: var(--text-muted); font-size: 12px">-</span>
               </td>
 
               <!-- S.M.A.R.T. Health -->
               <td class="col-desktop-only">
                 <div style="display: flex; flex-direction: column; gap: 2px">
-                  <span class="badge mono" :class="getSmartBadgeClass(d.smartStatus)" style="font-size: 10.5px">
+                  <span class="badge mono" :class="getSmartBadgeClass(d.smartStatus)" style="font-size: 11.5px">
                     {{ d.smartStatus }}
                   </span>
-                  <span v-if="d.healthPercentage > 0 && d.healthPercentage < 100" class="mono" style="font-size: 10px; color: var(--text-secondary)">
+                  <span v-if="d.healthPercentage > 0 && d.healthPercentage < 100" class="mono" style="font-size: 11px; color: var(--text-secondary)">
                     Health: {{ d.healthPercentage }}%
                   </span>
                 </div>
@@ -304,14 +304,14 @@ function goToPool(poolName: string) {
                 <button
                   v-if="d.owningZfsPool"
                   class="btn btn-sm mono"
-                  style="font-size: 11px; padding: 3px 8px; border-color: rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.1); color: var(--accent-primary)"
+                  style="font-size: 12px; padding: 3px 8px; border-color: rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.1); color: var(--accent-primary)"
                   title="Click to view owning ZFS Pool"
                   @click="goToPool(d.owningZfsPool)"
                 >
                   <MdiIcon :path="mdiDatabase" size="13" style="margin-right: 4px" />
                   {{ d.owningZfsPool }}
                 </button>
-                <span v-else class="mono" style="color: var(--text-muted); font-size: 11.5px">
+                <span v-else class="mono" style="color: var(--text-muted); font-size: 12px">
                   Unallocated
                 </span>
               </td>
@@ -324,7 +324,7 @@ function goToPool(poolName: string) {
                     :key="p.name"
                     class="badge mono"
                     :class="p.owningZfsPool ? 'badge-info' : 'badge-neutral'"
-                    style="font-size: 10px"
+                    style="font-size: 11px"
                     :title="`${p.devicePath} (${formatBytes(p.sizeBytes)})${p.mountpoint ? ' mounted at ' + p.mountpoint : ''}${p.owningZfsPool ? ' [ZFS: ' + p.owningZfsPool + ']' : ''}`"
                   >
                     {{ p.name }} ({{ formatBytes(p.sizeBytes) }})

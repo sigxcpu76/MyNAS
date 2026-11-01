@@ -686,7 +686,7 @@ onMounted(() => {
 }
 
 .appliance-node-chip {
-  font-size: 11px;
+  font-size: 12px;
   background: var(--bg-surface);
   color: var(--text-secondary);
   border: 1px solid var(--border-subtle);
@@ -702,7 +702,7 @@ onMounted(() => {
 }
 
 .header-sync-text {
-  font-size: 11px;
+  font-size: 11.5px;
   color: var(--text-muted);
 }
 
@@ -753,7 +753,7 @@ onMounted(() => {
   border: none;
   border-bottom: 2px solid transparent;
   padding: 4px 12px;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
@@ -857,6 +857,6 @@ onMounted(() => {
 }
 
 .font-xs {
-  font-size: 10px;
+  font-size: 11.5px;
 }
 </style>

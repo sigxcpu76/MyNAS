@@ -1259,7 +1259,7 @@ onUnmounted(() => {
     <div v-else class="card" style="padding: 0; overflow-x: auto">
       <table class="data-table" style="width: 100%; border-collapse: collapse">
         <thead>
-          <tr style="border-bottom: 1px solid var(--border-subtle); text-align: left; font-size: 11px; color: var(--text-secondary); text-transform: uppercase">
+          <tr style="border-bottom: 1px solid var(--border-subtle); text-align: left; font-size: 12px; color: var(--text-secondary); text-transform: uppercase">
             <SortableTh :sort="appSort" sort-key="name" style="padding: 8px 10px; width: 280px; min-width: 220px; max-width: 340px">Application</SortableTh>
             <SortableTh :sort="appSort" sort-key="webui" style="padding: 8px 10px; width: 130px; min-width: 130px">Web UI</SortableTh>
             <SortableTh :sort="appSort" sort-key="cpu" class="col-desktop-only" style="padding: 8px 10px; width: 85px; min-width: 85px; max-width: 85px">CPU</SortableTh>
@@ -1311,7 +1311,7 @@ onUnmounted(() => {
                 <div>
                   <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
                     <span
-                      style="font-weight: 600; font-size: 13px; color: var(--text-primary)"
+                      style="font-weight: 600; font-size: 13.5px; color: var(--text-primary)"
                       title="Open Application Details"
                     >
                       {{ app.title || app.appId }}
@@ -1320,7 +1320,7 @@ onUnmounted(() => {
                       v-if="app.updateAvailable"
                       type="button"
                       class="badge badge-warning"
-                      style="font-size: 10px; padding: 1px 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; border: none"
+                      style="font-size: 11px; padding: 1px 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; border: none"
                       :title="`Catalog Update Available: ${app.catalogVersion || 'installed'} → ${app.latestVersion || 'latest'}. Click to upgrade.`"
                       :aria-label="`Upgrade ${app.title || app.appId}`"
                       @click.stop="openUpgradeModal(app)"
@@ -1331,7 +1331,7 @@ onUnmounted(() => {
                     <span
                       v-if="transitioningApps[app.name]"
                       class="badge badge-warning pulse-anim"
-                      style="font-size: 10px; padding: 1px 6px; display: inline-flex; align-items: center; gap: 4px"
+                      style="font-size: 11px; padding: 1px 6px; display: inline-flex; align-items: center; gap: 4px"
                     >
                       <MdiIcon :path="mdiLoading" size="10" class="spin-icon" />
                       {{ transitioningApps[app.name].toUpperCase() }}...
@@ -1339,7 +1339,7 @@ onUnmounted(() => {
                     <span
                       v-else-if="app.state === 'DEPLOYING'"
                       class="badge badge-info"
-                      style="font-size: 10px; padding: 1px 6px; display: inline-flex; align-items: center; gap: 4px"
+                      style="font-size: 11px; padding: 1px 6px; display: inline-flex; align-items: center; gap: 4px"
                       :title="app.statusText"
                     >
                       <span class="spinner-sm" style="width: 10px; height: 10px; border-width: 1.5px"></span>
@@ -1348,7 +1348,7 @@ onUnmounted(() => {
                     <span
                       v-else-if="app.state === 'ERROR'"
                       class="badge badge-danger"
-                      style="font-size: 10px; padding: 1px 6px"
+                      style="font-size: 11px; padding: 1px 6px"
                       :title="app.statusText"
                     >
                       Error
@@ -1356,21 +1356,21 @@ onUnmounted(() => {
                   </div>
                   <div
                     v-if="app.state === 'DEPLOYING'"
-                    style="font-size: 11px; color: var(--accent-primary); margin-top: 1px"
+                    style="font-size: 11.5px; color: var(--accent-primary); margin-top: 1px"
                     :title="app.statusText"
                   >
                     {{ app.statusText }}
                   </div>
                   <div
                     v-else-if="app.state === 'ERROR'"
-                    style="font-size: 11px; color: var(--danger); margin-top: 1px"
+                    style="font-size: 11.5px; color: var(--danger); margin-top: 1px"
                     :title="app.statusText"
                   >
                     {{ app.statusText }}
                   </div>
                   <div
                     v-else
-                    style="font-size: 11.5px; color: var(--text-secondary)"
+                    style="font-size: 12px; color: var(--text-secondary)"
                     :title="`Services: ${(app.services || []).join(', ') || 'none'}`"
                   >
                     {{ app.appId }} · {{ (app.services || []).length }} service{{ (app.services || []).length === 1 ? '' : 's' }} · {{ app.statusText }}
@@ -1384,7 +1384,7 @@ onUnmounted(() => {
               <div v-if="getPrimaryWebUiUrl(app)" style="display: inline-flex; align-items: center; gap: 2px">
                 <button
                   class="btn btn-sm"
-                  style="padding: 3px 8px; font-size: 11.5px; color: var(--success-text); border-color: var(--success-border); display: inline-flex; align-items: center; gap: 4px"
+                  style="padding: 3px 8px; font-size: 12px; color: var(--success-text); border-color: var(--success-border); display: inline-flex; align-items: center; gap: 4px"
                   :title="`Open Web UI (${getPrimaryWebUiUrl(app)})`"
                   @click.stop="openWebPortal(getPrimaryWebUiUrl(app))"
                 >
@@ -1395,7 +1395,7 @@ onUnmounted(() => {
                   v-if="(app.portals && app.portals.length > 1) || (!app.portals?.length && getAppWebPorts(app).length > 1)"
                   type="button"
                   class="btn btn-sm btn-icon webui-port-trigger"
-                  style="padding: 3px 4px; font-size: 11px; color: var(--success-text); border-color: var(--success-border)"
+                  style="padding: 3px 4px; font-size: 11.5px; color: var(--success-text); border-color: var(--success-border)"
                   title="View all portals and ports"
                   @click.stop="togglePortMenu(app.appId)"
                 >
@@ -1403,7 +1403,7 @@ onUnmounted(() => {
                 </button>
               </div>
 
-              <span v-else style="color: var(--text-secondary); font-size: 12px">—</span>
+              <span v-else style="color: var(--text-secondary); font-size: 12.5px">—</span>
 
               <!-- Port Selector / Portal Dropdown Menu -->
               <div
@@ -1413,7 +1413,7 @@ onUnmounted(() => {
               >
                 <!-- Application Portals from Manifest -->
                 <template v-if="app.portals && app.portals.length > 0">
-                  <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); padding: 4px 8px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 2px">
+                  <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); padding: 4px 8px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 2px">
                     Application Portals
                   </div>
                   <button
@@ -1425,10 +1425,10 @@ onUnmounted(() => {
                     @click.stop="openWebPortal(portal.url)"
                   >
                     <div style="display: flex; flex-direction: column">
-                      <span style="font-weight: 600; font-size: 12px; color: var(--text-primary)">
+                      <span style="font-weight: 600; font-size: 12.5px; color: var(--text-primary)">
                         {{ portal.name }}
                       </span>
-                      <span class="mono" style="font-size: 10.5px; color: var(--accent-primary)">
+                      <span class="mono" style="font-size: 11.5px; color: var(--accent-primary)">
                         {{ portal.protocol }}://:{{ portal.port }}{{ portal.path }}
                       </span>
                     </div>
@@ -1439,7 +1439,7 @@ onUnmounted(() => {
                 <!-- Fallback Web UI Ports (when no explicit portals defined) -->
                 <template v-else-if="getAppWebPorts(app).length > 0">
                   <div
-                    style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); padding: 4px 8px; border-bottom: 1px solid var(--border-subtle); margin-top: 4px; margin-bottom: 2px"
+                    style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); padding: 4px 8px; border-bottom: 1px solid var(--border-subtle); margin-top: 4px; margin-bottom: 2px"
                   >
                     Web UI Ports
                   </div>
@@ -1448,16 +1448,16 @@ onUnmounted(() => {
                     :key="p.containerPort"
                     type="button"
                     class="btn btn-sm btn-ghost"
-                    style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 5px 8px; text-align: left; font-size: 12px"
+                    style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 5px 8px; text-align: left; font-size: 12.5px"
                     @click.stop="openPortUrl(p.hostPort)"
                   >
                     <span class="mono font-semibold" style="color: var(--accent-primary)">
                       :{{ p.containerPort }}
                     </span>
-                    <span style="color: var(--text-secondary); font-size: 11px">
+                    <span style="color: var(--text-secondary); font-size: 11.5px">
                       → host :{{ p.hostPort }}
                     </span>
-                    <span v-if="isPortActiveWebUi(app, p)" class="badge badge-success" style="font-size: 9px; padding: 1px 4px">
+                    <span v-if="isPortActiveWebUi(app, p)" class="badge badge-success" style="font-size: 10.5px; padding: 1px 4px">
                       UI
                     </span>
                   </button>
@@ -1467,25 +1467,25 @@ onUnmounted(() => {
 
             <!-- CPU -->
             <td class="col-desktop-only" style="padding: 10px 14px; width: 85px; min-width: 85px; max-width: 85px; box-sizing: border-box; white-space: nowrap">
-              <div style="font-size: 12.5px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums">
+              <div style="font-size: 13.5px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums">
                 {{ (Number(app.totalCpuPercent) || 0).toFixed(1) }}%
               </div>
             </td>
 
             <!-- Memory -->
             <td class="col-desktop-only" style="padding: 10px 14px; width: 105px; min-width: 105px; max-width: 105px; box-sizing: border-box; white-space: nowrap">
-              <div style="font-size: 12.5px; color: var(--text-primary); font-variant-numeric: tabular-nums">
+              <div style="font-size: 13.5px; color: var(--text-primary); font-variant-numeric: tabular-nums">
                 {{ app.totalMemoryMib }} MiB
               </div>
             </td>
 
             <!-- Network (1s Live) -->
             <td class="col-desktop-only" style="padding: 10px 14px; width: 210px; min-width: 210px; max-width: 210px; box-sizing: border-box; white-space: nowrap">
-              <div style="font-size: 11.5px; font-variant-numeric: tabular-nums">
+              <div style="font-size: 12.5px; font-variant-numeric: tabular-nums">
                 <div style="color: var(--text-primary); font-weight: 500">
                   {{ formatNetworkRate(app) }}
                 </div>
-                <div style="font-size: 10.5px; color: var(--text-secondary); min-height: 14px">
+                <div style="font-size: 11.5px; color: var(--text-secondary); min-height: 14px">
                   {{ formatNetworkTotal(app) || ' ' }}
                 </div>
               </div>

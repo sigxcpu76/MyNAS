@@ -566,7 +566,7 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
   border: 1px solid var(--border-subtle);
   border-radius: 4px;
   padding: 4px 26px 4px 28px;
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: var(--text-primary);
   outline: none;
   transition: border-color 0.15s ease;
@@ -677,7 +677,7 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
 
 .node-name {
   font-weight: 700;
-  font-size: 13px;
+  font-size: 13.5px;
 }
 
 .tree-ip {
@@ -687,16 +687,16 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
 
 .tree-empty-hint {
   padding: 4px 8px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   font-style: italic;
 }
 
 .font-sm {
-  font-size: 11.5px;
+  font-size: 12.5px;
 }
 
 .font-xs {
-  font-size: 10.5px;
+  font-size: 11.5px;
 }
 </style>

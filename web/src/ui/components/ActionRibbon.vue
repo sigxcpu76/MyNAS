@@ -1398,7 +1398,7 @@ function popoutHostTerminal() {
 
 .ribbon-name {
   font-weight: 700;
-  font-size: 14px;
+  font-size: 14.5px;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -1411,6 +1411,7 @@ function popoutHostTerminal() {
   border: 1px solid var(--border-subtle);
   border-radius: 4px;
   padding: 1px 7px;
+  font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -1427,7 +1428,7 @@ function popoutHostTerminal() {
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   padding: 5px 11px;
   border-radius: 5px;
@@ -1460,6 +1461,6 @@ function popoutHostTerminal() {
 }
 
 .font-xs {
-  font-size: 11px;
+  font-size: 11.5px;
 }
 </style>

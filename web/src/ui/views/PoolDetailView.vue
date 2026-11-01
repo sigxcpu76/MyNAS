@@ -1018,10 +1018,10 @@ const poolDisks = computed(() => {
 }
 
 .font-sm {
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .font-xs {
-  font-size: 10.5px;
+  font-size: 11.5px;
 }
 </style>

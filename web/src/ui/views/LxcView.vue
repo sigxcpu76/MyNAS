@@ -1220,19 +1220,19 @@ function copyTemplatePath(path: string) {
                   <span
                     v-if="transitioningContainers[lx.name]"
                     class="badge badge-warning pulse-anim"
-                    style="display: inline-flex; align-items: center; gap: 4px; font-size: 10px; padding: 1px 6px"
+                    style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 1px 6px"
                   >
                     <MdiIcon :path="mdiLoading" size="10" class="spin-icon" />
                     {{ transitioningContainers[lx.name].toUpperCase() }}...
                   </span>
-                  <span v-if="lx.unprivileged" class="badge badge-info" style="font-size: 10px; padding: 1px 6px" title="Unprivileged user namespace">
+                  <span v-if="lx.unprivileged" class="badge badge-info" style="font-size: 11px; padding: 1px 6px" title="Unprivileged user namespace">
                     Unpriv
                   </span>
-                  <span v-if="lx.gpuEnabled" class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 10px; padding: 1px 6px" title="GPU Acceleration Enabled">
+                  <span v-if="lx.gpuEnabled" class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11px; padding: 1px 6px" title="GPU Acceleration Enabled">
                     GPU
                   </span>
                 </div>
-                <div v-if="lx.description" style="font-size: 11px; color: var(--text-secondary); margin-top: 2px; padding-left: 17px">
+                <div v-if="lx.description" style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; padding-left: 17px">
                   {{ lx.description }}
                 </div>
               </td>
@@ -1249,31 +1249,31 @@ function copyTemplatePath(path: string) {
 
               <!-- CPU -->
               <td class="col-desktop-only" style="padding: 10px 14px; width: 85px; min-width: 85px; max-width: 85px; box-sizing: border-box; white-space: nowrap">
-                <div v-if="lx.state === 'RUNNING'" style="font-size: 12.5px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums">
+                <div v-if="lx.state === 'RUNNING'" style="font-size: 13.5px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums">
                   {{ (Number(lx.cpuPercent) || 0).toFixed(1) }}%
                 </div>
-                <div v-else style="color: var(--text-muted); font-size: 12.5px">—</div>
+                <div v-else style="color: var(--text-muted); font-size: 13.5px">—</div>
               </td>
 
               <!-- Memory -->
               <td class="col-desktop-only" style="padding: 10px 14px; width: 105px; min-width: 105px; max-width: 105px; box-sizing: border-box; white-space: nowrap">
-                <div v-if="lx.state === 'RUNNING'" style="font-size: 12.5px; color: var(--text-primary); font-variant-numeric: tabular-nums">
+                <div v-if="lx.state === 'RUNNING'" style="font-size: 13.5px; color: var(--text-primary); font-variant-numeric: tabular-nums">
                   {{ lx.memoryUsedMib || 0 }} MiB
                 </div>
-                <div v-else style="color: var(--text-muted); font-size: 12.5px">—</div>
+                <div v-else style="color: var(--text-muted); font-size: 13.5px">—</div>
               </td>
 
               <!-- Network (1s Live) -->
               <td class="col-desktop-only" style="padding: 10px 14px; width: 210px; min-width: 210px; max-width: 210px; box-sizing: border-box; white-space: nowrap">
-                <div v-if="lx.state === 'RUNNING'" style="font-size: 11.5px; font-variant-numeric: tabular-nums">
+                <div v-if="lx.state === 'RUNNING'" style="font-size: 12.5px; font-variant-numeric: tabular-nums">
                   <div style="color: var(--text-primary); font-weight: 500">
                     {{ formatNetworkRate(lx) }}
                   </div>
-                  <div style="font-size: 10.5px; color: var(--text-secondary); min-height: 14px">
+                  <div style="font-size: 11.5px; color: var(--text-secondary); min-height: 14px">
                     {{ formatNetworkTotal(lx) || ' ' }}
                   </div>
                 </div>
-                <div v-else style="color: var(--text-muted); font-size: 12.5px">—</div>
+                <div v-else style="color: var(--text-muted); font-size: 13.5px">—</div>
               </td>
 
               <!-- Quick Power Toggle Action -->
@@ -1504,19 +1504,19 @@ function copyTemplatePath(path: string) {
 
           <!-- Specifications Chips -->
           <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px">
-            <span class="badge badge-neutral" style="font-size: 10.5px">
+            <span class="badge badge-neutral" style="font-size: 11.5px">
               {{ item.defaultCpuCores }} vCPU{{ item.defaultCpuCores > 1 ? 's' : '' }}
             </span>
-            <span class="badge badge-neutral" style="font-size: 10.5px">
+            <span class="badge badge-neutral" style="font-size: 11.5px">
               {{ item.defaultMemoryLimitMib }} MiB RAM
             </span>
-            <span v-if="item.defaultPort" class="badge badge-neutral mono" style="font-size: 10.5px">
+            <span v-if="item.defaultPort" class="badge badge-neutral mono" style="font-size: 11.5px">
               Port :{{ item.defaultPort }}
             </span>
-            <span v-if="item.gpuRecommended" class="badge" style="background: rgba(16, 185, 129, 0.12); color: #10b981; font-size: 10.5px">
+            <span v-if="item.gpuRecommended" class="badge" style="background: rgba(16, 185, 129, 0.12); color: #10b981; font-size: 11.5px">
               GPU Ready
             </span>
-            <span class="badge badge-neutral mono" style="font-size: 10.5px">
+            <span class="badge badge-neutral mono" style="font-size: 11.5px">
               {{ item.baseDistribution }}/{{ item.baseRelease }}
             </span>
           </div>
