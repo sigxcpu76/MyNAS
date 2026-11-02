@@ -162,6 +162,13 @@ var packageMapping = map[string]map[string][]string{
 		"zypper": {"nvme-cli"},
 		"apk":    {"nvme-cli"},
 	},
+	"sensors": {
+		"pacman": {"lm_sensors"},
+		"apt":    {"lm-sensors"},
+		"dnf":    {"lm_sensors"},
+		"zypper": {"sensors"},
+		"apk":    {"lm-sensors"},
+	},
 	"kvm-dev": {
 		"pacman": {"qemu-base"},
 		"apt":    {"qemu-system-x86"},

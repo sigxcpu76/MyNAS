@@ -6,6 +6,7 @@ import {
   mdiLanConnect,
   mdiMemory,
   mdiServer,
+  mdiThermometer,
   mdiViewDashboard,
 } from '@mdi/js';
 
@@ -97,6 +98,15 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     defaultColSpan: 6,
     allowedColSpans: [3, 4, 6, 8, 12],
     category: 'workloads',
+  },
+  {
+    type: 'sensors',
+    name: 'Hardware Sensors & Power',
+    description: 'System temperatures (CPU, GPU, PCI cards, storage), dedicated NVIDIA/AMD GPU metrics, fan speeds, and ACPI power meter.',
+    icon: mdiThermometer,
+    defaultColSpan: 12,
+    allowedColSpans: [6, 12],
+    category: 'system',
   },
 ];
 

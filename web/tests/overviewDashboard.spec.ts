@@ -4,6 +4,7 @@ import OverviewView from '../src/ui/views/OverviewView.vue';
 import WidgetCpu from '../src/ui/dashboard/widgets/WidgetCpu.vue';
 import WidgetMemory from '../src/ui/dashboard/widgets/WidgetMemory.vue';
 import WidgetSystem from '../src/ui/dashboard/widgets/WidgetSystem.vue';
+import WidgetSensors from '../src/ui/dashboard/widgets/WidgetSensors.vue';
 import SystemDetailsTopBarButton from '../src/ui/components/SystemDetailsTopBarButton.vue';
 import SystemDetailsModal from '../src/ui/components/SystemDetailsModal.vue';
 import { nasState } from '../src/ui/store';
@@ -400,6 +401,121 @@ describe('Overview Dashboard & Telemetry', () => {
       widgets = wrapper.findAll('.widget-wrapper');
       expect(widgets[0].find('.widget-type-label').text()).toBe(secondLabel);
       expect(widgets[1].find('.widget-type-label').text()).toBe(firstLabel);
+    });
+  });
+
+  describe('WidgetSensors (Hardware Sensors, Power & Temperatures)', () => {
+    it('renders power meter, GPU metrics, and temperature items', () => {
+      nasState.systemTelemetry = {
+        cpu: {
+          model: 'Intel Xeon E5-2680 v4',
+          physicalCores: 28,
+          logicalCores: 56,
+          usagePercent: 12.5,
+          load1: 1.2,
+          load5: 0.8,
+          load15: 0.5,
+          temperatureCelsius: 41.0,
+          coreTemperatures: [30, 32],
+          packageTemperatures: [35, 41],
+        },
+        memory: {
+          totalBytes: 67108864000,
+          freeBytes: 30000000000,
+          availableBytes: 40000000000,
+          usedBytes: 27108864000,
+          zfsArcBytes: 15000000000,
+          zfsArcMaxBytes: 30000000000,
+          buffersBytes: 100000000,
+          cachedBytes: 5000000000,
+          servicesBytes: 12108864000,
+        },
+        host: {
+          hostname: 'nasulica',
+          osName: 'Debian GNU/Linux',
+          osVersion: '12',
+          kernelVersion: '6.12.0',
+          architecture: 'x86_64',
+          uptimeSeconds: 86400,
+          motherboardVendor: 'HP',
+          motherboardName: 'ProLiant DL380 Gen9',
+          motherboardVersion: '1.0',
+          biosVendor: 'HP',
+          biosVersion: 'P89',
+          biosDate: '2020-05-21',
+          gpus: ['NVIDIA GeForce RTX 4060 Ti'],
+        },
+        network: [],
+        sensors: {
+          lmSensorsInstalled: true,
+          powerMeter: {
+            deviceName: 'power_meter-acpi-0',
+            adapter: 'ACPI interface',
+            powerWatts: 152.0,
+            intervalSeconds: 300.0,
+          },
+          gpus: [
+            {
+              index: 0,
+              name: 'NVIDIA GeForce RTX 4060 Ti',
+              driverVersion: '615.78.08',
+              temperatureCelsius: 30.0,
+              utilizationPercent: 15.0,
+              memoryUsedBytes: 8311013376,
+              memoryTotalBytes: 17179869184,
+              powerWatts: 12.7,
+              fanSpeedPercent: 0,
+              vendor: 'NVIDIA',
+            },
+          ],
+          temperatures: [
+            {
+              chip: 'coretemp-isa-0000',
+              adapter: 'ISA adapter',
+              label: 'Package id 0',
+              category: 'CPU',
+              currentValue: 35.0,
+              unit: '°C',
+              highThreshold: 93.0,
+              critThreshold: 103.0,
+              alarm: false,
+            },
+            {
+              chip: 'tg3-pci-0200',
+              adapter: 'PCI adapter',
+              label: 'tg3-pci-0200: temp1',
+              category: 'PCI',
+              currentValue: 52.0,
+              unit: '°C',
+              critThreshold: 110.0,
+              alarm: false,
+            },
+          ],
+          fans: [
+            {
+              chip: 'it8696-isa-0a40',
+              adapter: 'ISA adapter',
+              label: 'fan1',
+              category: 'FAN',
+              currentValue: 1073.0,
+              unit: 'RPM',
+              highThreshold: 0,
+              critThreshold: 0,
+              alarm: false,
+            },
+          ],
+        },
+      };
+
+      const wrapper = mount(WidgetSensors);
+      expect(wrapper.text()).toContain('Hardware Sensors & Power');
+      expect(wrapper.text()).toContain('152.0 W');
+      expect(wrapper.text()).toContain('power_meter-acpi-0');
+      expect(wrapper.text()).toContain('NVIDIA GeForce RTX 4060 Ti');
+      expect(wrapper.text()).toContain('30.0°C');
+      expect(wrapper.text()).toContain('Package id 0');
+      expect(wrapper.text()).toContain('tg3-pci-0200: temp1');
+      expect(wrapper.text()).toContain('1073 RPM');
     });
   });
 });

@@ -75,7 +75,7 @@ func (x WatchResourceChange_EventType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use WatchResourceChange_EventType.Descriptor instead.
 func (WatchResourceChange_EventType) EnumDescriptor() ([]byte, []int) {
-	return file_nas_v1_system_proto_rawDescGZIP(), []int{15, 0}
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{19, 0}
 }
 
 type DiscoveredPool struct {
@@ -970,19 +970,396 @@ func (x *NetworkInterfaceTelemetry) GetIsDefault() bool {
 	return false
 }
 
+type GpuTelemetry struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Index              int32                  `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
+	Name               string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	DriverVersion      string                 `protobuf:"bytes,3,opt,name=driver_version,json=driverVersion,proto3" json:"driver_version,omitempty"`
+	TemperatureCelsius float64                `protobuf:"fixed64,4,opt,name=temperature_celsius,json=temperatureCelsius,proto3" json:"temperature_celsius,omitempty"`
+	UtilizationPercent float64                `protobuf:"fixed64,5,opt,name=utilization_percent,json=utilizationPercent,proto3" json:"utilization_percent,omitempty"`
+	MemoryUsedBytes    int64                  `protobuf:"varint,6,opt,name=memory_used_bytes,json=memoryUsedBytes,proto3" json:"memory_used_bytes,omitempty"`
+	MemoryTotalBytes   int64                  `protobuf:"varint,7,opt,name=memory_total_bytes,json=memoryTotalBytes,proto3" json:"memory_total_bytes,omitempty"`
+	PowerWatts         float64                `protobuf:"fixed64,8,opt,name=power_watts,json=powerWatts,proto3" json:"power_watts,omitempty"`
+	PowerCapWatts      float64                `protobuf:"fixed64,9,opt,name=power_cap_watts,json=powerCapWatts,proto3" json:"power_cap_watts,omitempty"`
+	FanSpeedPercent    int32                  `protobuf:"varint,10,opt,name=fan_speed_percent,json=fanSpeedPercent,proto3" json:"fan_speed_percent,omitempty"`
+	Vendor             string                 `protobuf:"bytes,11,opt,name=vendor,proto3" json:"vendor,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *GpuTelemetry) Reset() {
+	*x = GpuTelemetry{}
+	mi := &file_nas_v1_system_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GpuTelemetry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GpuTelemetry) ProtoMessage() {}
+
+func (x *GpuTelemetry) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_system_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GpuTelemetry.ProtoReflect.Descriptor instead.
+func (*GpuTelemetry) Descriptor() ([]byte, []int) {
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *GpuTelemetry) GetIndex() int32 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
+func (x *GpuTelemetry) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *GpuTelemetry) GetDriverVersion() string {
+	if x != nil {
+		return x.DriverVersion
+	}
+	return ""
+}
+
+func (x *GpuTelemetry) GetTemperatureCelsius() float64 {
+	if x != nil {
+		return x.TemperatureCelsius
+	}
+	return 0
+}
+
+func (x *GpuTelemetry) GetUtilizationPercent() float64 {
+	if x != nil {
+		return x.UtilizationPercent
+	}
+	return 0
+}
+
+func (x *GpuTelemetry) GetMemoryUsedBytes() int64 {
+	if x != nil {
+		return x.MemoryUsedBytes
+	}
+	return 0
+}
+
+func (x *GpuTelemetry) GetMemoryTotalBytes() int64 {
+	if x != nil {
+		return x.MemoryTotalBytes
+	}
+	return 0
+}
+
+func (x *GpuTelemetry) GetPowerWatts() float64 {
+	if x != nil {
+		return x.PowerWatts
+	}
+	return 0
+}
+
+func (x *GpuTelemetry) GetPowerCapWatts() float64 {
+	if x != nil {
+		return x.PowerCapWatts
+	}
+	return 0
+}
+
+func (x *GpuTelemetry) GetFanSpeedPercent() int32 {
+	if x != nil {
+		return x.FanSpeedPercent
+	}
+	return 0
+}
+
+func (x *GpuTelemetry) GetVendor() string {
+	if x != nil {
+		return x.Vendor
+	}
+	return ""
+}
+
+type PowerMeterTelemetry struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	DeviceName      string                 `protobuf:"bytes,1,opt,name=device_name,json=deviceName,proto3" json:"device_name,omitempty"`
+	Adapter         string                 `protobuf:"bytes,2,opt,name=adapter,proto3" json:"adapter,omitempty"`
+	PowerWatts      float64                `protobuf:"fixed64,3,opt,name=power_watts,json=powerWatts,proto3" json:"power_watts,omitempty"`
+	IntervalSeconds float64                `protobuf:"fixed64,4,opt,name=interval_seconds,json=intervalSeconds,proto3" json:"interval_seconds,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *PowerMeterTelemetry) Reset() {
+	*x = PowerMeterTelemetry{}
+	mi := &file_nas_v1_system_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PowerMeterTelemetry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PowerMeterTelemetry) ProtoMessage() {}
+
+func (x *PowerMeterTelemetry) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_system_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PowerMeterTelemetry.ProtoReflect.Descriptor instead.
+func (*PowerMeterTelemetry) Descriptor() ([]byte, []int) {
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *PowerMeterTelemetry) GetDeviceName() string {
+	if x != nil {
+		return x.DeviceName
+	}
+	return ""
+}
+
+func (x *PowerMeterTelemetry) GetAdapter() string {
+	if x != nil {
+		return x.Adapter
+	}
+	return ""
+}
+
+func (x *PowerMeterTelemetry) GetPowerWatts() float64 {
+	if x != nil {
+		return x.PowerWatts
+	}
+	return 0
+}
+
+func (x *PowerMeterTelemetry) GetIntervalSeconds() float64 {
+	if x != nil {
+		return x.IntervalSeconds
+	}
+	return 0
+}
+
+type HardwareSensorItem struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Chip          string                 `protobuf:"bytes,1,opt,name=chip,proto3" json:"chip,omitempty"`
+	Adapter       string                 `protobuf:"bytes,2,opt,name=adapter,proto3" json:"adapter,omitempty"`
+	Label         string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	Category      string                 `protobuf:"bytes,4,opt,name=category,proto3" json:"category,omitempty"` // "CPU", "GPU", "PCI", "STORAGE", "MOTHERBOARD", "FAN", "POWER", "SYSTEM"
+	CurrentValue  float64                `protobuf:"fixed64,5,opt,name=current_value,json=currentValue,proto3" json:"current_value,omitempty"`
+	Unit          string                 `protobuf:"bytes,6,opt,name=unit,proto3" json:"unit,omitempty"` // "°C", "RPM", "W", "V", "%"
+	HighThreshold float64                `protobuf:"fixed64,7,opt,name=high_threshold,json=highThreshold,proto3" json:"high_threshold,omitempty"`
+	CritThreshold float64                `protobuf:"fixed64,8,opt,name=crit_threshold,json=critThreshold,proto3" json:"crit_threshold,omitempty"`
+	Alarm         bool                   `protobuf:"varint,9,opt,name=alarm,proto3" json:"alarm,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HardwareSensorItem) Reset() {
+	*x = HardwareSensorItem{}
+	mi := &file_nas_v1_system_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HardwareSensorItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HardwareSensorItem) ProtoMessage() {}
+
+func (x *HardwareSensorItem) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_system_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HardwareSensorItem.ProtoReflect.Descriptor instead.
+func (*HardwareSensorItem) Descriptor() ([]byte, []int) {
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *HardwareSensorItem) GetChip() string {
+	if x != nil {
+		return x.Chip
+	}
+	return ""
+}
+
+func (x *HardwareSensorItem) GetAdapter() string {
+	if x != nil {
+		return x.Adapter
+	}
+	return ""
+}
+
+func (x *HardwareSensorItem) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *HardwareSensorItem) GetCategory() string {
+	if x != nil {
+		return x.Category
+	}
+	return ""
+}
+
+func (x *HardwareSensorItem) GetCurrentValue() float64 {
+	if x != nil {
+		return x.CurrentValue
+	}
+	return 0
+}
+
+func (x *HardwareSensorItem) GetUnit() string {
+	if x != nil {
+		return x.Unit
+	}
+	return ""
+}
+
+func (x *HardwareSensorItem) GetHighThreshold() float64 {
+	if x != nil {
+		return x.HighThreshold
+	}
+	return 0
+}
+
+func (x *HardwareSensorItem) GetCritThreshold() float64 {
+	if x != nil {
+		return x.CritThreshold
+	}
+	return 0
+}
+
+func (x *HardwareSensorItem) GetAlarm() bool {
+	if x != nil {
+		return x.Alarm
+	}
+	return false
+}
+
+type HardwareSensorsTelemetry struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	LmSensorsInstalled bool                   `protobuf:"varint,1,opt,name=lm_sensors_installed,json=lmSensorsInstalled,proto3" json:"lm_sensors_installed,omitempty"`
+	PowerMeter         *PowerMeterTelemetry   `protobuf:"bytes,2,opt,name=power_meter,json=powerMeter,proto3" json:"power_meter,omitempty"`
+	Gpus               []*GpuTelemetry        `protobuf:"bytes,3,rep,name=gpus,proto3" json:"gpus,omitempty"`
+	Temperatures       []*HardwareSensorItem  `protobuf:"bytes,4,rep,name=temperatures,proto3" json:"temperatures,omitempty"`
+	Fans               []*HardwareSensorItem  `protobuf:"bytes,5,rep,name=fans,proto3" json:"fans,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *HardwareSensorsTelemetry) Reset() {
+	*x = HardwareSensorsTelemetry{}
+	mi := &file_nas_v1_system_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HardwareSensorsTelemetry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HardwareSensorsTelemetry) ProtoMessage() {}
+
+func (x *HardwareSensorsTelemetry) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_system_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HardwareSensorsTelemetry.ProtoReflect.Descriptor instead.
+func (*HardwareSensorsTelemetry) Descriptor() ([]byte, []int) {
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *HardwareSensorsTelemetry) GetLmSensorsInstalled() bool {
+	if x != nil {
+		return x.LmSensorsInstalled
+	}
+	return false
+}
+
+func (x *HardwareSensorsTelemetry) GetPowerMeter() *PowerMeterTelemetry {
+	if x != nil {
+		return x.PowerMeter
+	}
+	return nil
+}
+
+func (x *HardwareSensorsTelemetry) GetGpus() []*GpuTelemetry {
+	if x != nil {
+		return x.Gpus
+	}
+	return nil
+}
+
+func (x *HardwareSensorsTelemetry) GetTemperatures() []*HardwareSensorItem {
+	if x != nil {
+		return x.Temperatures
+	}
+	return nil
+}
+
+func (x *HardwareSensorsTelemetry) GetFans() []*HardwareSensorItem {
+	if x != nil {
+		return x.Fans
+	}
+	return nil
+}
+
 type SystemTelemetry struct {
 	state         protoimpl.MessageState       `protogen:"open.v1"`
 	Cpu           *CpuTelemetry                `protobuf:"bytes,1,opt,name=cpu,proto3" json:"cpu,omitempty"`
 	Memory        *MemoryTelemetry             `protobuf:"bytes,2,opt,name=memory,proto3" json:"memory,omitempty"`
 	Host          *HostHardwareInfo            `protobuf:"bytes,3,opt,name=host,proto3" json:"host,omitempty"`
 	Network       []*NetworkInterfaceTelemetry `protobuf:"bytes,4,rep,name=network,proto3" json:"network,omitempty"`
+	Sensors       *HardwareSensorsTelemetry    `protobuf:"bytes,5,opt,name=sensors,proto3" json:"sensors,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SystemTelemetry) Reset() {
 	*x = SystemTelemetry{}
-	mi := &file_nas_v1_system_proto_msgTypes[11]
+	mi := &file_nas_v1_system_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -994,7 +1371,7 @@ func (x *SystemTelemetry) String() string {
 func (*SystemTelemetry) ProtoMessage() {}
 
 func (x *SystemTelemetry) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_system_proto_msgTypes[11]
+	mi := &file_nas_v1_system_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1007,7 +1384,7 @@ func (x *SystemTelemetry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SystemTelemetry.ProtoReflect.Descriptor instead.
 func (*SystemTelemetry) Descriptor() ([]byte, []int) {
-	return file_nas_v1_system_proto_rawDescGZIP(), []int{11}
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *SystemTelemetry) GetCpu() *CpuTelemetry {
@@ -1038,6 +1415,13 @@ func (x *SystemTelemetry) GetNetwork() []*NetworkInterfaceTelemetry {
 	return nil
 }
 
+func (x *SystemTelemetry) GetSensors() *HardwareSensorsTelemetry {
+	if x != nil {
+		return x.Sensors
+	}
+	return nil
+}
+
 type GetSystemTelemetryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1046,7 +1430,7 @@ type GetSystemTelemetryRequest struct {
 
 func (x *GetSystemTelemetryRequest) Reset() {
 	*x = GetSystemTelemetryRequest{}
-	mi := &file_nas_v1_system_proto_msgTypes[12]
+	mi := &file_nas_v1_system_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1058,7 +1442,7 @@ func (x *GetSystemTelemetryRequest) String() string {
 func (*GetSystemTelemetryRequest) ProtoMessage() {}
 
 func (x *GetSystemTelemetryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_system_proto_msgTypes[12]
+	mi := &file_nas_v1_system_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1071,7 +1455,7 @@ func (x *GetSystemTelemetryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSystemTelemetryRequest.ProtoReflect.Descriptor instead.
 func (*GetSystemTelemetryRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_system_proto_rawDescGZIP(), []int{12}
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{16}
 }
 
 type StreamSystemTelemetryRequest struct {
@@ -1083,7 +1467,7 @@ type StreamSystemTelemetryRequest struct {
 
 func (x *StreamSystemTelemetryRequest) Reset() {
 	*x = StreamSystemTelemetryRequest{}
-	mi := &file_nas_v1_system_proto_msgTypes[13]
+	mi := &file_nas_v1_system_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1095,7 +1479,7 @@ func (x *StreamSystemTelemetryRequest) String() string {
 func (*StreamSystemTelemetryRequest) ProtoMessage() {}
 
 func (x *StreamSystemTelemetryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_system_proto_msgTypes[13]
+	mi := &file_nas_v1_system_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1108,7 +1492,7 @@ func (x *StreamSystemTelemetryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamSystemTelemetryRequest.ProtoReflect.Descriptor instead.
 func (*StreamSystemTelemetryRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_system_proto_rawDescGZIP(), []int{13}
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *StreamSystemTelemetryRequest) GetIntervalSeconds() int32 {
@@ -1127,7 +1511,7 @@ type WatchResourcesRequest struct {
 
 func (x *WatchResourcesRequest) Reset() {
 	*x = WatchResourcesRequest{}
-	mi := &file_nas_v1_system_proto_msgTypes[14]
+	mi := &file_nas_v1_system_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1139,7 +1523,7 @@ func (x *WatchResourcesRequest) String() string {
 func (*WatchResourcesRequest) ProtoMessage() {}
 
 func (x *WatchResourcesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_system_proto_msgTypes[14]
+	mi := &file_nas_v1_system_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1152,7 +1536,7 @@ func (x *WatchResourcesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchResourcesRequest.ProtoReflect.Descriptor instead.
 func (*WatchResourcesRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_system_proto_rawDescGZIP(), []int{14}
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *WatchResourcesRequest) GetResourceTypes() []string {
@@ -1174,7 +1558,7 @@ type WatchResourceChange struct {
 
 func (x *WatchResourceChange) Reset() {
 	*x = WatchResourceChange{}
-	mi := &file_nas_v1_system_proto_msgTypes[15]
+	mi := &file_nas_v1_system_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1186,7 +1570,7 @@ func (x *WatchResourceChange) String() string {
 func (*WatchResourceChange) ProtoMessage() {}
 
 func (x *WatchResourceChange) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_system_proto_msgTypes[15]
+	mi := &file_nas_v1_system_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1199,7 +1583,7 @@ func (x *WatchResourceChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchResourceChange.ProtoReflect.Descriptor instead.
 func (*WatchResourceChange) Descriptor() ([]byte, []int) {
-	return file_nas_v1_system_proto_rawDescGZIP(), []int{15}
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *WatchResourceChange) GetResourceType() string {
@@ -1240,7 +1624,7 @@ type CheckSystemUpdateRequest struct {
 
 func (x *CheckSystemUpdateRequest) Reset() {
 	*x = CheckSystemUpdateRequest{}
-	mi := &file_nas_v1_system_proto_msgTypes[16]
+	mi := &file_nas_v1_system_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1252,7 +1636,7 @@ func (x *CheckSystemUpdateRequest) String() string {
 func (*CheckSystemUpdateRequest) ProtoMessage() {}
 
 func (x *CheckSystemUpdateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_system_proto_msgTypes[16]
+	mi := &file_nas_v1_system_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1265,7 +1649,7 @@ func (x *CheckSystemUpdateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckSystemUpdateRequest.ProtoReflect.Descriptor instead.
 func (*CheckSystemUpdateRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_system_proto_rawDescGZIP(), []int{16}
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *CheckSystemUpdateRequest) GetForceRefresh() bool {
@@ -1302,7 +1686,7 @@ type CheckSystemUpdateResponse struct {
 
 func (x *CheckSystemUpdateResponse) Reset() {
 	*x = CheckSystemUpdateResponse{}
-	mi := &file_nas_v1_system_proto_msgTypes[17]
+	mi := &file_nas_v1_system_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1314,7 +1698,7 @@ func (x *CheckSystemUpdateResponse) String() string {
 func (*CheckSystemUpdateResponse) ProtoMessage() {}
 
 func (x *CheckSystemUpdateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_system_proto_msgTypes[17]
+	mi := &file_nas_v1_system_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1327,7 +1711,7 @@ func (x *CheckSystemUpdateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckSystemUpdateResponse.ProtoReflect.Descriptor instead.
 func (*CheckSystemUpdateResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_system_proto_rawDescGZIP(), []int{17}
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *CheckSystemUpdateResponse) GetCurrentVersion() string {
@@ -1424,7 +1808,7 @@ type ApplySystemUpdateRequest struct {
 
 func (x *ApplySystemUpdateRequest) Reset() {
 	*x = ApplySystemUpdateRequest{}
-	mi := &file_nas_v1_system_proto_msgTypes[18]
+	mi := &file_nas_v1_system_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1436,7 +1820,7 @@ func (x *ApplySystemUpdateRequest) String() string {
 func (*ApplySystemUpdateRequest) ProtoMessage() {}
 
 func (x *ApplySystemUpdateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_system_proto_msgTypes[18]
+	mi := &file_nas_v1_system_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1449,7 +1833,7 @@ func (x *ApplySystemUpdateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplySystemUpdateRequest.ProtoReflect.Descriptor instead.
 func (*ApplySystemUpdateRequest) Descriptor() ([]byte, []int) {
-	return file_nas_v1_system_proto_rawDescGZIP(), []int{18}
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ApplySystemUpdateRequest) GetTargetVersion() string {
@@ -1479,7 +1863,7 @@ type ApplySystemUpdateResponse struct {
 
 func (x *ApplySystemUpdateResponse) Reset() {
 	*x = ApplySystemUpdateResponse{}
-	mi := &file_nas_v1_system_proto_msgTypes[19]
+	mi := &file_nas_v1_system_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1491,7 +1875,7 @@ func (x *ApplySystemUpdateResponse) String() string {
 func (*ApplySystemUpdateResponse) ProtoMessage() {}
 
 func (x *ApplySystemUpdateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_nas_v1_system_proto_msgTypes[19]
+	mi := &file_nas_v1_system_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1504,7 +1888,7 @@ func (x *ApplySystemUpdateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplySystemUpdateResponse.ProtoReflect.Descriptor instead.
 func (*ApplySystemUpdateResponse) Descriptor() ([]byte, []int) {
-	return file_nas_v1_system_proto_rawDescGZIP(), []int{19}
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ApplySystemUpdateResponse) GetSuccess() bool {
@@ -1634,12 +2018,51 @@ const file_nas_v1_system_proto_rawDesc = "" +
 	"\x15tx_rate_bytes_per_sec\x18\t \x01(\x03R\x11txRateBytesPerSec\x12\x1d\n" +
 	"\n" +
 	"is_default\x18\n" +
-	" \x01(\bR\tisDefault\"\xd5\x01\n" +
+	" \x01(\bR\tisDefault\"\xa8\x03\n" +
+	"\fGpuTelemetry\x12\x14\n" +
+	"\x05index\x18\x01 \x01(\x05R\x05index\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12%\n" +
+	"\x0edriver_version\x18\x03 \x01(\tR\rdriverVersion\x12/\n" +
+	"\x13temperature_celsius\x18\x04 \x01(\x01R\x12temperatureCelsius\x12/\n" +
+	"\x13utilization_percent\x18\x05 \x01(\x01R\x12utilizationPercent\x12*\n" +
+	"\x11memory_used_bytes\x18\x06 \x01(\x03R\x0fmemoryUsedBytes\x12,\n" +
+	"\x12memory_total_bytes\x18\a \x01(\x03R\x10memoryTotalBytes\x12\x1f\n" +
+	"\vpower_watts\x18\b \x01(\x01R\n" +
+	"powerWatts\x12&\n" +
+	"\x0fpower_cap_watts\x18\t \x01(\x01R\rpowerCapWatts\x12*\n" +
+	"\x11fan_speed_percent\x18\n" +
+	" \x01(\x05R\x0ffanSpeedPercent\x12\x16\n" +
+	"\x06vendor\x18\v \x01(\tR\x06vendor\"\x9c\x01\n" +
+	"\x13PowerMeterTelemetry\x12\x1f\n" +
+	"\vdevice_name\x18\x01 \x01(\tR\n" +
+	"deviceName\x12\x18\n" +
+	"\aadapter\x18\x02 \x01(\tR\aadapter\x12\x1f\n" +
+	"\vpower_watts\x18\x03 \x01(\x01R\n" +
+	"powerWatts\x12)\n" +
+	"\x10interval_seconds\x18\x04 \x01(\x01R\x0fintervalSeconds\"\x91\x02\n" +
+	"\x12HardwareSensorItem\x12\x12\n" +
+	"\x04chip\x18\x01 \x01(\tR\x04chip\x12\x18\n" +
+	"\aadapter\x18\x02 \x01(\tR\aadapter\x12\x14\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\x12\x1a\n" +
+	"\bcategory\x18\x04 \x01(\tR\bcategory\x12#\n" +
+	"\rcurrent_value\x18\x05 \x01(\x01R\fcurrentValue\x12\x12\n" +
+	"\x04unit\x18\x06 \x01(\tR\x04unit\x12%\n" +
+	"\x0ehigh_threshold\x18\a \x01(\x01R\rhighThreshold\x12%\n" +
+	"\x0ecrit_threshold\x18\b \x01(\x01R\rcritThreshold\x12\x14\n" +
+	"\x05alarm\x18\t \x01(\bR\x05alarm\"\xa4\x02\n" +
+	"\x18HardwareSensorsTelemetry\x120\n" +
+	"\x14lm_sensors_installed\x18\x01 \x01(\bR\x12lmSensorsInstalled\x12<\n" +
+	"\vpower_meter\x18\x02 \x01(\v2\x1b.nas.v1.PowerMeterTelemetryR\n" +
+	"powerMeter\x12(\n" +
+	"\x04gpus\x18\x03 \x03(\v2\x14.nas.v1.GpuTelemetryR\x04gpus\x12>\n" +
+	"\ftemperatures\x18\x04 \x03(\v2\x1a.nas.v1.HardwareSensorItemR\ftemperatures\x12.\n" +
+	"\x04fans\x18\x05 \x03(\v2\x1a.nas.v1.HardwareSensorItemR\x04fans\"\x91\x02\n" +
 	"\x0fSystemTelemetry\x12&\n" +
 	"\x03cpu\x18\x01 \x01(\v2\x14.nas.v1.CpuTelemetryR\x03cpu\x12/\n" +
 	"\x06memory\x18\x02 \x01(\v2\x17.nas.v1.MemoryTelemetryR\x06memory\x12,\n" +
 	"\x04host\x18\x03 \x01(\v2\x18.nas.v1.HostHardwareInfoR\x04host\x12;\n" +
-	"\anetwork\x18\x04 \x03(\v2!.nas.v1.NetworkInterfaceTelemetryR\anetwork\"\x1b\n" +
+	"\anetwork\x18\x04 \x03(\v2!.nas.v1.NetworkInterfaceTelemetryR\anetwork\x12:\n" +
+	"\asensors\x18\x05 \x01(\v2 .nas.v1.HardwareSensorsTelemetryR\asensors\"\x1b\n" +
 	"\x19GetSystemTelemetryRequest\"I\n" +
 	"\x1cStreamSystemTelemetryRequest\x12)\n" +
 	"\x10interval_seconds\x18\x01 \x01(\x05R\x0fintervalSeconds\">\n" +
@@ -1699,7 +2122,7 @@ func file_nas_v1_system_proto_rawDescGZIP() []byte {
 }
 
 var file_nas_v1_system_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_nas_v1_system_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_nas_v1_system_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_nas_v1_system_proto_goTypes = []any{
 	(WatchResourceChange_EventType)(0),   // 0: nas.v1.WatchResourceChange.EventType
 	(*DiscoveredPool)(nil),               // 1: nas.v1.DiscoveredPool
@@ -1713,32 +2136,41 @@ var file_nas_v1_system_proto_goTypes = []any{
 	(*MemoryTelemetry)(nil),              // 9: nas.v1.MemoryTelemetry
 	(*HostHardwareInfo)(nil),             // 10: nas.v1.HostHardwareInfo
 	(*NetworkInterfaceTelemetry)(nil),    // 11: nas.v1.NetworkInterfaceTelemetry
-	(*SystemTelemetry)(nil),              // 12: nas.v1.SystemTelemetry
-	(*GetSystemTelemetryRequest)(nil),    // 13: nas.v1.GetSystemTelemetryRequest
-	(*StreamSystemTelemetryRequest)(nil), // 14: nas.v1.StreamSystemTelemetryRequest
-	(*WatchResourcesRequest)(nil),        // 15: nas.v1.WatchResourcesRequest
-	(*WatchResourceChange)(nil),          // 16: nas.v1.WatchResourceChange
-	(*CheckSystemUpdateRequest)(nil),     // 17: nas.v1.CheckSystemUpdateRequest
-	(*CheckSystemUpdateResponse)(nil),    // 18: nas.v1.CheckSystemUpdateResponse
-	(*ApplySystemUpdateRequest)(nil),     // 19: nas.v1.ApplySystemUpdateRequest
-	(*ApplySystemUpdateResponse)(nil),    // 20: nas.v1.ApplySystemUpdateResponse
-	(*fieldmaskpb.FieldMask)(nil),        // 21: google.protobuf.FieldMask
+	(*GpuTelemetry)(nil),                 // 12: nas.v1.GpuTelemetry
+	(*PowerMeterTelemetry)(nil),          // 13: nas.v1.PowerMeterTelemetry
+	(*HardwareSensorItem)(nil),           // 14: nas.v1.HardwareSensorItem
+	(*HardwareSensorsTelemetry)(nil),     // 15: nas.v1.HardwareSensorsTelemetry
+	(*SystemTelemetry)(nil),              // 16: nas.v1.SystemTelemetry
+	(*GetSystemTelemetryRequest)(nil),    // 17: nas.v1.GetSystemTelemetryRequest
+	(*StreamSystemTelemetryRequest)(nil), // 18: nas.v1.StreamSystemTelemetryRequest
+	(*WatchResourcesRequest)(nil),        // 19: nas.v1.WatchResourcesRequest
+	(*WatchResourceChange)(nil),          // 20: nas.v1.WatchResourceChange
+	(*CheckSystemUpdateRequest)(nil),     // 21: nas.v1.CheckSystemUpdateRequest
+	(*CheckSystemUpdateResponse)(nil),    // 22: nas.v1.CheckSystemUpdateResponse
+	(*ApplySystemUpdateRequest)(nil),     // 23: nas.v1.ApplySystemUpdateRequest
+	(*ApplySystemUpdateResponse)(nil),    // 24: nas.v1.ApplySystemUpdateResponse
+	(*fieldmaskpb.FieldMask)(nil),        // 25: google.protobuf.FieldMask
 }
 var file_nas_v1_system_proto_depIdxs = []int32{
 	1,  // 0: nas.v1.SystemConfig.discovered_pools:type_name -> nas.v1.DiscoveredPool
 	2,  // 1: nas.v1.UpdateSystemConfigRequest.system_config:type_name -> nas.v1.SystemConfig
-	21, // 2: nas.v1.UpdateSystemConfigRequest.update_mask:type_name -> google.protobuf.FieldMask
+	25, // 2: nas.v1.UpdateSystemConfigRequest.update_mask:type_name -> google.protobuf.FieldMask
 	1,  // 3: nas.v1.DiscoverPoolsResponse.pools:type_name -> nas.v1.DiscoveredPool
-	8,  // 4: nas.v1.SystemTelemetry.cpu:type_name -> nas.v1.CpuTelemetry
-	9,  // 5: nas.v1.SystemTelemetry.memory:type_name -> nas.v1.MemoryTelemetry
-	10, // 6: nas.v1.SystemTelemetry.host:type_name -> nas.v1.HostHardwareInfo
-	11, // 7: nas.v1.SystemTelemetry.network:type_name -> nas.v1.NetworkInterfaceTelemetry
-	0,  // 8: nas.v1.WatchResourceChange.event_type:type_name -> nas.v1.WatchResourceChange.EventType
-	9,  // [9:9] is the sub-list for method output_type
-	9,  // [9:9] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	13, // 4: nas.v1.HardwareSensorsTelemetry.power_meter:type_name -> nas.v1.PowerMeterTelemetry
+	12, // 5: nas.v1.HardwareSensorsTelemetry.gpus:type_name -> nas.v1.GpuTelemetry
+	14, // 6: nas.v1.HardwareSensorsTelemetry.temperatures:type_name -> nas.v1.HardwareSensorItem
+	14, // 7: nas.v1.HardwareSensorsTelemetry.fans:type_name -> nas.v1.HardwareSensorItem
+	8,  // 8: nas.v1.SystemTelemetry.cpu:type_name -> nas.v1.CpuTelemetry
+	9,  // 9: nas.v1.SystemTelemetry.memory:type_name -> nas.v1.MemoryTelemetry
+	10, // 10: nas.v1.SystemTelemetry.host:type_name -> nas.v1.HostHardwareInfo
+	11, // 11: nas.v1.SystemTelemetry.network:type_name -> nas.v1.NetworkInterfaceTelemetry
+	15, // 12: nas.v1.SystemTelemetry.sensors:type_name -> nas.v1.HardwareSensorsTelemetry
+	0,  // 13: nas.v1.WatchResourceChange.event_type:type_name -> nas.v1.WatchResourceChange.EventType
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_nas_v1_system_proto_init() }
@@ -1752,7 +2184,7 @@ func file_nas_v1_system_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nas_v1_system_proto_rawDesc), len(file_nas_v1_system_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   20,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

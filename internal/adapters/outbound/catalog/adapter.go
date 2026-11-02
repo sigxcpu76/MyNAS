@@ -1956,7 +1956,20 @@ func (a *Adapter) seedDefaultApps() {
 			DefaultPort:    81,
 			Sources:        []string{"https://apps.truenas.com/catalog/nginx-proxy-manager_community/", "https://hub.docker.com/r/jc21/nginx-proxy-manager", "https://nginxproxymanager.com/"},
 			ContainerImage: "jc21/nginx-proxy-manager:latest",
-			ComposeYAML: `services:
+			ComposeYAML: `x-portals:
+  - name: "Admin Web UI"
+    scheme: "http"
+    port: 81
+    path: "/"
+  - name: "HTTP Traffic"
+    scheme: "http"
+    port: 80
+    path: "/"
+  - name: "HTTPS Traffic"
+    scheme: "https"
+    port: 443
+    path: "/"
+services:
   nginx-proxy-manager:
     image: jc21/nginx-proxy-manager:latest
     container_name: nginx-proxy-manager

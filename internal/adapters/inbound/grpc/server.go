@@ -3191,7 +3191,64 @@ func toProtoSystemTelemetry(t *domain.SystemTelemetry) *nasv1.SystemTelemetry {
 			Gpus:               t.Host.Gpus,
 		},
 		Network: netIfaces,
+		Sensors: toProtoSensorsTelemetry(t.Sensors),
 	}
+}
+
+func toProtoSensorsTelemetry(s domain.HardwareSensorsTelemetry) *nasv1.HardwareSensorsTelemetry {
+	res := &nasv1.HardwareSensorsTelemetry{
+		LmSensorsInstalled: s.LmSensorsInstalled,
+	}
+	if s.PowerMeter != nil {
+		res.PowerMeter = &nasv1.PowerMeterTelemetry{
+			DeviceName:      s.PowerMeter.DeviceName,
+			Adapter:         s.PowerMeter.Adapter,
+			PowerWatts:      s.PowerMeter.PowerWatts,
+			IntervalSeconds: s.PowerMeter.IntervalSeconds,
+		}
+	}
+	for _, g := range s.Gpus {
+		res.Gpus = append(res.Gpus, &nasv1.GpuTelemetry{
+			Index:              g.Index,
+			Name:               g.Name,
+			DriverVersion:      g.DriverVersion,
+			TemperatureCelsius: g.TemperatureCelsius,
+			UtilizationPercent: g.UtilizationPercent,
+			MemoryUsedBytes:    g.MemoryUsedBytes,
+			MemoryTotalBytes:   g.MemoryTotalBytes,
+			PowerWatts:         g.PowerWatts,
+			PowerCapWatts:      g.PowerCapWatts,
+			FanSpeedPercent:    g.FanSpeedPercent,
+			Vendor:             g.Vendor,
+		})
+	}
+	for _, item := range s.Temperatures {
+		res.Temperatures = append(res.Temperatures, &nasv1.HardwareSensorItem{
+			Chip:          item.Chip,
+			Adapter:       item.Adapter,
+			Label:         item.Label,
+			Category:      item.Category,
+			CurrentValue:  item.CurrentValue,
+			Unit:          item.Unit,
+			HighThreshold: item.HighThreshold,
+			CritThreshold: item.CritThreshold,
+			Alarm:         item.Alarm,
+		})
+	}
+	for _, item := range s.Fans {
+		res.Fans = append(res.Fans, &nasv1.HardwareSensorItem{
+			Chip:          item.Chip,
+			Adapter:       item.Adapter,
+			Label:         item.Label,
+			Category:      item.Category,
+			CurrentValue:  item.CurrentValue,
+			Unit:          item.Unit,
+			HighThreshold: item.HighThreshold,
+			CritThreshold: item.CritThreshold,
+			Alarm:         item.Alarm,
+		})
+	}
+	return res
 }
 
 func toProtoLinuxFlavor(f domain.LinuxFlavor) *nasv1.LinuxFlavor {

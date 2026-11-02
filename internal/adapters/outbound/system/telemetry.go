@@ -3,6 +3,7 @@ package system
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -52,12 +53,16 @@ func (c *TelemetryCollector) Collect(ctx context.Context) (*domain.SystemTelemet
 	mem := c.collectMemory()
 	host := c.collectHost(ctx)
 	netIfaces := c.collectNetwork()
+	sensors := c.collectSensors(ctx)
+
+	c.enrichCpuTemperatures(&cpu, &sensors)
 
 	return &domain.SystemTelemetry{
 		Cpu:     cpu,
 		Memory:  mem,
 		Host:    host,
 		Network: netIfaces,
+		Sensors: sensors,
 	}, nil
 }
 
@@ -604,4 +609,322 @@ func readProcNetDev() map[string]devStats {
 		}
 	}
 	return m
+}
+
+func (c *TelemetryCollector) collectSensors(ctx context.Context) domain.HardwareSensorsTelemetry {
+	res := domain.HardwareSensorsTelemetry{
+		LmSensorsInstalled: false,
+		Temperatures:       make([]domain.HardwareSensorItem, 0),
+		Fans:               make([]domain.HardwareSensorItem, 0),
+		Gpus:               make([]domain.GpuTelemetry, 0),
+	}
+
+	sensorsBin, err := exec.LookPath("sensors")
+	if err != nil {
+		if _, statErr := os.Stat("/usr/bin/sensors"); statErr == nil {
+			sensorsBin = "/usr/bin/sensors"
+		} else if _, statErr := os.Stat("/bin/sensors"); statErr == nil {
+			sensorsBin = "/bin/sensors"
+		}
+	}
+
+	if sensorsBin != "" {
+		res.LmSensorsInstalled = true
+		c.parseLmSensorsOutput(ctx, sensorsBin, &res)
+	}
+
+	// Always collect GPU telemetry (via nvidia-smi if available, plus amdgpu from sensors/sysfs)
+	gpus := c.collectGpus(ctx)
+	if len(gpus) > 0 {
+		res.Gpus = append(res.Gpus, gpus...)
+		// Also add GPU temperatures to Temperatures list if not already present
+		for _, g := range gpus {
+			if g.TemperatureCelsius > 0 {
+				res.Temperatures = append(res.Temperatures, domain.HardwareSensorItem{
+					Chip:          fmt.Sprintf("gpu-%d", g.Index),
+					Adapter:       "PCI adapter",
+					Label:         fmt.Sprintf("%s (GPU %d)", g.Name, g.Index),
+					Category:      "GPU",
+					CurrentValue:  g.TemperatureCelsius,
+					Unit:          "°C",
+				})
+			}
+		}
+	}
+
+	return res
+}
+
+func (c *TelemetryCollector) parseLmSensorsOutput(ctx context.Context, sensorsBin string, res *domain.HardwareSensorsTelemetry) {
+	tctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(tctx, sensorsBin, "-j")
+	out, err := cmd.CombinedOutput()
+	if err != nil && len(out) == 0 {
+		return
+	}
+
+	c.parseLmSensorsJSON(out, res)
+}
+
+func (c *TelemetryCollector) parseLmSensorsJSON(out []byte, res *domain.HardwareSensorsTelemetry) {
+	raw := string(out)
+	idx := strings.Index(raw, "{")
+	if idx < 0 {
+		return
+	}
+	jsonStr := raw[idx:]
+
+	var parsed map[string]map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &parsed); err != nil {
+		return
+	}
+
+	for chipName, chipData := range parsed {
+		adapter := ""
+		if a, ok := chipData["Adapter"].(string); ok {
+			adapter = a
+		}
+
+		lowerChip := strings.ToLower(chipName)
+		defaultCat := "SYSTEM"
+		if strings.Contains(lowerChip, "coretemp") || strings.Contains(lowerChip, "k10temp") ||
+			strings.Contains(lowerChip, "zenpower") || strings.Contains(lowerChip, "cpu") {
+			defaultCat = "CPU"
+		} else if strings.Contains(lowerChip, "amdgpu") || strings.Contains(lowerChip, "nvidia") ||
+			strings.Contains(lowerChip, "nouveau") || strings.Contains(lowerChip, "radeon") {
+			defaultCat = "GPU"
+		} else if strings.Contains(lowerChip, "nvme") || strings.Contains(lowerChip, "drivetemp") ||
+			strings.Contains(lowerChip, "disk") || strings.Contains(lowerChip, "sata") {
+			defaultCat = "STORAGE"
+		} else if strings.Contains(strings.ToLower(adapter), "pci") || strings.Contains(lowerChip, "pci") {
+			defaultCat = "PCI"
+		} else if strings.Contains(lowerChip, "it86") || strings.Contains(lowerChip, "nct") ||
+			strings.Contains(lowerChip, "w83") || strings.Contains(lowerChip, "superio") ||
+			strings.Contains(lowerChip, "acpi") {
+			defaultCat = "MOTHERBOARD"
+		}
+
+		for featureName, featureVal := range chipData {
+			if featureName == "Adapter" {
+				continue
+			}
+
+			subMap, ok := featureVal.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			// 1. Check for Power Meter (e.g. power_meter-acpi-0, power1: {power1_average: 152.0, power1_average_interval: 300.0})
+			isPowerChip := strings.Contains(lowerChip, "power_meter") || strings.HasPrefix(strings.ToLower(featureName), "power")
+			var powerAvg, powerInterval float64
+			for subKey, subVal := range subMap {
+				num, isNum := toFloat64(subVal)
+				if !isNum {
+					continue
+				}
+				if strings.Contains(subKey, "power") && (strings.HasSuffix(subKey, "_average") || strings.HasSuffix(subKey, "_input")) {
+					powerAvg = num
+				} else if strings.Contains(subKey, "average_interval") || strings.Contains(subKey, "interval") {
+					powerInterval = num
+				}
+			}
+
+			if isPowerChip && powerAvg > 0 {
+				if res.PowerMeter == nil {
+					res.PowerMeter = &domain.PowerMeterTelemetry{
+						DeviceName:      chipName,
+						Adapter:         adapter,
+						PowerWatts:      powerAvg,
+						IntervalSeconds: powerInterval,
+					}
+				}
+				res.Temperatures = append(res.Temperatures, domain.HardwareSensorItem{
+					Chip:         chipName,
+					Adapter:      adapter,
+					Label:        fmt.Sprintf("%s (%s)", featureName, chipName),
+					Category:     "POWER",
+					CurrentValue: powerAvg,
+					Unit:         "W",
+				})
+				continue
+			}
+
+			// 2. Check for Fan
+			if strings.HasPrefix(strings.ToLower(featureName), "fan") {
+				var fanRpm, fanMin, fanMax float64
+				var fanAlarm bool
+				for subKey, subVal := range subMap {
+					num, isNum := toFloat64(subVal)
+					if !isNum {
+						continue
+					}
+					if strings.HasSuffix(subKey, "_input") {
+						fanRpm = num
+					} else if strings.HasSuffix(subKey, "_min") {
+						fanMin = num
+					} else if strings.HasSuffix(subKey, "_max") {
+						fanMax = num
+					} else if strings.HasSuffix(subKey, "_alarm") {
+						fanAlarm = (num > 0)
+					}
+				}
+				_ = fanMin
+				res.Fans = append(res.Fans, domain.HardwareSensorItem{
+					Chip:          chipName,
+					Adapter:       adapter,
+					Label:         fmt.Sprintf("%s (%s)", featureName, chipName),
+					Category:      "FAN",
+					CurrentValue:  fanRpm,
+					Unit:          "RPM",
+					HighThreshold: fanMax,
+					Alarm:         fanAlarm,
+				})
+				continue
+			}
+
+			// 3. Check for Temperature
+			var tempVal, tempMax, tempCrit float64
+			var tempAlarm bool
+			hasTemp := false
+
+			for subKey, subVal := range subMap {
+				num, isNum := toFloat64(subVal)
+				if !isNum {
+					continue
+				}
+				if strings.HasSuffix(subKey, "_input") && strings.HasPrefix(subKey, "temp") {
+					tempVal = num
+					hasTemp = true
+				} else if strings.HasSuffix(subKey, "_max") || strings.HasSuffix(subKey, "_high") {
+					tempMax = num
+				} else if strings.HasSuffix(subKey, "_crit") {
+					tempCrit = num
+				} else if strings.HasSuffix(subKey, "_alarm") {
+					tempAlarm = (num > 0)
+				}
+			}
+
+			if hasTemp && tempVal > -50 && tempVal < 200 {
+				cat := defaultCat
+				lowerFeat := strings.ToLower(featureName)
+				if strings.Contains(lowerFeat, "core") || strings.Contains(lowerFeat, "package") ||
+					strings.Contains(lowerFeat, "tctl") || strings.Contains(lowerFeat, "tccd") {
+					cat = "CPU"
+				} else if strings.Contains(lowerFeat, "edge") || strings.Contains(lowerFeat, "junction") || strings.Contains(lowerFeat, "mem") && defaultCat == "GPU" {
+					cat = "GPU"
+				}
+
+				displayLabel := featureName
+				if !strings.Contains(displayLabel, chipName) {
+					displayLabel = fmt.Sprintf("%s: %s", chipName, featureName)
+				}
+
+				res.Temperatures = append(res.Temperatures, domain.HardwareSensorItem{
+					Chip:          chipName,
+					Adapter:       adapter,
+					Label:         displayLabel,
+					Category:      cat,
+					CurrentValue:  tempVal,
+					Unit:          "°C",
+					HighThreshold: tempMax,
+					CritThreshold: tempCrit,
+					Alarm:         tempAlarm,
+				})
+			}
+		}
+	}
+}
+
+func (c *TelemetryCollector) collectGpus(ctx context.Context) []domain.GpuTelemetry {
+	var results []domain.GpuTelemetry
+
+	tctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(tctx, "nvidia-smi",
+		"--query-gpu=index,name,driver_version,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw,fan.speed",
+		"--format=csv,noheader,nounits")
+	if out, err := cmd.Output(); err == nil {
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" {
+				continue
+			}
+			parts := strings.Split(line, ",")
+			if len(parts) >= 7 {
+				idx, _ := strconv.Atoi(strings.TrimSpace(parts[0]))
+				name := strings.TrimSpace(parts[1])
+				driverVer := strings.TrimSpace(parts[2])
+				temp, _ := strconv.ParseFloat(strings.TrimSpace(parts[3]), 64)
+				util, _ := strconv.ParseFloat(strings.TrimSpace(parts[4]), 64)
+				memUsedMiB, _ := strconv.ParseFloat(strings.TrimSpace(parts[5]), 64)
+				memTotalMiB, _ := strconv.ParseFloat(strings.TrimSpace(parts[6]), 64)
+				var power float64
+				if len(parts) >= 8 {
+					power, _ = strconv.ParseFloat(strings.TrimSpace(parts[7]), 64)
+				}
+				var fan int
+				if len(parts) >= 9 {
+					fan, _ = strconv.Atoi(strings.TrimSpace(parts[8]))
+				}
+
+				results = append(results, domain.GpuTelemetry{
+					Index:              int32(idx),
+					Name:               name,
+					DriverVersion:      driverVer,
+					TemperatureCelsius: temp,
+					UtilizationPercent: util,
+					MemoryUsedBytes:    int64(memUsedMiB * 1024 * 1024),
+					MemoryTotalBytes:   int64(memTotalMiB * 1024 * 1024),
+					PowerWatts:         power,
+					FanSpeedPercent:    int32(fan),
+					Vendor:             "NVIDIA",
+				})
+			}
+		}
+	}
+
+	return results
+}
+
+func (c *TelemetryCollector) enrichCpuTemperatures(cpu *domain.CpuTelemetry, sensors *domain.HardwareSensorsTelemetry) {
+	var pkgTemps []float64
+	for _, item := range sensors.Temperatures {
+		if item.Category == "CPU" && strings.Contains(strings.ToLower(item.Label), "package") && item.CurrentValue > 0 {
+			pkgTemps = append(pkgTemps, item.CurrentValue)
+		}
+	}
+	if len(pkgTemps) > len(cpu.PackageTemperatures) {
+		cpu.PackageTemperatures = pkgTemps
+		maxTemp := 0.0
+		for _, t := range pkgTemps {
+			if t > maxTemp {
+				maxTemp = t
+			}
+		}
+		if maxTemp > 0 {
+			cpu.TemperatureCelsius = maxTemp
+		}
+	}
+}
+
+func toFloat64(val interface{}) (float64, bool) {
+	switch v := val.(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case string:
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f, true
+		}
+	}
+	return 0, false
 }

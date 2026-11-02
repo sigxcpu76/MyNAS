@@ -14,7 +14,9 @@ import {
   mdiThermometer,
   mdiCellphoneArrowDown,
   mdiClose,
+  mdiFlash,
   mdiUpdate,
+  mdiVideo3dVariant,
 } from '@mdi/js';
 import MdiIcon from '../../components/MdiIcon.vue';
 import { nasState, refreshAllData } from '../../store';
@@ -31,6 +33,8 @@ const { isStandalone, promptInstall } = usePwaInstall();
 const bannerDismissed = ref(false);
 
 const telem = computed(() => nasState.systemTelemetry);
+const powerMeter = computed(() => telem.value?.sensors?.powerMeter);
+const gpus = computed(() => telem.value?.sensors?.gpus || []);
 
 const cpuPercent = computed(() => Math.round(telem.value?.cpu?.usagePercent || 0));
 const cpuTemp = computed(() => {
@@ -243,6 +247,26 @@ const isDegraded = computed(() => {
             background: mainPoolPercent > 85 ? 'var(--accent-warning)' : 'var(--accent-primary)',
           }"
         />
+      </div>
+    </div>
+
+    <!-- Power Meter & GPU Telemetry Mobile Card -->
+    <div
+      v-if="(powerMeter && powerMeter.powerWatts > 0) || gpus.length > 0"
+      class="sensors-mobile-card"
+      @click="emit('open-system-details')"
+    >
+      <div v-if="powerMeter && powerMeter.powerWatts > 0" class="sensor-pill-mobile power-highlight">
+        <MdiIcon :path="mdiFlash" size="18" style="color: #f59e0b" />
+        <span class="sensor-label">System Power:</span>
+        <strong class="mono" style="color: #f59e0b">{{ powerMeter.powerWatts.toFixed(1) }} W</strong>
+        <span class="sensor-sub-tag">ACPI</span>
+      </div>
+      <div v-for="g in gpus" :key="g.index" class="sensor-pill-mobile">
+        <MdiIcon :path="mdiVideo3dVariant" size="18" style="color: var(--accent-primary)" />
+        <span class="sensor-label">{{ g.name.replace('NVIDIA ', '').replace('GeForce ', '') }}:</span>
+        <strong class="mono">{{ g.temperatureCelsius > 0 ? `${g.temperatureCelsius.toFixed(0)}°C` : 'Active' }}</strong>
+        <span v-if="g.powerWatts > 0" class="mono" style="font-size: 11px; color: var(--text-muted)">• {{ g.powerWatts.toFixed(0) }}W</span>
       </div>
     </div>
 
@@ -646,5 +670,45 @@ const isDegraded = computed(() => {
   font-size: 11px;
   color: var(--text-secondary, #94a3b8);
   margin-top: 2px;
+}
+
+.sensors-mobile-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.sensor-pill-mobile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.sensor-pill-mobile.power-highlight {
+  padding: 4px 8px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 8px;
+}
+
+.sensor-label {
+  color: var(--text-secondary);
+}
+
+.sensor-sub-tag {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.2);
+  padding: 1px 5px;
+  border-radius: 4px;
 }
 </style>

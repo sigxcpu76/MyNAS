@@ -75,6 +75,16 @@ var defaultSpecs = []Spec{
 		RequiredBy:  []string{"NVMe Health Log", "NVMe Temperature & Endurance Telemetry"},
 	},
 	{
+		ID:          "sensors",
+		Module:      "system",
+		DisplayName: "Hardware Sensors & Monitoring CLI (sensors)",
+		Category:    "SYSTEM",
+		Kind:        "BINARY",
+		Target:      "sensors",
+		VersionArgs: []string{"-v"},
+		RequiredBy:  []string{"Hardware Monitoring", "ACPI Power Meter", "PCI Card & Motherboard Telemetry"},
+	},
+	{
 		ID:          "kvm-dev",
 		Module:      "kvm",
 		DisplayName: "Linux KVM Hardware Virtualization (/dev/kvm)",

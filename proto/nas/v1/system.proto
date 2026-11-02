@@ -108,11 +108,53 @@ message NetworkInterfaceTelemetry {
   bool is_default = 10;
 }
 
+message GpuTelemetry {
+  int32 index = 1;
+  string name = 2;
+  string driver_version = 3;
+  double temperature_celsius = 4;
+  double utilization_percent = 5;
+  int64 memory_used_bytes = 6;
+  int64 memory_total_bytes = 7;
+  double power_watts = 8;
+  double power_cap_watts = 9;
+  int32 fan_speed_percent = 10;
+  string vendor = 11;
+}
+
+message PowerMeterTelemetry {
+  string device_name = 1;
+  string adapter = 2;
+  double power_watts = 3;
+  double interval_seconds = 4;
+}
+
+message HardwareSensorItem {
+  string chip = 1;
+  string adapter = 2;
+  string label = 3;
+  string category = 4; // "CPU", "GPU", "PCI", "STORAGE", "MOTHERBOARD", "FAN", "POWER", "SYSTEM"
+  double current_value = 5;
+  string unit = 6;     // "°C", "RPM", "W", "V", "%"
+  double high_threshold = 7;
+  double crit_threshold = 8;
+  bool alarm = 9;
+}
+
+message HardwareSensorsTelemetry {
+  bool lm_sensors_installed = 1;
+  PowerMeterTelemetry power_meter = 2;
+  repeated GpuTelemetry gpus = 3;
+  repeated HardwareSensorItem temperatures = 4;
+  repeated HardwareSensorItem fans = 5;
+}
+
 message SystemTelemetry {
   CpuTelemetry cpu = 1;
   MemoryTelemetry memory = 2;
   HostHardwareInfo host = 3;
   repeated NetworkInterfaceTelemetry network = 4;
+  HardwareSensorsTelemetry sensors = 5;
 }
 
 message GetSystemTelemetryRequest {}

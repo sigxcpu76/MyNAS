@@ -75,10 +75,52 @@ type NetworkInterfaceTelemetry struct {
 	IsDefault          bool     `json:"isDefault"`
 }
 
+type GpuTelemetry struct {
+	Index              int32   `json:"index"`
+	Name               string  `json:"name"`
+	DriverVersion      string  `json:"driverVersion"`
+	TemperatureCelsius float64 `json:"temperatureCelsius"`
+	UtilizationPercent float64 `json:"utilizationPercent"`
+	MemoryUsedBytes    int64   `json:"memoryUsedBytes"`
+	MemoryTotalBytes   int64   `json:"memoryTotalBytes"`
+	PowerWatts         float64 `json:"powerWatts"`
+	PowerCapWatts      float64 `json:"powerCapWatts"`
+	FanSpeedPercent    int32   `json:"fanSpeedPercent"`
+	Vendor             string  `json:"vendor"`
+}
+
+type PowerMeterTelemetry struct {
+	DeviceName      string  `json:"deviceName"`
+	Adapter         string  `json:"adapter"`
+	PowerWatts      float64 `json:"powerWatts"`
+	IntervalSeconds float64 `json:"intervalSeconds"`
+}
+
+type HardwareSensorItem struct {
+	Chip          string  `json:"chip"`
+	Adapter       string  `json:"adapter"`
+	Label         string  `json:"label"`
+	Category      string  `json:"category"`
+	CurrentValue  float64 `json:"currentValue"`
+	Unit          string  `json:"unit"`
+	HighThreshold float64 `json:"highThreshold"`
+	CritThreshold float64 `json:"critThreshold"`
+	Alarm         bool    `json:"alarm"`
+}
+
+type HardwareSensorsTelemetry struct {
+	LmSensorsInstalled bool                 `json:"lmSensorsInstalled"`
+	PowerMeter         *PowerMeterTelemetry `json:"powerMeter,omitempty"`
+	Gpus               []GpuTelemetry       `json:"gpus"`
+	Temperatures       []HardwareSensorItem `json:"temperatures"`
+	Fans               []HardwareSensorItem `json:"fans"`
+}
+
 type SystemTelemetry struct {
 	Cpu     CpuTelemetry                `json:"cpu"`
 	Memory  MemoryTelemetry             `json:"memory"`
 	Host    HostHardwareInfo            `json:"host"`
 	Network []NetworkInterfaceTelemetry `json:"network"`
+	Sensors HardwareSensorsTelemetry    `json:"sensors"`
 }
 

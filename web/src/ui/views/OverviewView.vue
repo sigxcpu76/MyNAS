@@ -31,6 +31,7 @@ import WidgetSystem from '../dashboard/widgets/WidgetSystem.vue';
 import WidgetNetwork from '../dashboard/widgets/WidgetNetwork.vue';
 import WidgetDisks from '../dashboard/widgets/WidgetDisks.vue';
 import WidgetWorkloads from '../dashboard/widgets/WidgetWorkloads.vue';
+import WidgetSensors from '../dashboard/widgets/WidgetSensors.vue';
 
 // ---------------------------------------------------------------------------
 // Telemetry (Reactive Stream)
@@ -106,6 +107,8 @@ function getWidgetComponent(type: string) {
       return WidgetDisks;
     case 'workloads':
       return WidgetWorkloads;
+    case 'sensors':
+      return WidgetSensors;
     default:
       return null;
   }

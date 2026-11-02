@@ -7,6 +7,8 @@ import {
   mdiConsole,
   mdiContentCopy,
   mdiCpu64Bit,
+  mdiFan,
+  mdiFlash,
   mdiHarddisk,
   mdiLanConnect,
   mdiLinux,
@@ -16,6 +18,7 @@ import {
   mdiSpeedometer,
   mdiThermometer,
   mdiUpdate,
+  mdiVideo3dVariant,
 } from '@mdi/js';
 import { formatBytes, formatUptime } from '../../domain/models';
 import MdiIcon from './MdiIcon.vue';
@@ -37,6 +40,11 @@ const copied = ref(false);
 const host = computed(() => telemetry.value?.host);
 const cpu = computed(() => telemetry.value?.cpu);
 const mem = computed(() => telemetry.value?.memory);
+const sensors = computed(() => telemetry.value?.sensors);
+const powerMeter = computed(() => sensors.value?.powerMeter);
+const gpus = computed(() => sensors.value?.gpus || []);
+const temps = computed(() => sensors.value?.temperatures || []);
+const fans = computed(() => sensors.value?.fans || []);
 
 const primaryInterface = computed(() => {
   const list = telemetry.value?.network || [];
@@ -436,6 +444,68 @@ async function copySystemSummary() {
             <div class="spec-row" v-else>
               <span class="spec-label">Graphics:</span>
               <span class="spec-val text-muted">Integrated / Headless</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 7. Hardware Sensors, Power & Temperatures -->
+        <div class="details-section" v-if="sensors">
+          <div class="section-title">
+            <MdiIcon :path="mdiThermometer" size="16" class="section-icon" />
+            <span>Hardware Sensors & Power</span>
+          </div>
+          <div class="details-card">
+            <div class="spec-row">
+              <span class="spec-label">lm-sensors:</span>
+              <span class="spec-val">
+                <span v-if="sensors.lmSensorsInstalled" class="badge badge-success" style="font-size: 11px">Installed & Active</span>
+                <span v-else class="badge badge-neutral" style="font-size: 11px">Not Installed (lm-sensors)</span>
+              </span>
+            </div>
+            <div class="spec-row" v-if="powerMeter && powerMeter.powerWatts > 0">
+              <span class="spec-label">ACPI Power Meter:</span>
+              <span class="spec-val mono font-semibold" style="color: #f59e0b">
+                {{ powerMeter.powerWatts.toFixed(1) }} W ({{ powerMeter.deviceName }} • {{ powerMeter.adapter }})
+              </span>
+            </div>
+            <div class="spec-row" v-if="gpus.length > 0">
+              <span class="spec-label">GPU Accelerators:</span>
+              <div class="spec-val">
+                <div v-for="g in gpus" :key="g.index" style="margin-bottom: 4px">
+                  <strong>{{ g.name }}</strong>
+                  <span class="mono" style="margin-left: 6px; font-size: 11.5px">
+                    {{ g.temperatureCelsius.toFixed(1) }}°C · {{ g.powerWatts.toFixed(1) }}W · VRAM {{ formatBytes(g.memoryUsedBytes) }}/{{ formatBytes(g.memoryTotalBytes) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div class="spec-row" v-if="temps.length > 0">
+              <span class="spec-label">Thermal Sensors:</span>
+              <div class="spec-val" style="display: flex; gap: 6px; flex-wrap: wrap">
+                <span
+                  v-for="t in temps"
+                  :key="`${t.chip}-${t.label}`"
+                  class="badge mono"
+                  :class="getTempBadgeClass(t.currentValue)"
+                  style="font-size: 11px; padding: 2px 7px"
+                  :title="`${t.chip} • ${t.adapter}`"
+                >
+                  {{ t.label }}: {{ t.currentValue.toFixed(1) }}°C
+                </span>
+              </div>
+            </div>
+            <div class="spec-row" v-if="fans.length > 0">
+              <span class="spec-label">Fans:</span>
+              <div class="spec-val" style="display: flex; gap: 6px; flex-wrap: wrap">
+                <span
+                  v-for="f in fans"
+                  :key="`${f.chip}-${f.label}`"
+                  class="badge badge-neutral mono"
+                  style="font-size: 11px; padding: 2px 7px"
+                >
+                  {{ f.label }}: {{ Math.round(f.currentValue) }} RPM
+                </span>
+              </div>
             </div>
           </div>
         </div>

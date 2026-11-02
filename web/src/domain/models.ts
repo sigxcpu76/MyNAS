@@ -141,11 +141,53 @@ export interface NetworkInterfaceTelemetry {
   isDefault?: boolean;
 }
 
+export interface GpuTelemetry {
+  index: number;
+  name: string;
+  driverVersion?: string;
+  temperatureCelsius: number;
+  utilizationPercent: number;
+  memoryUsedBytes: number;
+  memoryTotalBytes: number;
+  powerWatts: number;
+  powerCapWatts?: number;
+  fanSpeedPercent?: number;
+  vendor: string;
+}
+
+export interface PowerMeterTelemetry {
+  deviceName: string;
+  adapter: string;
+  powerWatts: number;
+  intervalSeconds: number;
+}
+
+export interface HardwareSensorItem {
+  chip: string;
+  adapter: string;
+  label: string;
+  category: 'CPU' | 'GPU' | 'PCI' | 'STORAGE' | 'MOTHERBOARD' | 'POWER' | 'FAN' | 'SYSTEM' | string;
+  currentValue: number;
+  unit: string;
+  highThreshold?: number;
+  critThreshold?: number;
+  alarm?: boolean;
+}
+
+export interface HardwareSensorsTelemetry {
+  lmSensorsInstalled: boolean;
+  powerMeter?: PowerMeterTelemetry | null;
+  gpus: GpuTelemetry[];
+  temperatures: HardwareSensorItem[];
+  fans: HardwareSensorItem[];
+}
+
 export interface SystemTelemetry {
   cpu: CpuTelemetry;
   memory: MemoryTelemetry;
   host: HostHardwareInfo;
   network: NetworkInterfaceTelemetry[];
+  sensors?: HardwareSensorsTelemetry;
 }
 
 // ---------------------------------------------------------------------------
