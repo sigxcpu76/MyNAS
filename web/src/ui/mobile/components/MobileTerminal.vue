@@ -17,6 +17,21 @@ import MdiIcon from '../../components/MdiIcon.vue';
 import { services } from '../../../container';
 import { nasState } from '../../store';
 
+const props = withDefaults(
+  defineProps<{
+    title?: string;
+    endpoint?: string;
+    lxcId?: string;
+    containerId?: string;
+  }>(),
+  {
+    title: '',
+    endpoint: '',
+    lxcId: '',
+    containerId: '',
+  }
+);
+
 const emit = defineEmits<{
   (e: 'close'): void;
 }>();
@@ -25,6 +40,18 @@ const status = ref<'CONNECTING' | 'CONNECTED' | 'DISCONNECTED' | 'ERROR'>('CONNE
 const terminalContainer = ref<HTMLDivElement | null>(null);
 const isCtrlActive = ref(false);
 
+const viewportHeight = ref(
+  typeof window !== 'undefined' && window.visualViewport ? `${window.visualViewport.height}px` : '100%'
+);
+
+function handleViewportResize() {
+  if (typeof window !== 'undefined' && window.visualViewport) {
+    viewportHeight.value = `${window.visualViewport.height}px`;
+    fitAddon?.fit();
+    sendResize();
+  }
+}
+
 let term: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
 let ws: WebSocket | null = null;
@@ -32,10 +59,26 @@ let resizeObserver: ResizeObserver | null = null;
 
 const hostname = computed(() => nasState.systemTelemetry?.host?.hostname || 'Host');
 
+const displayTitle = computed(() => {
+  if (props.title) return props.title;
+  if (props.lxcId) return `LXC: ${props.lxcId}`;
+  if (props.containerId) return `Container: ${props.containerId}`;
+  return 'Host Shell';
+});
+
 function getWebSocketUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.host;
   const token = services.auth.getToken() ?? '';
+  if (props.lxcId) {
+    return `${protocol}//${host}/ws/lxc/${encodeURIComponent(props.lxcId)}/terminal?access_token=${encodeURIComponent(token)}`;
+  }
+  if (props.containerId) {
+    return `${protocol}//${host}/ws/docker/terminal?container=${encodeURIComponent(props.containerId)}&access_token=${encodeURIComponent(token)}`;
+  }
+  if (props.endpoint) {
+    return `${protocol}//${host}${props.endpoint}?access_token=${encodeURIComponent(token)}`;
+  }
   return `${protocol}//${host}/ws/host/terminal?access_token=${encodeURIComponent(token)}`;
 }
 
@@ -197,11 +240,15 @@ function sendDown() {
 
 function clearScreen() {
   term?.clear();
-  sendKey('clear\r');
+  sendKey('\x0c');
 }
 
 onMounted(() => {
   initTerminal();
+
+  if (typeof window !== 'undefined' && window.visualViewport) {
+    window.visualViewport.addEventListener('resize', handleViewportResize);
+  }
 
   if (terminalContainer.value && typeof ResizeObserver !== 'undefined') {
     resizeObserver = new ResizeObserver(() => {
@@ -215,6 +262,9 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  if (typeof window !== 'undefined' && window.visualViewport) {
+    window.visualViewport.removeEventListener('resize', handleViewportResize);
+  }
   if (resizeObserver) {
     resizeObserver.disconnect();
     resizeObserver = null;
@@ -231,12 +281,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="mobile-terminal-wrapper">
+  <div class="mobile-terminal-wrapper" :style="{ height: viewportHeight }">
     <!-- Header -->
     <div class="mobile-terminal-header">
       <div class="header-left">
         <MdiIcon :path="mdiConsole" size="16" style="color: var(--accent-primary)" />
-        <span class="header-title">Host Shell</span>
+        <span class="header-title">{{ displayTitle }}</span>
         <span class="status-indicator" :class="status.toLowerCase()">
           {{ status }}
         </span>

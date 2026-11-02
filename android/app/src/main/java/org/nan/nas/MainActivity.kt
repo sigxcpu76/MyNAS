@@ -46,10 +46,17 @@ class MainActivity : AppCompatActivity() {
     private fun setupBackNavigation() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (binding.webView.canGoBack()) {
-                    binding.webView.goBack()
-                } else {
-                    finish()
+                binding.webView.evaluateJavascript(
+                    "(function() { if (typeof window.nanDismissTopOverlay === 'function') { return window.nanDismissTopOverlay(); } return false; })();"
+                ) { result ->
+                    val dismissed = result == "true" || result == "\"true\""
+                    if (!dismissed) {
+                        if (binding.webView.canGoBack()) {
+                            binding.webView.goBack()
+                        } else {
+                            finish()
+                        }
+                    }
                 }
             }
         })
@@ -57,9 +64,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun getAppVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.6.8"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.6.9"
         } catch (e: Exception) {
-            "1.6.8"
+            "1.6.9"
         }
     }
 
@@ -73,7 +80,7 @@ class MainActivity : AppCompatActivity() {
                 pInfo.versionCode.toLong()
             }
         } catch (e: Exception) {
-            8L
+            9L
         }
     }
 
@@ -119,6 +126,25 @@ class MainActivity : AppCompatActivity() {
             fun getVersionCode(): Long = build
             @android.webkit.JavascriptInterface
             fun isNativeApp(): Boolean = true
+            @android.webkit.JavascriptInterface
+            fun updateToken(newToken: String) {
+                profile?.let {
+                    val updated = it.copy(token = newToken)
+                    profile = updated
+                    prefsManager.saveProfile(updated)
+                }
+            }
+            @android.webkit.JavascriptInterface
+            fun clearSession() {
+                profile?.let {
+                    val updated = it.copy(token = "")
+                    profile = updated
+                    prefsManager.saveProfile(updated)
+                }
+                runOnUiThread {
+                    redirectToLogin()
+                }
+            }
         }, "NanAndroidNative")
 
         binding.webView.webChromeClient = object : WebChromeClient() {
@@ -153,13 +179,19 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                val url = request?.url?.toString() ?: return false
+                val uri = request?.url ?: return false
                 val targetHost = profile?.host ?: ""
-                // Keep all server URLs inside the WebView; allow external links to open outside if needed
-                if (url.contains(targetHost)) {
+                // Keep server URLs inside the WebView; allow external links to open outside
+                if (targetHost.isNotEmpty() && uri.host?.contains(targetHost) == true) {
                     return false
                 }
-                return false
+                return try {
+                    val intent = Intent(Intent.ACTION_VIEW, uri)
+                    startActivity(intent)
+                    true
+                } catch (e: Exception) {
+                    false
+                }
             }
         }
     }
@@ -182,10 +214,11 @@ class MainActivity : AppCompatActivity() {
                         window.localStorage.setItem('nan_apk_version', '$ver');
                         window.localStorage.setItem('nan_apk_build', '$build');
                         if ('$token'.length > 0) {
-                            if (!window.localStorage.getItem('nas_jwt_token') || window.localStorage.getItem('nas_jwt_token') !== '$token') {
+                            if (!window.localStorage.getItem('nas_jwt_token')) {
                                 window.localStorage.setItem('nas_jwt_token', '$token');
                             }
                         }
+                        window.localStorage.setItem('nas_device_view_mode', 'mobile');
                         window.localStorage.setItem('device_ui_mode_override', 'mobile');
                     }
                 } catch(e) {}

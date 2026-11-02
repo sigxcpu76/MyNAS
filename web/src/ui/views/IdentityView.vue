@@ -16,7 +16,7 @@ const userSort = useTableSort(
     if (nasState.includeSystemAccounts) {
       return nasState.users;
     }
-    return nasState.users.filter((u) => u.uid >= 1000 && u.uid <= 10000);
+    return nasState.users.filter((u) => u.uid >= 1000 && u.uid <= 60000);
   },
   {
     username: (u: User) => u.username,
@@ -32,7 +32,7 @@ const groupSort = useTableSort(
     if (nasState.includeSystemGroups) {
       return nasState.groups;
     }
-    return nasState.groups.filter((g) => g.gid >= 1000 && g.gid <= 10000);
+    return nasState.groups.filter((g) => g.gid >= 1000 && g.gid <= 60000);
   },
   {
     name: (g: Group) => g.groupName,
@@ -43,7 +43,7 @@ const groupSort = useTableSort(
 
 function getNextAvailableUid(): number {
   const used = new Set(nasState.users.map((u) => u.uid));
-  for (let uid = 1000; uid <= 10000; uid++) {
+  for (let uid = 1000; uid <= 60000; uid++) {
     if (!used.has(uid)) return uid;
   }
   const max = Math.max(1000, ...Array.from(used));
@@ -52,7 +52,7 @@ function getNextAvailableUid(): number {
 
 function getNextAvailableGid(): number {
   const used = new Set(nasState.groups.map((g) => g.gid));
-  for (let gid = 1000; gid <= 10000; gid++) {
+  for (let gid = 1000; gid <= 60000; gid++) {
     if (!used.has(gid)) return gid;
   }
   const max = Math.max(1000, ...Array.from(used));
@@ -117,7 +117,7 @@ function toggleCreateUser() {
     userForm.userId = '';
     userForm.fullName = '';
     userForm.uid = getNextAvailableUid();
-    userForm.primaryGroup = nasState.groups.find((g) => g.gid >= 1000 && g.gid <= 10000)?.groupName || '';
+    userForm.primaryGroup = nasState.groups.find((g) => g.gid >= 1000 && g.gid <= 60000)?.groupName || '';
     userForm.supplementaryGroupsText = '';
     userForm.homeDirectory = '';
     userForm.shell = '/bin/bash';
@@ -155,8 +155,8 @@ async function handleCreateUser() {
     notify('error', `UID ${userForm.uid} is already used by user "${duplicateUidUser.value.username}".`);
     return;
   }
-  if (userForm.uid < 1000 || userForm.uid > 10000) {
-    notify('error', 'UID must be between 1000 and 10000.');
+  if (userForm.uid < 1000 || userForm.uid > 60000) {
+    notify('error', 'UID must be between 1000 and 60000.');
     return;
   }
   try {
@@ -238,6 +238,20 @@ async function handleSaveUserEdit() {
       'is_admin',
       'smb_enabled',
     ];
+    // Self-lockout and self-admin-revocation guard
+    const isSelf = nasState.currentUser && (
+      nasState.currentUser.username === editingUser.value.username ||
+      nasState.currentUser.uid === editingUser.value.uid
+    );
+    if (isSelf && editUserForm.locked) {
+      notify('error', 'You cannot lock your own logged-in user account.');
+      return;
+    }
+    if (isSelf && !editUserForm.isAdmin && editingUser.value.isAdmin) {
+      notify('error', 'You cannot revoke your own administrator privileges.');
+      return;
+    }
+
     const updates: Partial<User> = {
       fullName: editUserForm.fullName,
       primaryGroup: editUserForm.primaryGroup,
@@ -253,6 +267,11 @@ async function handleSaveUserEdit() {
     if (editUserForm.password) {
       updates.password = editUserForm.password;
       mask.push('password');
+      // If Samba is enabled and no explicit Samba password was entered, synchronize Samba with Linux password
+      if (editUserForm.smbEnabled && !editUserForm.smbPassword) {
+        updates.smbPassword = editUserForm.password;
+        mask.push('smb_password');
+      }
     }
     if (editUserForm.smbPassword) {
       updates.smbPassword = editUserForm.smbPassword;
@@ -271,6 +290,17 @@ async function handleSaveUserEdit() {
 async function handleDeleteUser(u: User) {
   const name = u.name;
   const shortName = u.username || name.replace(/^users\//, '');
+
+  // Prevent self-deletion
+  const isSelf = nasState.currentUser && (
+    nasState.currentUser.username === shortName ||
+    nasState.currentUser.uid === u.uid
+  );
+  if (isSelf) {
+    notify('error', 'You cannot delete your own logged-in user account.');
+    return;
+  }
+
   const res = await confirmDelete({
     kind: 'User',
     name: shortName,
@@ -300,8 +330,8 @@ async function handleCreateGroup() {
     notify('error', `GID ${groupForm.gid} is already used by group "${duplicateGidGroup.value.groupName}".`);
     return;
   }
-  if (groupForm.gid < 1000 || groupForm.gid > 10000) {
-    notify('error', 'GID must be between 1000 and 10000.');
+  if (groupForm.gid < 1000 || groupForm.gid > 60000) {
+    notify('error', 'GID must be between 1000 and 60000.');
     return;
   }
   try {
@@ -416,7 +446,7 @@ async function handleDeleteGroup(g: Group) {
               v-model.number="userForm.uid"
               type="number"
               min="1000"
-              max="10000"
+              max="60000"
               class="input mono"
               :class="{ 'input-error': duplicateUidUser }"
               required
@@ -543,7 +573,7 @@ async function handleDeleteGroup(g: Group) {
           </div>
           <div class="form-group">
             <label>New Samba / SMB Password</label>
-            <input v-model="editUserForm.smbPassword" type="password" class="input" placeholder="Leave blank to keep current" />
+            <input v-model="editUserForm.smbPassword" type="password" class="input" placeholder="Leave blank to sync with new Linux password" />
           </div>
         </div>
 
@@ -743,7 +773,7 @@ async function handleDeleteGroup(g: Group) {
               v-model.number="groupForm.gid"
               type="number"
               min="1000"
-              max="10000"
+              max="60000"
               class="input mono"
               :class="{ 'input-error': duplicateGidGroup }"
               required

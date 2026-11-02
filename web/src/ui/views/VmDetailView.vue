@@ -15,6 +15,7 @@ import {
   mdiMonitor,
   mdiNetwork,
   mdiOpenInNew,
+  mdiPencil,
   mdiPlay,
   mdiPlus,
   mdiPower,
@@ -455,12 +456,144 @@ async function handleRemoveDisk(idx: number) {
   }
 }
 
+const showEditDiskModal = ref(false);
+const editingDiskIndex = ref(-1);
+const editDiskForm = reactive({
+  bus: 'scsi',
+  diskPath: '',
+  sizeGib: 32,
+  cacheMode: 'none',
+  discard: true,
+});
+
+function openEditDisk(idx: number) {
+  const disk = (vm.value?.disks || [])[idx];
+  if (!disk) return;
+  editingDiskIndex.value = idx;
+  editDiskForm.bus = disk.bus || 'scsi';
+  editDiskForm.diskPath = disk.diskPath || '';
+  editDiskForm.sizeGib = Math.round((disk.sizeBytes || 0) / (1024 * 1024 * 1024)) || 32;
+  editDiskForm.cacheMode = disk.cacheMode || 'none';
+  editDiskForm.discard = disk.discard ?? true;
+  showEditDiskModal.value = true;
+}
+
+async function submitEditDisk() {
+  if (!vm.value || editingDiskIndex.value < 0 || isBusy.value) return;
+  isBusy.value = true;
+  const disks = [...(vm.value.disks || [])];
+  disks[editingDiskIndex.value] = {
+    ...disks[editingDiskIndex.value],
+    bus: editDiskForm.bus,
+    cacheMode: editDiskForm.cacheMode,
+    discard: editDiskForm.discard,
+  };
+  try {
+    await runTrackedTask(`VM "${cleanVmName.value}": Edit Disk`, async () => {
+      await services.kvm.updateVirtualMachine(vm.value!.name, { disks }, ['disks']);
+    });
+    notify('success', 'Updated disk configuration');
+    showEditDiskModal.value = false;
+    await refreshAllData();
+  } catch (err: any) {
+    notify('error', `Failed to update disk: ${err.message}`);
+  } finally {
+    isBusy.value = false;
+  }
+}
+
 const showAddNicModal = ref(false);
 const newNic = reactive({
   model: 'virtio',
   bridge: 'br0',
   vlanTag: 0,
 });
+
+const showEditNicModal = ref(false);
+const editingNicIndex = ref(-1);
+const editNicForm = reactive({
+  model: 'virtio',
+  bridge: 'br0',
+  vlanTag: 0,
+});
+
+function openEditNic(idx: number) {
+  const nic = (vm.value?.networkInterfaces || [])[idx];
+  if (!nic) return;
+  editingNicIndex.value = idx;
+  editNicForm.model = nic.model || 'virtio';
+  editNicForm.bridge = nic.bridge || 'br0';
+  editNicForm.vlanTag = nic.vlanTag || 0;
+  showEditNicModal.value = true;
+}
+
+async function submitEditNic() {
+  if (!vm.value || editingNicIndex.value < 0 || isBusy.value) return;
+  isBusy.value = true;
+  const nics = [...(vm.value.networkInterfaces || [])];
+  nics[editingNicIndex.value] = {
+    ...nics[editingNicIndex.value],
+    model: editNicForm.model,
+    bridge: editNicForm.bridge.trim() || 'br0',
+    vlanTag: editNicForm.vlanTag > 0 ? editNicForm.vlanTag : undefined,
+  };
+  try {
+    await runTrackedTask(`VM "${cleanVmName.value}": Edit NIC`, async () => {
+      await services.kvm.updateVirtualMachine(vm.value!.name, { networkInterfaces: nics }, ['network_interfaces']);
+    });
+    notify('success', 'Updated network interface');
+    showEditNicModal.value = false;
+    await refreshAllData();
+  } catch (err: any) {
+    notify('error', `Failed to update network interface: ${err.message}`);
+  } finally {
+    isBusy.value = false;
+  }
+}
+
+// CD-ROM Media (Insert / Swap / Eject)
+const showMediaModal = ref(false);
+const activeMediaDeviceId = ref('');
+const selectedMediaIso = ref('');
+
+function openMediaDialog(deviceId: string, currentIso?: string) {
+  activeMediaDeviceId.value = deviceId;
+  selectedMediaIso.value = currentIso || nasState.isos[0]?.path || '';
+  showMediaModal.value = true;
+}
+
+async function handleAttachMedia() {
+  if (!vm.value || !selectedMediaIso.value.trim() || isBusy.value) return;
+  isBusy.value = true;
+  try {
+    await runTrackedTask(`VM "${cleanVmName.value}": Insert ISO`, async () => {
+      await services.kvm.attachMedia(vm.value!.name, selectedMediaIso.value.trim(), activeMediaDeviceId.value);
+    });
+    notify('success', 'ISO media mounted');
+    showMediaModal.value = false;
+    await refreshAllData();
+  } catch (err: any) {
+    notify('error', `Failed to mount media: ${err.message}`);
+  } finally {
+    isBusy.value = false;
+  }
+}
+
+async function handleEjectMedia(deviceId: string) {
+  if (!vm.value || isBusy.value) return;
+  isBusy.value = true;
+  try {
+    await runTrackedTask(`VM "${cleanVmName.value}": Eject ISO`, async () => {
+      await services.kvm.ejectMedia(vm.value!.name, deviceId);
+    });
+    notify('success', 'ISO media ejected');
+    await refreshAllData();
+  } catch (err: any) {
+    notify('error', `Failed to eject media: ${err.message}`);
+  } finally {
+    isBusy.value = false;
+  }
+}
 
 async function submitAddNic() {
   if (!vm.value || isBusy.value) return;
@@ -783,6 +916,21 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
                     <option value="none">Headless (Serial Only)</option>
                   </select>
                 </div>
+                <div class="form-group">
+                  <label class="form-label">TPM Emulator</label>
+                  <select v-model="hwForm.tpmVersion" class="form-input">
+                    <option value="none">None (Disabled)</option>
+                    <option value="v2.0">TPM 2.0 (swtpm)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Hugepages</label>
+                  <select v-model="hwForm.hugepages" class="form-input">
+                    <option value="off">Off (Standard 4KB)</option>
+                    <option value="2MB">2MB Hugepages</option>
+                    <option value="1GB">1GB Hugepages</option>
+                  </select>
+                </div>
               </div>
 
               <div style="display: flex; gap: 18px; flex-wrap: wrap; margin-top: 4px">
@@ -892,9 +1040,14 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
                 </td>
                 <td><span class="badge badge-neutral font-xs">{{ d.bus }}</span></td>
                 <td style="text-align: right">
-                  <button class="btn btn-xs btn-danger" title="Detach Disk" @click="handleRemoveDisk(idx)">
-                    <MdiIcon :path="mdiTrashCanOutline" size="13" />
-                  </button>
+                  <div style="display: inline-flex; gap: 4px; justify-content: flex-end">
+                    <button class="btn btn-xs btn-secondary" title="Edit Disk Configuration" @click="openEditDisk(idx)">
+                      <MdiIcon :path="mdiPencil" size="13" />
+                    </button>
+                    <button class="btn btn-xs btn-danger" title="Detach Disk" @click="handleRemoveDisk(idx)">
+                      <MdiIcon :path="mdiTrashCanOutline" size="13" />
+                    </button>
+                  </div>
                 </td>
               </tr>
 
@@ -910,7 +1063,25 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
                   {{ cd.isoPath || 'empty (no media)' }}
                 </td>
                 <td><span class="badge badge-neutral font-xs">{{ cd.bus || 'ide' }}</span></td>
-                <td style="text-align: right">—</td>
+                <td style="text-align: right">
+                  <div style="display: inline-flex; gap: 4px; justify-content: flex-end">
+                    <button
+                      v-if="cd.isoPath"
+                      class="btn btn-xs btn-secondary"
+                      title="Eject CD-ROM Media"
+                      @click="handleEjectMedia(cd.id || String(idx))"
+                    >
+                      Eject
+                    </button>
+                    <button
+                      class="btn btn-xs btn-secondary"
+                      :title="cd.isoPath ? 'Swap ISO Image' : 'Insert ISO Image'"
+                      @click="openMediaDialog(cd.id || String(idx), cd.isoPath)"
+                    >
+                      {{ cd.isoPath ? 'Swap' : 'Insert' }}
+                    </button>
+                  </div>
+                </td>
               </tr>
 
               <!-- Network Interfaces -->
@@ -923,12 +1094,18 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
                 </td>
                 <td class="font-sm">
                   Bridge: <span class="mono">{{ nic.bridge }}</span><span v-if="nic.macAddress"> · MAC: <span class="mono">{{ nic.macAddress }}</span></span>
+                  <span v-if="nic.vlanTag"> · VLAN: <span class="mono">{{ nic.vlanTag }}</span></span>
                 </td>
                 <td><span class="badge badge-neutral font-xs">{{ nic.model || 'virtio' }}</span></td>
                 <td style="text-align: right">
-                  <button class="btn btn-xs btn-danger" title="Remove Network Interface" @click="handleRemoveNic(idx)">
-                    <MdiIcon :path="mdiTrashCanOutline" size="13" />
-                  </button>
+                  <div style="display: inline-flex; gap: 4px; justify-content: flex-end">
+                    <button class="btn btn-xs btn-secondary" title="Edit Network Interface" @click="openEditNic(idx)">
+                      <MdiIcon :path="mdiPencil" size="13" />
+                    </button>
+                    <button class="btn btn-xs btn-danger" title="Remove Network Interface" @click="handleRemoveNic(idx)">
+                      <MdiIcon :path="mdiTrashCanOutline" size="13" />
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -1138,6 +1315,119 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
           <button class="btn btn-secondary btn-sm" @click="showSnapshotModal = false">Cancel</button>
           <button class="btn btn-primary btn-sm" :disabled="!snapshotForm.id.trim() || isBusy" @click="submitSnapshot">
             Create Snapshot
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Disk Modal -->
+    <div v-if="showEditDiskModal" class="modal-overlay" @click.self="showEditDiskModal = false">
+      <div class="modal-container" style="max-width: 460px">
+        <div class="modal-header">
+          <h3 class="modal-title">Edit Virtual Disk: {{ editDiskForm.diskPath }}</h3>
+          <button class="btn btn-xs btn-ghost" @click="showEditDiskModal = false">
+            <MdiIcon :path="mdiClose" size="16" />
+          </button>
+        </div>
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; padding: 16px 20px">
+          <div class="form-group">
+            <label class="form-label">Controller Bus</label>
+            <select v-model="editDiskForm.bus" class="form-input">
+              <option value="scsi">VirtIO SCSI</option>
+              <option value="virtio">VirtIO Block</option>
+              <option value="sata">SATA</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Cache Mode</label>
+            <select v-model="editDiskForm.cacheMode" class="form-input">
+              <option value="none">none (Direct I/O — Recommended)</option>
+              <option value="writeback">writeback (Fast Async)</option>
+              <option value="writethrough">writethrough (Safe Sync)</option>
+            </select>
+          </div>
+          <div class="form-group" style="display: flex; align-items: center; gap: 8px">
+            <input id="edit-discard-cb" v-model="editDiskForm.discard" type="checkbox" />
+            <label for="edit-discard-cb" style="margin: 0; font-size: 13px; cursor: pointer">Enable Discard / TRIM</label>
+          </div>
+        </div>
+        <div class="modal-footer" style="padding: 12px 20px; display: flex; justify-content: flex-end; gap: 8px">
+          <button class="btn btn-secondary btn-sm" @click="showEditDiskModal = false">Cancel</button>
+          <button class="btn btn-primary btn-sm" :disabled="isBusy" @click="submitEditDisk">
+            Save Disk
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit NIC Modal -->
+    <div v-if="showEditNicModal" class="modal-overlay" @click.self="showEditNicModal = false">
+      <div class="modal-container" style="max-width: 440px">
+        <div class="modal-header">
+          <h3 class="modal-title">Edit Network Interface</h3>
+          <button class="btn btn-xs btn-ghost" @click="showEditNicModal = false">
+            <MdiIcon :path="mdiClose" size="16" />
+          </button>
+        </div>
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; padding: 16px 20px">
+          <div class="form-group">
+            <label class="form-label">Host Network Bridge</label>
+            <input v-model="editNicForm.bridge" type="text" class="form-input mono" placeholder="br0" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Adapter Model</label>
+            <select v-model="editNicForm.model" class="form-input">
+              <option value="virtio">VirtIO (Paravirtualized)</option>
+              <option value="e1000e">Intel e1000e</option>
+              <option value="rtl8139">Realtek RTL8139</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">VLAN Tag (Optional)</label>
+            <input v-model.number="editNicForm.vlanTag" type="number" min="0" max="4094" class="form-input" placeholder="0 (Native / No VLAN)" />
+          </div>
+        </div>
+        <div class="modal-footer" style="padding: 12px 20px; display: flex; justify-content: flex-end; gap: 8px">
+          <button class="btn btn-secondary btn-sm" @click="showEditNicModal = false">Cancel</button>
+          <button class="btn btn-primary btn-sm" :disabled="isBusy" @click="submitEditNic">
+            Save Interface
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Insert / Swap CD-ROM Media Modal -->
+    <div v-if="showMediaModal" class="modal-overlay" @click.self="showMediaModal = false">
+      <div class="modal-container" style="max-width: 500px">
+        <div class="modal-header">
+          <h3 class="modal-title">Mount CD-ROM ISO Media</h3>
+          <button class="btn btn-xs btn-ghost" @click="showMediaModal = false">
+            <MdiIcon :path="mdiClose" size="16" />
+          </button>
+        </div>
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; padding: 16px 20px">
+          <div v-if="nasState.isos.length > 0" class="form-group">
+            <label class="form-label">Select from Storage Repository</label>
+            <select v-model="selectedMediaIso" class="form-input mono">
+              <option v-for="iso in nasState.isos" :key="iso.path" :value="iso.path">
+                {{ iso.name }} ({{ iso.sizeFormatted }})
+              </option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Custom ISO Image Path</label>
+            <input
+              v-model="selectedMediaIso"
+              type="text"
+              class="form-input mono"
+              placeholder="/mnt/tank/isos/debian-12.iso"
+            />
+          </div>
+        </div>
+        <div class="modal-footer" style="padding: 12px 20px; display: flex; justify-content: flex-end; gap: 8px">
+          <button class="btn btn-secondary btn-sm" @click="showMediaModal = false">Cancel</button>
+          <button class="btn btn-primary btn-sm" :disabled="!selectedMediaIso.trim() || isBusy" @click="handleAttachMedia">
+            Mount ISO Image
           </button>
         </div>
       </div>

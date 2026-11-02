@@ -22,7 +22,7 @@ import {
 } from '@mdi/js';
 import { formatBytes, formatUptime } from '../../domain/models';
 import MdiIcon from './MdiIcon.vue';
-import { nasState, notify, refreshTelemetry } from '../store';
+import { getModuleAvailability, nasState, notify, refreshTelemetry } from '../store';
 import { useClientApp } from '../composables/useClientApp';
 
 const emit = defineEmits<{
@@ -32,6 +32,15 @@ const emit = defineEmits<{
 }>();
 
 const { clientApp } = useClientApp();
+
+const moduleStatusList = computed(() => [
+  { name: 'ZFS', ...getModuleAvailability('zfs') },
+  { name: 'KVM', ...getModuleAvailability('kvm') },
+  { name: 'Docker', ...getModuleAvailability('docker') },
+  { name: 'LXC', ...getModuleAvailability('lxc') },
+  { name: 'CIFS', ...getModuleAvailability('cifs') },
+  { name: 'WebDAV', enabled: true, missing: [] },
+]);
 
 const telemetry = computed(() => nasState.systemTelemetry);
 const isRefreshing = ref(false);
@@ -338,7 +347,7 @@ async function copySystemSummary() {
             <div class="spec-row">
               <span class="spec-label">nasctl Daemon:</span>
               <span class="spec-val" style="display: flex; align-items: center; gap: 8px">
-                <span class="mono">{{ nasState.systemUpdate?.currentVersion || 'v1.6.8' }}</span>
+                <span class="mono">{{ nasState.systemUpdate?.currentVersion || 'v1.6.9' }}</span>
                 <button
                   class="btn btn-xs"
                   :class="nasState.systemUpdate?.updateAvailable ? 'btn-warning' : 'btn-ghost'"
@@ -360,12 +369,14 @@ async function copySystemSummary() {
               <span class="spec-label">Active Modules:</span>
               <span class="spec-val" style="display: flex; gap: 4px; flex-wrap: wrap">
                 <span
-                  v-for="mod in ['ZFS', 'KVM', 'Docker', 'LXC', 'CIFS', 'WebDAV']"
-                  :key="mod"
-                  class="badge badge-neutral"
+                  v-for="mod in moduleStatusList"
+                  :key="mod.name"
+                  class="badge"
+                  :class="mod.enabled ? 'badge-success' : 'badge-neutral'"
                   style="font-size: 10.5px; padding: 1px 6px"
+                  :title="mod.enabled ? `${mod.name} is installed and active` : `${mod.name} is missing prerequisites`"
                 >
-                  {{ mod }}
+                  {{ mod.name }}
                 </span>
               </span>
             </div>
@@ -488,9 +499,12 @@ async function copySystemSummary() {
                   class="badge mono"
                   :class="getTempBadgeClass(t.currentValue)"
                   style="font-size: 11px; padding: 2px 7px"
-                  :title="`${t.chip} • ${t.adapter}`"
+                  :title="`${t.chip} • ${t.adapter}${t.averageValue ? ` • Avg: ${t.averageValue.toFixed(1)}°C` : ''}`"
                 >
                   {{ t.label }}: {{ t.currentValue.toFixed(1) }}°C
+                  <template v-if="t.averageValue && t.averageValue !== t.currentValue">
+                    (avg {{ t.averageValue.toFixed(1) }}°C)
+                  </template>
                 </span>
               </div>
             </div>

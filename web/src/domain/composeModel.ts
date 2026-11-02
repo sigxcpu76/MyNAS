@@ -5,6 +5,7 @@ import YAML from 'yaml';
 // =============================================================================
 
 export interface ComposePortModel {
+  hostIp?: string;
   hostPort: string;
   containerPort: string;
   protocol: 'tcp' | 'udp';
@@ -43,6 +44,7 @@ export interface ComposeServiceModel {
   gpuEnabled: boolean;
   gpuCount: string; // 'all' | '1' | '2' | 'custom'
   gpuDeviceIds: string; // e.g. "0" or "0,1"
+  customFields?: Record<string, any>;
 }
 
 export interface ComposeTopLevelNetwork {
@@ -275,10 +277,8 @@ export function composeYamlToForm(
   let parsed: any;
   try {
     parsed = YAML.parse(yamlStr);
-  } catch {
-    // If parse fails, return default with raw YAML intact
-    model.services.push(createDefaultService());
-    return model;
+  } catch (err: any) {
+    throw new Error(`YAML syntax error: ${err?.message || err}`);
   }
 
   if (!parsed || typeof parsed !== 'object') {
@@ -378,10 +378,12 @@ export function composeYamlToForm(
         if (typeof p === 'string' || typeof p === 'number') {
           const str = String(p).trim().replace(/^["']+|["']+$/g, '');
           const parts = str.split(':');
+          let hostIp: string | undefined = undefined;
           if (parts.length >= 2) {
             let hostP = parts[0].replace(/^["']+|["']+$/g, '').trim();
             let containerPart = parts[1];
             if (parts.length === 3) {
+              hostIp = parts[0].replace(/^["']+|["']+$/g, '').trim();
               hostP = parts[1].replace(/^["']+|["']+$/g, '').trim();
               containerPart = parts[2];
             }
@@ -392,6 +394,7 @@ export function composeYamlToForm(
             }
             const cleanContP = (contP || '').replace(/^["']+|["']+$/g, '').trim();
             serviceModel.ports.push({
+              hostIp: hostIp || undefined,
               hostPort: cleanHostP,
               containerPort: cleanContP,
               protocol: (proto?.toLowerCase() === 'udp' ? 'udp' : 'tcp') as 'tcp' | 'udp',
@@ -413,12 +416,14 @@ export function composeYamlToForm(
         } else if (p && typeof p === 'object') {
           const hasHost = p.published !== undefined && p.published !== null && String(p.published).trim() !== '';
           const hostP = hasHost ? String(p.published).replace(/^["']+|["']+$/g, '').trim() : String(generateRandomHighPort());
-          const contP = String(p.target || '').replace(/^["']+|["']+$/g, '').trim();
+          const contP = String(p.target || p.container || '').replace(/^["']+|["']+$/g, '').trim();
+          const hostIp = p.host_ip ? String(p.host_ip).trim() : (p.ip ? String(p.ip).trim() : undefined);
           serviceModel.ports.push({
+            hostIp: hostIp || undefined,
             hostPort: hostP,
             containerPort: contP,
             protocol: (p.protocol?.toLowerCase() === 'udp' ? 'udp' : 'tcp') as 'tcp' | 'udp',
-            publishToHost: true,
+            publishToHost: hasHost,
           });
         }
       }
@@ -531,6 +536,41 @@ export function composeYamlToForm(
       serviceModel.networks = svc.networks.map(String);
     } else if (svc.networks && typeof svc.networks === 'object') {
       serviceModel.networks = Object.keys(svc.networks);
+    }
+
+    // Preserve custom or unrecognized service attributes (e.g. labels, healthcheck, cap_add, user, shm_size, etc.)
+    const knownKeys = new Set([
+      'container_name', 'image', 'restart', 'command', 'ports', 'expose',
+      'environment', 'volumes', 'depends_on', 'network_mode', 'networks',
+      'mem_limit', 'cpus', 'privileged', 'devices', 'deploy', 'runtime', 'labels'
+    ]);
+    const customFields: Record<string, any> = {};
+    for (const [k, v] of Object.entries(svc)) {
+      if (!knownKeys.has(k)) {
+        customFields[k] = v;
+      }
+    }
+    // Also preserve non-management labels
+    if (svc.labels) {
+      if (Array.isArray(svc.labels)) {
+        const filtered = svc.labels.filter((l: any) => {
+          const s = String(l);
+          return !s.startsWith('nas.management.port=') && !s.startsWith('nas.webui.port=');
+        });
+        if (filtered.length > 0) {
+          customFields['labels'] = filtered;
+        }
+      } else if (typeof svc.labels === 'object') {
+        const copy = { ...(svc.labels as Record<string, any>) };
+        delete copy['nas.management.port'];
+        delete copy['nas.webui.port'];
+        if (Object.keys(copy).length > 0) {
+          customFields['labels'] = copy;
+        }
+      }
+    }
+    if (Object.keys(customFields).length > 0) {
+      serviceModel.customFields = customFields;
     }
 
     model.services.push(serviceModel);
@@ -755,7 +795,8 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
         }
         const cleanContP = p.containerPort.replace(/^["']+|["']+$/g, '').trim();
         const protoSuffix = p.protocol === 'udp' ? '/udp' : '';
-        const portStr = `${hostP}:${cleanContP}${protoSuffix}`;
+        const hostIpPrefix = p.hostIp ? `${p.hostIp}:` : '';
+        const portStr = `${hostIpPrefix}${hostP}:${cleanContP}${protoSuffix}`;
         const s = new YAML.Scalar(portStr);
         s.type = 'QUOTE_DOUBLE';
         return s;
@@ -818,10 +859,27 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
       svcObj.privileged = true;
     }
 
-    // Web UI Management Port label
+    // Web UI Management Port label + preserved custom labels
     const hasMgmtPortInSvc = svc.ports.some((p) => p.containerPort.trim() === mgmtPort);
-    if (mgmtPort && hasMgmtPortInSvc) {
-      svcObj.labels = [`nas.management.port=${mgmtPort}`];
+    const mgmtLabel = (mgmtPort && hasMgmtPortInSvc) ? `nas.management.port=${mgmtPort}` : null;
+    const customLabels = svc.customFields?.labels;
+    if (customLabels) {
+      if (Array.isArray(customLabels)) {
+        svcObj.labels = mgmtLabel ? [...customLabels, mgmtLabel] : [...customLabels];
+      } else if (typeof customLabels === 'object') {
+        svcObj.labels = mgmtLabel ? { ...customLabels, 'nas.management.port': mgmtPort } : { ...customLabels };
+      }
+    } else if (mgmtLabel) {
+      svcObj.labels = [mgmtLabel];
+    }
+
+    // Merge any other customFields (healthcheck, cap_add, user, shm_size, env_file, etc.)
+    if (svc.customFields) {
+      for (const [k, v] of Object.entries(svc.customFields)) {
+        if (k !== 'labels') {
+          svcObj[k] = v;
+        }
+      }
     }
 
     // Devices

@@ -38,11 +38,8 @@ function getTempClass(temp?: number): string {
             <strong class="mono" style="font-size: 13.5px; color: var(--accent-primary)">
               {{ disk.name.replace(/^disks\//, '') }}
             </strong>
-            <span v-if="disk.transport" class="badge badge-neutral mono" style="font-size: 10px; padding: 1px 5px">
-              {{ disk.transport }}
-            </span>
-            <span v-if="disk.type" class="badge badge-info" style="font-size: 10px; padding: 1px 5px">
-              {{ disk.type }}
+            <span v-if="disk.transport || disk.type" class="mono font-xs" style="color: var(--text-secondary); opacity: 0.85">
+              {{ [disk.transport, disk.type].filter(Boolean).join(' · ') }}
             </span>
           </div>
           <div class="card-subtitle" style="font-size: 11.5px; margin-top: 2px">
@@ -67,11 +64,11 @@ function getTempClass(temp?: number): string {
               {{ disk.temperatureCelsius }}°C
             </span>
             <span
-              class="badge mono"
-              :class="disk.smartStatus === 'PASSED' ? 'badge-success' : disk.smartStatus === 'FAILED' ? 'badge-danger' : 'badge-neutral'"
+              v-if="disk.smartStatus && disk.smartStatus !== 'PASSED' && disk.smartStatus !== 'OK'"
+              class="badge badge-danger mono"
               style="font-size: 10px; padding: 1px 5px"
             >
-              {{ disk.smartStatus || 'OK' }}
+              {{ disk.smartStatus }}
             </span>
           </div>
         </div>

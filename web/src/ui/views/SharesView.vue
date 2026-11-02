@@ -15,6 +15,7 @@ import {
   mdiOpenInNew,
   mdiPencil,
   mdiPlus,
+  mdiTreeOutline,
   mdiWeb,
 } from '@mdi/js';
 import { services } from '../../container';
@@ -24,6 +25,7 @@ import SkeletonBox from '../components/SkeletonBox.vue';
 import SortableTh from '../components/SortableTh.vue';
 import PathSelector from '../components/PathSelector.vue';
 import UserGroupSelector from '../components/UserGroupSelector.vue';
+import DatasetHierarchyTree, { type DatasetTreeNode } from '../components/DatasetHierarchyTree.vue';
 import { useTableSort } from '../composables/useTableSort';
 import { getModuleAvailability, nasState, notify } from '../store';
 import { confirmDelete } from '../modal';
@@ -88,6 +90,29 @@ const cifsModuleStatus = computed(() => getModuleAvailability('cifs'));
 
 // Samba [global] configuration modal
 const showGlobalSettings = ref(false);
+
+// ZFS Dataset Hierarchy Picker
+const showDatasetPicker = ref(false);
+const datasetPickerTarget = ref<'cifsCreate' | 'cifsEdit' | 'webdavCreate' | 'webdavEdit'>('cifsCreate');
+
+function openZfsPicker(target: 'cifsCreate' | 'cifsEdit' | 'webdavCreate' | 'webdavEdit') {
+  datasetPickerTarget.value = target;
+  showDatasetPicker.value = true;
+}
+
+function onDatasetPicked(node: DatasetTreeNode) {
+  const mount = node.mountpoint || (node.path ? `/mnt/${node.path}` : '');
+  if (datasetPickerTarget.value === 'cifsCreate') {
+    cifsForm.path = mount;
+  } else if (datasetPickerTarget.value === 'cifsEdit') {
+    editCifsForm.path = mount;
+  } else if (datasetPickerTarget.value === 'webdavCreate') {
+    webdavForm.path = mount;
+  } else if (datasetPickerTarget.value === 'webdavEdit') {
+    editWebdavForm.path = mount;
+  }
+  showDatasetPicker.value = false;
+}
 const globalForm = reactive<CifsGlobalConfig>({
   name: 'cifsGlobalConfig',
   workgroup: 'WORKGROUP',
@@ -119,8 +144,8 @@ const cifsForm = reactive({
   browseable: true,
   createMask: '0664',
   directoryMask: '0775',
-  forceCreateMode: '0664',
-  forceDirectoryMode: '0775',
+  forceCreateMode: '0000',
+  forceDirectoryMode: '0000',
   shadowCopy: true,
   timeMachine: false,
   recycleBin: true,
@@ -144,8 +169,8 @@ const editCifsForm = reactive({
   browseable: true,
   createMask: '0664',
   directoryMask: '0775',
-  forceCreateMode: '0664',
-  forceDirectoryMode: '0775',
+  forceCreateMode: '0000',
+  forceDirectoryMode: '0000',
   shadowCopy: false,
   timeMachine: false,
   recycleBin: false,
@@ -630,7 +655,18 @@ async function handleDeleteWebdav(share: WebdavShare) {
             <input v-model="cifsForm.shareId" class="input mono" placeholder="media" required />
           </div>
           <div class="form-group">
-            <label>Filesystem Path</label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px">
+              <label style="margin: 0">Filesystem Path</label>
+              <button
+                type="button"
+                class="btn btn-xs btn-ghost"
+                style="padding: 1px 6px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; color: var(--accent-primary)"
+                @click="openZfsPicker('cifsCreate')"
+              >
+                <MdiIcon :path="mdiTreeOutline" size="13" />
+                <span>Browse ZFS Datasets</span>
+              </button>
+            </div>
             <PathSelector
               v-model="cifsForm.path"
               placeholder="/mnt/tank/media"
@@ -718,6 +754,9 @@ async function handleDeleteWebdav(share: WebdavShare) {
 
         <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-color)">
           <div style="display: flex; gap: 14px; font-size: 12px; flex-wrap: wrap">
+            <label style="display: flex; align-items: center; gap: 5px; font-weight: 600">
+              <input v-model="cifsForm.enabled" type="checkbox" /> Enabled
+            </label>
             <label style="display: flex; align-items: center; gap: 5px">
               <input v-model="cifsForm.browseable" type="checkbox" /> Browseable (Visible in Network)
             </label>
@@ -765,7 +804,18 @@ async function handleDeleteWebdav(share: WebdavShare) {
         </div>
         <div class="form-grid">
           <div class="form-group">
-            <label>Path</label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px">
+              <label style="margin: 0">Path</label>
+              <button
+                type="button"
+                class="btn btn-xs btn-ghost"
+                style="padding: 1px 6px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; color: var(--accent-primary)"
+                @click="openZfsPicker('cifsEdit')"
+              >
+                <MdiIcon :path="mdiTreeOutline" size="13" />
+                <span>Browse ZFS Datasets</span>
+              </button>
+            </div>
             <PathSelector
               v-model="editCifsForm.path"
               placeholder="/mnt/tank/media"
@@ -853,6 +903,9 @@ async function handleDeleteWebdav(share: WebdavShare) {
 
         <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(56, 189, 248, 0.2)">
           <div style="display: flex; gap: 14px; font-size: 12px; flex-wrap: wrap">
+            <label style="display: flex; align-items: center; gap: 5px; font-weight: 600">
+              <input v-model="editCifsForm.enabled" type="checkbox" /> Enabled
+            </label>
             <label style="display: flex; align-items: center; gap: 5px">
               <input v-model="editCifsForm.browseable" type="checkbox" /> Browseable
             </label>
@@ -1055,7 +1108,18 @@ async function handleDeleteWebdav(share: WebdavShare) {
             <input v-model="webdavForm.shareId" class="input mono" placeholder="documents" required />
           </div>
           <div class="form-group">
-            <label>Filesystem Path</label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px">
+              <label style="margin: 0">Filesystem Path</label>
+              <button
+                type="button"
+                class="btn btn-xs btn-ghost"
+                style="padding: 1px 6px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; color: var(--accent-primary)"
+                @click="openZfsPicker('webdavCreate')"
+              >
+                <MdiIcon :path="mdiTreeOutline" size="13" />
+                <span>Browse ZFS Datasets</span>
+              </button>
+            </div>
             <PathSelector
               v-model="webdavForm.path"
               placeholder="/mnt/tank/documents"
@@ -1086,6 +1150,9 @@ async function handleDeleteWebdav(share: WebdavShare) {
           </div>
 
           <div class="form-group" style="grid-column: 1 / -1">
+            <label style="display: flex; align-items: center; gap: 6px; font-weight: 600; margin-bottom: 8px">
+              <input v-model="webdavForm.enabled" type="checkbox" /> Enable Share
+            </label>
             <label style="font-weight: 600; margin-bottom: 6px; display: block">Access Type</label>
             <div class="access-type-selector">
               <button
@@ -1140,7 +1207,18 @@ async function handleDeleteWebdav(share: WebdavShare) {
         </div>
         <div class="form-grid">
           <div class="form-group">
-            <label>Path</label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px">
+              <label style="margin: 0">Path</label>
+              <button
+                type="button"
+                class="btn btn-xs btn-ghost"
+                style="padding: 1px 6px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; color: var(--accent-primary)"
+                @click="openZfsPicker('webdavEdit')"
+              >
+                <MdiIcon :path="mdiTreeOutline" size="13" />
+                <span>Browse ZFS Datasets</span>
+              </button>
+            </div>
             <PathSelector
               v-model="editWebdavForm.path"
               placeholder="/mnt/tank/documents"
@@ -1169,6 +1247,9 @@ async function handleDeleteWebdav(share: WebdavShare) {
           </div>
 
           <div class="form-group" style="grid-column: 1 / -1">
+            <label style="display: flex; align-items: center; gap: 6px; font-weight: 600; margin-bottom: 8px">
+              <input v-model="editWebdavForm.enabled" type="checkbox" /> Enable Share
+            </label>
             <label style="font-weight: 600; margin-bottom: 6px; display: block">Access Type</label>
             <div class="access-type-selector">
               <button
@@ -1575,6 +1656,25 @@ async function handleDeleteWebdav(share: WebdavShare) {
           <button type="submit" class="btn btn-primary btn-sm">Save & Apply Global Config</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ZFS Dataset Picker Modal -->
+  <div v-if="showDatasetPicker" class="modal-backdrop" @click.self="showDatasetPicker = false">
+    <div class="modal-card" style="max-width: 680px; width: 95vw; max-height: 80vh; display: flex; flex-direction: column">
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border-subtle)">
+        <h3 class="modal-title" style="margin: 0; font-size: 16px; font-weight: 700">Select ZFS Dataset for Share</h3>
+        <button class="btn btn-sm btn-icon" @click="showDatasetPicker = false">
+          <MdiIcon :path="mdiClose" size="16" />
+        </button>
+      </div>
+      <div style="padding: 16px; overflow-y: auto; flex: 1">
+        <DatasetHierarchyTree
+          return-type="mountpoint"
+          title="Available ZFS Datasets"
+          @select="onDatasetPicked"
+        />
+      </div>
     </div>
   </div>
 </template>

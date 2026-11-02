@@ -5,7 +5,7 @@
 
 import { reactive } from 'vue';
 import { aipClient, services } from '../container';
-import { isDotDataset } from '../domain/models';
+import { formatBytes, isDotDataset } from '../domain/models';
 import {
   mapCronJob,
   mapDockerApp,
@@ -92,7 +92,17 @@ export interface TaskRecord {
   status: 'RUNNING' | 'OK' | 'ERROR';
   duration?: string;
   details?: string;
+  progress?: number;
   logs: string[];
+}
+
+export interface ActiveUpload {
+  id: string;
+  kind: 'iso' | 'lxc-template';
+  filename: string;
+  loaded: number;
+  total: number;
+  percent: number;
 }
 
 export interface TrafficPoint {
@@ -201,6 +211,7 @@ export const nasState = reactive({
       ],
     },
   ] as TaskRecord[],
+  activeUploads: [] as ActiveUpload[],
   authenticated: services.auth.isAuthenticated(),
   currentUser: null as User | null,
   loading: false,
@@ -297,9 +308,13 @@ export function notify(type: 'success' | 'error' | 'info' | 'warning', message: 
   const id = nextToastId++;
   nasState.toasts.push({ id, type, message });
   setTimeout(() => {
-    const idx = nasState.toasts.findIndex((t) => t.id === id);
-    if (idx !== -1) nasState.toasts.splice(idx, 1);
-  }, 4200);
+    dismissToast(id);
+  }, 5000);
+}
+
+export function dismissToast(id: number): void {
+  const idx = nasState.toasts.findIndex((t) => t.id === id);
+  if (idx !== -1) nasState.toasts.splice(idx, 1);
 }
 
 let nextTaskIdCounter = 1;
@@ -433,6 +448,94 @@ export async function refreshLxcTemplates(): Promise<void> {
     nasState.lxcTemplates = await services.lxc.listTemplates();
   } catch (err) {
     console.warn('Failed to refresh LXC templates repository:', err);
+  }
+}
+
+export async function uploadIsoTracked(file: File): Promise<StorageImage> {
+  const uploadId = `upload-iso-${Date.now()}`;
+  const uploadRecord: ActiveUpload = reactive({
+    id: uploadId,
+    kind: 'iso',
+    filename: file.name,
+    loaded: 0,
+    total: file.size,
+    percent: 0,
+  });
+  nasState.activeUploads.push(uploadRecord);
+
+  const task = startTask(
+    `Upload ISO Image: ${file.name}`,
+    `Size: ${formatBytes(file.size)}`,
+    nasState.systemTelemetry?.host?.hostname || 'nas01',
+    nasState.currentUser?.username || 'root'
+  );
+
+  try {
+    const result = await services.kvm.uploadIso(file, (progress) => {
+      uploadRecord.loaded = progress.loaded;
+      uploadRecord.total = progress.total;
+      uploadRecord.percent = progress.percent;
+      task.progress = progress.percent;
+    });
+
+    finishTask(task.id, 'OK', `Uploaded ISO ${result.name} (${result.sizeFormatted})`);
+    notify('success', `ISO "${file.name}" uploaded successfully`);
+    await refreshIsos();
+    return result;
+  } catch (err: any) {
+    const errMsg = err?.message || String(err);
+    finishTask(task.id, 'ERROR', `Upload failed: ${errMsg}`);
+    notify('error', `Failed to upload ISO "${file.name}": ${errMsg}`);
+    throw err;
+  } finally {
+    const idx = nasState.activeUploads.findIndex((u) => u.id === uploadId);
+    if (idx !== -1) {
+      nasState.activeUploads.splice(idx, 1);
+    }
+  }
+}
+
+export async function uploadLxcTemplateTracked(file: File): Promise<StorageImage> {
+  const uploadId = `upload-lxc-${Date.now()}`;
+  const uploadRecord: ActiveUpload = reactive({
+    id: uploadId,
+    kind: 'lxc-template',
+    filename: file.name,
+    loaded: 0,
+    total: file.size,
+    percent: 0,
+  });
+  nasState.activeUploads.push(uploadRecord);
+
+  const task = startTask(
+    `Upload LXC Template: ${file.name}`,
+    `Size: ${formatBytes(file.size)}`,
+    nasState.systemTelemetry?.host?.hostname || 'nas01',
+    nasState.currentUser?.username || 'root'
+  );
+
+  try {
+    const result = await services.lxc.uploadTemplate(file, (progress) => {
+      uploadRecord.loaded = progress.loaded;
+      uploadRecord.total = progress.total;
+      uploadRecord.percent = progress.percent;
+      task.progress = progress.percent;
+    });
+
+    finishTask(task.id, 'OK', `Uploaded LXC template ${result.name} (${result.sizeFormatted})`);
+    notify('success', `LXC template "${file.name}" uploaded successfully`);
+    await refreshLxcTemplates();
+    return result;
+  } catch (err: any) {
+    const errMsg = err?.message || String(err);
+    finishTask(task.id, 'ERROR', `Upload failed: ${errMsg}`);
+    notify('error', `Failed to upload LXC template "${file.name}": ${errMsg}`);
+    throw err;
+  } finally {
+    const idx = nasState.activeUploads.findIndex((u) => u.id === uploadId);
+    if (idx !== -1) {
+      nasState.activeUploads.splice(idx, 1);
+    }
   }
 }
 

@@ -140,7 +140,7 @@ onMounted(() => {
           </button>
         </div>
 
-        <div v-if="allPools.length === 0" style="text-align: center; padding: 32px 16px; background: rgba(0,0,0,0.2); border-radius: 8px">
+        <div v-if="allPools.length === 0" style="text-align: center; padding: 32px 16px; background: var(--bg-hover); border-radius: 8px">
           <MdiIcon :path="mdiDatabase" size="36" style="color: var(--text-muted); margin-bottom: 8px" />
           <div style="font-weight: 600; font-size: 14px">No ZFS pools found</div>
           <p style="font-size: 12.5px; color: var(--text-secondary); margin-top: 4px">
@@ -203,7 +203,7 @@ onMounted(() => {
         </div>
 
         <!-- Manual Pool Name Input -->
-        <div style="margin-top: 16px; padding: 12px 14px; background: rgba(0,0,0,0.15); border: 1px dashed var(--border-subtle); border-radius: 8px">
+        <div style="margin-top: 16px; padding: 12px 14px; background: var(--bg-hover); border: 1px dashed var(--border-subtle); border-radius: 8px">
           <div style="font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px">
             Or specify pool name directly:
           </div>

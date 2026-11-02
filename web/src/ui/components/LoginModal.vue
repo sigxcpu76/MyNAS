@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { services } from '../../container';
-import { nasState, notify, refreshAllData, startEventStream } from '../store';
+import { nasState, notify, refreshAllData, startEventStream, startWatchStream } from '../store';
 import NanLogo from './NanLogo.vue';
 
 const username = ref('');
@@ -18,6 +18,7 @@ async function handleLogin() {
     nasState.authenticated = true;
     notify('success', `Authenticated as Linux user ${session.user.username || username.value}`);
     await refreshAllData();
+    startWatchStream();
     startEventStream();
   } catch (err: any) {
     errorMsg.value = err?.message || 'Authentication failed';

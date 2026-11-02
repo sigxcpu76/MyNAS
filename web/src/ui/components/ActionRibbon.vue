@@ -45,7 +45,8 @@ import {
   selectResource,
 } from '../store';
 import { navigateTo } from '../router';
-import { confirmDelete } from '../modal';
+import { confirmDelete, confirmModal } from '../modal';
+import { computeStorageBlastRadius } from '../utils/storageBlastRadius';
 import { toZfsSafeSlug } from '../../domain/id';
 import type { VirtualMachine, LxcContainer, ZfsPool, DockerApp } from '../../domain/models';
 
@@ -163,6 +164,13 @@ async function shutdownVm() {
 async function forceStopVm() {
   if (!currentVm.value || isBusy.value) return;
   const vm = currentVm.value;
+  const ok = await confirmModal({
+    title: `Force Power Off "${vm.vmName}"?`,
+    message: 'Forcibly terminating power is equivalent to pulling the power plug. Unsaved data and guest filesystems may become corrupted.',
+    tone: 'danger',
+    confirmText: 'Force Power Off',
+  });
+  if (!ok) return;
   isBusy.value = true;
   try {
     await runTrackedTask(`VM "${vm.vmName}": Force Power Off`, async () => {
@@ -493,12 +501,17 @@ async function deleteDocker() {
     name: appDisplayName,
     details: 'The Docker Compose service stack, containers and virtual network will be removed.',
     confirmText: 'Delete App',
+    checkbox: {
+      label: 'Also permanently delete application persistent volumes and data (-v)',
+      checked: false,
+    },
   });
   if (!confirmed.confirmed) return;
+  const purgeVolumes = Boolean(confirmed.checkboxChecked);
   isBusy.value = true;
   try {
     await runTrackedTask(`App "${appDisplayName}": Delete`, async () => {
-      await services.apps.deleteApp(app.name, false);
+      await services.apps.deleteApp(app.name, purgeVolumes);
     });
     notify('warning', `Application "${appDisplayName}" deleted`);
     selectResource('node:docker');
@@ -561,9 +574,7 @@ async function setMainPool() {
   isBusy.value = true;
   try {
     await runTrackedTask(`System: Set Main Pool to "${name}"`, async () => {
-      await services.system.updateSystemConfig({
-        mainPool: name,
-      });
+      await services.system.selectMainPool(name, true);
     });
     notify('success', `Designated "${name}" as main storage pool`);
     await refreshAllData();
@@ -606,10 +617,14 @@ async function destroyPool() {
   if (!currentPool.value || isBusy.value) return;
   const pool = currentPool.value;
   const name = pool.poolName || pool.name.replace(/^zfsPools\//, '');
+  const blast = computeStorageBlastRadius(name);
+  const details = blast.hasDependencies
+    ? `CRITICAL DANGER: ALL DATA, DATASETS, AND VOLUMES ON THIS POOL WILL BE PERMANENTLY DESTROYED.\n\nACTIVE DEPENDENCIES DETECTED:\n${blast.summaryWarning}`
+    : 'CRITICAL DANGER: ALL DATA, DATASETS, AND VOLUMES ON THIS POOL WILL BE PERMANENTLY DESTROYED.';
   const confirmed = await confirmDelete({
-    kind: 'Destroy ZFS Pool',
+    kind: 'Pool',
     name,
-    details: 'CRITICAL DANGER: ALL DATA, DATASETS, AND VOLUMES ON THIS POOL WILL BE PERMANENTLY DESTROYED.',
+    details,
     confirmText: 'Destroy Pool Permanently',
   });
   if (!confirmed.confirmed) return;
@@ -820,7 +835,6 @@ function popoutHostTerminal() {
       </template>
       <template v-else>
         <MdiIcon :path="mdiServer" size="16" style="color: var(--accent-primary)" />
-        <MdiIcon :path="mdiCircle" size="9" style="color: var(--success)" title="Node Online" />
         <span class="ribbon-name">{{ nasState.systemTelemetry?.host?.hostname || 'nas01' }}</span>
         <span v-if="nasState.systemTelemetry?.host?.uptimeSeconds" class="ribbon-metric font-xs">
           Uptime: {{ Math.floor(nasState.systemTelemetry.host.uptimeSeconds / 86400) }}d {{ Math.floor((nasState.systemTelemetry.host.uptimeSeconds % 86400) / 3600) }}h

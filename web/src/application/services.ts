@@ -18,6 +18,7 @@ import {
   type Group,
   type HostPortStatus,
   isValidResourceId,
+  isValidZfsPath,
   type LxcCatalogItem,
   type LxcContainer,
   type Prerequisite,
@@ -253,7 +254,7 @@ export class ZfsService {
     datasetId: string,
     dataset: Partial<ZfsDataset>
   ): Promise<ZfsDataset> {
-    if (!isValidResourceId(datasetId)) {
+    if (!isValidZfsPath(datasetId)) {
       throw new Error(`Invalid ZFS dataset ID: "${datasetId}"`);
     }
     const parent = ResourceNames.zfsPool(poolIdOrName);
@@ -304,7 +305,7 @@ export class ZfsService {
     volumeId: string,
     volume: Partial<ZfsVolume>
   ): Promise<ZfsVolume> {
-    if (!isValidResourceId(volumeId)) {
+    if (!isValidZfsPath(volumeId)) {
       throw new Error(`Invalid ZFS volume ID: "${volumeId}"`);
     }
     if (!volume.sizeBytes || volume.sizeBytes <= 0) {

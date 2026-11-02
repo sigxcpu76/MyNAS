@@ -44,8 +44,6 @@ import {
 import { composeYamlToForm, formToComposeYaml } from '../../domain/composeModel';
 import ComposeFormEditor from '../components/ComposeFormEditor.vue';
 import CodeMirrorEditor from '../components/CodeMirrorEditor.vue';
-import DockerTerminalModal, { type TerminalContainerOption } from '../components/DockerTerminalModal.vue';
-import { useAutoScroll } from '../composables/useAutoScroll';
 import CatalogQuestionWizard from '../components/CatalogQuestionWizard.vue';
 import DockerRegistriesModal from '../components/DockerRegistriesModal.vue';
 import MdiIcon from '../components/MdiIcon.vue';
@@ -537,42 +535,7 @@ async function handleDeployApp(data: { appId: string; title: string; composeYaml
   }
 }
 
-// =============================================================================
-// Edit App Modal
-// =============================================================================
-const isEditModalOpen = ref(false);
-const editingApp = ref<DockerApp | null>(null);
-const isUpdatingApp = ref(false);
 
-function openEditModal(app: DockerApp) {
-  editingApp.value = app;
-  isEditModalOpen.value = true;
-}
-
-async function handleSaveAppEdit(data: { appId: string; title: string; composeYaml: string }) {
-  if (!editingApp.value || isUpdatingApp.value) return;
-  isUpdatingApp.value = true;
-  const appId = editingApp.value.appId;
-  try {
-    await services.apps.updateApp(editingApp.value.name, data.composeYaml, data.title);
-    notify('info', `Updating "${appId}" in background. Pulling images and restarting stack...`);
-    isEditModalOpen.value = false;
-    await refreshApps();
-  } catch (err: any) {
-    notify('error', err?.message || 'Failed to update Docker App');
-  } finally {
-    isUpdatingApp.value = false;
-  }
-}
-
-function applyLatestImageInEditor() {
-  if (!editingApp.value || !editingApp.value.latestImage) return;
-  let yaml = editingApp.value.composeYaml;
-  const latestImg = editingApp.value.latestImage;
-  yaml = yaml.replace(/(image:\s*)["']?[^"'\s\n]+["']?/i, `$1${latestImg}`);
-  editingApp.value.composeYaml = yaml;
-  notify('success', `Applied latest image: ${latestImg}`);
-}
 
 // =============================================================================
 // Upgrade App Modal
@@ -605,183 +568,6 @@ async function handleConfirmUpgrade() {
   } finally {
     isUpgradingApp.value = false;
   }
-}
-
-// =============================================================================
-// App Inspection & Logs Modal
-// =============================================================================
-const isInspectModalOpen = ref(false);
-const inspectedApp = ref<DockerApp | null>(null);
-const inspectActiveTab = ref<'containers' | 'logs' | 'compose'>('containers');
-const logTail = ref(100);
-const selectedService = ref<string>('');
-const logsContent = ref('');
-const isLoadingLogs = ref(false);
-let logPollTimer: any = null;
-
-const {
-  containerRef: logContainerRef,
-  autoScroll,
-  scrollToBottom,
-  onScroll: onLogScroll,
-  toggleAutoScroll,
-} = useAutoScroll();
-
-function startLogPolling() {
-  stopLogPolling();
-  logPollTimer = setInterval(() => {
-    if (isInspectModalOpen.value && inspectActiveTab.value === 'logs') {
-      fetchLogs(true);
-    } else {
-      stopLogPolling();
-    }
-  }, 2500);
-}
-
-function stopLogPolling() {
-  if (logPollTimer) {
-    clearInterval(logPollTimer);
-    logPollTimer = null;
-  }
-}
-
-function closeInspectModal() {
-  isInspectModalOpen.value = false;
-  stopLogPolling();
-}
-
-const containerSort = useTableSort(() => inspectedApp.value?.containers ?? [], {
-  name: (c) => c.name,
-  service: (c) => c.serviceName,
-  image: (c) => c.image,
-  state: (c) => c.state,
-  cpu: (c) => c.cpuPercent,
-  memory: (c) => c.memoryMib,
-  ports: (c) => {
-    const p = formatContainerPorts(c.ports);
-    return p === '—' ? null : p;
-  },
-});
-
-const isTogglingAutostart = ref(false);
-async function toggleAppAutostart(app: DockerApp) {
-  if (isTogglingAutostart.value) return;
-  isTogglingAutostart.value = true;
-  try {
-    const form = composeYamlToForm(app.composeYaml, app.appId, app.title);
-    form.autoStart = !app.autoStart;
-    const newYaml = formToComposeYaml(form);
-    await services.apps.updateApp(app.name, newYaml, app.title);
-    notify('success', `Autostart ${form.autoStart ? 'enabled' : 'disabled'} for ${app.title || app.appId}`);
-    await refreshApps();
-    if (inspectedApp.value && inspectedApp.value.name === app.name) {
-      inspectedApp.value.autoStart = form.autoStart;
-      inspectedApp.value.composeYaml = newYaml;
-    }
-  } catch (err: any) {
-    notify('error', err?.message || 'Failed to update autostart setting');
-  } finally {
-    isTogglingAutostart.value = false;
-  }
-}
-
-function openInspectModal(app: DockerApp, defaultTab: 'containers' | 'logs' | 'compose' = 'containers') {
-  inspectedApp.value = app;
-  inspectActiveTab.value = defaultTab;
-  selectedService.value = '';
-  isInspectModalOpen.value = true;
-  if (defaultTab === 'logs') {
-    autoScroll.value = true;
-    fetchLogs(false);
-    startLogPolling();
-  } else {
-    stopLogPolling();
-  }
-}
-
-async function fetchLogs(silent = false) {
-  if (!inspectedApp.value) return;
-  if (!silent) isLoadingLogs.value = true;
-  try {
-    const res = await services.apps.getAppLogs(
-      inspectedApp.value.name,
-      logTail.value,
-      selectedService.value || undefined
-    );
-    logsContent.value = res.logs || 'No log entries found for this application.';
-    scrollToBottom();
-  } catch (err: any) {
-    if (!silent) logsContent.value = `Failed to fetch logs: ${err?.message || 'Unknown error'}`;
-  } finally {
-    if (!silent) {
-      isLoadingLogs.value = false;
-      scrollToBottom();
-    }
-  }
-}
-
-function copyLogs() {
-  navigator.clipboard.writeText(logsContent.value);
-  notify('info', 'Logs copied to clipboard');
-}
-
-function copyCompose(yaml: string) {
-  navigator.clipboard.writeText(yaml);
-  notify('info', 'Compose YAML copied to clipboard');
-}
-
-// =============================================================================
-// Container Terminal Modal
-// =============================================================================
-const isTerminalOpen = ref(false);
-const terminalTarget = ref<{
-  appTitle: string;
-  containers: TerminalContainerOption[];
-  defaultContainerId: string;
-} | null>(null);
-
-function openTerminalForApp(app: DockerApp) {
-  const containerList: TerminalContainerOption[] = (app.containers || []).map((c) => ({
-    id: c.containerId || c.name,
-    name: c.name || c.containerId,
-    serviceName: c.serviceName,
-    state: c.state,
-  }));
-  const firstRunning = containerList.find((c) => c.state === 'RUNNING') || containerList[0];
-  terminalTarget.value = {
-    appTitle: app.title || app.appId,
-    containers: containerList,
-    defaultContainerId: firstRunning?.id || firstRunning?.name || app.appId,
-  };
-  isTerminalOpen.value = true;
-}
-
-function openTerminalForContainer(
-  app: DockerApp | null,
-  container: { containerId?: string; name?: string; serviceName?: string; state?: string }
-) {
-  const containerList: TerminalContainerOption[] = app?.containers
-    ? app.containers.map((c) => ({
-        id: c.containerId || c.name,
-        name: c.name || c.containerId,
-        serviceName: c.serviceName,
-        state: c.state,
-      }))
-    : [
-        {
-          id: container.containerId || container.name || '',
-          name: container.name || container.containerId || '',
-          serviceName: container.serviceName,
-          state: container.state,
-        },
-      ];
-
-  terminalTarget.value = {
-    appTitle: app?.title || app?.appId || container.name || 'Container',
-    containers: containerList,
-    defaultContainerId: container.containerId || container.name || '',
-  };
-  isTerminalOpen.value = true;
 }
 
 // =============================================================================
@@ -882,6 +668,30 @@ function getAppPorts(app: DockerApp): AppPortEntry[] {
   for (const p of rawPorts) {
     let clean = String(p || '').trim();
     if (!clean) continue;
+
+    // Handle raw stringified Go map: e.g. "map[mode:ingress protocol:tcp published:30020 target:81]"
+    if (clean.startsWith('map[') && clean.endsWith(']')) {
+      const inner = clean.slice(4, -1);
+      const fields = inner.split(/\s+/);
+      const m: Record<string, string> = {};
+      for (const f of fields) {
+        const idx = f.indexOf(':');
+        if (idx !== -1) {
+          m[f.slice(0, idx)] = f.slice(idx + 1);
+        }
+      }
+      const pub = m['published'];
+      const tgt = m['target'];
+      const pr = (m['protocol'] || 'tcp').toLowerCase();
+      if (pub && tgt) {
+        clean = `${pub}:${tgt}${pr !== 'tcp' ? '/' + pr : ''}`;
+      } else if (tgt) {
+        clean = `${tgt}${pr !== 'tcp' ? '/' + pr : ''}`;
+      } else {
+        continue;
+      }
+    }
+
     let proto = 'tcp';
     if (clean.includes('/')) {
       const parts = clean.split('/');
@@ -1621,62 +1431,6 @@ onUnmounted(() => {
     </div>
 
     <!-- ===================================================================== -->
-    <!-- MODAL 2: Edit App Modal                                               -->
-    <!-- ===================================================================== -->
-    <div v-if="isEditModalOpen && editingApp" class="modal-backdrop">
-      <div class="modal-card modal-card-xlarge">
-        <!-- Header -->
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; flex-shrink: 0">
-          <div>
-            <h3 style="font-size: 18px; font-weight: 700; color: var(--text-primary)">
-              Edit App: {{ editingApp.title || editingApp.appId }}
-            </h3>
-          </div>
-          <button class="btn btn-sm" style="padding: 2px 6px" @click="isEditModalOpen = false">
-            <MdiIcon :path="mdiClose" size="18" />
-          </button>
-        </div>
-
-        <!-- Scrollable Body with Reusable Form-Based Compose Editor Component in Edit Mode -->
-        <div class="modal-scroll-body">
-          <!-- Catalog Update Available Banner -->
-          <div
-            v-if="editingApp.updateAvailable"
-            style="background: var(--warning-bg, rgba(234, 179, 8, 0.1)); border: 1px solid var(--warning-border, rgba(234, 179, 8, 0.3)); border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap"
-          >
-            <div style="font-size: 12.5px; color: var(--text-primary)">
-              <strong>Catalog Update Available:</strong>
-              <span v-if="editingApp.latestVersion" style="margin-left: 4px">Version {{ editingApp.latestVersion }}</span>
-              <span v-if="editingApp.latestImage" style="color: var(--text-secondary); margin-left: 8px">
-                Recommended Image: <code class="mono" style="font-size: 11px">{{ editingApp.latestImage }}</code>
-              </span>
-            </div>
-            <button
-              v-if="editingApp.latestImage"
-              type="button"
-              class="btn btn-sm btn-primary"
-              style="font-size: 11.5px; padding: 3px 8px; flex-shrink: 0"
-              @click="applyLatestImageInEditor"
-            >
-              Apply Latest Image
-            </button>
-          </div>
-
-          <ComposeFormEditor
-            :initial-app-id="editingApp.appId"
-            :initial-title="editingApp.title"
-            :initial-compose-yaml="editingApp.composeYaml"
-            :is-edit-mode="true"
-            :is-saving="isUpdatingApp"
-            :show-cancel="true"
-            @save="handleSaveAppEdit"
-            @cancel="isEditModalOpen = false"
-          />
-        </div>
-      </div>
-    </div>
-
-    <!-- ===================================================================== -->
     <!-- MODAL 2.5: Upgrade App Modal                                          -->
     <!-- ===================================================================== -->
     <div v-if="isUpgradeModalOpen && upgradingApp" class="modal-backdrop">
@@ -1735,267 +1489,6 @@ onUnmounted(() => {
             <MdiIcon v-else :path="mdiArrowUpBoldCircleOutline" size="16" />
             <span>{{ isUpgradingApp ? 'Upgrading...' : 'Confirm Upgrade' }}</span>
           </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ===================================================================== -->
-    <!-- MODAL 3: App Inspector (Containers, Logs, YAML)                        -->
-    <!-- ===================================================================== -->
-    <div v-if="isInspectModalOpen && inspectedApp" class="modal-backdrop" @click.self="closeInspectModal">
-      <div class="modal-card modal-card-large">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-shrink: 0">
-          <div>
-            <div style="display: flex; align-items: center; gap: 8px">
-              <h3 style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin: 0">
-                {{ inspectedApp.title || inspectedApp.appId }}
-              </h3>
-              <span
-                v-if="transitioningApps[inspectedApp.name]"
-                class="badge mono badge-warning pulse-anim"
-                style="font-size: 11px; display: inline-flex; align-items: center; gap: 4px"
-              >
-                <MdiIcon :path="mdiLoading" size="11" class="spin-icon" />
-                {{ transitioningApps[inspectedApp.name].toUpperCase() }}...
-              </span>
-              <span
-                v-else
-                class="badge"
-                :class="
-                  inspectedApp.state === 'RUNNING'
-                    ? 'badge-success'
-                    : inspectedApp.state === 'DEPLOYING'
-                    ? 'badge-info'
-                    : inspectedApp.state === 'ERROR'
-                    ? 'badge-danger'
-                    : 'badge-neutral'
-                "
-              >
-                {{ inspectedApp.state }}
-              </span>
-              <button
-                type="button"
-                class="badge"
-                :class="inspectedApp.autoStart ? 'badge-success' : 'badge-neutral'"
-                style="cursor: pointer; border: 1px solid var(--border-subtle); display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px; transition: all 0.15s ease"
-                :title="`Click to ${inspectedApp.autoStart ? 'disable' : 'enable'} autostart on host boot`"
-                :disabled="isTogglingAutostart"
-                @click="toggleAppAutostart(inspectedApp)"
-              >
-                <span
-                  style="display: inline-block; width: 6px; height: 6px; border-radius: 50%"
-                  :style="{ background: inspectedApp.autoStart ? 'var(--success)' : 'var(--text-muted)' }"
-                ></span>
-                {{ inspectedApp.autoStart ? 'Autostart: On Boot' : 'Autostart: Manual' }}
-              </button>
-            </div>
-            <p class="mono" style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; margin-bottom: 0">
-              {{ inspectedApp.composeFilePath }}
-            </p>
-          </div>
-
-          <div style="display: flex; gap: 8px; align-items: center">
-            <button
-              v-if="(inspectedApp.state !== 'RUNNING' && inspectedApp.state !== 'DEPLOYING') || transitioningApps[inspectedApp.name] === 'starting'"
-              class="btn btn-sm btn-success"
-              :class="{ 'btn-loading': transitioningApps[inspectedApp.name] === 'starting' }"
-              :disabled="Boolean(transitioningApps[inspectedApp.name])"
-              @click="startApp(inspectedApp)"
-            >
-              <MdiIcon
-                :path="transitioningApps[inspectedApp.name] === 'starting' ? mdiLoading : mdiPlay"
-                size="14"
-                :class="{ 'spin-icon': transitioningApps[inspectedApp.name] === 'starting' }"
-                style="margin-right: 4px"
-              />
-              {{ transitioningApps[inspectedApp.name] === 'starting' ? 'Starting...' : 'Start' }}
-            </button>
-            <template v-else-if="inspectedApp.state === 'RUNNING'">
-              <button
-                class="btn btn-sm"
-                :class="{ 'btn-loading': transitioningApps[inspectedApp.name] === 'restarting' }"
-                :disabled="Boolean(transitioningApps[inspectedApp.name])"
-                title="Restart Application"
-                @click="restartApp(inspectedApp)"
-              >
-                <MdiIcon
-                  :path="transitioningApps[inspectedApp.name] === 'restarting' ? mdiLoading : mdiRestart"
-                  size="14"
-                  :class="{ 'spin-icon': transitioningApps[inspectedApp.name] === 'restarting' }"
-                  style="margin-right: 4px"
-                />
-                {{ transitioningApps[inspectedApp.name] === 'restarting' ? 'Restarting...' : 'Restart' }}
-              </button>
-              <button
-                class="btn btn-sm btn-warning"
-                :class="{ 'btn-loading': transitioningApps[inspectedApp.name] === 'stopping' }"
-                :disabled="Boolean(transitioningApps[inspectedApp.name])"
-                title="Stop Application"
-                @click="stopApp(inspectedApp)"
-              >
-                <MdiIcon
-                  :path="transitioningApps[inspectedApp.name] === 'stopping' ? mdiLoading : mdiStop"
-                  size="14"
-                  :class="{ 'spin-icon': transitioningApps[inspectedApp.name] === 'stopping' }"
-                  style="margin-right: 4px"
-                />
-                {{ transitioningApps[inspectedApp.name] === 'stopping' ? 'Stopping...' : 'Stop' }}
-              </button>
-            </template>
-
-            <button class="btn btn-sm" style="padding: 2px 6px" @click="closeInspectModal">
-              <MdiIcon :path="mdiClose" size="18" />
-            </button>
-          </div>
-        </div>
-
-        <!-- Inspector Tabs -->
-        <div style="display: flex; gap: 8px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px; margin-bottom: 14px; flex-shrink: 0">
-          <button
-            class="btn btn-sm"
-            :class="inspectActiveTab === 'containers' ? 'btn-primary' : ''"
-            @click="inspectActiveTab = 'containers'"
-          >
-            <MdiIcon :path="mdiLayers" size="14" style="margin-right: 4px" />
-            Containers ({{ (inspectedApp.containers || []).length }})
-          </button>
-          <button
-            class="btn btn-sm"
-            :class="inspectActiveTab === 'logs' ? 'btn-primary' : ''"
-            @click="openInspectModal(inspectedApp, 'logs')"
-          >
-            <MdiIcon :path="mdiFileDocumentOutline" size="14" style="margin-right: 4px" />
-            Logs
-          </button>
-          <button
-            class="btn btn-sm"
-            :class="inspectActiveTab === 'compose' ? 'btn-primary' : ''"
-            @click="inspectActiveTab = 'compose'"
-          >
-            <MdiIcon :path="mdiDocker" size="14" style="margin-right: 4px" />
-            Compose YAML
-          </button>
-        </div>
-
-        <!-- Tab 1: Containers Table -->
-        <div v-if="inspectActiveTab === 'containers'" class="modal-scroll-body">
-          <table class="table" style="width: 100%">
-            <thead>
-              <tr style="text-align: left; font-size: 11.5px; color: var(--text-secondary)">
-                <SortableTh :sort="containerSort" sort-key="name" style="padding: 8px">CONTAINER</SortableTh>
-                <SortableTh :sort="containerSort" sort-key="service" style="padding: 8px">SERVICE</SortableTh>
-                <SortableTh :sort="containerSort" sort-key="image" style="padding: 8px">IMAGE</SortableTh>
-                <SortableTh :sort="containerSort" sort-key="state" style="padding: 8px">STATE</SortableTh>
-                <SortableTh :sort="containerSort" sort-key="cpu" style="padding: 8px; width: 85px; min-width: 85px; max-width: 85px">CPU</SortableTh>
-                <SortableTh :sort="containerSort" sort-key="memory" style="padding: 8px; width: 105px; min-width: 105px; max-width: 105px">RAM</SortableTh>
-                <SortableTh :sort="containerSort" sort-key="ports" style="padding: 8px">PORTS</SortableTh>
-                <th style="padding: 8px; width: 70px; text-align: right">ACTIONS</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="c in containerSort.sorted.value" :key="c.containerId" style="border-bottom: 1px solid var(--border-subtle); font-size: 12.5px">
-                <td style="padding: 8px" class="mono font-semibold">{{ c.name }}</td>
-                <td style="padding: 8px"><span class="badge badge-info">{{ c.serviceName }}</span></td>
-                <td class="mono" style="padding: 8px; font-size: 11px">{{ c.image }}</td>
-                <td style="padding: 8px">
-                  <span class="badge" :class="c.state === 'RUNNING' ? 'badge-success' : (c.state === 'COMPLETED' ? 'badge-info' : 'badge-neutral')">{{ c.state }}</span>
-                </td>
-                <td style="padding: 8px; width: 85px; min-width: 85px; max-width: 85px; white-space: nowrap; font-variant-numeric: tabular-nums" class="mono">{{ (Number(c.cpuPercent) || 0).toFixed(1) }}%</td>
-                <td style="padding: 8px; width: 105px; min-width: 105px; max-width: 105px; white-space: nowrap; font-variant-numeric: tabular-nums" class="mono">{{ c.memoryMib }} MiB</td>
-                <td class="mono" style="padding: 8px; font-size: 11px">
-                  {{ formatContainerPorts(c.ports) }}
-                </td>
-                <td style="padding: 8px; text-align: right">
-                  <button
-                    v-if="c.state === 'RUNNING'"
-                    class="btn btn-sm btn-icon"
-                    style="color: var(--accent-primary); padding: 2px 6px"
-                    title="Open Shell Terminal"
-                    aria-label="Open Shell Terminal"
-                    @click="openTerminalForContainer(inspectedApp, c)"
-                  >
-                    <MdiIcon :path="mdiConsole" size="15" />
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Tab 2: Aggregated Logs -->
-        <div v-else-if="inspectActiveTab === 'logs'" class="modal-scroll-body" style="display: flex; flex-direction: column">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; flex-wrap: wrap">
-            <div style="display: flex; align-items: center; gap: 8px">
-              <label style="font-size: 12px; color: var(--text-secondary)">Service:</label>
-              <select v-model="selectedService" class="form-input" style="padding: 3px 8px; font-size: 12px; width: auto" @change="fetchLogs(false)">
-                <option value="">(All Services)</option>
-                <option v-for="s in (inspectedApp.services || [])" :key="s" :value="s">{{ s }}</option>
-              </select>
-
-              <label style="font-size: 12px; color: var(--text-secondary); margin-left: 8px">Tail:</label>
-              <select v-model="logTail" class="form-input" style="padding: 3px 8px; font-size: 12px; width: auto" @change="fetchLogs(false)">
-                <option :value="50">50 lines</option>
-                <option :value="100">100 lines</option>
-                <option :value="250">250 lines</option>
-                <option :value="500">500 lines</option>
-              </select>
-            </div>
-
-            <div style="display: flex; gap: 8px">
-              <button
-                class="btn btn-sm"
-                :class="autoScroll ? 'btn-primary' : ''"
-                :title="autoScroll ? 'Auto-scroll enabled (click to pause)' : 'Click to jump to bottom and follow logs'"
-                @click="toggleAutoScroll"
-              >
-                <MdiIcon :path="mdiChevronDoubleDown" size="14" style="margin-right: 4px" />
-                Auto-scroll
-              </button>
-              <button class="btn btn-sm" :disabled="isLoadingLogs" @click="fetchLogs(false)">
-                <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" :class="{ 'spin-icon': isLoadingLogs }" />
-                {{ isLoadingLogs ? 'Fetching...' : 'Refresh' }}
-              </button>
-              <button class="btn btn-sm" @click="copyLogs">
-                <MdiIcon :path="mdiContentCopy" size="14" style="margin-right: 4px" />
-                Copy
-              </button>
-            </div>
-          </div>
-
-          <pre
-            ref="logContainerRef"
-            class="mono"
-            style="
-              flex: 1;
-              background: #0d1117;
-              color: #c9d1d9;
-              padding: 12px;
-              border-radius: 6px;
-              font-size: 12px;
-              line-height: 1.45;
-              overflow: auto;
-              max-height: 480px;
-              white-space: pre-wrap;
-              word-break: break-all;
-              border: 1px solid var(--border-subtle);
-            "
-            @scroll="onLogScroll"
-          >{{ logsContent }}</pre>
-        </div>
-
-        <!-- Tab 3: Compose Descriptor -->
-        <div v-else-if="inspectActiveTab === 'compose'" class="modal-scroll-body" style="display: flex; flex-direction: column">
-          <div style="display: flex; justify-content: flex-end; margin-bottom: 8px">
-            <button class="btn btn-sm" @click="copyCompose(inspectedApp.composeYaml)">
-              <MdiIcon :path="mdiContentCopy" size="14" style="margin-right: 4px" />
-              Copy YAML
-            </button>
-          </div>
-          <CodeMirrorEditor
-            :model-value="inspectedApp.composeYaml"
-            :read-only="true"
-            min-height="420px"
-          />
         </div>
       </div>
     </div>
@@ -2508,15 +2001,5 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- ===================================================================== -->
-    <!-- MODAL 4: Docker Interactive Container Terminal                        -->
-    <!-- ===================================================================== -->
-    <DockerTerminalModal
-      v-if="isTerminalOpen && terminalTarget"
-      :app-title="terminalTarget.appTitle"
-      :containers="terminalTarget.containers"
-      :initial-container-id="terminalTarget.defaultContainerId"
-      @close="isTerminalOpen = false"
-    />
   </div>
 </template>

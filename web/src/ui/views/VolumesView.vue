@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
   mdiChevronDown,
   mdiChevronRight,
@@ -26,9 +26,36 @@ import SkeletonBox from '../components/SkeletonBox.vue';
 import SortableTh from '../components/SortableTh.vue';
 import { sortHierarchy, useTableSort } from '../composables/useTableSort';
 import { confirmDelete } from '../modal';
+import { computeStorageBlastRadius } from '../utils/storageBlastRadius';
 import { nasState, notify, refreshAllData, refreshZfsSubresources } from '../store';
 
-const selectedPool = ref<string>('all');
+const props = withDefaults(
+  defineProps<{
+    initialPool?: string;
+    embedded?: boolean;
+    autoExpandRoots?: boolean;
+  }>(),
+  {
+    initialPool: 'all',
+    embedded: false,
+    autoExpandRoots: false,
+  }
+);
+
+function normalizePool(p?: string): string {
+  if (!p || p === 'all') return 'all';
+  return p.startsWith('zfsPools/') ? p : `zfsPools/${p}`;
+}
+
+const selectedPool = ref<string>(normalizePool(props.initialPool));
+
+watch(
+  () => props.initialPool,
+  (newP) => {
+    selectedPool.value = normalizePool(newP);
+  }
+);
+
 const searchQuery = ref('');
 const viewMode = ref<'tree' | 'flat'>('tree');
 const expandedPaths = ref<Set<string>>(new Set());
@@ -371,10 +398,14 @@ async function handleSaveEditVolume() {
 async function handleDeleteVolume(vol: ZfsVolume) {
   const name = vol.name;
   const shortName = vol.volumePath || name.replace(/^zfsPools\/[^/]+\/volumes\//, '');
+  const blast = computeStorageBlastRadius(shortName);
+  const details = blast.hasDependencies
+    ? `All data on this volume will be destroyed.\n\nACTIVE DEPENDENCIES DETECTED:\n${blast.summaryWarning}`
+    : 'All data on this volume will be destroyed.';
   const res = await confirmDelete({
     kind: 'Volume',
     name: shortName,
-    details: 'All data on this volume will be destroyed.',
+    details,
     confirmText: 'Delete Volume',
   });
   if (!res.confirmed) return;
@@ -397,11 +428,11 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div style="display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 100%; min-width: 0">
+  <div style="display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 100%; min-width: 0">
     <!-- Header Card with Controls and "New Volume" Button -->
-    <div class="card" style="padding: 18px 20px">
+    <div :class="props.embedded ? '' : 'card'" :style="props.embedded ? 'padding: 4px 0; margin-bottom: 4px' : 'padding: 18px 20px'">
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px">
-        <div>
+        <div v-if="!props.embedded">
           <div style="display: flex; align-items: center; gap: 10px">
             <h2 class="card-title" style="font-size: 19px; margin: 0">Volumes</h2>
             <span class="badge badge-purple" style="font-size: 12px">
@@ -410,9 +441,9 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap" :style="props.embedded ? 'width: 100%; justify-content: space-between' : ''">
           <!-- Pool Filter Selector -->
-          <div style="display: flex; align-items: center; gap: 6px">
+          <div v-if="!props.embedded" style="display: flex; align-items: center; gap: 6px">
             <label style="font-size: 12px; color: var(--text-secondary)">Pool:</label>
             <select v-model="selectedPool" class="select" style="height: 32px; font-size: 12px; padding: 2px 8px">
               <option value="all">All Pools ({{ nasState.pools.length }})</option>

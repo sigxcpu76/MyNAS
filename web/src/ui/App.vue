@@ -4,6 +4,7 @@ import {
   mdiAlertCircle,
   mdiArrowLeft,
   mdiCamera,
+  mdiCellphone,
   mdiClose,
   mdiCogOutline,
   mdiConsole,
@@ -21,6 +22,7 @@ import {
   mdiMenuDown,
   mdiMonitor,
   mdiOpenInNew,
+  mdiPageLayoutSidebarLeft,
   mdiPencil,
   mdiRefresh,
   mdiUpdate,
@@ -37,6 +39,7 @@ import {
   selectResource,
   startEventStream,
   stopEventStream,
+  stopWatchStream,
 } from './store';
 import { navigateTo, getPathFromTab } from './router';
 import type { VirtualMachine, LxcContainer, VirtualMachineConsoleSession } from '../domain/models';
@@ -45,6 +48,7 @@ import LoginModal from './components/LoginModal.vue';
 import SystemPoolModal from './components/SystemPoolModal.vue';
 import ConfirmModal from './components/ConfirmModal.vue';
 import VncConsoleStandalone from './components/VncConsoleStandalone.vue';
+import TerminalStandalone from './components/TerminalStandalone.vue';
 import VncConsole from './components/VncConsole.vue';
 import MdiIcon from './components/MdiIcon.vue';
 import SortableTh from './components/SortableTh.vue';
@@ -85,7 +89,7 @@ import MobileShell from './mobile/MobileShell.vue';
 import MobileTerminal from './mobile/components/MobileTerminal.vue';
 import PwaInstallSheet from './components/PwaInstallSheet.vue';
 
-const { isMobile } = useDevice();
+const { isMobile, viewMode, setViewMode } = useDevice();
 
 async function handleMobileVmConsole(vmName: string) {
   try {
@@ -105,6 +109,43 @@ const showSystemDetailsModal = ref(false);
 const showUpdateModal = ref(false);
 const showHostTerminalModal = ref(false);
 const isMobileDrawerOpen = ref(false);
+const isSidebarCollapsed = ref(false);
+
+// Register top overlay dismissal for mobile / Android back button
+if (typeof window !== 'undefined') {
+  (window as any).nanDismissTopOverlay = () => {
+    if (activeLxcTerminal.value) {
+      activeLxcTerminal.value = null;
+      return true;
+    }
+    if (showHostTerminalModal.value) {
+      showHostTerminalModal.value = false;
+      return true;
+    }
+    if (showPoolModal.value) {
+      showPoolModal.value = false;
+      return true;
+    }
+    if (showPrerequisitesModal.value) {
+      showPrerequisitesModal.value = false;
+      return true;
+    }
+    if (showSystemDetailsModal.value) {
+      showSystemDetailsModal.value = false;
+      return true;
+    }
+    if (showUpdateModal.value || nasState.updateModalOpen) {
+      showUpdateModal.value = false;
+      nasState.updateModalOpen = false;
+      return true;
+    }
+    if (isMobileDrawerOpen.value) {
+      isMobileDrawerOpen.value = false;
+      return true;
+    }
+    return false;
+  };
+}
 
 // Active terminal for LXC
 const activeLxcTerminal = ref<LxcContainer | null>(null);
@@ -187,25 +228,6 @@ const activeSelectedDocker = computed<string | null>(() => {
   return null;
 });
 
-// Resource Detail View Active Subtabs
-const vmActiveSubTab = ref<'summary' | 'hardware' | 'console' | 'snapshots'>('summary');
-const lxcActiveSubTab = ref<'summary' | 'terminal' | 'mounts' | 'configuration' | 'logs'>('summary');
-const dockerActiveSubTab = ref<'summary' | 'containers' | 'compose' | 'logs'>('summary');
-const poolActiveSubTab = ref<'summary' | 'datasets' | 'volumes' | 'topology' | 'config'>('summary');
-
-watch(activeSelectedVm, () => {
-  vmActiveSubTab.value = 'summary';
-});
-watch(activeSelectedLxc, () => {
-  lxcActiveSubTab.value = 'summary';
-});
-watch(activeSelectedDocker, () => {
-  dockerActiveSubTab.value = 'summary';
-});
-watch(activeSelectedPool, () => {
-  poolActiveSubTab.value = 'summary';
-});
-
 // Integrated VNC Console Session for selected VM
 const embeddedConsoleSession = ref<VirtualMachineConsoleSession | null>(null);
 const isLoadingEmbeddedConsole = ref(false);
@@ -261,9 +283,6 @@ watch(
     if (tab === 'prerequisites') {
       showPrerequisitesModal.value = true;
       navigateTo('overview', true);
-    } else if (tab === 'terminal') {
-      showHostTerminalModal.value = true;
-      navigateTo('overview', true);
     }
   },
   { immediate: true }
@@ -312,16 +331,20 @@ const hasFallbackPrereqs = computed(() =>
 
 function handleLogout() {
   stopEventStream();
+  stopWatchStream();
   services.auth.logout();
   nasState.authenticated = false;
   nasState.currentUser = null;
+  if (typeof (window as any).NanAndroidNative?.clearSession === 'function') {
+    (window as any).NanAndroidNative.clearSession();
+  }
   notify('info', 'Logged out of NAS session');
 }
 
-// Restore last active resource across reloads (only for default overview navigation)
+// Restore last active resource across reloads (only when loading root '/' path)
 onMounted(() => {
   initSession();
-  const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+  const currentPath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/+$/, '') || '/' : '/';
   if (
     nasState.activeTab === 'vnc-console' ||
     nasState.activeTab === 'terminal' ||
@@ -330,22 +353,24 @@ onMounted(() => {
   ) {
     return;
   }
-  const saved = nasState.selectedResourceId;
-  if (saved) {
-    if (saved.startsWith('vm:')) {
-      navigateTo('kvm');
-    } else if (saved.startsWith('lxc:')) {
-      navigateTo('lxc');
-    } else if (saved.startsWith('docker:')) {
-      navigateTo('docker');
-    } else if (saved.startsWith('pool:')) {
-      navigateTo('storage-pools');
-    } else if (saved === 'node:disks') {
-      navigateTo('storage-disks');
-    } else if (saved === 'node:shares' || saved.startsWith('shares:')) {
-      navigateTo(saved === 'shares:webdav' ? 'shares-webdav' : 'shares-cifs');
-    } else if (saved === 'node:identity') {
-      navigateTo('identity');
+  if (currentPath === '/') {
+    const saved = nasState.selectedResourceId;
+    if (saved) {
+      if (saved.startsWith('vm:')) {
+        navigateTo('kvm');
+      } else if (saved.startsWith('lxc:')) {
+        navigateTo('lxc');
+      } else if (saved.startsWith('docker:')) {
+        navigateTo('docker');
+      } else if (saved.startsWith('pool:')) {
+        navigateTo('storage-pools');
+      } else if (saved === 'node:disks') {
+        navigateTo('storage-disks');
+      } else if (saved === 'node:shares' || saved.startsWith('shares:')) {
+        navigateTo(saved === 'shares:webdav' ? 'shares-webdav' : 'shares-cifs');
+      } else if (saved === 'node:identity') {
+        navigateTo('identity');
+      }
     }
   }
 });
@@ -355,6 +380,11 @@ onMounted(() => {
   <!-- Detached Standalone Console View (when ?vm=... is opened in its own window) -->
   <div v-if="nasState.activeTab === 'vnc-console'" class="detached-console-view">
     <VncConsoleStandalone />
+  </div>
+
+  <!-- Detached Standalone Terminal View (for LXC, Docker, or Host terminal) -->
+  <div v-else-if="nasState.activeTab === 'terminal'" class="detached-terminal-view">
+    <TerminalStandalone />
   </div>
 
   <!-- Dedicated Mobile Shell (Phone / Tablet / Viewport <= 768px) -->
@@ -382,6 +412,15 @@ onMounted(() => {
           @click="toggleMobileDrawer"
         >
           <MdiIcon :path="mdiMenu" size="20" />
+        </button>
+
+        <button
+          class="btn btn-xs btn-icon btn-ghost sidebar-toggle-btn hide-mobile"
+          :title="isSidebarCollapsed ? 'Show Sidebar' : 'Hide Sidebar'"
+          aria-label="Toggle Navigation Sidebar"
+          @click="isSidebarCollapsed = !isSidebarCollapsed"
+        >
+          <MdiIcon :path="mdiPageLayoutSidebarLeft" size="16" />
         </button>
 
         <NanLogo :size="26" subtitle="Enterprise Hypervisor & Storage" />
@@ -414,13 +453,17 @@ onMounted(() => {
 
       <!-- Right: Quick Shell, Specs, Theme & User -->
       <div class="header-right">
-        <span v-if="hasFallbackPrereqs" class="badge badge-warning hide-mobile font-xs">
-          Fallback
-        </span>
-
-        <span v-if="nasState.lastRefreshed" class="header-sync-text hide-mobile font-xs">
-          Synced {{ nasState.lastRefreshed }}
-        </span>
+        <!-- Return to Mobile Shell if user forced Desktop mode on a mobile device -->
+        <button
+          v-if="viewMode === 'desktop'"
+          class="btn btn-xs btn-primary forced-desktop-pill"
+          style="display: inline-flex; align-items: center; gap: 4px; font-weight: 600"
+          title="Return to Mobile Shell"
+          @click="setViewMode('auto')"
+        >
+          <MdiIcon :path="mdiCellphone" size="14" />
+          <span>Mobile View</span>
+        </button>
 
         <button
           class="btn btn-xs btn-icon btn-secondary hide-mobile"
@@ -457,10 +500,19 @@ onMounted(() => {
         </button>
 
         <template v-if="nasState.authenticated && nasState.currentUser">
-          <span class="badge badge-info hide-mobile font-xs">
+          <span
+            class="user-chip font-xs mono"
+            :class="{ 'hide-mobile': viewMode !== 'desktop' }"
+            style="color: var(--text-secondary); padding: 0 4px"
+          >
             {{ nasState.currentUser.username }}
           </span>
-          <button class="btn btn-xs btn-ghost hide-mobile" title="Sign Out" @click="handleLogout">
+          <button
+            class="btn btn-xs btn-ghost"
+            :class="{ 'hide-mobile': viewMode !== 'desktop' }"
+            title="Sign Out"
+            @click="handleLogout"
+          >
             <MdiIcon :path="mdiLogout" size="13" />
           </button>
         </template>
@@ -470,7 +522,7 @@ onMounted(() => {
     <!-- Main Split Pane Workbench -->
     <div class="workbench-split">
       <!-- Left: Hierarchical Resource Tree (Desktop) -->
-      <aside class="sidebar-tree hide-mobile">
+      <aside class="sidebar-tree hide-mobile" :class="{ 'is-collapsed': isSidebarCollapsed }">
         <ResourceTree />
       </aside>
 
@@ -658,7 +710,11 @@ onMounted(() => {
   <!-- Shared Global Modals & Utilities (Accessible across Desktop & Mobile) -->
   <LoginModal v-if="!nasState.authenticated" />
   <SystemPoolModal v-if="showPoolModal" @close="showPoolModal = false" />
-  <PrerequisitesModal v-if="showPrerequisitesModal" @close="showPrerequisitesModal = false" />
+  <PrerequisitesModal
+    v-if="showPrerequisitesModal"
+    @close="showPrerequisitesModal = false"
+    @open-terminal="showPrerequisitesModal = false; showHostTerminalModal = true"
+  />
   <SystemDetailsModal
     v-if="showSystemDetailsModal"
     @close="showSystemDetailsModal = false"
@@ -685,14 +741,22 @@ onMounted(() => {
     />
   </template>
 
-  <DockerTerminalModal
-    v-if="activeLxcTerminal"
-    :app-title="`LXC Terminal: ${activeLxcTerminal.containerName || activeLxcTerminal.name.replace('lxcContainers/', '')}`"
-    :containers="lxcTerminalOptions"
-    :initial-container-id="activeLxcTerminal.name.replace('lxcContainers/', '')"
-    endpoint-type="lxc"
-    @close="activeLxcTerminal = null"
-  />
+  <!-- LXC Terminal: Dedicated touch-enabled full screen on mobile, desktop modal on desktop -->
+  <template v-if="activeLxcTerminal">
+    <MobileTerminal
+      v-if="isMobile"
+      :lxc-id="activeLxcTerminal.name.replace(/^lxcContainers\//, '')"
+      @close="activeLxcTerminal = null"
+    />
+    <DockerTerminalModal
+      v-else
+      :app-title="`LXC Terminal: ${activeLxcTerminal.containerName || activeLxcTerminal.name.replace('lxcContainers/', '')}`"
+      :containers="lxcTerminalOptions"
+      :initial-container-id="activeLxcTerminal.name.replace('lxcContainers/', '')"
+      endpoint-type="lxc"
+      @close="activeLxcTerminal = null"
+    />
+  </template>
   <ConfirmModal />
   <PwaInstallSheet />
 
@@ -771,6 +835,17 @@ onMounted(() => {
   width: 260px;
   flex-shrink: 0;
   height: 100%;
+  transition: width 0.15s ease;
+}
+
+.sidebar-tree.is-collapsed {
+  display: none !important;
+}
+
+@media (max-width: 1024px) {
+  .sidebar-tree {
+    width: 210px;
+  }
 }
 
 .center-workspace {

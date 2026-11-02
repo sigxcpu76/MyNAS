@@ -40,7 +40,6 @@ import {
   isDotDataset,
 } from '../../domain/models';
 import {
-  confirmModal,
   nasState,
   notify,
   refreshAllData,
@@ -48,7 +47,10 @@ import {
   runTrackedTask,
   selectResource,
 } from '../store';
-import { confirmDelete } from '../modal';
+import { confirmDelete, confirmModal } from '../modal';
+import { computeStorageBlastRadius } from '../utils/storageBlastRadius';
+import DatasetsView from './DatasetsView.vue';
+import VolumesView from './VolumesView.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -132,9 +134,7 @@ async function handleSetMainPool() {
   isBusy.value = true;
   try {
     await runTrackedTask(`System: Set Main Pool to "${cleanName.value}"`, async () => {
-      await services.system.updateSystemConfig({
-        mainPool: cleanName.value,
-      });
+      await services.system.selectMainPool(cleanName.value, true);
     });
     notify('success', `Designated "${cleanName.value}" as main storage pool`);
     await refreshAllData();
@@ -148,15 +148,19 @@ async function handleSetMainPool() {
 async function handleExportPool() {
   if (!pool.value || isBusy.value) return;
   const isMain = isMainPool.value;
-  const confirmed = await confirmDelete({
-    kind: 'Export ZFS Pool',
-    name: cleanName.value,
-    details: isMain
-      ? 'WARNING: This is the MAIN POOL. Exporting it will pause Apps and Containers!'
-      : 'The pool will be unmounted and safely detached. You can re-import it anytime.',
+  const blast = computeStorageBlastRadius(cleanName.value);
+  const message = isMain
+    ? 'WARNING: This is the MAIN POOL. Exporting it will pause Apps and Containers!'
+    : blast.hasDependencies
+    ? `The pool will be unmounted and safely detached.\n\nACTIVE DEPENDENCIES DETECTED:\n${blast.summaryWarning}`
+    : 'The pool will be unmounted and safely detached. You can re-import it anytime.';
+  const confirmed = await confirmModal({
+    title: `Export ZFS Pool "${cleanName.value}"`,
+    message,
+    tone: isMain ? 'danger' : 'warning',
     confirmText: 'Export Pool',
   });
-  if (!confirmed.confirmed) return;
+  if (!confirmed) return;
 
   isBusy.value = true;
   try {
@@ -620,143 +624,6 @@ async function handleApplyPoolConfig() {
 }
 
 // -----------------------------------------------------------------------------
-// Dataset Creation Modal State
-// -----------------------------------------------------------------------------
-const showCreateDatasetModal = ref(false);
-const datasetForm = reactive({
-  datasetId: '',
-  mountpoint: '',
-  compression: 'lz4',
-  recordsize: 131072,
-});
-
-function openCreateDataset() {
-  datasetForm.datasetId = '';
-  datasetForm.mountpoint = `/mnt/${cleanName.value}/`;
-  datasetForm.compression = pool.value?.compression || 'lz4';
-  datasetForm.recordsize = 131072;
-  showCreateDatasetModal.value = true;
-}
-
-async function submitCreateDataset() {
-  if (!datasetForm.datasetId.trim() || isBusy.value) return;
-  isBusy.value = true;
-  const id = datasetForm.datasetId.trim().replace(/^\/+/, '');
-  try {
-    await runTrackedTask(`ZFS Dataset "${cleanName.value}/${id}": Create`, async () => {
-      await services.zfs.createDataset(
-        pool.value!.name,
-        id,
-        {
-          mountpoint: datasetForm.mountpoint.trim() || undefined,
-          compression: datasetForm.compression,
-        }
-      );
-    });
-    notify('success', `Dataset "${cleanName.value}/${id}" created`);
-    showCreateDatasetModal.value = false;
-    await refreshZfsSubresources(cleanName.value);
-  } catch (err: any) {
-    notify('error', `Failed to create dataset: ${err.message}`);
-  } finally {
-    isBusy.value = false;
-  }
-}
-
-async function handleDeleteDataset(ds: ZfsDataset) {
-  const shortName = ds.name.replace(/^zfsPools\/[^/]+\/datasets\//, '');
-  const confirmed = await confirmDelete({
-    kind: 'Dataset',
-    name: `${cleanName.value}/${shortName}`,
-    details: 'All data and nested snapshots within this dataset will be destroyed.',
-    confirmText: 'Delete Dataset',
-  });
-  if (!confirmed.confirmed) return;
-
-  isBusy.value = true;
-  try {
-    await runTrackedTask(`ZFS Dataset "${cleanName.value}/${shortName}": Delete`, async () => {
-      await services.zfs.deleteDataset(ds.name);
-    });
-    notify('info', `Dataset "${shortName}" deleted`);
-    await refreshZfsSubresources(cleanName.value);
-  } catch (err: any) {
-    notify('error', `Failed to delete dataset: ${err.message}`);
-  } finally {
-    isBusy.value = false;
-  }
-}
-
-// -----------------------------------------------------------------------------
-// Volume (ZVol) Creation Modal State
-// -----------------------------------------------------------------------------
-const showCreateVolumeModal = ref(false);
-const volumeForm = reactive({
-  volumeId: '',
-  sizeGib: 20,
-  volblocksize: 16384,
-  sparse: true,
-});
-
-function openCreateVolume() {
-  volumeForm.volumeId = '';
-  volumeForm.sizeGib = 20;
-  volumeForm.volblocksize = 16384;
-  volumeForm.sparse = true;
-  showCreateVolumeModal.value = true;
-}
-
-async function submitCreateVolume() {
-  if (!volumeForm.volumeId.trim() || isBusy.value) return;
-  isBusy.value = true;
-  const id = volumeForm.volumeId.trim().replace(/^\/+/, '');
-  try {
-    await runTrackedTask(`ZFS Volume "${cleanName.value}/${id}": Create`, async () => {
-      await services.zfs.createVolume(
-        pool.value!.name,
-        id,
-        {
-          sizeBytes: gibToBytes(volumeForm.sizeGib),
-          volblocksize: String(volumeForm.volblocksize),
-          thinProvisioned: volumeForm.sparse,
-        }
-      );
-    });
-    notify('success', `Volume "${cleanName.value}/${id}" created`);
-    showCreateVolumeModal.value = false;
-    await refreshZfsSubresources(cleanName.value);
-  } catch (err: any) {
-    notify('error', `Failed to create volume: ${err.message}`);
-  } finally {
-    isBusy.value = false;
-  }
-}
-
-async function handleDeleteVolume(vol: ZfsVolume) {
-  const shortName = vol.name.replace(/^zfsPools\/[^/]+\/volumes\//, '');
-  const confirmed = await confirmDelete({
-    kind: 'Volume (zvol)',
-    name: `${cleanName.value}/${shortName}`,
-    details: 'The block device will be permanently destroyed. Virtual machines using this disk will lose access!',
-    confirmText: 'Delete Volume',
-  });
-  if (!confirmed.confirmed) return;
-
-  isBusy.value = true;
-  try {
-    await runTrackedTask(`ZFS Volume "${cleanName.value}/${shortName}": Delete`, async () => {
-      await services.zfs.deleteVolume(vol.name);
-    });
-    notify('info', `Volume "${shortName}" deleted`);
-    await refreshZfsSubresources(cleanName.value);
-  } catch (err: any) {
-    notify('error', `Failed to delete volume: ${err.message}`);
-  } finally {
-    isBusy.value = false;
-  }
-}
-
-// -----------------------------------------------------------------------------
 // Disks belonging to this pool
 // -----------------------------------------------------------------------------
 const poolDisks = computed(() => {
@@ -907,116 +774,12 @@ const poolDisks = computed(() => {
 
     <!-- Subtab 2: Pool Datasets -->
     <div v-else-if="props.activeSubTab === 'datasets'" class="pool-tab-content">
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <h3 class="card-title">Datasets in {{ cleanName }}</h3>
-            <p class="card-subtitle">File systems hosted on pool {{ cleanName }}</p>
-          </div>
-          <button class="btn btn-sm btn-primary" @click="openCreateDataset">
-            <MdiIcon :path="mdiPlus" size="15" style="margin-right: 4px" />
-            Create Dataset
-          </button>
-        </div>
-
-        <div class="table-wrap">
-          <div v-if="poolDatasets.length === 0" class="empty-state">
-            No child datasets created on pool {{ cleanName }}.
-          </div>
-          <table v-else class="data-table">
-            <thead>
-              <tr>
-                <th>Dataset Name</th>
-                <th>Used</th>
-                <th>Available</th>
-                <th>Referenced</th>
-                <th>Mountpoint</th>
-                <th>Compression</th>
-                <th style="width: 80px; text-align: center">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="ds in poolDatasets" :key="ds.name">
-                <td style="font-weight: 600">
-                  <div style="display: flex; align-items: center; gap: 6px">
-                    <MdiIcon :path="mdiFolderOutline" size="15" style="color: var(--accent-primary)" />
-                    <span>{{ ds.name.replace(/^zfsPools\/[^/]+\/datasets\//, '') }}</span>
-                  </div>
-                </td>
-                <td class="font-sm">{{ formatBytes(ds.usedBytes) }}</td>
-                <td class="font-sm text-muted">{{ formatBytes(ds.availableBytes) }}</td>
-                <td class="font-sm text-muted">{{ formatBytes(ds.referencedBytes) }}</td>
-                <td class="mono font-sm text-secondary">{{ ds.mountpoint || '-' }}</td>
-                <td class="font-sm">{{ ds.compression || 'lz4' }}</td>
-                <td style="text-align: center">
-                  <button
-                    class="btn btn-xs btn-ghost"
-                    title="Delete Dataset"
-                    @click="handleDeleteDataset(ds)"
-                  >
-                    <MdiIcon :path="mdiTrashCanOutline" size="14" style="color: var(--danger-text)" />
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DatasetsView :initial-pool="cleanName" :embedded="true" />
     </div>
 
     <!-- Subtab 3: Pool Volumes (ZVols) -->
     <div v-else-if="props.activeSubTab === 'volumes'" class="pool-tab-content">
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <h3 class="card-title">Volumes (ZVols) in {{ cleanName }}</h3>
-            <p class="card-subtitle">Block devices hosted on pool {{ cleanName }}</p>
-          </div>
-          <button class="btn btn-sm btn-primary" @click="openCreateVolume">
-            <MdiIcon :path="mdiPlus" size="15" style="margin-right: 4px" />
-            Create Volume
-          </button>
-        </div>
-
-        <div class="table-wrap">
-          <div v-if="poolVolumes.length === 0" class="empty-state">
-            No block volumes (zvols) created on pool {{ cleanName }}.
-          </div>
-          <table v-else class="data-table">
-            <thead>
-              <tr>
-                <th>Volume Name</th>
-                <th>Volsize</th>
-                <th>Used Space</th>
-                <th>Block Size</th>
-                <th style="width: 80px; text-align: center">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="vol in poolVolumes" :key="vol.name">
-                <td style="font-weight: 600">
-                  <div style="display: flex; align-items: center; gap: 6px">
-                    <MdiIcon :path="mdiHarddisk" size="15" style="color: var(--accent-secondary)" />
-                    <span>{{ vol.name.replace(/^zfsPools\/[^/]+\/volumes\//, '') }}</span>
-                  </div>
-                </td>
-                <td class="font-sm">{{ formatBytes(vol.sizeBytes) }}</td>
-                <td class="font-sm text-muted">{{ formatBytes(vol.usedBytes) }}</td>
-                <td class="font-sm text-secondary">{{ vol.volblocksize || '16K' }}</td>
-                <td style="text-align: center">
-                  <button
-                    class="btn btn-xs btn-ghost"
-                    title="Delete Volume"
-                    @click="handleDeleteVolume(vol)"
-                  >
-                    <MdiIcon :path="mdiTrashCanOutline" size="14" style="color: var(--danger-text)" />
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <VolumesView :initial-pool="cleanName" :embedded="true" />
     </div>
 
     <!-- Subtab 4: Topology & Disks -->
@@ -1523,102 +1286,6 @@ const poolDisks = computed(() => {
       </div>
     </div>
 
-    <!-- Create Dataset Modal -->
-    <div v-if="showCreateDatasetModal" class="modal-overlay" @click.self="showCreateDatasetModal = false">
-      <div class="modal-container" style="max-width: 520px">
-        <div class="modal-header">
-          <h3 class="modal-title">Create Dataset in {{ cleanName }}</h3>
-          <button class="btn btn-xs btn-ghost" @click="showCreateDatasetModal = false">
-            <MdiIcon :path="mdiClose" size="16" />
-          </button>
-        </div>
-        <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; padding: 16px 20px">
-          <div class="form-group">
-            <label class="form-label">Dataset Name</label>
-            <input
-              v-model="datasetForm.datasetId"
-              type="text"
-              class="form-input"
-              placeholder="e.g. media, backups, data"
-            />
-          </div>
-          <div class="form-group">
-            <label class="form-label">Mountpoint</label>
-            <input
-              v-model="datasetForm.mountpoint"
-              type="text"
-              class="form-input"
-              placeholder="/mnt/fast/..."
-            />
-          </div>
-          <div class="form-group">
-            <label class="form-label">Compression</label>
-            <select v-model="datasetForm.compression" class="form-select">
-              <option value="lz4">lz4</option>
-              <option value="zstd">zstd</option>
-              <option value="off">off</option>
-            </select>
-          </div>
-        </div>
-        <div class="modal-footer" style="padding: 12px 20px; display: flex; justify-content: flex-end; gap: 8px">
-          <button class="btn btn-secondary btn-sm" @click="showCreateDatasetModal = false">Cancel</button>
-          <button class="btn btn-primary btn-sm" :disabled="!datasetForm.datasetId.trim() || isBusy" @click="submitCreateDataset">
-            Create Dataset
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Create Volume Modal -->
-    <div v-if="showCreateVolumeModal" class="modal-overlay" @click.self="showCreateVolumeModal = false">
-      <div class="modal-container" style="max-width: 520px">
-        <div class="modal-header">
-          <h3 class="modal-title">Create Volume (zvol) in {{ cleanName }}</h3>
-          <button class="btn btn-xs btn-ghost" @click="showCreateVolumeModal = false">
-            <MdiIcon :path="mdiClose" size="16" />
-          </button>
-        </div>
-        <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; padding: 16px 20px">
-          <div class="form-group">
-            <label class="form-label">Volume Name</label>
-            <input
-              v-model="volumeForm.volumeId"
-              type="text"
-              class="form-input"
-              placeholder="e.g. vm-101-disk-0"
-            />
-          </div>
-          <div class="form-group">
-            <label class="form-label">Volume Size (GiB)</label>
-            <input
-              v-model.number="volumeForm.sizeGib"
-              type="number"
-              min="1"
-              class="form-input"
-            />
-          </div>
-          <div class="form-group">
-            <label class="form-label">Block Size</label>
-            <select v-model.number="volumeForm.volblocksize" class="form-select">
-              <option :value="8192">8 KiB</option>
-              <option :value="16384">16 KiB (Recommended for VM Disks)</option>
-              <option :value="32768">32 KiB</option>
-              <option :value="65536">64 KiB</option>
-            </select>
-          </div>
-          <div class="form-group" style="display: flex; align-items: center; gap: 8px">
-            <input id="sparse-cb" v-model="volumeForm.sparse" type="checkbox" />
-            <label for="sparse-cb" style="margin: 0; font-size: 13px; cursor: pointer">Sparse Volume (Thin Provisioning)</label>
-          </div>
-        </div>
-        <div class="modal-footer" style="padding: 12px 20px; display: flex; justify-content: flex-end; gap: 8px">
-          <button class="btn btn-secondary btn-sm" @click="showCreateVolumeModal = false">Cancel</button>
-          <button class="btn btn-primary btn-sm" :disabled="!volumeForm.volumeId.trim() || isBusy" @click="submitCreateVolume">
-            Create Volume
-          </button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 

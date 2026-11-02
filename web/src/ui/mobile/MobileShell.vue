@@ -46,6 +46,25 @@ const emit = defineEmits<{
 const isPowerSheetOpen = ref(false);
 const isDrawerOpen = ref(false);
 
+// Register overlay dismissal for mobile / Android back button
+if (typeof window !== 'undefined') {
+  const prevDismiss = (window as any).nanDismissTopOverlay;
+  (window as any).nanDismissTopOverlay = () => {
+    if (isPowerSheetOpen.value) {
+      isPowerSheetOpen.value = false;
+      return true;
+    }
+    if (isDrawerOpen.value) {
+      isDrawerOpen.value = false;
+      return true;
+    }
+    if (typeof prevDismiss === 'function') {
+      return prevDismiss();
+    }
+    return false;
+  };
+}
+
 const activeTab = computed(() => nasState.activeTab);
 
 const isOverview = computed(() => activeTab.value === 'overview');
@@ -54,7 +73,6 @@ const isStorage = computed(() => {
   return (
     activeTab.value === 'storage-pools' ||
     activeTab.value === 'storage-disks' ||
-    activeTab.value === 'storage-datasets' ||
     activeTab.value === 'zfs'
   );
 });
@@ -154,7 +172,6 @@ const isDegraded = computed(() => {
       >
         <div class="nav-icon-wrap">
           <MdiIcon :path="mdiDocker" size="20" />
-          <span v-if="(nasState.dockerApps || []).length > 0" class="nav-badge-dot" />
         </div>
         <span class="nav-tab-label">Apps</span>
       </button>
@@ -228,7 +245,8 @@ const isDegraded = computed(() => {
 }
 
 .mobile-top-bar {
-  height: 52px;
+  min-height: 52px;
+  height: calc(52px + env(safe-area-inset-top, 0px));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -236,6 +254,7 @@ const isDegraded = computed(() => {
   background: var(--bg-surface, #1e293b);
   border-bottom: 1px solid var(--border-color, #334155);
   padding-top: env(safe-area-inset-top, 0px);
+  box-sizing: border-box;
   flex-shrink: 0;
   z-index: 100;
 }

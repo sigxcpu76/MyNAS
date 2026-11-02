@@ -39,12 +39,14 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Never cache API calls, WebSocket upgrades, WebDAV, or non-GET requests
+  // Never cache API calls, WebSocket upgrades, WebDAV, APK downloads, or non-GET requests
   if (
     event.request.method !== 'GET' ||
     url.pathname.startsWith('/v1') ||
     url.pathname.startsWith('/ws') ||
-    url.pathname.startsWith('/dav')
+    url.pathname.startsWith('/dav') ||
+    url.pathname.endsWith('.apk') ||
+    url.pathname === '/nan-nas.apk'
   ) {
     return;
   }

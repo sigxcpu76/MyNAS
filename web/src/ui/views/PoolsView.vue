@@ -34,7 +34,8 @@ import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import PathSelector from '../components/PathSelector.vue';
 import { confirmDelete } from '../modal';
-import { confirmModal, nasState, notify, refreshAllData, selectResource } from '../store';
+import { computeStorageBlastRadius } from '../utils/storageBlastRadius';
+import { confirmModal, nasState, notify, refreshAllData, runTrackedTask, selectResource } from '../store';
 import { navigateTo } from '../router';
 
 function openPoolDetails(pool: ZfsPool) {
@@ -67,6 +68,7 @@ const poolForm = reactive({
   poolId: '',
   compression: 'lz4',
   mountpoint: '',
+  setAsMainPool: !nasState.systemConfig?.mainPool,
 });
 
 const builderVdevs = ref<BuilderVdev[]>([
@@ -82,6 +84,7 @@ function resetPoolBuilder() {
   poolForm.poolId = '';
   poolForm.compression = 'lz4';
   poolForm.mountpoint = '';
+  poolForm.setAsMainPool = !nasState.systemConfig?.mainPool;
   driveSearchQuery.value = '';
   draggedDevicePath.value = null;
   hoveredVdevId.value = null;
@@ -451,17 +454,29 @@ async function handleCreatePool() {
   creatingPool.value = true;
   try {
     const cleanId = poolForm.poolId.replace(/^zfsPools\//, '').trim();
-    const created = await services.zfs.createPool(cleanId, {
-      vdevLayout: primaryDataVdev?.layout || 'mirror',
-      devices: allDevices,
-      compression: poolForm.compression || 'lz4',
-      mountpoint: poolForm.mountpoint || `/mnt/${cleanId}`,
-      vdevs,
+    await runTrackedTask(`ZFS: Create Storage Pool "${cleanId}"`, async () => {
+      const created = await services.zfs.createPool(cleanId, {
+        vdevLayout: primaryDataVdev?.layout || 'mirror',
+        devices: allDevices,
+        compression: poolForm.compression || 'lz4',
+        mountpoint: poolForm.mountpoint || `/mnt/${cleanId}`,
+        vdevs,
+      });
+
+      if (poolForm.setAsMainPool || !nasState.systemConfig?.mainPool) {
+        try {
+          await services.system.selectMainPool(cleanId, true);
+          notify('success', `Created pool "${cleanId}" and initialized as Main Storage Pool`);
+        } catch (e: any) {
+          console.warn('Auto set main pool warning:', e);
+        }
+      } else {
+        notify(
+          'success',
+          `Created ZFS pool "${created.poolName || created.name.replace(/^zfsPools\//, '')}" with ${vdevs.length} VDEV tier(s)`
+        );
+      }
     });
-    notify(
-      'success',
-      `Created ZFS pool "${created.poolName || created.name.replace(/^zfsPools\//, '')}" with ${vdevs.length} VDEV tier(s)`
-    );
     showCreatePool.value = false;
     resetPoolBuilder();
     await refreshAllData();
@@ -491,7 +506,9 @@ async function handleExportPool(poolName: string) {
   if (!confirmed) return;
 
   try {
-    await services.zfs.exportPool(poolName, false);
+    await runTrackedTask(`ZFS: Export Pool "${shortName}"`, async () => {
+      await services.zfs.exportPool(poolName, false);
+    });
     notify('info', `Successfully exported ZFS pool "${shortName}"`);
     await refreshAllData();
   } catch (err: any) {
@@ -500,8 +517,11 @@ async function handleExportPool(poolName: string) {
 }
 
 async function handleScrubPool(poolName: string) {
+  const shortName = poolName.replace(/^zfsPools\//, '');
   try {
-    const updated = await services.zfs.scrubPool(poolName);
+    const updated = await runTrackedTask(`ZFS: Scrub Pool "${shortName}"`, async () => {
+      return await services.zfs.scrubPool(poolName);
+    });
     const idx = nasState.pools.findIndex((p) => p.name === poolName);
     if (idx !== -1) nasState.pools[idx] = updated;
     notify('success', `Initiated ZFS scrub on ${updated.poolName || updated.name}`);
@@ -512,16 +532,22 @@ async function handleScrubPool(poolName: string) {
 
 async function handleDeletePool(poolName: string) {
   const shortName = poolName.replace(/^zfsPools\//, '');
+  const blast = computeStorageBlastRadius(shortName);
+  const details = blast.hasDependencies
+    ? `All data, datasets, snapshots and volumes in this pool will be destroyed.\n\nACTIVE DEPENDENCIES DETECTED:\n${blast.summaryWarning}`
+    : 'All data, datasets, snapshots and volumes in this pool will be destroyed.';
   const res = await confirmDelete({
     kind: 'Pool',
     name: shortName,
-    details: 'All data, datasets, snapshots and volumes in this pool will be destroyed.',
+    details,
     confirmText: 'Destroy Pool',
   });
   if (!res.confirmed) return;
 
   try {
-    await services.zfs.deletePool(poolName, true);
+    await runTrackedTask(`ZFS: Destroy Pool "${shortName}"`, async () => {
+      await services.zfs.deletePool(poolName, true);
+    });
     notify('info', `Destroyed ZFS pool "${shortName}"`);
     await refreshAllData();
   } catch (err: any) {
@@ -548,7 +574,9 @@ async function handleSetMainPool(poolName: string) {
   if (!confirmed) return;
 
   try {
-    const updated = await services.system.selectMainPool(cleanName, true);
+    const updated = await runTrackedTask(`System: Set Main Pool to "${cleanName}"`, async () => {
+      return await services.system.selectMainPool(cleanName, true);
+    });
     nasState.systemConfig = updated;
     notify('success', `"${cleanName}" is now the Main Storage Pool!`);
     await refreshAllData();
@@ -1361,6 +1389,13 @@ function viewPoolDatasets(poolName: string) {
                 <option value="gzip">gzip (Legacy)</option>
                 <option value="off">off</option>
               </select>
+            </div>
+
+            <div class="form-group" style="grid-column: 1 / -1; margin-top: -4px">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 13px; font-weight: 500">
+                <input v-model="poolForm.setAsMainPool" type="checkbox" style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--accent-primary)" />
+                <span>Designate as Main Storage Pool (Initializes system config, enables Docker appdata and LXC storage)</span>
+              </label>
             </div>
           </div>
 

@@ -363,4 +363,61 @@ services:
     expect(generatedYaml).toContain('"36052:80"');
     expect(generatedYaml).toContain('/mnt/tank/apps/esphome:/data');
   });
+
+  it('preserves host IP binding in ports during round-trip', () => {
+    const yaml = `services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "127.0.0.1:8080:80"
+`;
+    const form = composeYamlToForm(yaml, 'web');
+    expect(form.services[0].ports[0].hostIp).toBe('127.0.0.1');
+    expect(form.services[0].ports[0].hostPort).toBe('8080');
+    expect(form.services[0].ports[0].containerPort).toBe('80');
+
+    const generated = formToComposeYaml(form);
+    expect(generated).toContain('"127.0.0.1:8080:80"');
+  });
+
+  it('preserves custom fields like labels, healthcheck, cap_add, user, and shm_size on round-trip', () => {
+    const yaml = `services:
+  app:
+    image: custom-app:latest
+    user: "1000:1000"
+    shm_size: 2gb
+    cap_add:
+      - NET_ADMIN
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -f
+        - http://localhost
+      interval: 30s
+    labels:
+      - traefik.enable=true
+      - homepage.group=Media
+`;
+    const form = composeYamlToForm(yaml, 'app');
+    expect(form.services[0].customFields?.user).toBe('1000:1000');
+    expect(form.services[0].customFields?.shm_size).toBe('2gb');
+    expect(form.services[0].customFields?.cap_add).toEqual(['NET_ADMIN']);
+    expect(form.services[0].customFields?.healthcheck).toBeDefined();
+
+    const generated = formToComposeYaml(form);
+    expect(generated).toContain('user: 1000:1000');
+    expect(generated).toContain('shm_size: 2gb');
+    expect(generated).toContain('NET_ADMIN');
+    expect(generated).toContain('traefik.enable=true');
+    expect(generated).toContain('homepage.group=Media');
+  });
+
+  it('throws syntax error when parsing malformed YAML', () => {
+    const badYaml = `services:
+  app:
+    image: [unclosed
+`;
+    expect(() => composeYamlToForm(badYaml, 'bad')).toThrow(/YAML syntax error/);
+  });
 });

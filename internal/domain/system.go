@@ -96,16 +96,25 @@ type PowerMeterTelemetry struct {
 	IntervalSeconds float64 `json:"intervalSeconds"`
 }
 
-type HardwareSensorItem struct {
-	Chip          string  `json:"chip"`
-	Adapter       string  `json:"adapter"`
+type CoreSensorItem struct {
 	Label         string  `json:"label"`
-	Category      string  `json:"category"`
 	CurrentValue  float64 `json:"currentValue"`
-	Unit          string  `json:"unit"`
-	HighThreshold float64 `json:"highThreshold"`
-	CritThreshold float64 `json:"critThreshold"`
-	Alarm         bool    `json:"alarm"`
+	HighThreshold float64 `json:"highThreshold,omitempty"`
+	CritThreshold float64 `json:"critThreshold,omitempty"`
+}
+
+type HardwareSensorItem struct {
+	Chip          string           `json:"chip"`
+	Adapter       string           `json:"adapter"`
+	Label         string           `json:"label"`
+	Category      string           `json:"category"`
+	CurrentValue  float64          `json:"currentValue"`
+	AverageValue  float64          `json:"averageValue,omitempty"`
+	Unit          string           `json:"unit"`
+	HighThreshold float64          `json:"highThreshold"`
+	CritThreshold float64          `json:"critThreshold"`
+	Alarm         bool             `json:"alarm"`
+	Cores         []CoreSensorItem `json:"cores,omitempty"`
 }
 
 type HardwareSensorsTelemetry struct {

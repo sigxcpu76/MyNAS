@@ -10,9 +10,11 @@ import {
   mdiInformationOutline,
   mdiAlertCircle,
   mdiHarddisk,
+  mdiChevronDown,
+  mdiChevronUp,
 } from '@mdi/js';
 import { formatBytes } from '../../../domain/models';
-import type { HardwareSensorItem, GpuTelemetry } from '../../../domain/models';
+import type { HardwareSensorItem, GpuTelemetry, CoreSensorItem } from '../../../domain/models';
 import { nasState } from '../../store';
 import MdiIcon from '../../components/MdiIcon.vue';
 
@@ -27,6 +29,22 @@ const lmSensorsInstalled = computed(() => sensors.value?.lmSensorsInstalled ?? f
 // Active category filter for temperatures
 const selectedCategory = ref<string>('ALL');
 
+const CATEGORY_ORDER = ['CPU', 'GPU', 'PCI', 'STORAGE', 'MOTHERBOARD', 'SYSTEM'];
+
+function getCategoryPriority(cat: string): number {
+  const idx = CATEGORY_ORDER.indexOf(cat.toUpperCase());
+  return idx === -1 ? 99 : idx;
+}
+
+function formatSensorName(label: string): string {
+  if (!label) return '';
+  return label
+    .replace(/package\s*id\s*(\d+)/gi, 'CPU $1')
+    .replace(/package\s*id\b/gi, 'CPU')
+    .replace(/\s*\(coretemp-[^)]+\)/gi, '')
+    .trim();
+}
+
 const categories = computed(() => {
   const set = new Set<string>();
   temperatures.value.forEach((t) => {
@@ -34,15 +52,30 @@ const categories = computed(() => {
       set.add(t.category);
     }
   });
-  return ['ALL', ...Array.from(set).sort()];
+  const sorted = Array.from(set).sort((a, b) => {
+    const prioA = getCategoryPriority(a);
+    const prioB = getCategoryPriority(b);
+    if (prioA !== prioB) return prioA - prioB;
+    return a.localeCompare(b);
+  });
+  return ['ALL', ...sorted];
 });
 
 const filteredTemperatures = computed(() => {
   const list = temperatures.value.filter((t) => t.category !== 'POWER' && t.category !== 'FAN');
-  if (selectedCategory.value === 'ALL') {
-    return list;
-  }
-  return list.filter((t) => t.category === selectedCategory.value);
+  const filtered = selectedCategory.value === 'ALL'
+    ? list
+    : list.filter((t) => t.category === selectedCategory.value);
+
+  // Sort deterministically by selector order (CPU -> GPU -> PCI -> STORAGE -> MOTHERBOARD), then by numeric label
+  return [...filtered].sort((a, b) => {
+    const prioA = getCategoryPriority(a.category || '');
+    const prioB = getCategoryPriority(b.category || '');
+    if (prioA !== prioB) return prioA - prioB;
+    const nameA = formatSensorName(a.label || '');
+    const nameB = formatSensorName(b.label || '');
+    return nameA.localeCompare(nameB, undefined, { numeric: true });
+  });
 });
 
 function getTempBadgeClass(temp: number): string {
@@ -66,6 +99,31 @@ function getCategoryIcon(cat: string): string {
       return mdiThermometer;
   }
 }
+
+const expandedCores = ref<Record<string, boolean>>({});
+
+function toggleCores(key: string) {
+  expandedCores.value[key] = !expandedCores.value[key];
+}
+
+function isCoresExpanded(key: string): boolean {
+  return !!expandedCores.value[key];
+}
+
+function getMinCore(cores?: CoreSensorItem[]): number {
+  if (!cores || cores.length === 0) return 0;
+  return Math.min(...cores.map((c) => c.currentValue));
+}
+
+function getMaxCore(cores?: CoreSensorItem[]): number {
+  if (!cores || cores.length === 0) return 0;
+  return Math.max(...cores.map((c) => c.currentValue));
+}
+
+function formatCoreShort(label: string): string {
+  const match = label.match(/\d+/);
+  return match ? `C${match[0]}` : label;
+}
 </script>
 
 <template>
@@ -86,14 +144,7 @@ function getCategoryIcon(cat: string): string {
           <strong>{{ powerMeter.powerWatts.toFixed(1) }} W</strong>
         </span>
         <span
-          v-if="lmSensorsInstalled"
-          class="badge badge-success"
-          title="lm-sensors is active on this system"
-        >
-          lm-sensors active
-        </span>
-        <span
-          v-else
+          v-if="!lmSensorsInstalled"
           class="badge badge-neutral"
           title="Install lm-sensors package for full motherboard & PCI sensor support"
         >
@@ -114,7 +165,12 @@ function getCategoryIcon(cat: string): string {
         </div>
         <div class="power-meta">
           Device: <code class="mono">{{ powerMeter.deviceName }}</code>
-          <span v-if="powerMeter.intervalSeconds > 0"> • Interval: {{ powerMeter.intervalSeconds }}s</span>
+          <span
+            v-if="powerMeter.intervalSeconds > 0"
+            :title="`Hardware moving-average window configured in ${powerMeter.adapter}. Telemetry updates continuously.`"
+          >
+            • {{ powerMeter.intervalSeconds }}s avg
+          </span>
         </div>
       </div>
       <div class="power-value-box">
@@ -128,7 +184,6 @@ function getCategoryIcon(cat: string): string {
       <div class="section-title">
         <MdiIcon :path="mdiVideo3dVariant" size="16" style="color: var(--accent-primary)" />
         <span>Dedicated GPU Accelerators</span>
-        <span class="badge badge-neutral mono">{{ gpus.length }} {{ gpus.length === 1 ? 'GPU' : 'GPUs' }}</span>
       </div>
       <div class="gpus-grid">
         <div v-for="gpu in gpus" :key="gpu.index" class="gpu-card">
@@ -207,7 +262,6 @@ function getCategoryIcon(cat: string): string {
         <div class="section-title">
           <MdiIcon :path="mdiThermometer" size="16" style="color: var(--accent-primary)" />
           <span>Component Temperatures</span>
-          <span class="badge badge-neutral mono">{{ filteredTemperatures.length }} Sensors</span>
         </div>
         <!-- Category Filter Tabs -->
         <div v-if="categories.length > 2" class="category-tabs">
@@ -235,28 +289,79 @@ function getCategoryIcon(cat: string): string {
           v-for="item in filteredTemperatures"
           :key="`${item.chip}-${item.label}`"
           class="sensor-item-tile"
+          :class="{ 'has-cores': item.cores && item.cores.length > 0 }"
         >
-          <div class="sensor-icon-col">
-            <MdiIcon :path="getCategoryIcon(item.category)" size="16" style="color: var(--text-secondary)" />
-          </div>
-          <div class="sensor-info-col">
-            <div class="sensor-label-row">
-              <span class="sensor-name" :title="item.label">{{ item.label }}</span>
-              <span v-if="item.alarm" class="badge badge-danger" title="Sensor Threshold Alarm">ALARM</span>
+          <div class="sensor-main-row">
+            <div class="sensor-icon-col">
+              <MdiIcon :path="getCategoryIcon(item.category)" size="16" style="color: var(--text-secondary)" />
             </div>
-            <div class="sensor-sub-row">
-              <span class="sensor-chip mono" :title="item.chip">{{ item.chip }}</span>
-              <span v-if="item.adapter" class="sensor-adapter mono">{{ item.adapter }}</span>
+            <div class="sensor-info-col">
+              <div class="sensor-label-row">
+                <span class="sensor-name" :title="item.label">{{ formatSensorName(item.label) }}</span>
+                <span v-if="item.alarm" class="badge badge-danger" title="Sensor Threshold Alarm">ALARM</span>
+              </div>
+              <div class="sensor-sub-row">
+                <span class="sensor-chip mono" :title="item.chip">{{ item.chip }}</span>
+                <span v-if="item.cores && item.cores.length > 0" class="cores-count-label mono">
+                  {{ item.cores.length }} Cores
+                </span>
+                <span v-else-if="item.adapter" class="sensor-adapter mono">{{ item.adapter }}</span>
+              </div>
+            </div>
+            <div class="sensor-val-col">
+              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end">
+                <span
+                  v-if="item.averageValue !== undefined && item.averageValue > 0"
+                  class="badge mono avg-pill"
+                  :title="`Average core temperature: ${item.averageValue.toFixed(1)}°C`"
+                >
+                  Avg: {{ item.averageValue.toFixed(1) }}°C
+                </span>
+                <span
+                  class="badge mono temp-badge"
+                  :class="getTempBadgeClass(item.currentValue)"
+                  :title="item.cores && item.cores.length > 0 ? 'CPU Package temperature' : 'Sensor temperature'"
+                >
+                  {{ item.cores && item.cores.length > 0 ? 'Pkg: ' : '' }}{{ item.currentValue.toFixed(1) }}{{ item.unit || '°C' }}
+                </span>
+              </div>
+              <span v-if="item.critThreshold && item.critThreshold > 0 && item.critThreshold < 150" class="sensor-crit mono">
+                Crit: {{ item.critThreshold.toFixed(0) }}°C
+              </span>
             </div>
           </div>
-          <div class="sensor-val-col">
-            <span class="badge mono temp-badge" :class="getTempBadgeClass(item.currentValue)">
-              {{ item.currentValue.toFixed(1) }}{{ item.unit || '°C' }}
-            </span>
-            <span v-if="item.critThreshold && item.critThreshold > 0 && item.critThreshold < 150" class="sensor-crit mono">
-              Crit: {{ item.critThreshold.toFixed(0) }}°C
-            </span>
-          </div>
+
+          <!-- Cores breakdown section (if package has cores) -->
+          <template v-if="item.cores && item.cores.length > 0">
+            <div class="cores-toggle-bar" @click="toggleCores(`${item.chip}-${item.label}`)">
+              <div class="cores-summary mono">
+                <span>{{ item.cores.length }} Cores</span>
+                <span class="dot-separator">·</span>
+                <span>Min: {{ getMinCore(item.cores).toFixed(0) }}°C</span>
+                <span class="dot-separator">·</span>
+                <span>Avg: {{ (item.averageValue ?? item.currentValue).toFixed(1) }}°C</span>
+                <span class="dot-separator">·</span>
+                <span>Max: {{ getMaxCore(item.cores).toFixed(0) }}°C</span>
+              </div>
+              <button class="cores-btn-toggle" type="button">
+                <span>{{ isCoresExpanded(`${item.chip}-${item.label}`) ? 'Hide Cores' : 'Show Cores' }}</span>
+                <MdiIcon :path="isCoresExpanded(`${item.chip}-${item.label}`) ? mdiChevronUp : mdiChevronDown" size="14" />
+              </button>
+            </div>
+
+            <div v-if="isCoresExpanded(`${item.chip}-${item.label}`)" class="cores-breakdown-grid">
+              <div
+                v-for="core in item.cores"
+                :key="core.label"
+                class="core-chip"
+                :class="getTempBadgeClass(core.currentValue)"
+                :title="`${core.label}: ${core.currentValue.toFixed(1)}°C`"
+              >
+                <span class="core-chip-id">{{ formatCoreShort(core.label) }}</span>
+                <span class="core-chip-val mono">{{ core.currentValue.toFixed(0) }}°</span>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
     </div>
@@ -500,18 +605,29 @@ function getCategoryIcon(cat: string): string {
 /* Sensors Grid */
 .sensors-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
 }
 
 .sensor-item-tile {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
   padding: 8px 10px;
   background: rgba(0, 0, 0, 0.15);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.sensor-item-tile.has-cores {
+  background: var(--bg-surface-elevated, rgba(255, 255, 255, 0.02));
+}
+
+.sensor-main-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
 }
 
 .sensor-icon-col {
@@ -534,13 +650,13 @@ function getCategoryIcon(cat: string): string {
 }
 
 .sensor-name {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 140px;
+  max-width: 180px;
 }
 
 .sensor-sub-row {
@@ -556,7 +672,13 @@ function getCategoryIcon(cat: string): string {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100px;
+  max-width: 140px;
+}
+
+.cores-count-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  opacity: 0.85;
 }
 
 .sensor-adapter {
@@ -568,6 +690,15 @@ function getCategoryIcon(cat: string): string {
   flex-direction: column;
   align-items: flex-end;
   flex-shrink: 0;
+  gap: 2px;
+}
+
+.avg-pill {
+  background: var(--bg-tertiary, rgba(255, 255, 255, 0.05));
+  color: var(--accent-primary, #38bdf8);
+  border: 1px solid var(--border-subtle);
+  font-size: 10.5px;
+  padding: 1px 6px;
 }
 
 .temp-badge {
@@ -579,6 +710,80 @@ function getCategoryIcon(cat: string): string {
   font-size: 9.5px;
   color: var(--text-muted);
   margin-top: 2px;
+}
+
+/* Cores Summary & Breakdown */
+.cores-toggle-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-subtle);
+  cursor: pointer;
+  user-select: none;
+}
+
+.cores-summary {
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dot-separator {
+  color: var(--text-muted);
+}
+
+.cores-btn-toggle {
+  background: transparent;
+  border: none;
+  color: var(--accent-primary, #38bdf8);
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+}
+
+.cores-btn-toggle:hover {
+  text-decoration: underline;
+}
+
+.cores-breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(54px, 1fr));
+  gap: 4px;
+  margin-top: 8px;
+  padding: 6px;
+  background: var(--bg-surface-elevated, rgba(0, 0, 0, 0.25));
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+}
+
+.core-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.core-chip-id {
+  opacity: 0.8;
+  font-size: 9px;
+  font-family: var(--font-mono);
+}
+
+.core-chip-val {
+  font-size: 10px;
 }
 
 /* Fans Grid */

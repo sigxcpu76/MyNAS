@@ -75,4 +75,20 @@ describe('Domain Slug and Resource Path Helpers (TypeScript)', () => {
     const appPath = generateAppdataPath('fastpool', appId);
     expect(appPath).toBe('/mnt/fastpool/apps/nextcloud-hub');
   });
+
+  it('validates single and nested ZFS dataset / volume paths correctly', async () => {
+    const { isValidZfsPath, isValidResourceId } = await import('../src/domain/models');
+    expect(isValidResourceId('media')).toBe(true);
+    expect(isValidResourceId('media/movies')).toBe(false);
+
+    expect(isValidZfsPath('media')).toBe(true);
+    expect(isValidZfsPath('media/movies')).toBe(true);
+    expect(isValidZfsPath('tank/vms/disks/win10')).toBe(true);
+    expect(isValidZfsPath('media/movies/sub_dir-01.test')).toBe(true);
+
+    expect(isValidZfsPath('')).toBe(false);
+    expect(isValidZfsPath('/media//movies')).toBe(false);
+    expect(isValidZfsPath('media/invalid@name')).toBe(false);
+    expect(isValidZfsPath('media/!invalid')).toBe(false);
+  });
 });

@@ -17,6 +17,7 @@ import { checkForUpdate, nasState } from '../store';
 import { services } from '../../container';
 import { formatBytes } from '../../domain/models';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 
 const emit = defineEmits<{
   (e: 'close'): void;
@@ -28,13 +29,30 @@ const isApplying = computed(() => nasState.isApplyingUpdate);
 
 const renderedNotes = computed(() => {
   if (!updateInfo.value?.releaseNotes) return '';
-  return marked.parse(updateInfo.value.releaseNotes, { gfm: true, breaks: true }) as string;
+  const raw = marked.parse(updateInfo.value.releaseNotes, { gfm: true, breaks: true }) as string;
+  return DOMPurify.sanitize(raw);
 });
 
-const updateStep = ref<'idle' | 'updating' | 'restarting' | 'error'>('idle');
+const updateStep = ref<'idle' | 'updating' | 'restarting' | 'error' | 'restart_failed'>('idle');
 const errorMessage = ref('');
 const reconnectCountdown = ref(10);
 let reconnectTimer: any = null;
+let pollAttempts = 0;
+const MAX_POLL_ATTEMPTS = 30; // Max 60 seconds
+
+// Active Workloads detection
+const runningVmsCount = computed(() => nasState.vms.filter((v) => v.state === 'RUNNING' || v.state === 'running').length);
+const runningLxcCount = computed(() => nasState.lxcContainers.filter((c) => c.state === 'RUNNING' || c.state === 'running').length);
+const runningAppsCount = computed(() => nasState.dockerApps.filter((a) => a.state === 'RUNNING' || a.state === 'running').length);
+const hasRunningWorkloads = computed(() => runningVmsCount.value > 0 || runningLxcCount.value > 0 || runningAppsCount.value > 0);
+
+const runningSummary = computed(() => {
+  const parts: string[] = [];
+  if (runningVmsCount.value > 0) parts.push(`${runningVmsCount.value} Virtual Machine${runningVmsCount.value > 1 ? 's' : ''}`);
+  if (runningLxcCount.value > 0) parts.push(`${runningLxcCount.value} LXC Container${runningLxcCount.value > 1 ? 's' : ''}`);
+  if (runningAppsCount.value > 0) parts.push(`${runningAppsCount.value} Docker App${runningAppsCount.value > 1 ? 's' : ''}`);
+  return parts.join(', ');
+});
 
 onMounted(() => {
   if (!updateInfo.value) {
@@ -72,11 +90,22 @@ async function handleApply() {
 }
 
 function startReconnectPolling() {
+  updateStep.value = 'restarting';
   reconnectCountdown.value = 8;
+  pollAttempts = 0;
   if (reconnectTimer) clearInterval(reconnectTimer);
 
   reconnectTimer = setInterval(async () => {
     reconnectCountdown.value--;
+    pollAttempts++;
+
+    if (pollAttempts >= MAX_POLL_ATTEMPTS) {
+      clearInterval(reconnectTimer);
+      reconnectTimer = null;
+      updateStep.value = 'restart_failed';
+      return;
+    }
+
     if (reconnectCountdown.value <= 3) {
       try {
         await services.system.getTelemetry();
@@ -147,6 +176,19 @@ function handleClose() {
           <span class="badge badge-info" style="font-family: monospace">
             Upgrading to {{ updateInfo?.latestVersion || 'new version' }}
           </span>
+        </div>
+
+        <div v-else-if="updateStep === 'restart_failed'" class="card" style="border-color: var(--danger-border); padding: 18px">
+          <h3 style="color: var(--danger-text); font-size: 16px; font-weight: 700; margin: 0 0 8px 0">Service Reconnect Timed Out</h3>
+          <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 12px 0">
+            The updated binary was installed, but the daemon did not become reachable after 60 seconds of polling.
+            Connect via SSH to check service status and logs:
+          </p>
+          <pre class="mono font-xs" style="background: rgba(0,0,0,0.3); padding: 10px 14px; border-radius: 6px; user-select: all">systemctl status nasctl&#10;journalctl -u nasctl -n 50 --no-pager</pre>
+          <div style="display: flex; gap: 8px; margin-top: 16px">
+            <button class="btn btn-sm btn-primary" @click="startReconnectPolling">Retry Reconnect</button>
+            <button class="btn btn-sm btn-secondary" @click="emit('close')">Close Window</button>
+          </div>
         </div>
 
         <template v-else>
@@ -242,6 +284,20 @@ function handleClose() {
           >
             <MdiIcon :path="mdiCheckCircle" size="16" />
             <span>nasctl is running the latest version! No updates needed.</span>
+          </div>
+          <!-- Active Workloads Pre-flight Warning -->
+          <div
+            v-if="hasRunningWorkloads && updateInfo?.updateAvailable"
+            class="alert alert-warning"
+            style="margin: 0; font-size: 12px; display: flex; align-items: flex-start; gap: 8px"
+          >
+            <MdiIcon :path="mdiAlertCircle" size="18" style="flex-shrink: 0; margin-top: 1px" />
+            <div>
+              <div style="font-weight: 600">Active Workloads Running</div>
+              <div style="color: var(--text-secondary); margin-top: 2px">
+                {{ runningSummary }} detected. Virtual machines and containers continue execution in the background, but management connections will briefly restart.
+              </div>
+            </div>
           </div>
         </template>
       </div>

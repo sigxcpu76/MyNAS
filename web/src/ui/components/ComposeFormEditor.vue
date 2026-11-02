@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import {
   type ComposeAppFormModel,
   type ComposeEnvModel,
@@ -93,6 +93,7 @@ const activeService = computed(() => {
 
 // Resource Limit Select Options (128m, 256m, 512m, 1g, 2g, 4g, 8g, 16g, 32g & 0.5, 1.0, 2, 4, 8, 16, 32)
 const MEMORY_LIMIT_SELECT_OPTIONS = [
+  { value: '', label: 'Unlimited (No Limit)' },
   { value: '128m', label: '128m (128 MB)' },
   { value: '256m', label: '256m (256 MB)' },
   { value: '512m', label: '512m (512 MB — Default)' },
@@ -105,6 +106,7 @@ const MEMORY_LIMIT_SELECT_OPTIONS = [
 ];
 
 const CPU_LIMIT_SELECT_OPTIONS = [
+  { value: '', label: 'Unlimited (No Limit)' },
   { value: '0.5', label: '0.5 (Half Core)' },
   { value: '1.0', label: '1.0 (1 Core — Default)' },
   { value: '2', label: '2 (2 Cores)' },
@@ -143,14 +145,12 @@ const hasNvidiaGpuOnHost = computed(() => {
   });
 });
 
-// Ensure active service has memoryLimit and cpuLimit initialized
+// Normalize cpuLimit '1' to '1.0' if present
 watch(
   activeService,
   (svc) => {
-    if (svc) {
-      if (!svc.memoryLimit) svc.memoryLimit = DEFAULT_COMPOSE_MEMORY_LIMIT;
-      if (!svc.cpuLimit) svc.cpuLimit = DEFAULT_COMPOSE_CPU_LIMIT;
-      else if (svc.cpuLimit === '1') svc.cpuLimit = '1.0';
+    if (svc && svc.cpuLimit === '1') {
+      svc.cpuLimit = '1.0';
     }
   },
   { immediate: true }
@@ -265,7 +265,10 @@ watch(editorMode, (newMode) => {
         activeServiceId.value = form.services[0]?.id || '';
       }
     } catch (err: any) {
-      notify('error', `Failed to parse YAML into form: ${err?.message || 'Invalid syntax'}`);
+      notify('error', `Cannot switch to Form mode: ${err?.message || 'Invalid YAML syntax'}`);
+      nextTick(() => {
+        editorMode.value = 'raw';
+      });
     }
   }
 });

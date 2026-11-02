@@ -602,10 +602,14 @@ html[data-theme="one-light"] {
 }
 
 /* ==========================================================================
-   Typography Scale Variables
+   Typography Scale Variables & Design System Aliases
    Controls the overall UI font size dynamically without viewport zoom
    ========================================================================== */
 :root {
+  --bg-surface-elevated: var(--bg-elevated);
+  --bg-tertiary: var(--bg-hover);
+  --border-color: var(--border-subtle);
+
   --fs-scale: 1;
   --fs-xs: calc(11.5px * var(--fs-scale));
   --fs-sm: calc(13px * var(--fs-scale));

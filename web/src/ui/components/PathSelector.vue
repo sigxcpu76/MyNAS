@@ -114,7 +114,7 @@ const pathBreadcrumbs = computed(() => {
   const p = currentBrowsePath.value;
   if (!p || p === '/') return [{ name: '/', path: '/' }];
   const parts = p.split('/').filter(Boolean);
-  const crumbs = [{ name: 'root (/)', path: '/' }];
+  const crumbs = [{ name: '/', path: '/' }];
   let accum = '';
   for (const part of parts) {
     accum += '/' + part;

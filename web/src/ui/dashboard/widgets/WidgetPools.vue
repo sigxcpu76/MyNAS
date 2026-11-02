@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import type * as echarts from 'echarts';
-import { formatBytes } from '../../../domain/models';
-import { nasState } from '../../store';
+import { formatBytes, type ZfsPool } from '../../../domain/models';
+import { nasState, selectResource } from '../../store';
 import { navigateTo } from '../../router';
 import { useChartPalette } from '../chartPalette';
 import EChart from '../../components/EChart.vue';
@@ -10,6 +10,12 @@ import SkeletonBox from '../../components/SkeletonBox.vue';
 
 const chartPalette = useChartPalette();
 const poolChartModes = ref<Record<string, 'usage' | 'frag'>>({});
+
+function openPool(pool: ZfsPool) {
+  const clean = pool.poolName || pool.name.replace(/^zfsPools\//, '');
+  selectResource(`pool:${clean}`);
+  navigateTo('storage-pools');
+}
 
 function getPoolChartMode(poolName: string): 'usage' | 'frag' {
   return poolChartModes.value[poolName] || 'usage';
@@ -146,7 +152,7 @@ function getPoolFragChartOptions(fragPercent: number): echarts.EChartsOption {
   <div class="pools-widget">
     <div class="pools-header">
       <h2 style="font-size: 18px; font-weight: 700; margin: 0">Pools</h2>
-      <button class="btn btn-sm btn-primary" @click="navigateTo('zfs')">
+      <button class="btn btn-sm btn-primary" @click="navigateTo('storage-pools')">
         Manage Pools
       </button>
     </div>
@@ -182,7 +188,7 @@ function getPoolFragChartOptions(fragPercent: number): echarts.EChartsOption {
 
     <div v-else-if="nasState.pools.length === 0" class="card" style="text-align: center; padding: 36px 20px">
       <div style="font-size: 16px; font-weight: 600; margin-bottom: 16px">No pools configured.</div>
-      <button class="btn btn-primary" @click="navigateTo('zfs')">Configure Pools</button>
+      <button class="btn btn-primary" @click="navigateTo('storage-pools')">Configure Pools</button>
     </div>
 
     <div v-else class="pool-cards-grid">
@@ -192,13 +198,16 @@ function getPoolFragChartOptions(fragPercent: number): echarts.EChartsOption {
         class="card pool-telemetry-card"
       >
         <!-- Pool Card Header -->
-        <div class="card-header" style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px; margin-bottom: 10px">
+        <div
+          class="card-header"
+          style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px; margin-bottom: 10px; cursor: pointer"
+          @click="openPool(pool)"
+        >
           <div style="display: flex; align-items: center; gap: 8px">
             <strong class="mono" style="font-size: 15px; color: var(--accent-primary)">
               {{ pool.poolName || pool.name.replace(/^zfsPools\//, '') }}
             </strong>
-            <span class="badge badge-neutral" style="font-size: 10.5px; padding: 1px 6px">{{ pool.vdevLayout || 'stripe' }}</span>
-            <span class="badge badge-info" style="font-size: 10.5px; padding: 1px 6px" v-if="pool.compression">{{ pool.compression }}</span>
+            <span class="mono font-xs" style="color: var(--text-secondary); opacity: 0.85">{{ pool.vdevLayout || 'stripe' }}</span>
           </div>
           <span
             class="badge mono"

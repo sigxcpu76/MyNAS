@@ -296,10 +296,17 @@ export function mapSystemTelemetry(raw: any): SystemTelemetry {
         label: t.label ?? '',
         category: t.category ?? 'SYSTEM',
         currentValue: Number(t.currentValue ?? t.current_value ?? 0),
+        averageValue: t.averageValue !== undefined ? Number(t.averageValue) : (t.average_value !== undefined ? Number(t.average_value) : undefined),
         unit: t.unit ?? '°C',
         highThreshold: Number(t.highThreshold ?? t.high_threshold ?? 0),
         critThreshold: Number(t.critThreshold ?? t.crit_threshold ?? 0),
         alarm: Boolean(t.alarm),
+        cores: Array.isArray(t.cores) ? t.cores.map((c: any) => ({
+          label: c.label ?? '',
+          currentValue: Number(c.currentValue ?? c.current_value ?? 0),
+          highThreshold: c.highThreshold !== undefined ? Number(c.highThreshold) : (c.high_threshold !== undefined ? Number(c.high_threshold) : undefined),
+          critThreshold: c.critThreshold !== undefined ? Number(c.critThreshold) : (c.crit_threshold !== undefined ? Number(c.crit_threshold) : undefined),
+        })) : undefined,
       })) : [],
       fans: Array.isArray(raw.sensors.fans) ? raw.sensors.fans.map((f: any) => ({
         chip: f.chip ?? '',

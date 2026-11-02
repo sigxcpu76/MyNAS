@@ -78,7 +78,7 @@ function handleSwitchToDesktop() {
           <!-- Drawer Navigation Items -->
           <div class="drawer-content">
             <!-- PWA Install Banner -->
-            <div v-if="!isStandalone" class="pwa-drawer-tile" @click="close(); promptInstall()">
+            <div v-if="!isStandalone && !clientApp.isNative" class="pwa-drawer-tile" @click="close(); promptInstall()">
               <div class="pwa-drawer-icon">
                 <MdiIcon :path="mdiCellphoneArrowDown" size="18" />
               </div>
@@ -117,6 +117,10 @@ function handleSwitchToDesktop() {
                 <MdiIcon :path="mdiLayersTripleOutline" size="18" style="color: #4ade80" />
                 <span>ZFS Datasets</span>
               </button>
+              <button class="nav-link-btn" @click="nav('storage-volumes')">
+                <MdiIcon :path="mdiLayersTripleOutline" size="18" style="color: #38bdf8" />
+                <span>ZFS Block Volumes (zvol)</span>
+              </button>
               <button class="nav-link-btn" @click="nav('shares')">
                 <MdiIcon :path="mdiFolderNetworkOutline" size="18" style="color: #fbbf24" />
                 <span>Shares (SMB & WebDAV)</span>
@@ -132,7 +136,7 @@ function handleSwitchToDesktop() {
                   {{ nasState.systemUpdate.latestVersion }}
                 </span>
                 <span v-else class="text-muted" style="margin-left: auto; font-size: 11px">
-                  {{ nasState.systemUpdate?.currentVersion || 'v1.6.8' }}
+                  {{ nasState.systemUpdate?.currentVersion || 'v1.6.9' }}
                 </span>
               </button>
               <div class="client-shell-tile" style="margin: 4px 0 6px 0; padding: 7px 10px; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border-subtle); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; font-size: 11.5px">

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import {
   mdiAlertCircle,
   mdiCalendarClock,
@@ -14,10 +14,12 @@ import {
   mdiFolderOutline,
   mdiInformationOutline,
   mdiMagnify,
+  mdiPause,
   mdiPencil,
   mdiPlay,
   mdiPlus,
   mdiRefresh,
+  mdiStop,
 } from '@mdi/js';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
@@ -25,7 +27,7 @@ import SortableTh from '../components/SortableTh.vue';
 import PathSelector from '../components/PathSelector.vue';
 import { useTableSort } from '../composables/useTableSort';
 import { useAutoScroll } from '../composables/useAutoScroll';
-import { nasState, notify, refreshCronJobs } from '../store';
+import { getModuleAvailability, nasState, notify, refreshCronJobs } from '../store';
 import { confirmDelete } from '../modal';
 import type { CronEnvVar, CronJob, CronVolumeMount } from '../../domain/models';
 import { services } from '../../container';
@@ -103,10 +105,33 @@ function humanizeCron(expr: string): string {
   if (clean === '0 * * * *' || clean === '@hourly') return 'Every hour on the hour';
   if (clean === '0 0 * * 0' || clean === '@weekly') return 'Every Sunday at midnight';
   if (clean === '0 0 1 * *' || clean === '@monthly') return 'First of every month';
-  if (clean.startsWith('*/')) {
-    const mins = clean.split(' ')[0].replace('*/', '');
-    return `Every ${mins} minutes`;
+  if (clean === '0 0 1 1 *' || clean === '@yearly' || clean === '@annually') return 'Annually on Jan 1st at midnight';
+
+  const parts = clean.split(/\s+/);
+  if (parts.length === 5) {
+    const [min, hour, dom, mon, dow] = parts;
+    const isNum = (s: string) => /^\d+$/.test(s);
+    const dowNames: Record<string, string> = {
+      '0': 'Sun', '1': 'Mon', '2': 'Tue', '3': 'Wed', '4': 'Thu', '5': 'Fri', '6': 'Sat', '7': 'Sun',
+      '1-5': 'Mon–Fri', '0,6': 'Weekends',
+    };
+    const dayStr = dowNames[dow] || (dow !== '*' ? `on ${dow}` : '');
+
+    if (min.startsWith('*/') && hour === '*' && dom === '*' && mon === '*' && dow === '*') {
+      return `Every ${min.slice(2)} minutes`;
+    }
+    if (min.startsWith('*/') && hour !== '*' && dom === '*' && mon === '*' && dow === '*') {
+      return `Every ${min.slice(2)} min (hours ${hour})`;
+    }
+    if (min === '0' && hour.startsWith('*/') && dom === '*' && mon === '*' && dow === '*') {
+      return `Every ${hour.slice(2)} hours`;
+    }
+    if (isNum(min) && isNum(hour) && dom === '*' && mon === '*') {
+      const timeStr = `${hour.padStart(2, '0')}:${min.padStart(2, '0')}`;
+      return dayStr ? `Every ${dayStr} at ${timeStr}` : `Daily at ${timeStr}`;
+    }
   }
+
   return clean;
 }
 
@@ -171,6 +196,24 @@ async function handleRunNow(job: CronJob) {
     await refreshCronJobs();
   } finally {
     isRunningJob[job.id] = false;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Stop / Abort Running Job
+// -----------------------------------------------------------------------------
+async function handleStopJob(job: CronJob) {
+  if (!isJobActive(job)) return;
+  try {
+    // Toggling enabled to false signals the backend execution engine to abort the active container
+    await services.cron.updateCronJob(job.name, { enabled: false }, ['enabled']);
+    if (job.enabled) {
+      await services.cron.updateCronJob(job.name, { enabled: true }, ['enabled']);
+    }
+    notify('info', `Stopped execution of "${job.title || job.id}"`);
+    await refreshCronJobs();
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to stop cron job');
   }
 }
 
@@ -346,6 +389,14 @@ function onPresetChange() {
   }
 }
 
+watch(
+  () => form.schedule,
+  (val) => {
+    const match = SCHEDULE_PRESETS.find((p) => p.value === val);
+    form.schedulePreset = match ? match.value : 'custom';
+  }
+);
+
 function addVolumeMount() {
   form.volumes.push({ hostPath: '', mountPath: '', readOnly: false });
 }
@@ -362,6 +413,29 @@ function removeEnvVar(index: number) {
   form.env.splice(index, 1);
 }
 
+function applyTemplate(type: 'rclone' | 'shell' | 'empty') {
+  if (type === 'rclone') {
+    const mainPool = (nasState.systemConfig?.mainPool || 'tank').replace(/^zfsPools\//, '');
+    form.image = 'rclone/rclone:1';
+    form.commandStr = '';
+    form.argsStr = 'sync\n/data/source\nremote:/backup/target';
+    form.volumes = [
+      { hostPath: `/mnt/${mainPool}/data`, mountPath: '/data/source', readOnly: true },
+      { hostPath: `/mnt/${mainPool}/.nas-system/rclone`, mountPath: '/config/rclone', readOnly: false },
+    ];
+  } else if (type === 'shell') {
+    form.image = 'alpine:latest';
+    form.commandStr = '/bin/sh -c';
+    form.argsStr = 'echo "Running scheduled maintenance task"\ndate\necho "Task finished"';
+    form.volumes = [];
+  } else {
+    form.image = '';
+    form.commandStr = '';
+    form.argsStr = '';
+    form.volumes = [];
+  }
+}
+
 function openCreateModal() {
   isEditing.value = false;
   form.id = '';
@@ -369,18 +443,12 @@ function openCreateModal() {
   form.description = '';
   form.schedulePreset = '0 23 * * *';
   form.schedule = '0 23 * * *';
-  form.image = 'rclone/rclone:1';
-  form.commandStr = '';
-  form.argsStr = 'sync\n/data/library/pictures\ngoogle_drive:/Backups/Pictures';
+  applyTemplate('empty');
   form.enabled = true;
   form.concurrencyPolicy = 'Forbid';
   form.restartPolicy = 'Never';
   form.timeoutPreset = '0';
   form.timeoutCustomMinutes = 60;
-  form.volumes = [
-    { hostPath: '/data/library', mountPath: '/data/library', readOnly: false },
-    { hostPath: '/mnt/tank/.nas-system/rclone', mountPath: '/config/rclone', readOnly: false },
-  ];
   form.env = [];
   isEditModalOpen.value = true;
 }
@@ -531,6 +599,20 @@ async function saveForm() {
           <MdiIcon :path="mdiPlus" size="15" style="margin-right: 4px" />
           Create Task
         </button>
+      </div>
+    </div>
+
+    <!-- Docker Module Prerequisite Notice -->
+    <div
+      v-if="!getModuleAvailability('docker').enabled"
+      class="card"
+      style="padding: 12px 16px; margin-bottom: 16px; background: rgba(234, 179, 8, 0.08); border-color: rgba(234, 179, 8, 0.3)"
+    >
+      <div style="display: flex; align-items: center; gap: 10px">
+        <MdiIcon :path="mdiAlertCircle" size="20" style="color: #eab308; flex-shrink: 0" />
+        <div style="font-size: 12.5px; color: var(--text-primary)">
+          <strong>Docker Runtime Required:</strong> Scheduled tasks execute inside isolated Docker containers. Please install or start Docker to run scheduled tasks.
+        </div>
       </div>
     </div>
 
@@ -707,7 +789,7 @@ async function saveForm() {
             <!-- Actions -->
             <td style="padding: 10px 14px; text-align: right">
               <div style="display: inline-flex; align-items: center; gap: 6px">
-                <!-- Run Now -->
+                <!-- Run / Running Button -->
                 <button
                   class="btn btn-sm"
                   style="padding: 4px 8px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px"
@@ -723,6 +805,18 @@ async function saveForm() {
                   />
                   <MdiIcon v-else :path="mdiPlay" size="13" style="color: var(--success)" />
                   {{ isJobActive(job) ? 'Running...' : 'Run' }}
+                </button>
+
+                <!-- Stop / Abort if Active -->
+                <button
+                  v-if="isJobActive(job)"
+                  class="btn btn-sm btn-danger"
+                  style="padding: 4px 8px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px"
+                  title="Stop / Abort running job"
+                  @click.stop="handleStopJob(job)"
+                >
+                  <MdiIcon :path="mdiStop" size="13" />
+                  Stop
                 </button>
 
                 <!-- View Logs -->
@@ -741,9 +835,9 @@ async function saveForm() {
                   @click.stop="handleToggleEnabled(job)"
                 >
                   <MdiIcon
-                    :path="job.enabled ? mdiClockOutline : mdiAlertCircle"
+                    :path="job.enabled ? mdiPause : mdiPlay"
                     size="14"
-                    :style="{ color: job.enabled ? 'var(--text-secondary)' : 'var(--warning)' }"
+                    :style="{ color: job.enabled ? 'var(--warning)' : 'var(--success)' }"
                   />
                 </button>
 
@@ -911,6 +1005,14 @@ async function saveForm() {
             </div>
           </div>
 
+          <!-- Starter Templates Quick Bar -->
+          <div v-if="!isEditing" style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(255,255,255,0.03); border-radius: 6px; border: 1px solid var(--border-color, rgba(255,255,255,0.1))">
+            <span style="font-size: 11.5px; color: var(--text-secondary); font-weight: 500">Starter Templates:</span>
+            <button type="button" class="btn btn-xs btn-secondary" @click="applyTemplate('empty')">Blank</button>
+            <button type="button" class="btn btn-xs btn-secondary" @click="applyTemplate('shell')">Alpine Shell Script</button>
+            <button type="button" class="btn btn-xs btn-secondary" @click="applyTemplate('rclone')">Rclone Sync</button>
+          </div>
+
           <!-- Image -->
           <div>
             <label class="form-label font-xs" style="display: block; margin-bottom: 4px">Docker Container Image *</label>
@@ -922,6 +1024,23 @@ async function saveForm() {
               required
               style="font-size: 12.5px"
             />
+          </div>
+
+          <!-- Command Override -->
+          <div>
+            <label class="form-label font-xs" style="display: block; margin-bottom: 4px">
+              Entrypoint / Command Override (optional)
+            </label>
+            <input
+              v-model="form.commandStr"
+              type="text"
+              class="form-control mono"
+              placeholder="e.g. /bin/sh -c or backup.sh"
+              style="font-size: 12.5px"
+            />
+            <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 2px">
+              Overrides the container image entrypoint or command binary.
+            </span>
           </div>
 
           <!-- Arguments -->

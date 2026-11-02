@@ -10,8 +10,8 @@ import (
 
 var (
 	// Version is populated at build time via -ldflags:
-	// -X github.com/sigxcpu/nas/internal/version.Version=v1.6.8
-	Version   = "v1.6.8-dev"
+	// -X github.com/sigxcpu/nas/internal/version.Version=v1.6.9
+	Version   = "v1.6.9-dev"
 	GitCommit = "HEAD"
 	BuildDate = "unknown"
 )

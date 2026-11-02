@@ -15,6 +15,7 @@ import {
 } from '@mdi/js';
 import MdiIcon from '../../components/MdiIcon.vue';
 import BottomSheet from '../../components/BottomSheet.vue';
+import { ansiToHtml } from '../../utils/ansi';
 import { nasState, notify, refreshAllData } from '../../store';
 import { services } from '../../../container';
 import type { DockerApp } from '../../../domain/models';
@@ -27,6 +28,10 @@ const isSheetOpen = ref(false);
 const actionLoading = ref(false);
 const logsLoading = ref(false);
 const appLogs = ref<string>('');
+const renderedLogs = computed(() => {
+  if (!appLogs.value) return 'Loading logs...';
+  return ansiToHtml(appLogs.value);
+});
 const activeDetailTab = ref<'details' | 'logs'>('details');
 
 const apps = computed(() => nasState.dockerApps || []);
@@ -328,7 +333,7 @@ function switchDetailTab(tab: 'details' | 'logs') {
             <span>Refresh Logs</span>
           </button>
         </div>
-        <pre class="mobile-logs-pre">{{ appLogs || 'Loading logs...' }}</pre>
+        <pre class="mobile-logs-pre" v-html="renderedLogs"></pre>
       </div>
     </BottomSheet>
   </div>

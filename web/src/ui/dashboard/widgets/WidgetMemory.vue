@@ -142,7 +142,7 @@ const ramChartOptions = computed<echarts.EChartsOption>(() => {
       <div class="ram-summary-item">
         <span class="detail-name">Services & Apps</span>
         <strong class="mono" style="color: var(--accent-primary)">
-          {{ formatBytes(telemetry?.memory?.servicesBytes || 0) }}
+          {{ formatBytes(telemetry?.memory?.servicesBytes || Math.max(0, (telemetry?.memory?.usedBytes || 0) - (telemetry?.memory?.zfsArcBytes || 0))) }}
         </strong>
       </div>
       <div class="ram-summary-item">

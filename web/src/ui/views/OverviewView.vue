@@ -31,6 +31,9 @@ import WidgetSystem from '../dashboard/widgets/WidgetSystem.vue';
 import WidgetNetwork from '../dashboard/widgets/WidgetNetwork.vue';
 import WidgetDisks from '../dashboard/widgets/WidgetDisks.vue';
 import WidgetWorkloads from '../dashboard/widgets/WidgetWorkloads.vue';
+import WidgetVms from '../dashboard/widgets/WidgetVms.vue';
+import WidgetApps from '../dashboard/widgets/WidgetApps.vue';
+import WidgetShares from '../dashboard/widgets/WidgetShares.vue';
 import WidgetSensors from '../dashboard/widgets/WidgetSensors.vue';
 
 // ---------------------------------------------------------------------------
@@ -74,9 +77,21 @@ const systemInterface = computed<NetworkInterfaceTelemetry | null>(() => {
   return list.find((n) => n.name !== 'lo') || list[0] || null;
 });
 
+let telemetryPollInterval: ReturnType<typeof setInterval> | null = null;
+
 onMounted(() => {
-  if (!nasState.systemTelemetry) {
-    refreshTelemetry();
+  refreshTelemetry();
+  telemetryPollInterval = setInterval(() => {
+    if (!nasState.liveSyncActive) {
+      refreshTelemetry();
+    }
+  }, 4000);
+});
+
+onBeforeUnmount(() => {
+  if (telemetryPollInterval) {
+    clearInterval(telemetryPollInterval);
+    telemetryPollInterval = null;
   }
 });
 
@@ -107,6 +122,12 @@ function getWidgetComponent(type: string) {
       return WidgetDisks;
     case 'workloads':
       return WidgetWorkloads;
+    case 'vms':
+      return WidgetVms;
+    case 'apps':
+      return WidgetApps;
+    case 'shares':
+      return WidgetShares;
     case 'sensors':
       return WidgetSensors;
     default:
@@ -272,14 +293,21 @@ function onDragEnd() {
         ]"
         :draggable="isEditMode"
         @dragstart="onDragStart(index, $event)"
+        @dragend="onDragEnd"
         @dragover="onDragOver(index, $event)"
         @drop="onDrop(index)"
-        @dragend="onDragEnd"
       >
         <!-- Edit Mode Header Toolbar -->
         <div v-if="isEditMode" class="widget-edit-toolbar">
           <div class="edit-left">
-            <span class="drag-handle" title="Drag to reorder">
+            <span
+              class="drag-handle"
+              title="Drag to reorder"
+              :draggable="isEditMode"
+              style="cursor: grab"
+              @dragstart.stop="onDragStart(index, $event)"
+              @dragend="onDragEnd"
+            >
               <svg viewBox="0 0 24 24" class="toolbar-svg"><path :d="mdiDrag" /></svg>
             </span>
             <span class="widget-type-label">
@@ -439,6 +467,7 @@ function onDragEnd() {
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
+  grid-auto-flow: dense;
   gap: 16px;
   width: 100%;
 }

@@ -90,7 +90,7 @@ func (d *ZfsDataset) Validate() error {
 	if err := ValidateResourceID(d.PoolID, "pool_id"); err != nil {
 		return err
 	}
-	if err := ValidateResourceID(d.ID, "zfs_dataset_id"); err != nil {
+	if err := ValidateResourcePath(d.ID, "zfs_dataset_id"); err != nil {
 		return err
 	}
 	if d.QuotaBytes < 0 {
@@ -118,7 +118,7 @@ func (v *ZfsVolume) Validate() error {
 	if err := ValidateResourceID(v.PoolID, "pool_id"); err != nil {
 		return err
 	}
-	if err := ValidateResourceID(v.ID, "zfs_volume_id"); err != nil {
+	if err := ValidateResourcePath(v.ID, "zfs_volume_id"); err != nil {
 		return err
 	}
 	if v.SizeBytes <= 0 {

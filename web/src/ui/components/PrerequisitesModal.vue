@@ -5,6 +5,7 @@ import {
   mdiCheck,
   mdiCheckCircle,
   mdiClose,
+  mdiConsole,
   mdiContentCopy,
   mdiLinux,
   mdiRefresh,
@@ -21,6 +22,7 @@ import { nasState, notify } from '../store';
 
 const emit = defineEmits<{
   (e: 'close'): void;
+  (e: 'open-terminal'): void;
 }>();
 
 const checking = ref(false);
@@ -213,14 +215,25 @@ function generateFallbackScript(): string {
                 Instructions to Fix Missing Prerequisites
               </strong>
             </div>
-            <button
-              v-if="summary?.remediationScript || generateFallbackScript()"
-              class="btn btn-sm btn-primary"
-              @click="copyRemediation"
-            >
-              <MdiIcon :path="copied ? mdiCheck : mdiContentCopy" size="14" style="margin-right: 4px" />
-              {{ copied ? 'Copied Command!' : 'Copy Fix Command' }}
-            </button>
+            <div style="display: flex; gap: 8px">
+              <button
+                v-if="summary?.remediationScript || generateFallbackScript()"
+                class="btn btn-sm btn-primary"
+                @click="copyRemediation"
+              >
+                <MdiIcon :path="copied ? mdiCheck : mdiContentCopy" size="14" style="margin-right: 4px" />
+                {{ copied ? 'Copied Command!' : 'Copy Fix Command' }}
+              </button>
+              <button
+                type="button"
+                class="btn btn-sm btn-secondary"
+                style="display: inline-flex; align-items: center; gap: 4px"
+                @click="emit('open-terminal')"
+              >
+                <MdiIcon :path="mdiConsole" size="14" />
+                Open Host Terminal
+              </button>
+            </div>
           </div>
 
           <p style="font-size: 12.5px; color: var(--text-secondary); margin: 0 0 10px 0">

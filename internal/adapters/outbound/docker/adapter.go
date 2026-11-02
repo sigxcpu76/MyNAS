@@ -1799,6 +1799,12 @@ func normalizePortSpec(s string) string {
 		return ""
 	}
 
+	// Handle stringified Go map from yaml deserialization, e.g.
+	// "map[mode:ingress protocol:tcp published:30020 target:81]"
+	if strings.HasPrefix(s, "map[") && strings.HasSuffix(s, "]") {
+		return parseMapStringPort(s)
+	}
+
 	proto := "tcp"
 	if idx := strings.LastIndex(s, "/"); idx != -1 {
 		proto = strings.ToLower(s[idx+1:])
@@ -1819,6 +1825,111 @@ func normalizePortSpec(s string) string {
 		return s + "/" + proto
 	}
 	return s
+}
+
+func parseComposePort(p any) string {
+	if p == nil {
+		return ""
+	}
+	switch v := p.(type) {
+	case string:
+		return normalizePortSpec(v)
+	case int:
+		return strconv.Itoa(v)
+	case int32:
+		return strconv.FormatInt(int64(v), 10)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case float64:
+		return strconv.Itoa(int(v))
+	case map[string]any:
+		return formatPortMap(v)
+	case map[any]any:
+		converted := make(map[string]any, len(v))
+		for k, val := range v {
+			converted[fmt.Sprintf("%v", k)] = val
+		}
+		return formatPortMap(converted)
+	default:
+		s := fmt.Sprintf("%v", p)
+		return normalizePortSpec(s)
+	}
+}
+
+func formatPortMap(m map[string]any) string {
+	target := ""
+	if m["target"] != nil {
+		target = strings.TrimSpace(fmt.Sprintf("%v", m["target"]))
+	}
+	published := ""
+	if m["published"] != nil {
+		published = strings.TrimSpace(fmt.Sprintf("%v", m["published"]))
+	}
+	proto := "tcp"
+	if m["protocol"] != nil {
+		proto = strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", m["protocol"])))
+	}
+	hostIP := ""
+	if m["host_ip"] != nil {
+		hostIP = strings.TrimSpace(fmt.Sprintf("%v", m["host_ip"]))
+	}
+
+	if published != "" && target != "" {
+		res := ""
+		if hostIP != "" && hostIP != "0.0.0.0" && hostIP != "::" && hostIP != "[::]" {
+			res = fmt.Sprintf("%s:%s:%s", hostIP, published, target)
+		} else {
+			res = fmt.Sprintf("%s:%s", published, target)
+		}
+		if proto != "" && proto != "tcp" {
+			res += "/" + proto
+		}
+		return res
+	} else if target != "" {
+		if proto != "" && proto != "tcp" {
+			return target + "/" + proto
+		}
+		return target
+	}
+	return ""
+}
+
+func parseMapStringPort(s string) string {
+	s = strings.TrimPrefix(s, "map[")
+	s = strings.TrimSuffix(s, "]")
+	fields := strings.Fields(s)
+	m := make(map[string]any)
+	for _, f := range fields {
+		parts := strings.SplitN(f, ":", 2)
+		if len(parts) == 2 {
+			m[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+		}
+	}
+	return formatPortMap(m)
+}
+
+func deduplicatePorts(ports []string) []string {
+	mappedContainers := make(map[string]bool)
+	for _, p := range ports {
+		_, cPort := parsePortMapping(p)
+		if cPort != "" && strings.Contains(p, ":") {
+			mappedContainers[cPort] = true
+		}
+	}
+	var res []string
+	seen := make(map[string]bool)
+	for _, p := range ports {
+		_, cPort := parsePortMapping(p)
+		if !strings.Contains(p, ":") && mappedContainers[cPort] {
+			continue
+		}
+		if !seen[p] {
+			seen[p] = true
+			res = append(res, p)
+		}
+	}
+	sort.Strings(res)
+	return res
 }
 
 func parsePortMapping(p string) (hostPort, containerPort string) {
@@ -1891,7 +2002,7 @@ func parseComposeYAML(content string) (services []string, ports []string, volume
 			}
 		}
 		for _, p := range svc.Ports {
-			ps := normalizePortSpec(fmt.Sprintf("%v", p))
+			ps := parseComposePort(p)
 			if ps != "" && !portSet[ps] {
 				portSet[ps] = true
 				ports = append(ports, ps)
@@ -2118,6 +2229,7 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 			}
 		}
 	}
+	allPorts = deduplicatePorts(allPorts)
 	sort.Strings(allPorts)
 
 	webUI := deriveWebUIURL(allPorts, mgmtPort)

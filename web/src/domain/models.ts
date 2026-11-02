@@ -162,16 +162,25 @@ export interface PowerMeterTelemetry {
   intervalSeconds: number;
 }
 
+export interface CoreSensorItem {
+  label: string;
+  currentValue: number;
+  highThreshold?: number;
+  critThreshold?: number;
+}
+
 export interface HardwareSensorItem {
   chip: string;
   adapter: string;
   label: string;
   category: 'CPU' | 'GPU' | 'PCI' | 'STORAGE' | 'MOTHERBOARD' | 'POWER' | 'FAN' | 'SYSTEM' | string;
   currentValue: number;
+  averageValue?: number;
   unit: string;
   highThreshold?: number;
   critThreshold?: number;
   alarm?: boolean;
+  cores?: CoreSensorItem[];
 }
 
 export interface HardwareSensorsTelemetry {
@@ -966,6 +975,13 @@ const RESOURCE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$/;
 
 export function isValidResourceId(id: string): boolean {
   return RESOURCE_ID_PATTERN.test(id.trim());
+}
+
+export function isValidZfsPath(path: string): boolean {
+  const clean = path.trim().replace(/^\/+|\/+$/g, '');
+  if (!clean) return false;
+  const segments = clean.split('/');
+  return segments.every((seg) => RESOURCE_ID_PATTERN.test(seg));
 }
 
 export function validateSshPublicKey(keyLine: string): boolean {

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -329,6 +330,51 @@ func TestPortDeduplicationAndNormalization(t *testing.T) {
 	}
 	if app.PortMappings[0] != "8086:80" {
 		t.Fatalf("expected port mapping '8086:80', got %q", app.PortMappings[0])
+	}
+}
+
+func TestLongSyntaxPortMapping(t *testing.T) {
+	tempUnitsDir := t.TempDir()
+	appDir := filepath.Join(tempUnitsDir, "long-ports-app")
+	if err := os.MkdirAll(appDir, 0755); err != nil {
+		t.Fatalf("failed to create app dir: %v", err)
+	}
+
+	composeContent := `services:
+  web:
+    image: nginx:alpine
+    ports:
+      - target: 81
+        published: 30020
+        protocol: tcp
+        mode: ingress
+      - target: 443
+        published: 443
+        protocol: tcp
+      - target: 80
+        published: 80
+`
+	if err := os.WriteFile(filepath.Join(appDir, "compose.yaml"), []byte(composeContent), 0644); err != nil {
+		t.Fatalf("failed to write compose.yaml: %v", err)
+	}
+
+	adapter := docker.NewAdapterFull("/nonexistent/docker.sock", tempUnitsDir)
+	ctx := context.Background()
+
+	app, err := adapter.GetApp(ctx, "long-ports-app")
+	if err != nil {
+		t.Fatalf("GetApp failed: %v", err)
+	}
+
+	expected := []string{"30020:81", "443:443", "80:80"}
+	sort.Strings(expected)
+	if len(app.PortMappings) != len(expected) {
+		t.Fatalf("expected %d port mappings, got %d: %v", len(expected), len(app.PortMappings), app.PortMappings)
+	}
+	for i, exp := range expected {
+		if app.PortMappings[i] != exp {
+			t.Errorf("expected port %q at %d, got %q", exp, i, app.PortMappings[i])
+		}
 	}
 }
 

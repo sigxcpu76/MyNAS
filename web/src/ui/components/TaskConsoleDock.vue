@@ -225,6 +225,13 @@ function copyLogs(task: TaskRecord) {
             <td class="task-desc-cell">
               <div class="task-desc-text font-sm">{{ task.description }}</div>
               <div v-if="task.details" class="task-details-sub mono font-xs">{{ task.details }}</div>
+              <div
+                v-if="task.status === 'RUNNING' && task.progress !== undefined"
+                class="progress-bar"
+                style="height: 4px; margin-top: 5px; width: 140px; background: rgba(255,255,255,0.1); border-radius: 2px"
+              >
+                <div class="progress-fill" :style="{ width: `${task.progress}%`, background: 'var(--accent-primary)', height: '100%' }"></div>
+              </div>
             </td>
             <td>
               <span
@@ -254,7 +261,7 @@ function copyLogs(task: TaskRecord) {
                   size="11"
                   style="margin-right: 3px"
                 />
-                {{ task.status }}
+                {{ task.status === 'RUNNING' && task.progress !== undefined ? `${task.progress}%` : task.status }}
               </span>
             </td>
             <td class="mono font-sm text-muted">{{ getLiveDuration(task) }}</td>

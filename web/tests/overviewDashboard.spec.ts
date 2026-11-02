@@ -5,6 +5,10 @@ import WidgetCpu from '../src/ui/dashboard/widgets/WidgetCpu.vue';
 import WidgetMemory from '../src/ui/dashboard/widgets/WidgetMemory.vue';
 import WidgetSystem from '../src/ui/dashboard/widgets/WidgetSystem.vue';
 import WidgetSensors from '../src/ui/dashboard/widgets/WidgetSensors.vue';
+import WidgetVms from '../src/ui/dashboard/widgets/WidgetVms.vue';
+import WidgetApps from '../src/ui/dashboard/widgets/WidgetApps.vue';
+import WidgetShares from '../src/ui/dashboard/widgets/WidgetShares.vue';
+import WidgetWorkloads from '../src/ui/dashboard/widgets/WidgetWorkloads.vue';
 import SystemDetailsTopBarButton from '../src/ui/components/SystemDetailsTopBarButton.vue';
 import SystemDetailsModal from '../src/ui/components/SystemDetailsModal.vue';
 import { nasState } from '../src/ui/store';
@@ -405,7 +409,7 @@ describe('Overview Dashboard & Telemetry', () => {
   });
 
   describe('WidgetSensors (Hardware Sensors, Power & Temperatures)', () => {
-    it('renders power meter, GPU metrics, and temperature items', () => {
+    it('renders power meter, GPU metrics, and temperature items', async () => {
       nasState.systemTelemetry = {
         cpu: {
           model: 'Intel Xeon E5-2680 v4',
@@ -475,10 +479,15 @@ describe('Overview Dashboard & Telemetry', () => {
               label: 'Package id 0',
               category: 'CPU',
               currentValue: 35.0,
+              averageValue: 31.5,
               unit: '°C',
               highThreshold: 93.0,
               critThreshold: 103.0,
               alarm: false,
+              cores: [
+                { label: 'Core 0', currentValue: 30.0 },
+                { label: 'Core 1', currentValue: 33.0 },
+              ],
             },
             {
               chip: 'tg3-pci-0200',
@@ -513,9 +522,136 @@ describe('Overview Dashboard & Telemetry', () => {
       expect(wrapper.text()).toContain('power_meter-acpi-0');
       expect(wrapper.text()).toContain('NVIDIA GeForce RTX 4060 Ti');
       expect(wrapper.text()).toContain('30.0°C');
-      expect(wrapper.text()).toContain('Package id 0');
+      expect(wrapper.text()).toContain('CPU 0');
+      expect(wrapper.text()).toContain('Avg: 31.5°C');
+      expect(wrapper.text()).toContain('2 Cores');
       expect(wrapper.text()).toContain('tg3-pci-0200: temp1');
       expect(wrapper.text()).toContain('1073 RPM');
+
+      // Click Show Cores toggle to expand cores breakdown
+      const toggleBtn = wrapper.find('.cores-btn-toggle');
+      expect(toggleBtn.exists()).toBe(true);
+      expect(toggleBtn.text()).toContain('Show Cores');
+      await toggleBtn.trigger('click');
+      expect(wrapper.text()).toContain('Hide Cores');
+      expect(wrapper.find('.cores-breakdown-grid').exists()).toBe(true);
+      expect(wrapper.text()).toContain('C0');
+      expect(wrapper.text()).toContain('C1');
+    });
+
+    it('renders dedicated WidgetVms with status chips and clean metadata without text clipping', () => {
+      nasState.vms = [
+        {
+          name: 'vms/debian-server',
+          vmName: 'debian-server',
+          vcpus: 2,
+          memoryMib: 4096,
+          vncPort: 0,
+          state: 'RUNNING',
+        } as any,
+        {
+          name: 'vms/windows-10',
+          vmName: 'windows-10',
+          vcpus: 8,
+          memoryMib: 16384,
+          vncPort: 0,
+          state: 'STOPPED',
+        } as any,
+      ];
+
+      const wrapper = mount(WidgetVms);
+      expect(wrapper.text()).toContain('Virtual Machines');
+      expect(wrapper.text()).toContain('1/2'); // running / total
+      expect(wrapper.text()).toContain('debian-server');
+      expect(wrapper.text()).toContain('2 vCPU · 4096 MiB · VNC :0');
+      expect(wrapper.text()).toContain('Running');
+      expect(wrapper.text()).toContain('windows-10');
+      expect(wrapper.text()).toContain('Stopped');
+    });
+
+    it('renders dedicated WidgetApps with Docker Compose and LXC containers', () => {
+      nasState.dockerApps = [
+        {
+          name: 'dockerApps/clickhouse',
+          appId: 'clickhouse',
+          title: 'Clickhouse',
+          state: 'RUNNING',
+          statusText: '1/1 running',
+          containers: [{ id: 'c1', name: 'ch', state: 'running' }],
+        } as any,
+      ];
+      nasState.lxcContainers = [
+        {
+          name: 'lxcContainers/alpine',
+          containerName: 'Alpine Linux',
+          distribution: 'alpine',
+          ipv4Address: '192.168.1.50',
+          state: 'STOPPED',
+        } as any,
+      ];
+
+      const wrapper = mount(WidgetApps);
+      expect(wrapper.text()).toContain('Apps & Containers');
+      expect(wrapper.text()).toContain('1/2');
+      expect(wrapper.text()).toContain('Clickhouse');
+      expect(wrapper.text()).toContain('APP');
+      expect(wrapper.text()).toContain('Running');
+      expect(wrapper.text()).toContain('Alpine Linux');
+      expect(wrapper.text()).toContain('LXC');
+      expect(wrapper.text()).toContain('Stopped');
+    });
+
+    it('renders dedicated WidgetShares with truncated paths and isolated RW/RO badges without overlap', () => {
+      nasState.cifsShares = [
+        {
+          name: 'cifsShares/habackups',
+          shareName: 'HABackups',
+          path: '/mnt/storage/library/ha-backups',
+          readOnly: false,
+          enabled: true,
+        } as any,
+        {
+          name: 'cifsShares/software',
+          shareName: 'Software',
+          path: '/mnt/raid0/torrents/downloads/Software',
+          readOnly: false,
+          enabled: true,
+        } as any,
+      ];
+      nasState.webdavShares = [
+        {
+          name: 'webdavShares/movies',
+          urlPrefix: '/dav/movies',
+          path: '/mnt/raid0/torrents/downloads/Movies',
+          readOnly: true,
+          enabled: true,
+        } as any,
+      ];
+
+      const wrapper = mount(WidgetShares);
+      expect(wrapper.text()).toContain('Network Shares');
+      expect(wrapper.text()).toContain('3/3');
+      expect(wrapper.text()).toContain('//nas/HABackups');
+      expect(wrapper.text()).toContain('/mnt/storage/library/ha-backups');
+      expect(wrapper.text()).toContain('//nas/Software');
+      expect(wrapper.text()).toContain('/mnt/raid0/torrents/downloads/Software');
+      expect(wrapper.text()).toContain('/dav/movies');
+      expect(wrapper.text()).toContain('SMB');
+      expect(wrapper.text()).toContain('WEBDAV');
+
+      const permBadges = wrapper.findAll('.perm-badge');
+      expect(permBadges.length).toBe(3);
+      expect(permBadges[0].classes()).toContain('perm-rw');
+      expect(permBadges[0].text()).toBe('RW');
+      expect(permBadges[2].classes()).toContain('perm-ro');
+      expect(permBadges[2].text()).toBe('RO');
+    });
+
+    it('renders WidgetWorkloads unified wrapper displaying all three sub-widgets', () => {
+      const wrapper = mount(WidgetWorkloads);
+      expect(wrapper.findComponent(WidgetVms).exists()).toBe(true);
+      expect(wrapper.findComponent(WidgetApps).exists()).toBe(true);
+      expect(wrapper.findComponent(WidgetShares).exists()).toBe(true);
     });
   });
 });

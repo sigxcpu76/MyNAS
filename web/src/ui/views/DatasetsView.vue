@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
   mdiCamera,
   mdiChevronDown,
@@ -27,20 +27,54 @@ import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import SortableTh from '../components/SortableTh.vue';
 import PathSelector from '../components/PathSelector.vue';
+import DatasetHierarchyTree, { type DatasetTreeNode } from '../components/DatasetHierarchyTree.vue';
 import { sortHierarchy, useTableSort } from '../composables/useTableSort';
 import { confirmDelete } from '../modal';
+import { computeStorageBlastRadius } from '../utils/storageBlastRadius';
 import { nasState, notify, refreshAllData, refreshZfsSubresources } from '../store';
 
-const selectedPool = ref<string>('all');
+const props = withDefaults(
+  defineProps<{
+    initialPool?: string;
+    embedded?: boolean;
+    autoExpandRoots?: boolean;
+  }>(),
+  {
+    initialPool: 'all',
+    embedded: false,
+    autoExpandRoots: false,
+  }
+);
+
+function normalizePool(p?: string): string {
+  if (!p || p === 'all') return 'all';
+  return p.startsWith('zfsPools/') ? p : `zfsPools/${p}`;
+}
+
+const selectedPool = ref<string>(normalizePool(props.initialPool));
+
+watch(
+  () => props.initialPool,
+  (newP) => {
+    selectedPool.value = normalizePool(newP);
+  }
+);
+
 const searchQuery = ref('');
 const viewMode = ref<'tree' | 'flat'>('tree');
 const expandedPaths = ref<Set<string>>(new Set());
 
 // Modals
 const showCreateDataset = ref(false);
+const showParentPicker = ref(false);
 const editingDataset = ref<ZfsDataset | null>(null);
 const snapshotModalDataset = ref<ZfsDataset | null>(null);
 const snapshotName = ref('');
+
+function onParentPicked(node: DatasetTreeNode) {
+  datasetForm.parentPoolOrDataset = node.path || node.name;
+  showParentPicker.value = false;
+}
 
 // Dataset Form
 const datasetForm = reactive({
@@ -443,10 +477,14 @@ async function handleTakeSnapshot() {
 async function handleDeleteDataset(ds: ZfsDataset) {
   const name = ds.name;
   const shortName = ds.datasetPath || name.replace(/^zfsPools\/[^/]+\/datasets\//, '');
+  const blast = computeStorageBlastRadius(shortName);
+  const details = blast.hasDependencies
+    ? `All data, child datasets and snapshots under it will be destroyed.\n\nACTIVE DEPENDENCIES DETECTED:\n${blast.summaryWarning}`
+    : 'All data, child datasets and snapshots under it will be destroyed.';
   const res = await confirmDelete({
     kind: 'Dataset',
     name: shortName,
-    details: 'All data, child datasets and snapshots under it will be destroyed.',
+    details,
     confirmText: 'Delete Dataset',
   });
   if (!res.confirmed) return;
@@ -469,11 +507,11 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div style="display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 100%; min-width: 0">
+  <div style="display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 100%; min-width: 0">
     <!-- Header Card with "New Dataset" Button -->
-    <div class="card" style="padding: 18px 20px">
+    <div :class="props.embedded ? '' : 'card'" :style="props.embedded ? 'padding: 4px 0; margin-bottom: 4px' : 'padding: 18px 20px'">
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px">
-        <div>
+        <div v-if="!props.embedded">
           <div style="display: flex; align-items: center; gap: 10px">
             <h2 class="card-title" style="font-size: 19px; margin: 0">Datasets</h2>
             <span class="badge badge-info" style="font-size: 12px">
@@ -482,9 +520,9 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap" :style="props.embedded ? 'width: 100%; justify-content: space-between' : ''">
           <!-- Pool Filter Selector -->
-          <div style="display: flex; align-items: center; gap: 6px">
+          <div v-if="!props.embedded" style="display: flex; align-items: center; gap: 6px">
             <label style="font-size: 12px; color: var(--text-secondary)">Pool:</label>
             <select v-model="selectedPool" class="select" style="height: 32px; font-size: 12px; padding: 2px 8px">
               <option value="all">All Pools ({{ nasState.pools.length }})</option>
@@ -761,7 +799,18 @@ onMounted(async () => {
         <form @submit.prevent="handleCreateDataset">
           <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px">
             <div class="form-group">
-              <label>Parent Pool or Dataset</label>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px">
+                <label style="margin: 0">Parent Pool or Dataset</label>
+                <button
+                  type="button"
+                  class="btn btn-xs btn-ghost"
+                  style="padding: 1px 6px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; color: var(--accent-primary)"
+                  @click="showParentPicker = true"
+                >
+                  <MdiIcon :path="mdiTreeOutline" size="13" />
+                  <span>Browse Hierarchy</span>
+                </button>
+              </div>
               <input v-model="datasetForm.parentPoolOrDataset" class="input mono" placeholder="tank or tank/ds1" required />
             </div>
 
@@ -946,6 +995,26 @@ onMounted(async () => {
             <button type="submit" class="btn btn-success btn-sm">Take Snapshot</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- Parent Dataset Picker Modal -->
+    <div v-if="showParentPicker" class="modal-overlay" @click.self="showParentPicker = false">
+      <div class="modal-container" style="max-width: 680px; width: 95vw; max-height: 80vh">
+        <div class="modal-header">
+          <h3 class="modal-title" style="margin: 0; font-size: 16px; font-weight: 700">Select Parent ZFS Dataset</h3>
+          <button class="btn btn-sm btn-icon" @click="showParentPicker = false">
+            <MdiIcon :path="mdiClose" size="16" />
+          </button>
+        </div>
+        <div style="padding: 16px; overflow-y: auto; flex: 1">
+          <DatasetHierarchyTree
+            return-type="path"
+            :selectable-pool-root="true"
+            title="Available Datasets & Pools"
+            @select="onParentPicked"
+          />
+        </div>
       </div>
     </div>
   </div>

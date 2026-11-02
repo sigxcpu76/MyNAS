@@ -29,7 +29,9 @@ import {
 import MdiIcon from '../components/MdiIcon.vue';
 import EmbeddedTerminal from '../components/EmbeddedTerminal.vue';
 import DockerTerminalModal, { type TerminalContainerOption } from '../components/DockerTerminalModal.vue';
+import LogViewer from '../components/LogViewer.vue';
 import { useAutoScroll } from '../composables/useAutoScroll';
+import { stripAnsi } from '../utils/ansi';
 import { services } from '../../container';
 import {
   type LxcContainer,
@@ -418,8 +420,8 @@ async function fetchLogs(silent = false) {
 }
 
 function copyLogs() {
-  navigator.clipboard.writeText(logsContent.value);
-  notify('info', 'Logs copied to clipboard');
+  navigator.clipboard.writeText(stripAnsi(logsContent.value));
+  notify('info', 'Logs copied to clipboard (clean plain text)');
 }
 
 watch(
@@ -717,7 +719,7 @@ onBeforeUnmount(() => {
     <!-- Subtab 4: Logs -->
     <div v-else-if="props.activeSubTab === 'logs'" class="lxc-tab-content">
       <div class="card detail-card">
-        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
           <div>
             <h3 class="card-title">Container Console Logs</h3>
             <p class="card-subtitle">Recent boot, console and kernel messages for {{ cleanContainerName }}</p>
@@ -729,42 +731,16 @@ onBeforeUnmount(() => {
               <option :value="250">Last 250 lines</option>
               <option :value="500">Last 500 lines</option>
             </select>
-            <button
-              class="btn btn-sm"
-              :class="autoScroll ? 'btn-primary' : 'btn-secondary'"
-              :title="autoScroll ? 'Auto-scroll enabled (click to pause)' : 'Click to follow logs automatically'"
-              @click="toggleAutoScroll"
-            >
-              <MdiIcon :path="mdiChevronDoubleDown" size="14" style="margin-right: 4px" />
-              <span>Auto-scroll</span>
-            </button>
-            <button class="btn btn-sm btn-secondary" :disabled="isLoadingLogs" @click="fetchLogs(false)">
-              <MdiIcon :path="mdiRefresh" size="14" style="margin-right: 4px" :class="{ 'spin-icon': isLoadingLogs }" />
-              <span>Refresh</span>
-            </button>
-            <button class="btn btn-sm btn-secondary" :disabled="!logsContent" @click="copyLogs">
-              <MdiIcon :path="mdiContentCopy" size="14" style="margin-right: 4px" />
-              <span>Copy</span>
-            </button>
           </div>
         </div>
-        <div class="card-body">
-          <pre
-            ref="logContainerRef"
-            class="mono font-xs"
-            style="
-              background: var(--bg-base);
-              padding: 16px;
-              border-radius: 6px;
-              border: 1px solid var(--border-subtle);
-              color: var(--text-secondary);
-              max-height: 520px;
-              overflow-y: auto;
-              white-space: pre-wrap;
-              word-break: break-all;
-            "
-            @scroll="onLogScroll"
-          >{{ isLoadingLogs ? 'Loading logs...' : logsContent }}</pre>
+        <div class="card-body" style="padding: 12px">
+          <LogViewer
+            :logs="logsContent"
+            :loading="isLoadingLogs"
+            max-height="620px"
+            empty-text="No log entries recorded for this container."
+            @refresh="fetchLogs(false)"
+          />
         </div>
       </div>
     </div>

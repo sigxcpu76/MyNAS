@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import {
   mdiLayers,
   mdiServer,
@@ -22,8 +22,16 @@ const emit = defineEmits<{
   (e: 'open-lxc-terminal', c: LxcContainer): void;
 }>();
 
-const activeTab = ref<'vms' | 'lxc'>('vms');
+const activeTab = ref<'vms' | 'lxc'>(nasState.activeTab === 'lxc' ? 'lxc' : 'vms');
 const actionLoading = ref(false);
+
+watch(
+  () => nasState.activeTab,
+  (tab) => {
+    if (tab === 'lxc') activeTab.value = 'lxc';
+    else if (tab === 'kvm') activeTab.value = 'vms';
+  }
+);
 
 const vms = computed(() => nasState.vms || []);
 const lxcContainers = computed(() => nasState.lxcContainers || []);

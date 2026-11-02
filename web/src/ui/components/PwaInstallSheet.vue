@@ -140,21 +140,21 @@ async function handleInstallClick() {
             </div>
           </div>
         </div>
+      </div>
 
-        <!-- Direct Native APK Download -->
-        <div class="native-apk-box">
-          <div class="apk-box-header">
-            <MdiIcon :path="mdiAndroid" size="18" style="color: #4ade80" />
-            <span class="apk-box-title">Or Get the Native Android App (.apk)</span>
-          </div>
-          <p class="apk-box-desc">
-            Prefer a standalone APK? Includes built-in self-signed SSL trust, server switcher, and offline persistence:
-          </p>
-          <a href="/nan-nas.apk" download="nan-nas.apk" class="btn btn-success btn-block btn-apk-download">
-            <MdiIcon :path="mdiDownload" size="18" style="margin-right: 6px;" />
-            <span>Download NaN App (.apk)</span>
-          </a>
+      <!-- Direct Native APK Download (Available whenever not on iOS) -->
+      <div v-if="!isIOS" class="native-apk-box">
+        <div class="apk-box-header">
+          <MdiIcon :path="mdiAndroid" size="18" style="color: #4ade80" />
+          <span class="apk-box-title">Or Get the Native Android App (.apk)</span>
         </div>
+        <p class="apk-box-desc">
+          Prefer a standalone APK? Includes built-in self-signed SSL trust, server switcher, and offline persistence:
+        </p>
+        <a href="/nan-nas.apk" download="nan-nas.apk" class="btn btn-success btn-block btn-apk-download">
+          <MdiIcon :path="mdiDownload" size="18" style="margin-right: 6px;" />
+          <span>Download NaN App (.apk)</span>
+        </a>
       </div>
 
       <!-- Root Certificate Authority Card for 1-Tap Trust -->

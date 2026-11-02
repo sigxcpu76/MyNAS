@@ -22,6 +22,7 @@ import MdiIcon from '../../components/MdiIcon.vue';
 import { nasState, refreshAllData } from '../../store';
 import { navigateTo } from '../../router';
 import { usePwaInstall } from '../../composables/usePwaInstall';
+import { useClientApp } from '../../composables/useClientApp';
 
 const emit = defineEmits<{
   (e: 'open-terminal'): void;
@@ -30,6 +31,7 @@ const emit = defineEmits<{
 }>();
 
 const { isStandalone, promptInstall } = usePwaInstall();
+const { clientApp } = useClientApp();
 const bannerDismissed = ref(false);
 
 const telem = computed(() => nasState.systemTelemetry);
@@ -94,15 +96,32 @@ const diskHealthyCount = computed(() => {
 });
 const diskTotalCount = computed(() => (nasState.disks || []).length);
 
-const isDegraded = computed(() => {
+const hasNoMainPool = computed(() => nasState.initialLoaded && !nasState.systemConfig?.mainPool);
+const hasFailedDisks = computed(() => {
+  return (nasState.disks || []).some((d) => {
+    if (!d.smartStatus) return false;
+    const s = d.smartStatus.toLowerCase();
+    return !s.includes('pass') && !s.includes('ok');
+  });
+});
+const hasDegradedPools = computed(() => {
   return (nasState.pools || []).some((p) => p.state && p.state !== 'ONLINE');
+});
+const isDegraded = computed(() => {
+  return hasNoMainPool.value || hasFailedDisks.value || hasDegradedPools.value;
+});
+const healthStatusText = computed(() => {
+  if (hasNoMainPool.value) return 'No Main Pool Configured';
+  if (hasDegradedPools.value) return 'Storage Pool Attention Required';
+  if (hasFailedDisks.value) return 'Disk S.M.A.R.T. Warning';
+  return 'All Core Systems Operational';
 });
 </script>
 
 <template>
   <div class="mobile-overview-container">
     <!-- PWA Install Quick Banner -->
-    <div v-if="!isStandalone && !bannerDismissed" class="pwa-quick-banner">
+    <div v-if="!isStandalone && !bannerDismissed && !clientApp.isNative" class="pwa-quick-banner">
       <div class="banner-left" @click="promptInstall">
         <div class="banner-icon">
           <MdiIcon :path="mdiCellphoneArrowDown" size="18" />
@@ -148,7 +167,7 @@ const isDegraded = computed(() => {
             :style="{ color: isDegraded ? '#f87171' : '#4ade80' }"
           />
           <span class="health-text">
-            {{ isDegraded ? 'Storage Attention Required' : 'All Core Systems Operational' }}
+            {{ healthStatusText }}
           </span>
         </div>
         <span class="host-pill">{{ telem?.host?.hostname || 'nas01' }}</span>
@@ -157,7 +176,7 @@ const isDegraded = computed(() => {
       <div class="hero-meta">
         <span>{{ telem?.host?.osName || 'Debian GNU/Linux' }}</span>
         <span v-if="telem?.host?.kernelVersion"> • {{ telem.host.kernelVersion }}</span>
-        <span> • nasctl {{ nasState.systemUpdate?.currentVersion || 'v1.6.8' }}</span>
+        <span> • nasctl {{ nasState.systemUpdate?.currentVersion || 'v1.6.9' }}</span>
       </div>
     </div>
 
@@ -306,7 +325,7 @@ const isDegraded = computed(() => {
           <span class="workload-count">{{ diskHealthyCount }} / {{ diskTotalCount }}</span>
         </div>
         <div class="workload-title">Disks & SMART</div>
-        <div class="workload-status-sub">All reporting OK</div>
+        <div class="workload-status-sub">{{ diskTotalCount > 0 && diskHealthyCount < diskTotalCount ? `${diskTotalCount - diskHealthyCount} attention needed` : 'All reporting OK' }}</div>
       </button>
 
       <!-- Host Shell -->
@@ -416,11 +435,11 @@ const isDegraded = computed(() => {
 }
 
 .hero-health-card {
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
-  border: 1px solid rgba(56, 189, 248, 0.2);
+  background: var(--bg-surface-elevated, var(--bg-surface));
+  border: 1px solid var(--border-subtle);
   border-radius: 16px;
   padding: 14px 16px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
 .hero-health-card.hero-warning {
@@ -451,7 +470,8 @@ const isDegraded = computed(() => {
   font-family: ui-monospace, monospace;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
   color: var(--accent-primary, #38bdf8);
 }
 

@@ -75,6 +75,9 @@ export class AipClient {
       ) {
         if (token) {
           window.localStorage.setItem('nas_jwt_token', token);
+          if (typeof (window as any).NanAndroidNative?.updateToken === 'function') {
+            (window as any).NanAndroidNative.updateToken(token);
+          }
         } else {
           window.localStorage.removeItem('nas_jwt_token');
         }

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -75,6 +76,7 @@ func (c *TelemetryCollector) collectCPU() domain.CpuTelemetry {
 		physicalMap := make(map[string]bool)
 		logicalCount := 0
 		var model string
+		currPhysicalId := "0"
 
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
@@ -85,10 +87,18 @@ func (c *TelemetryCollector) collectCPU() domain.CpuTelemetry {
 				}
 			} else if strings.HasPrefix(line, "processor") {
 				logicalCount++
+			} else if strings.HasPrefix(line, "physical id") {
+				parts := strings.SplitN(line, ":", 2)
+				if len(parts) == 2 {
+					currPhysicalId = strings.TrimSpace(parts[1])
+				}
 			} else if strings.HasPrefix(line, "core id") {
 				parts := strings.SplitN(line, ":", 2)
 				if len(parts) == 2 {
-					physicalMap[strings.TrimSpace(parts[1])] = true
+					coreId := strings.TrimSpace(parts[1])
+					// Unique key is physical socket + core id to properly count cores across multi-socket systems
+					key := fmt.Sprintf("%s:%s", currPhysicalId, coreId)
+					physicalMap[key] = true
 				}
 			}
 		}
@@ -652,6 +662,39 @@ func (c *TelemetryCollector) collectSensors(ctx context.Context) domain.Hardware
 		}
 	}
 
+	// Deterministically sort temperatures: CPU -> GPU -> PCI -> STORAGE -> MOTHERBOARD -> others
+	categoryPriority := func(cat string) int {
+		switch strings.ToUpper(cat) {
+		case "CPU":
+			return 1
+		case "GPU":
+			return 2
+		case "PCI":
+			return 3
+		case "STORAGE":
+			return 4
+		case "MOTHERBOARD":
+			return 5
+		case "SYSTEM":
+			return 6
+		default:
+			return 99
+		}
+	}
+
+	sort.SliceStable(res.Temperatures, func(i, j int) bool {
+		prioI := categoryPriority(res.Temperatures[i].Category)
+		prioJ := categoryPriority(res.Temperatures[j].Category)
+		if prioI != prioJ {
+			return prioI < prioJ
+		}
+		return res.Temperatures[i].Label < res.Temperatures[j].Label
+	})
+
+	sort.SliceStable(res.Fans, func(i, j int) bool {
+		return res.Fans[i].Label < res.Fans[j].Label
+	})
+
 	return res
 }
 
@@ -705,6 +748,16 @@ func (c *TelemetryCollector) parseLmSensorsJSON(out []byte, res *domain.Hardware
 			strings.Contains(lowerChip, "acpi") {
 			defaultCat = "MOTHERBOARD"
 		}
+
+		type parsedTempFeat struct {
+			name  string
+			val   float64
+			max   float64
+			crit  float64
+			alarm bool
+			cat   string
+		}
+		var tempFeats []parsedTempFeat
 
 		for featureName, featureVal := range chipData {
 			if featureName == "Adapter" {
@@ -784,7 +837,7 @@ func (c *TelemetryCollector) parseLmSensorsJSON(out []byte, res *domain.Hardware
 				continue
 			}
 
-			// 3. Check for Temperature
+			// 3. Collect Temperature feature
 			var tempVal, tempMax, tempCrit float64
 			var tempAlarm bool
 			hasTemp := false
@@ -816,22 +869,154 @@ func (c *TelemetryCollector) parseLmSensorsJSON(out []byte, res *domain.Hardware
 					cat = "GPU"
 				}
 
-				displayLabel := featureName
-				if !strings.Contains(displayLabel, chipName) {
-					displayLabel = fmt.Sprintf("%s: %s", chipName, featureName)
+				tempFeats = append(tempFeats, parsedTempFeat{
+					name:  featureName,
+					val:   tempVal,
+					max:   tempMax,
+					crit:  tempCrit,
+					alarm: tempAlarm,
+					cat:   cat,
+				})
+			}
+		}
+
+		if len(tempFeats) > 0 {
+			var coreFeats []parsedTempFeat
+			var pkgFeat *parsedTempFeat
+			var otherFeats []parsedTempFeat
+
+			for _, f := range tempFeats {
+				lowerName := strings.ToLower(f.name)
+				if strings.HasPrefix(lowerName, "core") || (f.cat == "CPU" && strings.HasPrefix(lowerName, "tccd")) {
+					coreFeats = append(coreFeats, f)
+				} else if strings.Contains(lowerName, "package") || strings.EqualFold(f.name, "tdie") || strings.EqualFold(f.name, "tctl") {
+					if pkgFeat == nil {
+						pkgCopy := f
+						pkgFeat = &pkgCopy
+					} else {
+						otherFeats = append(otherFeats, f)
+					}
+				} else {
+					otherFeats = append(otherFeats, f)
+				}
+			}
+
+			if len(coreFeats) > 0 {
+				sort.Slice(coreFeats, func(i, j int) bool {
+					idxI := extractCoreIndex(coreFeats[i].name)
+					idxJ := extractCoreIndex(coreFeats[j].name)
+					if idxI != idxJ {
+						return idxI < idxJ
+					}
+					return coreFeats[i].name < coreFeats[j].name
+				})
+
+				var sum float64
+				cores := make([]domain.CoreSensorItem, 0, len(coreFeats))
+				for _, c := range coreFeats {
+					sum += c.val
+					cores = append(cores, domain.CoreSensorItem{
+						Label:         c.name,
+						CurrentValue:  c.val,
+						HighThreshold: c.max,
+						CritThreshold: c.crit,
+					})
+				}
+				coreAvg := sum / float64(len(coreFeats))
+
+				label := ""
+				currentVal := coreAvg
+				highThresh := coreFeats[0].max
+				critThresh := coreFeats[0].crit
+				alarm := false
+
+				if pkgFeat != nil {
+					label = pkgFeat.name
+					// Rename "Package id X" to "CPU X", and "Package id" to "CPU"
+					rePkg := regexp.MustCompile(`(?i)\bPackage\s*id\s*(\d+)`)
+					if rePkg.MatchString(label) {
+						label = rePkg.ReplaceAllString(label, "CPU $1")
+					} else {
+						rePkgBare := regexp.MustCompile(`(?i)\bPackage\s*id\b`)
+						label = rePkgBare.ReplaceAllString(label, "CPU")
+					}
+					currentVal = pkgFeat.val
+					highThresh = pkgFeat.max
+					critThresh = pkgFeat.crit
+					alarm = pkgFeat.alarm
+				} else {
+					// Fallback when no explicit package sensor exists
+					reChipIdx := regexp.MustCompile(`\d+$`)
+					if m := reChipIdx.FindString(chipName); m != "" {
+						if n, err := strconv.Atoi(m); err == nil {
+							label = fmt.Sprintf("CPU %d", n)
+						} else {
+							label = "CPU"
+						}
+					} else {
+						label = "CPU"
+					}
+					for _, c := range coreFeats {
+						if c.alarm {
+							alarm = true
+							break
+						}
+					}
+				}
+
+				if !strings.HasPrefix(label, "CPU") && !strings.Contains(label, chipName) {
+					label = fmt.Sprintf("%s (%s)", label, chipName)
 				}
 
 				res.Temperatures = append(res.Temperatures, domain.HardwareSensorItem{
 					Chip:          chipName,
 					Adapter:       adapter,
-					Label:         displayLabel,
-					Category:      cat,
-					CurrentValue:  tempVal,
+					Label:         label,
+					Category:      "CPU",
+					CurrentValue:  currentVal,
+					AverageValue:  coreAvg,
 					Unit:          "°C",
-					HighThreshold: tempMax,
-					CritThreshold: tempCrit,
-					Alarm:         tempAlarm,
+					HighThreshold: highThresh,
+					CritThreshold: critThresh,
+					Alarm:         alarm,
+					Cores:         cores,
 				})
+
+				for _, of := range otherFeats {
+					dispLabel := of.name
+					if !strings.Contains(dispLabel, chipName) {
+						dispLabel = fmt.Sprintf("%s: %s", chipName, of.name)
+					}
+					res.Temperatures = append(res.Temperatures, domain.HardwareSensorItem{
+						Chip:          chipName,
+						Adapter:       adapter,
+						Label:         dispLabel,
+						Category:      of.cat,
+						CurrentValue:  of.val,
+						Unit:          "°C",
+						HighThreshold: of.max,
+						CritThreshold: of.crit,
+						Alarm:         of.alarm,
+					})
+				}
+			} else {
+				for _, f := range tempFeats {
+					displayLabel := f.name
+					if !strings.Contains(displayLabel, chipName) {
+						displayLabel = fmt.Sprintf("%s: %s", chipName, f.name)
+					}
+					res.Temperatures = append(res.Temperatures, domain.HardwareSensorItem{
+						Chip:          chipName,
+						Adapter:       adapter,
+						Label:         displayLabel,
+						Category:      f.cat,
+						CurrentValue:  f.val,
+						Unit:          "°C",
+						HighThreshold: f.max,
+						CritThreshold: f.crit,
+						Alarm:         f.alarm,
+					})
+				}
 			}
 		}
 	}
@@ -927,4 +1112,14 @@ func toFloat64(val interface{}) (float64, bool) {
 		}
 	}
 	return 0, false
+}
+
+func extractCoreIndex(label string) int {
+	parts := strings.Fields(label)
+	for _, p := range parts {
+		if n, err := strconv.Atoi(p); err == nil {
+			return n
+		}
+	}
+	return 9999
 }

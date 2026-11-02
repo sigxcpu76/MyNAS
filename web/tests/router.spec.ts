@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { getTabFromPath, getPathFromTab, navigateTo, initRouter } from '../src/ui/router';
-import { nasState } from '../src/ui/store';
+import { getTabFromPath, getPathFromTab, navigateTo, initRouter, resolveRouteFromPath, getCurrentPathFromState } from '../src/ui/router';
+import { nasState, selectResource } from '../src/ui/store';
 
 describe('SPA History Router', () => {
   beforeEach(() => {
     nasState.activeTab = 'overview';
+    nasState.selectedResourceId = '';
     window.history.replaceState(null, '', '/');
   });
 
@@ -30,6 +31,41 @@ describe('SPA History Router', () => {
     expect(getTabFromPath('/unknown-path')).toBe('overview');
   });
 
+  it('resolves parameterized deep routes for resources and subtabs', () => {
+    expect(resolveRouteFromPath('/kvm/win11/hardware')).toEqual({
+      tab: 'kvm',
+      resourceId: 'vm:win11',
+      subTab: 'hardware',
+    });
+    expect(resolveRouteFromPath('/storage/pools/tank/topology')).toEqual({
+      tab: 'storage-pools',
+      resourceId: 'pool:tank',
+      subTab: 'topology',
+    });
+    expect(resolveRouteFromPath('/apps/jellyfin/logs')).toEqual({
+      tab: 'docker',
+      resourceId: 'docker:jellyfin',
+      subTab: 'logs',
+    });
+    expect(resolveRouteFromPath('/lxc/alpine01/terminal')).toEqual({
+      tab: 'lxc',
+      resourceId: 'lxc:alpine01',
+      subTab: 'terminal',
+    });
+  });
+
+  it('formats hierarchical URLs from state', () => {
+    nasState.activeTab = 'kvm';
+    nasState.selectedResourceId = 'vm:win11';
+    nasState.vmSubTab = 'snapshots';
+    expect(getCurrentPathFromState()).toBe('/kvm/win11/snapshots');
+
+    nasState.activeTab = 'storage-pools';
+    nasState.selectedResourceId = 'pool:tank';
+    nasState.poolSubTab = 'datasets';
+    expect(getCurrentPathFromState()).toBe('/storage/pools/tank/datasets');
+  });
+
   it('maps tabs to canonical URL paths', () => {
     expect(getPathFromTab('docker')).toBe('/apps');
     expect(getPathFromTab('zfs')).toBe('/zfs');
@@ -49,6 +85,21 @@ describe('SPA History Router', () => {
     expect(nasState.activeTab).toBe('docker');
     expect(window.location.pathname).toBe('/apps');
     expect(window.history.state).toEqual({ tab: 'docker' });
+  });
+
+  it('handles popstate browser back from VM detail to KVM list view', () => {
+    window.history.replaceState(null, '', '/kvm/win11');
+    initRouter();
+
+    expect(nasState.activeTab).toBe('kvm');
+    expect(nasState.selectedResourceId).toBe('vm:win11');
+
+    // Simulate browser Back button to /kvm (list view)
+    window.history.replaceState({ tab: 'kvm' }, '', '/kvm');
+    window.dispatchEvent(new PopStateEvent('popstate', { state: { tab: 'kvm' } }));
+
+    expect(nasState.activeTab).toBe('kvm');
+    expect(nasState.selectedResourceId).toBe('node:vms');
   });
 
   it('handles popstate browser back/forward navigation', () => {
