@@ -69,6 +69,8 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
+        binding.webView.overScrollMode = View.OVER_SCROLL_NEVER
+
         val webSettings = binding.webView.settings
         webSettings.javaScriptEnabled = true
         webSettings.domStorageEnabled = true
@@ -81,7 +83,7 @@ class MainActivity : AppCompatActivity() {
 
         // Custom User-Agent to allow web application to identify Android native shell
         val defaultUA = webSettings.userAgentString
-        webSettings.userAgentString = "$defaultUA NaN-NAS-Android/1.6.2"
+        webSettings.userAgentString = "$defaultUA NaN-NAS-Android/1.6.4"
 
         binding.webView.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {

@@ -679,7 +679,10 @@ html[data-font-size="xlarge"] {
   background: var(--scrollbar-track);
 }
 
+html,
 body {
+  overscroll-behavior: none;
+  overscroll-behavior-y: none;
   background-color: var(--bg-base);
   color: var(--text-primary);
   font-family: var(--font-sans);
