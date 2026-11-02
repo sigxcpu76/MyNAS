@@ -63,6 +63,10 @@ func (s *stubZfsPort) ScrubPool(ctx context.Context, id string) (*domain.ZfsPool
 	return &p, nil
 }
 
+func (s *stubZfsPort) SyncCacheFile(ctx context.Context) error {
+	return nil
+}
+
 func (s *stubZfsPort) GetDataset(ctx context.Context, poolID, datasetID string) (*domain.ZfsDataset, error) {
 	key := poolID + "/" + datasetID
 	ds, ok := s.datasets[key]

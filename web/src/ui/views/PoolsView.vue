@@ -43,9 +43,7 @@ function openPoolDetails(pool: ZfsPool) {
 }
 
 onMounted(() => {
-  if (nasState.disks.length === 0 || nasState.pools.length === 0) {
-    refreshAllData();
-  }
+  refreshAllData();
 });
 
 // ---------------------------------------------------------------------------
@@ -153,6 +151,27 @@ async function handleImportPool() {
     await refreshAllData();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to import ZFS pool');
+  } finally {
+    importingPool.value = false;
+  }
+}
+
+const unimportedDiscoveredPools = computed(() => {
+  const discovered = nasState.systemConfig?.discoveredPools || [];
+  const importedNames = new Set(
+    nasState.pools.map((p) => (p.poolName || p.name.replace(/^zfsPools\//, '')).trim())
+  );
+  return discovered.filter((dp) => !dp.isImported && !importedNames.has(dp.poolName.trim()));
+});
+
+async function importDiscoveredPool(name: string) {
+  importingPool.value = true;
+  try {
+    await services.zfs.importPool(name, true, '/mnt');
+    notify('success', `Pool "${name}" imported successfully under /mnt`);
+    await refreshAllData();
+  } catch (err: any) {
+    notify('error', `Failed to import pool "${name}": ${err?.message || err}`);
   } finally {
     importingPool.value = false;
   }
@@ -910,6 +929,35 @@ function viewPoolDatasets(poolName: string) {
           </button>
         </div>
       </div>
+    </div>
+
+    <!-- Discovered Unimported Pools Alert / Recovery Tile -->
+    <div
+      v-for="unp in unimportedDiscoveredPools"
+      :key="unp.poolName"
+      class="card"
+      style="margin-bottom: 16px; padding: 14px 18px; border-left: 4px solid var(--warning); background: var(--bg-tertiary); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap"
+    >
+      <div style="display: flex; align-items: center; gap: 12px">
+        <MdiIcon :path="mdiAlertCircleOutline" size="24" style="color: var(--warning); flex-shrink: 0" />
+        <div>
+          <div style="font-weight: 600; font-size: 14px; color: var(--text-primary); display: flex; align-items: center; gap: 8px">
+            Unimported Storage Pool Detected: <span class="mono text-sky">{{ unp.poolName }}</span>
+            <span class="badge badge-warning" style="font-size: 10px">NOT IMPORTED</span>
+          </div>
+          <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px">
+            This pool exists on physical storage disks but is currently detached from the active filesystem.
+          </div>
+        </div>
+      </div>
+      <button
+        class="btn btn-sm btn-primary"
+        :disabled="importingPool"
+        @click="importDiscoveredPool(unp.poolName)"
+      >
+        <MdiIcon :path="mdiDatabaseImportOutline" size="14" style="margin-right: 4px" />
+        Import {{ unp.poolName }}
+      </button>
     </div>
 
     <!-- Moving Skeleton Placeholders when Loading -->

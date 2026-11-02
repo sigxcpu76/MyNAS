@@ -380,7 +380,7 @@ export function mapZfsVdev(raw: any): ZfsVdev {
     name: raw?.name ?? '',
     type: raw?.type ?? 'data',
     layout: raw?.layout ?? '',
-    state: raw?.state ?? 'ONLINE',
+    state: raw?.state ? String(raw.state).trim() : 'OFFLINE',
     path: raw?.path ?? '',
     readErrors: raw?.readErrors ?? raw?.read_errors ?? '0',
     writeErrors: raw?.writeErrors ?? raw?.write_errors ?? '0',
@@ -404,7 +404,7 @@ export function mapZfsPool(raw: any): ZfsPool {
   return {
     name: rawName || (poolName ? `zfsPools/${poolName}` : ''),
     poolName,
-    state: raw?.state ?? 'ONLINE',
+    state: raw?.state ? String(raw.state).trim() : 'OFFLINE',
     sizeBytes: normalizeInt64(raw?.sizeBytes ?? raw?.size_bytes),
     allocatedBytes: normalizeInt64(raw?.allocatedBytes ?? raw?.allocated_bytes),
     freeBytes: normalizeInt64(raw?.freeBytes ?? raw?.free_bytes),

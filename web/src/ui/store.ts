@@ -517,6 +517,25 @@ export async function refreshAllData(): Promise<void> {
         }
       }
       nasState.pools = pools;
+    } else if (zfsOk && nasState.pools.length > 0) {
+      for (const p of nasState.pools) {
+        p.state = 'UNKNOWN' as any;
+      }
+    }
+
+    // Reconcile with discovered unimported pools to prevent false ONLINE badges
+    if (nasState.systemConfig?.discoveredPools && nasState.systemConfig.discoveredPools.length > 0) {
+      const unimportedSet = new Set(
+        nasState.systemConfig.discoveredPools
+          .filter((dp) => !dp.isImported)
+          .map((dp) => dp.poolName.replace(/^zfsPools\//, '').trim())
+      );
+      for (const p of nasState.pools) {
+        const pName = (p.poolName || p.name.replace(/^zfsPools\//, '')).trim();
+        if (unimportedSet.has(pName)) {
+          p.state = 'OFFLINE' as any;
+        }
+      }
     }
     if (vms !== null) nasState.vms = vms;
     if (dockerContainers !== null) nasState.dockerContainers = dockerContainers;

@@ -67,6 +67,10 @@ func (s *ZfsService) ImportPool(ctx context.Context, poolName string, force bool
 	return s.engine.ImportPool(ctx, cleanName, force, altroot)
 }
 
+func (s *ZfsService) SyncCacheFile(ctx context.Context) error {
+	return s.engine.SyncCacheFile(ctx)
+}
+
 func (s *ZfsService) ScrubPool(ctx context.Context, id string) (*domain.ZfsPool, error) {
 	if err := domain.ValidateResourceID(id, "zfs_pool"); err != nil {
 		return nil, err

@@ -215,6 +215,9 @@ func (m *mockZfsEngine) DeleteDataset(ctx context.Context, poolID, datasetID str
 	m.deletedDatasets = append(m.deletedDatasets, datasetID)
 	return nil
 }
+func (m *mockZfsEngine) SyncCacheFile(ctx context.Context) error {
+	return nil
+}
 
 func TestLxcAdapter_DedicatedZfsDataset(t *testing.T) {
 	ctx := context.Background()

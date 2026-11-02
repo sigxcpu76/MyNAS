@@ -80,6 +80,10 @@ func (s *cliZfsPort) CreateDataset(ctx context.Context, ds domain.ZfsDataset) (*
 	return &ds, nil
 }
 
+func (s *cliZfsPort) SyncCacheFile(ctx context.Context) error {
+	return nil
+}
+
 type cliKvmPort struct {
 	ports.KvmHypervisorPort
 	vms map[string]domain.VirtualMachine

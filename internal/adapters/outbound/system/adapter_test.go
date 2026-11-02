@@ -50,6 +50,10 @@ func (m *testZfsPort) CreateDataset(ctx context.Context, ds domain.ZfsDataset) (
 	return &ds, nil
 }
 
+func (m *testZfsPort) SyncCacheFile(ctx context.Context) error {
+	return nil
+}
+
 func TestSystemAdapterPoolSelectionAndRecovery(t *testing.T) {
 	tempDir := t.TempDir()
 	configFile := filepath.Join(tempDir, "config.yaml")

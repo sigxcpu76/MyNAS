@@ -460,8 +460,12 @@ EOF
     chroot "$TARGET" systemctl enable zfs-import-cache.service 2>/dev/null || true
     chroot "$TARGET" systemctl enable zfs-mount.service 2>/dev/null || true
 
-    # Create zpool.cache
-    zpool set cachefile="$TARGET/etc/zfs/zpool.cache" rpool || true
+    # Create zpool.cache for appliance boot
+    mkdir -p "$TARGET/etc/zfs"
+    zpool set cachefile=/etc/zfs/zpool.cache rpool || true
+    if [ -f /etc/zfs/zpool.cache ]; then
+        cp -f /etc/zfs/zpool.cache "$TARGET/etc/zfs/zpool.cache"
+    fi
 
     run_step 90 "Installing UEFI & Legacy BIOS bootloaders..."
     # 0. Generate /etc/default/grub with ZFS boot parameters and serial console
@@ -518,7 +522,18 @@ EOF
     umount -l "$TARGET/sys" 2>/dev/null || true
     umount -l "$TARGET/proc" 2>/dev/null || true
 
+    # Preserve zpool.cache across zpool export (as export clears the cachefile)
+    if [ -f "$TARGET/etc/zfs/zpool.cache" ]; then
+        cp -f "$TARGET/etc/zfs/zpool.cache" /tmp/zpool.cache.appliance 2>/dev/null || true
+    fi
+
     zpool export rpool 2>/dev/null || true
+
+    # Restore zpool.cache into target so first boot can use zfs-import-cache.service
+    if [ -f /tmp/zpool.cache.appliance ]; then
+        mkdir -p "$TARGET/etc/zfs"
+        cp -f /tmp/zpool.cache.appliance "$TARGET/etc/zfs/zpool.cache" 2>/dev/null || true
+    fi
 
     run_step 100 "Installation completed successfully!"
     sleep 2

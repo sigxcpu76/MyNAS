@@ -345,7 +345,9 @@ func (a *Adapter) CreatePool(ctx context.Context, pool domain.ZfsPool) (*domain.
 	}
 
 	_ = os.MkdirAll("/mnt", 0755)
+	_ = os.MkdirAll("/etc/zfs", 0755)
 	args := []string{"create", "-m", pool.Mountpoint}
+	args = append(args, "-o", "cachefile=/etc/zfs/zpool.cache")
 	if pool.Compression != "" && pool.Compression != "off" {
 		args = append(args, "-O", fmt.Sprintf("compression=%s", pool.Compression))
 	}
@@ -416,6 +418,8 @@ func (a *Adapter) CreatePool(ctx context.Context, pool domain.ZfsPool) (*domain.
 		return nil, fmt.Errorf("zpool create failed: %v (%s)", err, strings.TrimSpace(string(out)))
 	}
 
+	_ = exec.CommandContext(ctx, "zpool", "set", "cachefile=/etc/zfs/zpool.cache", pool.ID).Run()
+
 	return a.GetPool(ctx, pool.ID)
 }
 
@@ -462,7 +466,9 @@ func (a *Adapter) ImportPool(ctx context.Context, poolName string, force bool, a
 		targetAltroot = "/mnt"
 	}
 	_ = os.MkdirAll(targetAltroot, 0755)
+	_ = os.MkdirAll("/etc/zfs", 0755)
 	args = append(args, "-R", targetAltroot)
+	args = append(args, "-o", "cachefile=/etc/zfs/zpool.cache")
 
 	// Instruct zpool to only scan physical disk paths and ignore /dev/zd* zvols
 	if _, err := os.Stat("/dev/disk/by-id"); err == nil {
@@ -479,7 +485,32 @@ func (a *Adapter) ImportPool(ctx context.Context, poolName string, force bool, a
 		return nil, fmt.Errorf("zpool import failed: %v (%s)", err, strings.TrimSpace(string(out)))
 	}
 
+	// Guarantee cachefile is set and persistent for systemd zfs-import-cache across host reboots
+	_ = exec.CommandContext(ctx, "zpool", "set", "cachefile=/etc/zfs/zpool.cache", cleanID).Run()
+	_ = exec.CommandContext(ctx, "zfs", "mount", "-a").Run()
+
 	return a.GetPool(ctx, cleanID)
+}
+
+func (a *Adapter) SyncCacheFile(ctx context.Context) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if !a.canUseHostZfs() {
+		return nil
+	}
+	_ = os.MkdirAll("/etc/zfs", 0755)
+	pools, err := a.listHostPools(ctx)
+	if err != nil {
+		return err
+	}
+	for _, p := range pools {
+		cleanID := strings.TrimPrefix(p.ID, "zfsPools/")
+		if cleanID == "" || domain.IsZvolDevice(cleanID) {
+			continue
+		}
+		_ = exec.CommandContext(ctx, "zpool", "set", "cachefile=/etc/zfs/zpool.cache", cleanID).Run()
+	}
+	return nil
 }
 
 func (a *Adapter) DeletePool(ctx context.Context, id string, force bool) error {

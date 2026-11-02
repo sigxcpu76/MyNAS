@@ -57,9 +57,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun getAppVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.6.5"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.6.6"
         } catch (e: Exception) {
-            "1.6.5"
+            "1.6.6"
         }
     }
 

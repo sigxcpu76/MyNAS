@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -148,21 +149,51 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	systemAdapter := system.NewAdapter(zfsAdapter, prereqAdapter)
 	systemSvc := application.NewSystemService(systemAdapter)
 
-	// Auto-Discovery on Reinstall / Boot:
-	// If main pool is not selected, scan imported pools for existing .nas-system
-	if cfg.System.MainPool == "" && cfg.System.AutoDiscover {
+	// 0. Ensure /etc/zfs exists
+	_ = os.MkdirAll("/etc/zfs", 0755)
+
+	// Step A: Auto-Import Configured Main Pool on Boot / Reboot
+	if cfg.System.MainPool != "" {
+		cleanMain := strings.TrimPrefix(strings.TrimSpace(cfg.System.MainPool), "zfsPools/")
+		if cleanMain != "" {
+			if _, getErr := zfsAdapter.GetPool(ctx, cleanMain); getErr != nil {
+				logger.Warn("configured main storage pool is not currently imported, attempting boot-time import", "main_pool", cleanMain)
+				if impPool, impErr := zfsAdapter.ImportPool(ctx, cleanMain, true, "/mnt"); impErr == nil && impPool != nil {
+					logger.Info("successfully imported main storage pool on startup", "main_pool", cleanMain)
+					prereqAdapter.SetMainPool(cleanMain)
+				} else {
+					logger.Error("failed to auto-import configured main storage pool", "main_pool", cleanMain, "error", impErr)
+				}
+			} else {
+				prereqAdapter.SetMainPool(cleanMain)
+			}
+		}
+	}
+
+	// Step B: Auto-Discovery on Reinstall / Boot:
+	// If main pool is still not selected/imported, scan discovered pools for existing .nas-system
+	if prereqAdapter.GetMainPool() == "" && cfg.System.AutoDiscover {
 		if discovered, discErr := systemAdapter.DiscoverPools(ctx); discErr == nil {
 			for _, dp := range discovered {
-				if dp.IsImported && dp.HasNasSystem {
-					logger.Info("auto-discovering existing NAS system dataset on imported pool", "pool", dp.PoolName, "dataset", dp.DatasetPath)
-					if _, selErr := systemAdapter.SelectMainPool(ctx, dp.PoolName, true); selErr == nil {
-						logger.Info("re-discovered and restored NAS configuration from imported pool", "main_pool", dp.PoolName)
-						break
+				cleanDP := strings.TrimPrefix(dp.PoolName, "zfsPools/")
+				if !dp.IsImported {
+					logger.Info("attempting to import discovered pool to check for NAS system dataset", "pool", cleanDP)
+					if _, impErr := zfsAdapter.ImportPool(ctx, cleanDP, true, "/mnt"); impErr != nil {
+						logger.Debug("could not import discovered pool for inspection", "pool", cleanDP, "error", impErr)
+						continue
 					}
+				}
+				if _, selErr := systemAdapter.SelectMainPool(ctx, cleanDP, true); selErr == nil {
+					logger.Info("re-discovered and restored NAS configuration from pool", "main_pool", cleanDP)
+					break
 				}
 			}
 		}
 	}
+
+	// Step C: Ensure /etc/zfs/zpool.cache is synchronized for all active pools and mount all datasets
+	_ = zfsAdapter.SyncCacheFile(ctx)
+	_ = exec.CommandContext(ctx, "zfs", "mount", "-a").Run()
 
 	// Resolve State Storage Location:
 	// If a main pool is selected, use its persistent .nas-system dataset; otherwise fallback to stateDir

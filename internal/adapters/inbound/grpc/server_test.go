@@ -119,6 +119,10 @@ func (s *stubZfsServerPort) ListVolumes(ctx context.Context, poolID string) ([]d
 	return nil, nil
 }
 
+func (s *stubZfsServerPort) SyncCacheFile(ctx context.Context) error {
+	return nil
+}
+
 func TestAIPResourceNamesPaginationAndErrors(t *testing.T) {
 	ctx := context.Background()
 	dockerAdapter := docker.NewAdapter()

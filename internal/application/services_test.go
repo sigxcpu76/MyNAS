@@ -88,6 +88,10 @@ func (s *stubZfsEnginePort) CreateVolume(ctx context.Context, volume domain.ZfsV
 	return &volume, nil
 }
 
+func (s *stubZfsEnginePort) SyncCacheFile(ctx context.Context) error {
+	return nil
+}
+
 type stubKvmPort struct {
 	ports.KvmHypervisorPort
 	vms      map[string]domain.VirtualMachine
