@@ -12,6 +12,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import org.nan.nas.databinding.ActivityMainBinding
 
@@ -38,7 +39,20 @@ class MainActivity : AppCompatActivity() {
 
         setupToolbar()
         setupWebView()
+        setupBackNavigation()
         loadServerUrl()
+    }
+
+    private fun setupBackNavigation() {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (binding.webView.canGoBack()) {
+                    binding.webView.goBack()
+                } else {
+                    finish()
+                }
+            }
+        })
     }
 
     private fun setupToolbar() {
@@ -152,15 +166,5 @@ class MainActivity : AppCompatActivity() {
         }
         startActivity(intent)
         finish()
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        if (binding.webView.canGoBack()) {
-            binding.webView.goBack()
-        } else {
-            @Suppress("DEPRECATION")
-            super.onBackPressed()
-        }
     }
 }

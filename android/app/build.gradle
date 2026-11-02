@@ -5,15 +5,15 @@ plugins {
 
 android {
     namespace 'org.nan.nas'
-    compileSdk 33
-    buildToolsVersion "33.0.2"
+    compileSdk 34
+    buildToolsVersion "34.0.0"
 
     defaultConfig {
         applicationId "org.nan.nas"
         minSdk 26
-        targetSdk 33
-        versionCode 1
-        versionName "1.5.0"
+        targetSdk 34
+        versionCode 2
+        versionName "1.5.1"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
