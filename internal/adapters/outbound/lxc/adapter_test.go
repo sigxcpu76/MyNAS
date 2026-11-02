@@ -313,9 +313,9 @@ func TestLxcAdapter_MetricsSampling_CgroupV2(t *testing.T) {
 		t.Errorf("expected MemoryUsedMiB == 16, got %d", c1.MemoryUsedMiB)
 	}
 
-	// Simulate CPU time advancement
-	time.Sleep(200 * time.Millisecond)
-	// Add 100,000 usec (0.1s CPU time over ~0.2s elapsed ~= ~50% CPU)
+	// Simulate CPU time advancement (exceeding background warmup goroutine interval)
+	time.Sleep(450 * time.Millisecond)
+	// Add 100,000 usec (0.1s CPU time over ~0.45s elapsed ~= ~22% CPU)
 	updatedCpuStat := "usage_usec 1100000\nuser_usec 450000\nsystem_usec 650000\n"
 	if err := os.WriteFile(filepath.Join(cgDir, "cpu.stat"), []byte(updatedCpuStat), 0644); err != nil {
 		t.Fatalf("failed to update cpu.stat: %v", err)
