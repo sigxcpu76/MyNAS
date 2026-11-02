@@ -94,6 +94,23 @@ service NasService {
   }
 
   // ---------------------------------------------------------------------------
+  // OTA System Updates
+  // ---------------------------------------------------------------------------
+
+  rpc CheckSystemUpdate(CheckSystemUpdateRequest) returns (CheckSystemUpdateResponse) {
+    option (google.api.http) = {
+      get: "/v1/system/update"
+    };
+  }
+
+  rpc ApplySystemUpdate(ApplySystemUpdateRequest) returns (ApplySystemUpdateResponse) {
+    option (google.api.http) = {
+      post: "/v1/system/update:apply"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // Prerequisites (AIP-131 Get, AIP-132 List, AIP-136 Custom :check)
   // ---------------------------------------------------------------------------
 

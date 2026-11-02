@@ -13,6 +13,7 @@ import (
 	"github.com/sigxcpu/nas/internal/application"
 	"github.com/sigxcpu/nas/internal/domain"
 	nasv1 "github.com/sigxcpu/nas/internal/gen/nas/v1"
+	"github.com/sigxcpu/nas/internal/updater"
 	"go.einride.tech/aip/fieldmask"
 	"go.einride.tech/aip/resourcename"
 	"google.golang.org/grpc/codes"
@@ -60,6 +61,7 @@ type Server struct {
 	registry   *application.DockerRegistryService
 	cron       *application.CronJobService
 	eventBus   *application.EventBus
+	updater    *updater.Updater
 }
 
 // SetCronJobService enables the native scheduled tasks / CronJob RPCs.
@@ -107,6 +109,7 @@ func NewServer(
 		share:     share,
 		identity:  identity,
 		catalog:   catalog,
+		updater:   updater.New(""),
 	}
 }
 
@@ -210,6 +213,47 @@ func (s *Server) GetSystemTelemetry(ctx context.Context, req *nasv1.GetSystemTel
 		return nil, ToGRPCError(err)
 	}
 	return toProtoSystemTelemetry(telem), nil
+}
+
+func (s *Server) CheckSystemUpdate(ctx context.Context, req *nasv1.CheckSystemUpdateRequest) (*nasv1.CheckSystemUpdateResponse, error) {
+	if s.updater == nil {
+		s.updater = updater.New("")
+	}
+	res, err := s.updater.Check(ctx, req.GetForceRefresh(), req.GetTargetVersion())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to check for updates: %v", err)
+	}
+	return &nasv1.CheckSystemUpdateResponse{
+		CurrentVersion:   res.CurrentVersion,
+		LatestVersion:    res.LatestVersion,
+		UpdateAvailable:  res.UpdateAvailable,
+		ReleaseUrl:       res.ReleaseURL,
+		ReleaseNotes:     res.ReleaseNotes,
+		PublishedAt:      res.PublishedAt.Format(time.RFC3339),
+		DownloadUrl:      res.DownloadURL,
+		BinarySizeBytes:  res.BinarySizeBytes,
+		ExpectedSha256:   res.ExpectedSHA256,
+		CurrentCommit:    res.CurrentCommit,
+		CurrentBuildDate: res.CurrentBuildDate,
+		BinaryPath:       res.BinaryPath,
+	}, nil
+}
+
+func (s *Server) ApplySystemUpdate(ctx context.Context, req *nasv1.ApplySystemUpdateRequest) (*nasv1.ApplySystemUpdateResponse, error) {
+	if s.updater == nil {
+		s.updater = updater.New("")
+	}
+	res, err := s.updater.Apply(ctx, req.GetTargetVersion(), req.GetRestartService())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to apply update: %v", err)
+	}
+	return &nasv1.ApplySystemUpdateResponse{
+		Success:           res.Success,
+		Message:           res.Message,
+		UpdatedVersion:    res.UpdatedVersion,
+		PreviousVersion:   res.PreviousVersion,
+		ServiceRestarting: res.ServiceRestarting,
+	}, nil
 }
 
 // =============================================================================

@@ -15,6 +15,7 @@ import {
   mdiServer,
   mdiSpeedometer,
   mdiThermometer,
+  mdiUpdate,
 } from '@mdi/js';
 import { formatBytes, formatUptime } from '../../domain/models';
 import MdiIcon from './MdiIcon.vue';
@@ -23,6 +24,7 @@ import { nasState, notify, refreshTelemetry } from '../store';
 const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'openTerminal'): void;
+  (e: 'openUpdate'): void;
 }>();
 
 const telemetry = computed(() => nasState.systemTelemetry);
@@ -321,6 +323,21 @@ async function copySystemSummary() {
             <div class="spec-row">
               <span class="spec-label">Architecture:</span>
               <span class="spec-val mono">{{ host?.architecture || 'x86_64' }}</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-label">nasctl Daemon:</span>
+              <span class="spec-val" style="display: flex; align-items: center; gap: 8px">
+                <span class="mono">{{ nasState.systemUpdate?.currentVersion || 'v1.5.0' }}</span>
+                <button
+                  class="btn btn-xs"
+                  :class="nasState.systemUpdate?.updateAvailable ? 'btn-warning' : 'btn-ghost'"
+                  style="font-size: 11px; padding: 1px 7px"
+                  @click="emit('openUpdate')"
+                >
+                  <MdiIcon :path="mdiUpdate" size="12" />
+                  <span>{{ nasState.systemUpdate?.updateAvailable ? 'Update Available' : 'Check Updates' }}</span>
+                </button>
+              </span>
             </div>
             <div class="spec-row">
               <span class="spec-label">Active Modules:</span>

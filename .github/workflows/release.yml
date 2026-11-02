@@ -60,10 +60,15 @@ jobs:
           mkdir -p dist
           TAG_NAME="${{ inputs.tag || github.ref_name }}"
           OUTPUT_NAME="nasctl-${TAG_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}"
-          go build -v -ldflags="-s -w -X main.version=${TAG_NAME}" -o "dist/${OUTPUT_NAME}" ./cmd/nasctl
+          BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          LDFLAGS="-s -w -X 'github.com/sigxcpu/nas/internal/version.Version=${TAG_NAME}' -X 'github.com/sigxcpu/nas/internal/version.GitCommit=${{ github.sha }} -X 'github.com/sigxcpu/nas/internal/version.BuildDate=${BUILD_DATE}'"
+          go build -v -ldflags="${LDFLAGS}" -o "dist/${OUTPUT_NAME}" ./cmd/nasctl
+          objcopy --remove-section .note.gnu.property "dist/${OUTPUT_NAME}" 2>/dev/null || true
           chmod +x "dist/${OUTPUT_NAME}"
-          tar -czf "dist/${OUTPUT_NAME}.tar.gz" -C dist "${OUTPUT_NAME}"
-          cd dist && sha256sum "${OUTPUT_NAME}.tar.gz" > "${OUTPUT_NAME}.tar.gz.sha256"
+          cd dist
+          sha256sum "${OUTPUT_NAME}" > "${OUTPUT_NAME}.sha256"
+          tar -czf "${OUTPUT_NAME}.tar.gz" "${OUTPUT_NAME}"
+          sha256sum "${OUTPUT_NAME}.tar.gz" > "${OUTPUT_NAME}.tar.gz.sha256"
 
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@v4
@@ -201,9 +206,11 @@ jobs:
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Attach Changelog to Release Assets
+      - name: Attach Changelog and Checksums to Release Assets
         run: |
           cp release-notes.md release-assets/CHANGELOG.md
+          cd release-assets
+          find . -maxdepth 1 -type f ! -name "*.sha256" ! -name "CHANGELOG.md" ! -name "checksums.txt" -exec sha256sum {} + > checksums.txt
 
       - name: List Release Assets
         run: |

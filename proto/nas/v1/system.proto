@@ -143,3 +143,41 @@ message WatchResourceChange {
   string json_payload = 4;   // JSON payload of the entity or initial array
 }
 
+// =============================================================================
+// OTA System Binary Update Messages
+// =============================================================================
+
+message CheckSystemUpdateRequest {
+  bool force_refresh = 1;
+  string target_version = 2;
+}
+
+message CheckSystemUpdateResponse {
+  string current_version = 1;
+  string latest_version = 2;
+  bool update_available = 3;
+  string release_url = 4;
+  string release_notes = 5;
+  string published_at = 6;
+  string download_url = 7;
+  int64 binary_size_bytes = 8;
+  string expected_sha256 = 9;
+  string current_commit = 10;
+  string current_build_date = 11;
+  string binary_path = 12;
+}
+
+message ApplySystemUpdateRequest {
+  string target_version = 1;
+  bool restart_service = 2;
+}
+
+message ApplySystemUpdateResponse {
+  bool success = 1;
+  string message = 2;
+  string updated_version = 3;
+  string previous_version = 4;
+  bool service_restarting = 5;
+}
+
+

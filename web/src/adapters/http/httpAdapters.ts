@@ -36,6 +36,8 @@ import type {
   StorageImage,
   SystemConfig,
   SystemTelemetry,
+  SystemUpdateInfo,
+  ApplyUpdateResult,
   UploadProgressCallback,
   User,
   VirtualMachine,
@@ -880,6 +882,42 @@ export class HttpSystemAdapter implements SystemPort {
   async getTelemetry(): Promise<SystemTelemetry> {
     const raw = await this.client.get<any>('system/telemetry');
     return mapSystemTelemetry(raw);
+  }
+
+  async checkUpdate(forceRefresh = false, targetVersion = ''): Promise<SystemUpdateInfo> {
+    const params = new URLSearchParams();
+    if (forceRefresh) params.set('force_refresh', 'true');
+    if (targetVersion) params.set('target_version', targetVersion);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const raw = await this.client.get<any>(`system/update${qs}`);
+    return {
+      currentVersion: raw?.currentVersion ?? raw?.current_version ?? '',
+      latestVersion: raw?.latestVersion ?? raw?.latest_version ?? '',
+      updateAvailable: Boolean(raw?.updateAvailable ?? raw?.update_available ?? false),
+      releaseUrl: raw?.releaseUrl ?? raw?.release_url ?? '',
+      releaseNotes: raw?.releaseNotes ?? raw?.release_notes ?? '',
+      publishedAt: raw?.publishedAt ?? raw?.published_at ?? '',
+      downloadUrl: raw?.downloadUrl ?? raw?.download_url ?? '',
+      binarySizeBytes: Number(raw?.binarySizeBytes ?? raw?.binary_size_bytes ?? 0),
+      expectedSha256: raw?.expectedSha256 ?? raw?.expected_sha256 ?? '',
+      currentCommit: raw?.currentCommit ?? raw?.current_commit ?? '',
+      currentBuildDate: raw?.currentBuildDate ?? raw?.current_build_date ?? '',
+      binaryPath: raw?.binaryPath ?? raw?.binary_path ?? '',
+    };
+  }
+
+  async applyUpdate(targetVersion = '', restartService = true): Promise<ApplyUpdateResult> {
+    const raw = await this.client.post<any>('system/update:apply', {
+      target_version: targetVersion,
+      restart_service: restartService,
+    });
+    return {
+      success: Boolean(raw?.success ?? false),
+      message: raw?.message ?? '',
+      updatedVersion: raw?.updatedVersion ?? raw?.updated_version ?? '',
+      previousVersion: raw?.previousVersion ?? raw?.previous_version ?? '',
+      serviceRestarting: Boolean(raw?.serviceRestarting ?? raw?.service_restarting ?? false),
+    };
   }
 }
 

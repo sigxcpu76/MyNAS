@@ -30,6 +30,8 @@ import type {
   StorageImage,
   SystemConfig,
   SystemTelemetry,
+  SystemUpdateInfo,
+  ApplyUpdateResult,
   User,
   VirtualMachine,
   WebdavShare,
@@ -235,6 +237,11 @@ export const nasState = reactive({
   includeSystemAccounts: false,
   includeSystemGroups: false,
   networkTrafficHistory: [] as TrafficPoint[],
+
+  systemUpdate: null as SystemUpdateInfo | null,
+  isCheckingUpdate: false,
+  isApplyingUpdate: false,
+  updateModalOpen: false,
 
   toasts: [] as ToastNotification[],
 });
@@ -546,6 +553,9 @@ export async function refreshAllData(): Promise<void> {
 
     nasState.lastRefreshed = new Date().toLocaleTimeString();
     saveLocalCache();
+
+    // Background check for updates (non-blocking)
+    checkForUpdate(false).catch(() => {});
   } finally {
     nasState.initialLoaded = true;
     nasState.loading = false;
@@ -999,6 +1009,42 @@ export async function initSession(): Promise<void> {
   } catch {
     // ignore until login
   }
+}
+
+export async function checkForUpdate(force = false, targetVer = ''): Promise<SystemUpdateInfo | null> {
+  nasState.isCheckingUpdate = true;
+  try {
+    const info = await services.system.checkUpdate(force, targetVer);
+    nasState.systemUpdate = info;
+    return info;
+  } catch (err: any) {
+    console.error('Failed to check for updates:', err);
+    return null;
+  } finally {
+    nasState.isCheckingUpdate = false;
+  }
+}
+
+export async function applySystemUpdate(targetVer = '', restart = true): Promise<ApplyUpdateResult> {
+  nasState.isApplyingUpdate = true;
+  try {
+    const res = await services.system.applyUpdate(targetVer, restart);
+    notify('success', res.message || 'System update applied successfully.');
+    return res;
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to apply system update.');
+    throw err;
+  } finally {
+    nasState.isApplyingUpdate = false;
+  }
+}
+
+export function openUpdateModal(): void {
+  nasState.updateModalOpen = true;
+}
+
+export function closeUpdateModal(): void {
+  nasState.updateModalOpen = false;
 }
 
 export { activeModal, askModal, confirmModal, alertModal, closeActiveModal } from './modal';

@@ -23,6 +23,7 @@ import {
   mdiOpenInNew,
   mdiPencil,
   mdiRefresh,
+  mdiUpdate,
 } from '@mdi/js';
 import { services } from '../container';
 import {
@@ -54,6 +55,7 @@ import PrerequisitesTopBarButton from './components/PrerequisitesTopBarButton.vu
 import PrerequisitesModal from './components/PrerequisitesModal.vue';
 import SystemDetailsTopBarButton from './components/SystemDetailsTopBarButton.vue';
 import SystemDetailsModal from './components/SystemDetailsModal.vue';
+import SystemUpdateModal from './components/SystemUpdateModal.vue';
 import HostTerminalModal from './components/HostTerminalModal.vue';
 import DockerTerminalModal, { type TerminalContainerOption } from './components/DockerTerminalModal.vue';
 import NanLogo from './components/NanLogo.vue';
@@ -100,6 +102,7 @@ async function handleMobileVmConsole(vmName: string) {
 const showPoolModal = ref(false);
 const showPrerequisitesModal = ref(false);
 const showSystemDetailsModal = ref(false);
+const showUpdateModal = ref(false);
 const showHostTerminalModal = ref(false);
 const isMobileDrawerOpen = ref(false);
 
@@ -427,6 +430,17 @@ onMounted(() => {
           <MdiIcon :path="mdiConsole" size="14" />
         </button>
 
+        <button
+          v-if="nasState.systemUpdate?.updateAvailable"
+          class="btn btn-xs btn-warning hide-mobile"
+          style="display: inline-flex; align-items: center; gap: 4px; font-weight: 600"
+          title="Software update is available! Click to inspect and apply."
+          @click="showUpdateModal = true"
+        >
+          <MdiIcon :path="mdiUpdate" size="14" />
+          <span>Update {{ nasState.systemUpdate.latestVersion }}</span>
+        </button>
+
         <SystemDetailsTopBarButton class="hide-mobile" @click="showSystemDetailsModal = true" />
         <PrerequisitesTopBarButton class="hide-mobile" @click="showPrerequisitesModal = true" />
         <ThemeSelector class="hide-mobile" />
@@ -648,6 +662,14 @@ onMounted(() => {
     v-if="showSystemDetailsModal"
     @close="showSystemDetailsModal = false"
     @open-terminal="showSystemDetailsModal = false; showHostTerminalModal = true"
+    @open-update="showSystemDetailsModal = false; showUpdateModal = true"
+  />
+  <SystemUpdateModal
+    v-if="showUpdateModal || nasState.updateModalOpen"
+    @close="
+      showUpdateModal = false;
+      nasState.updateModalOpen = false;
+    "
   />
 
   <!-- Host Terminal: Dedicated touch-enabled full screen on mobile, desktop modal on desktop -->

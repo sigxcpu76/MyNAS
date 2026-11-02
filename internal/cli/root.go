@@ -10,6 +10,7 @@ import (
 
 	nasv1 "github.com/sigxcpu/nas/internal/gen/nas/v1"
 	"github.com/sigxcpu/nas/internal/logging"
+	"github.com/sigxcpu/nas/internal/version"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -36,8 +37,9 @@ func NewRootCmd() *cobra.Command {
 	}
 
 	rootCmd := &cobra.Command{
-		Use:   "nasctl",
-		Short: "NAS management server and CLI client",
+		Use:     "nasctl",
+		Version: version.Version,
+		Short:   "NAS management server and CLI client",
 		Long: `nasctl is the unified single-binary daemon and CLI for managing ZFS pools/datasets/volumes,
 KVM virtual machines (libvirt + noVNC), Docker & LXC containers, CIFS & WebDAV shares,
 and Linux system users/groups.`,
@@ -62,6 +64,8 @@ and Linux system users/groups.`,
 		newStartCmd(opts),
 		newLoginCmd(opts),
 		newLogoutCmd(opts),
+		newVersionCmd(opts),
+		newUpdateCmd(opts),
 		newSystemCmd(opts),
 		newPrereqCmd(opts),
 		newDiskCmd(opts),

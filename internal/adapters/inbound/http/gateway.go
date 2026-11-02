@@ -153,6 +153,7 @@ func NewGateway(
 
 	// 3. Google AIP REST/JSON API via gRPC-Gateway (authenticated by the gRPC interceptors)
 	mux.Handle("/v1/", noStoreMiddleware(gwMux))
+	mux.Handle("/api/v1/", http.StripPrefix("/api", noStoreMiddleware(gwMux)))
 
 	// 4. KVM noVNC WebSocket-to-RFB Proxy (/ws/novnc/{vmName}?token={token}).
 	// Authorized by the single-VM console token minted by the authenticated :openConsole call.

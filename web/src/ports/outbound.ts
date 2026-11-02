@@ -24,6 +24,8 @@ import type {
   StorageImage,
   SystemConfig,
   SystemTelemetry,
+  SystemUpdateInfo,
+  ApplyUpdateResult,
   UploadProgressCallback,
   User,
   VirtualMachine,
@@ -51,6 +53,8 @@ export interface SystemPort {
   selectMainPool(poolName: string, autoImportExisting?: boolean): Promise<SystemConfig>;
   discoverPools(): Promise<DiscoveredPool[]>;
   getTelemetry(): Promise<SystemTelemetry>;
+  checkUpdate(forceRefresh?: boolean, targetVersion?: string): Promise<SystemUpdateInfo>;
+  applyUpdate(targetVersion?: string, restartService?: boolean): Promise<ApplyUpdateResult>;
 }
 
 export interface PrerequisitePort {

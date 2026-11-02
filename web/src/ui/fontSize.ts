@@ -110,9 +110,15 @@ export function applyFontSize(id: FontSizeId): void {
   }
 
   // Trigger resize event so charts or terminals can re-measure if needed
-  if (typeof window !== 'undefined') {
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
     setTimeout(() => {
-      window.dispatchEvent(new Event('resize'));
+      try {
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+          window.dispatchEvent(new Event('resize'));
+        }
+      } catch {
+        // ignore in test environments
+      }
     }, 50);
   }
 }

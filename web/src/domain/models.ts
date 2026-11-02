@@ -1253,3 +1253,27 @@ export interface CronJob {
   createTime?: string;
   updateTime?: string;
 }
+
+export interface SystemUpdateInfo {
+  currentVersion: string;
+  latestVersion: string;
+  updateAvailable: boolean;
+  releaseUrl: string;
+  releaseNotes: string;
+  publishedAt: string;
+  downloadUrl: string;
+  binarySizeBytes: number;
+  expectedSha256: string;
+  currentCommit: string;
+  currentBuildDate: string;
+  binaryPath: string;
+}
+
+export interface ApplyUpdateResult {
+  success: boolean;
+  message: string;
+  updatedVersion: string;
+  previousVersion: string;
+  serviceRestarting: boolean;
+}
+

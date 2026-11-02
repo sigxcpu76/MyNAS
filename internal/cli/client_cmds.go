@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/sigxcpu/nas/internal/domain"
 	nasv1 "github.com/sigxcpu/nas/internal/gen/nas/v1"
+	"github.com/sigxcpu/nas/internal/updater"
+	"github.com/sigxcpu/nas/internal/version"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
@@ -2076,8 +2079,179 @@ func newSystemCmd(rootOpts *RootOptions) *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(statusCmd, selectPoolCmd, discoverCmd)
+	cmd.AddCommand(statusCmd, selectPoolCmd, discoverCmd, newUpdateCmd(rootOpts))
 	return cmd
+}
+
+func newVersionCmd(rootOpts *RootOptions) *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print the nasctl version, commit, and build information",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			info := version.GetInfo()
+			if rootOpts.JSONOutput {
+				return rootOpts.printJSON(info)
+			}
+			fmt.Fprintf(rootOpts.Out, "nasctl %s\n", info.Version)
+			fmt.Fprintf(rootOpts.Out, "  Git Commit: %s\n", info.GitCommit)
+			fmt.Fprintf(rootOpts.Out, "  Build Date: %s\n", info.BuildDate)
+			fmt.Fprintf(rootOpts.Out, "  Go Version: %s\n", info.GoVersion)
+			fmt.Fprintf(rootOpts.Out, "  Platform:   %s/%s\n", info.OS, info.Arch)
+			return nil
+		},
+	}
+}
+
+func newUpdateCmd(rootOpts *RootOptions) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "update",
+		Short: "Check for and apply OTA binary updates for nasctl",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runUpdateCheck(cmd.Context(), rootOpts, false, "")
+		},
+	}
+
+	var forceRefresh bool
+	var targetVersion string
+
+	checkCmd := &cobra.Command{
+		Use:   "check",
+		Short: "Check GitHub Releases for newer nasctl binary versions",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runUpdateCheck(cmd.Context(), rootOpts, forceRefresh, targetVersion)
+		},
+	}
+	checkCmd.Flags().BoolVarP(&forceRefresh, "force", "f", false, "Force refresh without using cached check")
+	checkCmd.Flags().StringVar(&targetVersion, "version", "", "Target release version/tag to check (e.g. v1.6.0)")
+
+	var applyVersion string
+	var noRestart bool
+
+	applyCmd := &cobra.Command{
+		Use:   "apply",
+		Short: "Download, verify, and atomically install the latest (or specified) nasctl update",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Fprintln(rootOpts.Out, "Requesting OTA binary update...")
+
+			// Try gRPC daemon first
+			if client, conn, err := rootOpts.dialClient(cmd.Context()); err == nil {
+				defer conn.Close()
+				resp, err := client.ApplySystemUpdate(cmd.Context(), &nasv1.ApplySystemUpdateRequest{
+					TargetVersion:  applyVersion,
+					RestartService: !noRestart,
+				})
+				if err == nil {
+					if rootOpts.JSONOutput {
+						return rootOpts.printJSON(resp)
+					}
+					fmt.Fprintf(rootOpts.Out, "✔ %s\n", resp.GetMessage())
+					fmt.Fprintf(rootOpts.Out, "  Previous Version: %s\n", resp.GetPreviousVersion())
+					fmt.Fprintf(rootOpts.Out, "  Updated Version:  %s\n", resp.GetUpdatedVersion())
+					if resp.GetServiceRestarting() {
+						fmt.Fprintln(rootOpts.Out, "  Service:          Restarting in background...")
+					}
+					return nil
+				}
+			}
+
+			// In-process fallback (e.g. daemon offline or standalone update)
+			u := updater.New("")
+			res, err := u.Apply(cmd.Context(), applyVersion, !noRestart)
+			if err != nil {
+				return fmt.Errorf("update failed: %w", err)
+			}
+			if rootOpts.JSONOutput {
+				return rootOpts.printJSON(res)
+			}
+			fmt.Fprintf(rootOpts.Out, "✔ %s\n", res.Message)
+			fmt.Fprintf(rootOpts.Out, "  Previous Version: %s\n", res.PreviousVersion)
+			fmt.Fprintf(rootOpts.Out, "  Updated Version:  %s\n", res.UpdatedVersion)
+			return nil
+		},
+	}
+	applyCmd.Flags().StringVar(&applyVersion, "version", "", "Specific release tag to install (e.g. v1.6.0)")
+	applyCmd.Flags().BoolVar(&noRestart, "no-restart", false, "Do not restart the systemd service after updating binary")
+
+	cmd.AddCommand(checkCmd, applyCmd)
+	return cmd
+}
+
+func runUpdateCheck(ctx context.Context, rootOpts *RootOptions, force bool, targetVer string) error {
+	// Try dialing running daemon first
+	if client, conn, err := rootOpts.dialClient(ctx); err == nil {
+		defer conn.Close()
+		resp, err := client.CheckSystemUpdate(ctx, &nasv1.CheckSystemUpdateRequest{
+			ForceRefresh:  force,
+			TargetVersion: targetVer,
+		})
+		if err == nil {
+			return printCheckResult(rootOpts, resp)
+		}
+	}
+
+	// Fallback to in-process query directly to GitHub Releases API
+	u := updater.New("")
+	res, err := u.Check(ctx, force, targetVer)
+	if err != nil {
+		return fmt.Errorf("failed to check for updates: %w", err)
+	}
+
+	resp := &nasv1.CheckSystemUpdateResponse{
+		CurrentVersion:   res.CurrentVersion,
+		LatestVersion:    res.LatestVersion,
+		UpdateAvailable:  res.UpdateAvailable,
+		ReleaseUrl:       res.ReleaseURL,
+		ReleaseNotes:     res.ReleaseNotes,
+		PublishedAt:      res.PublishedAt.Format(time.RFC3339),
+		DownloadUrl:      res.DownloadURL,
+		BinarySizeBytes:  res.BinarySizeBytes,
+		ExpectedSha256:   res.ExpectedSHA256,
+		CurrentCommit:    res.CurrentCommit,
+		CurrentBuildDate: res.CurrentBuildDate,
+		BinaryPath:       res.BinaryPath,
+	}
+	return printCheckResult(rootOpts, resp)
+}
+
+func printCheckResult(rootOpts *RootOptions, resp *nasv1.CheckSystemUpdateResponse) error {
+	if rootOpts.JSONOutput {
+		return rootOpts.printJSON(resp)
+	}
+
+	fmt.Fprintln(rootOpts.Out, "================================================================================")
+	fmt.Fprintln(rootOpts.Out, "NASCTL OVER-THE-AIR (OTA) UPDATE CHECK")
+	fmt.Fprintln(rootOpts.Out, "================================================================================")
+	fmt.Fprintf(rootOpts.Out, "Current Running Version : %s\n", resp.GetCurrentVersion())
+	fmt.Fprintf(rootOpts.Out, "Latest Upstream Release : %s\n", resp.GetLatestVersion())
+	fmt.Fprintf(rootOpts.Out, "Binary Path             : %s\n", resp.GetBinaryPath())
+	if resp.GetPublishedAt() != "" {
+		fmt.Fprintf(rootOpts.Out, "Release Date            : %s\n", resp.GetPublishedAt())
+	}
+	if resp.GetReleaseUrl() != "" {
+		fmt.Fprintf(rootOpts.Out, "Release URL             : %s\n", resp.GetReleaseUrl())
+	}
+
+	if resp.GetUpdateAvailable() {
+		fmt.Fprintln(rootOpts.Out)
+		fmt.Fprintf(rootOpts.Out, ">>> UPDATE AVAILABLE: %s -> %s <<<\n", resp.GetCurrentVersion(), resp.GetLatestVersion())
+		if resp.GetExpectedSha256() != "" {
+			fmt.Fprintf(rootOpts.Out, "Expected SHA256         : %s\n", resp.GetExpectedSha256())
+		}
+		if resp.GetBinarySizeBytes() > 0 {
+			fmt.Fprintf(rootOpts.Out, "Download Size           : %.1f MB\n", float64(resp.GetBinarySizeBytes())/(1024*1024))
+		}
+		if resp.GetReleaseNotes() != "" {
+			fmt.Fprintln(rootOpts.Out, "\nRELEASE NOTES:")
+			fmt.Fprintln(rootOpts.Out, "--------------------------------------------------------------------------------")
+			fmt.Fprintln(rootOpts.Out, strings.TrimSpace(resp.GetReleaseNotes()))
+			fmt.Fprintln(rootOpts.Out, "--------------------------------------------------------------------------------")
+		}
+		fmt.Fprintln(rootOpts.Out, "\nTo apply this update, run:")
+		fmt.Fprintf(rootOpts.Out, "  nasctl update apply\n")
+	} else {
+		fmt.Fprintln(rootOpts.Out, "\n✔ nasctl is up to date! No updates available.")
+	}
+	return nil
 }
 
 func newCronCmd(rootOpts *RootOptions) *cobra.Command {

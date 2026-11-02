@@ -1230,6 +1230,318 @@ func (x *WatchResourceChange) GetJsonPayload() string {
 	return ""
 }
 
+type CheckSystemUpdateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ForceRefresh  bool                   `protobuf:"varint,1,opt,name=force_refresh,json=forceRefresh,proto3" json:"force_refresh,omitempty"`
+	TargetVersion string                 `protobuf:"bytes,2,opt,name=target_version,json=targetVersion,proto3" json:"target_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckSystemUpdateRequest) Reset() {
+	*x = CheckSystemUpdateRequest{}
+	mi := &file_nas_v1_system_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckSystemUpdateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckSystemUpdateRequest) ProtoMessage() {}
+
+func (x *CheckSystemUpdateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_system_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckSystemUpdateRequest.ProtoReflect.Descriptor instead.
+func (*CheckSystemUpdateRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *CheckSystemUpdateRequest) GetForceRefresh() bool {
+	if x != nil {
+		return x.ForceRefresh
+	}
+	return false
+}
+
+func (x *CheckSystemUpdateRequest) GetTargetVersion() string {
+	if x != nil {
+		return x.TargetVersion
+	}
+	return ""
+}
+
+type CheckSystemUpdateResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	CurrentVersion   string                 `protobuf:"bytes,1,opt,name=current_version,json=currentVersion,proto3" json:"current_version,omitempty"`
+	LatestVersion    string                 `protobuf:"bytes,2,opt,name=latest_version,json=latestVersion,proto3" json:"latest_version,omitempty"`
+	UpdateAvailable  bool                   `protobuf:"varint,3,opt,name=update_available,json=updateAvailable,proto3" json:"update_available,omitempty"`
+	ReleaseUrl       string                 `protobuf:"bytes,4,opt,name=release_url,json=releaseUrl,proto3" json:"release_url,omitempty"`
+	ReleaseNotes     string                 `protobuf:"bytes,5,opt,name=release_notes,json=releaseNotes,proto3" json:"release_notes,omitempty"`
+	PublishedAt      string                 `protobuf:"bytes,6,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
+	DownloadUrl      string                 `protobuf:"bytes,7,opt,name=download_url,json=downloadUrl,proto3" json:"download_url,omitempty"`
+	BinarySizeBytes  int64                  `protobuf:"varint,8,opt,name=binary_size_bytes,json=binarySizeBytes,proto3" json:"binary_size_bytes,omitempty"`
+	ExpectedSha256   string                 `protobuf:"bytes,9,opt,name=expected_sha256,json=expectedSha256,proto3" json:"expected_sha256,omitempty"`
+	CurrentCommit    string                 `protobuf:"bytes,10,opt,name=current_commit,json=currentCommit,proto3" json:"current_commit,omitempty"`
+	CurrentBuildDate string                 `protobuf:"bytes,11,opt,name=current_build_date,json=currentBuildDate,proto3" json:"current_build_date,omitempty"`
+	BinaryPath       string                 `protobuf:"bytes,12,opt,name=binary_path,json=binaryPath,proto3" json:"binary_path,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *CheckSystemUpdateResponse) Reset() {
+	*x = CheckSystemUpdateResponse{}
+	mi := &file_nas_v1_system_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckSystemUpdateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckSystemUpdateResponse) ProtoMessage() {}
+
+func (x *CheckSystemUpdateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_system_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckSystemUpdateResponse.ProtoReflect.Descriptor instead.
+func (*CheckSystemUpdateResponse) Descriptor() ([]byte, []int) {
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *CheckSystemUpdateResponse) GetCurrentVersion() string {
+	if x != nil {
+		return x.CurrentVersion
+	}
+	return ""
+}
+
+func (x *CheckSystemUpdateResponse) GetLatestVersion() string {
+	if x != nil {
+		return x.LatestVersion
+	}
+	return ""
+}
+
+func (x *CheckSystemUpdateResponse) GetUpdateAvailable() bool {
+	if x != nil {
+		return x.UpdateAvailable
+	}
+	return false
+}
+
+func (x *CheckSystemUpdateResponse) GetReleaseUrl() string {
+	if x != nil {
+		return x.ReleaseUrl
+	}
+	return ""
+}
+
+func (x *CheckSystemUpdateResponse) GetReleaseNotes() string {
+	if x != nil {
+		return x.ReleaseNotes
+	}
+	return ""
+}
+
+func (x *CheckSystemUpdateResponse) GetPublishedAt() string {
+	if x != nil {
+		return x.PublishedAt
+	}
+	return ""
+}
+
+func (x *CheckSystemUpdateResponse) GetDownloadUrl() string {
+	if x != nil {
+		return x.DownloadUrl
+	}
+	return ""
+}
+
+func (x *CheckSystemUpdateResponse) GetBinarySizeBytes() int64 {
+	if x != nil {
+		return x.BinarySizeBytes
+	}
+	return 0
+}
+
+func (x *CheckSystemUpdateResponse) GetExpectedSha256() string {
+	if x != nil {
+		return x.ExpectedSha256
+	}
+	return ""
+}
+
+func (x *CheckSystemUpdateResponse) GetCurrentCommit() string {
+	if x != nil {
+		return x.CurrentCommit
+	}
+	return ""
+}
+
+func (x *CheckSystemUpdateResponse) GetCurrentBuildDate() string {
+	if x != nil {
+		return x.CurrentBuildDate
+	}
+	return ""
+}
+
+func (x *CheckSystemUpdateResponse) GetBinaryPath() string {
+	if x != nil {
+		return x.BinaryPath
+	}
+	return ""
+}
+
+type ApplySystemUpdateRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	TargetVersion  string                 `protobuf:"bytes,1,opt,name=target_version,json=targetVersion,proto3" json:"target_version,omitempty"`
+	RestartService bool                   `protobuf:"varint,2,opt,name=restart_service,json=restartService,proto3" json:"restart_service,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ApplySystemUpdateRequest) Reset() {
+	*x = ApplySystemUpdateRequest{}
+	mi := &file_nas_v1_system_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApplySystemUpdateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApplySystemUpdateRequest) ProtoMessage() {}
+
+func (x *ApplySystemUpdateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_system_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApplySystemUpdateRequest.ProtoReflect.Descriptor instead.
+func (*ApplySystemUpdateRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ApplySystemUpdateRequest) GetTargetVersion() string {
+	if x != nil {
+		return x.TargetVersion
+	}
+	return ""
+}
+
+func (x *ApplySystemUpdateRequest) GetRestartService() bool {
+	if x != nil {
+		return x.RestartService
+	}
+	return false
+}
+
+type ApplySystemUpdateResponse struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Success           bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message           string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	UpdatedVersion    string                 `protobuf:"bytes,3,opt,name=updated_version,json=updatedVersion,proto3" json:"updated_version,omitempty"`
+	PreviousVersion   string                 `protobuf:"bytes,4,opt,name=previous_version,json=previousVersion,proto3" json:"previous_version,omitempty"`
+	ServiceRestarting bool                   `protobuf:"varint,5,opt,name=service_restarting,json=serviceRestarting,proto3" json:"service_restarting,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *ApplySystemUpdateResponse) Reset() {
+	*x = ApplySystemUpdateResponse{}
+	mi := &file_nas_v1_system_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApplySystemUpdateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApplySystemUpdateResponse) ProtoMessage() {}
+
+func (x *ApplySystemUpdateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_system_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApplySystemUpdateResponse.ProtoReflect.Descriptor instead.
+func (*ApplySystemUpdateResponse) Descriptor() ([]byte, []int) {
+	return file_nas_v1_system_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ApplySystemUpdateResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *ApplySystemUpdateResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *ApplySystemUpdateResponse) GetUpdatedVersion() string {
+	if x != nil {
+		return x.UpdatedVersion
+	}
+	return ""
+}
+
+func (x *ApplySystemUpdateResponse) GetPreviousVersion() string {
+	if x != nil {
+		return x.PreviousVersion
+	}
+	return ""
+}
+
+func (x *ApplySystemUpdateResponse) GetServiceRestarting() bool {
+	if x != nil {
+		return x.ServiceRestarting
+	}
+	return false
+}
+
 var File_nas_v1_system_proto protoreflect.FileDescriptor
 
 const file_nas_v1_system_proto_rawDesc = "" +
@@ -1344,7 +1656,35 @@ const file_nas_v1_system_proto_rawDesc = "" +
 	"\bSNAPSHOT\x10\x01\x12\t\n" +
 	"\x05ADDED\x10\x02\x12\f\n" +
 	"\bMODIFIED\x10\x03\x12\v\n" +
-	"\aDELETED\x10\x04B2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
+	"\aDELETED\x10\x04\"f\n" +
+	"\x18CheckSystemUpdateRequest\x12#\n" +
+	"\rforce_refresh\x18\x01 \x01(\bR\fforceRefresh\x12%\n" +
+	"\x0etarget_version\x18\x02 \x01(\tR\rtargetVersion\"\xed\x03\n" +
+	"\x19CheckSystemUpdateResponse\x12'\n" +
+	"\x0fcurrent_version\x18\x01 \x01(\tR\x0ecurrentVersion\x12%\n" +
+	"\x0elatest_version\x18\x02 \x01(\tR\rlatestVersion\x12)\n" +
+	"\x10update_available\x18\x03 \x01(\bR\x0fupdateAvailable\x12\x1f\n" +
+	"\vrelease_url\x18\x04 \x01(\tR\n" +
+	"releaseUrl\x12#\n" +
+	"\rrelease_notes\x18\x05 \x01(\tR\freleaseNotes\x12!\n" +
+	"\fpublished_at\x18\x06 \x01(\tR\vpublishedAt\x12!\n" +
+	"\fdownload_url\x18\a \x01(\tR\vdownloadUrl\x12*\n" +
+	"\x11binary_size_bytes\x18\b \x01(\x03R\x0fbinarySizeBytes\x12'\n" +
+	"\x0fexpected_sha256\x18\t \x01(\tR\x0eexpectedSha256\x12%\n" +
+	"\x0ecurrent_commit\x18\n" +
+	" \x01(\tR\rcurrentCommit\x12,\n" +
+	"\x12current_build_date\x18\v \x01(\tR\x10currentBuildDate\x12\x1f\n" +
+	"\vbinary_path\x18\f \x01(\tR\n" +
+	"binaryPath\"j\n" +
+	"\x18ApplySystemUpdateRequest\x12%\n" +
+	"\x0etarget_version\x18\x01 \x01(\tR\rtargetVersion\x12'\n" +
+	"\x0frestart_service\x18\x02 \x01(\bR\x0erestartService\"\xd2\x01\n" +
+	"\x19ApplySystemUpdateResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12'\n" +
+	"\x0fupdated_version\x18\x03 \x01(\tR\x0eupdatedVersion\x12)\n" +
+	"\x10previous_version\x18\x04 \x01(\tR\x0fpreviousVersion\x12-\n" +
+	"\x12service_restarting\x18\x05 \x01(\bR\x11serviceRestartingB2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
 
 var (
 	file_nas_v1_system_proto_rawDescOnce sync.Once
@@ -1359,7 +1699,7 @@ func file_nas_v1_system_proto_rawDescGZIP() []byte {
 }
 
 var file_nas_v1_system_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_nas_v1_system_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_nas_v1_system_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_nas_v1_system_proto_goTypes = []any{
 	(WatchResourceChange_EventType)(0),   // 0: nas.v1.WatchResourceChange.EventType
 	(*DiscoveredPool)(nil),               // 1: nas.v1.DiscoveredPool
@@ -1378,12 +1718,16 @@ var file_nas_v1_system_proto_goTypes = []any{
 	(*StreamSystemTelemetryRequest)(nil), // 14: nas.v1.StreamSystemTelemetryRequest
 	(*WatchResourcesRequest)(nil),        // 15: nas.v1.WatchResourcesRequest
 	(*WatchResourceChange)(nil),          // 16: nas.v1.WatchResourceChange
-	(*fieldmaskpb.FieldMask)(nil),        // 17: google.protobuf.FieldMask
+	(*CheckSystemUpdateRequest)(nil),     // 17: nas.v1.CheckSystemUpdateRequest
+	(*CheckSystemUpdateResponse)(nil),    // 18: nas.v1.CheckSystemUpdateResponse
+	(*ApplySystemUpdateRequest)(nil),     // 19: nas.v1.ApplySystemUpdateRequest
+	(*ApplySystemUpdateResponse)(nil),    // 20: nas.v1.ApplySystemUpdateResponse
+	(*fieldmaskpb.FieldMask)(nil),        // 21: google.protobuf.FieldMask
 }
 var file_nas_v1_system_proto_depIdxs = []int32{
 	1,  // 0: nas.v1.SystemConfig.discovered_pools:type_name -> nas.v1.DiscoveredPool
 	2,  // 1: nas.v1.UpdateSystemConfigRequest.system_config:type_name -> nas.v1.SystemConfig
-	17, // 2: nas.v1.UpdateSystemConfigRequest.update_mask:type_name -> google.protobuf.FieldMask
+	21, // 2: nas.v1.UpdateSystemConfigRequest.update_mask:type_name -> google.protobuf.FieldMask
 	1,  // 3: nas.v1.DiscoverPoolsResponse.pools:type_name -> nas.v1.DiscoveredPool
 	8,  // 4: nas.v1.SystemTelemetry.cpu:type_name -> nas.v1.CpuTelemetry
 	9,  // 5: nas.v1.SystemTelemetry.memory:type_name -> nas.v1.MemoryTelemetry
@@ -1408,7 +1752,7 @@ func file_nas_v1_system_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nas_v1_system_proto_rawDesc), len(file_nas_v1_system_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   16,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

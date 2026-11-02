@@ -26,6 +26,8 @@ import {
   type StorageImage,
   type SystemConfig,
   type SystemTelemetry,
+  type SystemUpdateInfo,
+  type ApplyUpdateResult,
   type UploadProgressCallback,
   type DiscoveredPool,
   type User,
@@ -118,6 +120,14 @@ export class SystemService {
 
   async getTelemetry(): Promise<SystemTelemetry> {
     return this.systemPort.getTelemetry();
+  }
+
+  async checkUpdate(forceRefresh = false, targetVersion = ''): Promise<SystemUpdateInfo> {
+    return this.systemPort.checkUpdate(forceRefresh, targetVersion);
+  }
+
+  async applyUpdate(targetVersion = '', restartService = true): Promise<ApplyUpdateResult> {
+    return this.systemPort.applyUpdate(targetVersion, restartService);
   }
 }
 

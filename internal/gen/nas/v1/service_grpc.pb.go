@@ -29,6 +29,8 @@ const (
 	NasService_GetSystemTelemetry_FullMethodName             = "/nas.v1.NasService/GetSystemTelemetry"
 	NasService_StreamSystemTelemetry_FullMethodName          = "/nas.v1.NasService/StreamSystemTelemetry"
 	NasService_WatchResources_FullMethodName                 = "/nas.v1.NasService/WatchResources"
+	NasService_CheckSystemUpdate_FullMethodName              = "/nas.v1.NasService/CheckSystemUpdate"
+	NasService_ApplySystemUpdate_FullMethodName              = "/nas.v1.NasService/ApplySystemUpdate"
 	NasService_ListPrerequisites_FullMethodName              = "/nas.v1.NasService/ListPrerequisites"
 	NasService_GetPrerequisite_FullMethodName                = "/nas.v1.NasService/GetPrerequisite"
 	NasService_CheckPrerequisites_FullMethodName             = "/nas.v1.NasService/CheckPrerequisites"
@@ -174,6 +176,8 @@ type NasServiceClient interface {
 	GetSystemTelemetry(ctx context.Context, in *GetSystemTelemetryRequest, opts ...grpc.CallOption) (*SystemTelemetry, error)
 	StreamSystemTelemetry(ctx context.Context, in *StreamSystemTelemetryRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SystemTelemetry], error)
 	WatchResources(ctx context.Context, in *WatchResourcesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchResourceChange], error)
+	CheckSystemUpdate(ctx context.Context, in *CheckSystemUpdateRequest, opts ...grpc.CallOption) (*CheckSystemUpdateResponse, error)
+	ApplySystemUpdate(ctx context.Context, in *ApplySystemUpdateRequest, opts ...grpc.CallOption) (*ApplySystemUpdateResponse, error)
 	ListPrerequisites(ctx context.Context, in *ListPrerequisitesRequest, opts ...grpc.CallOption) (*ListPrerequisitesResponse, error)
 	GetPrerequisite(ctx context.Context, in *GetPrerequisiteRequest, opts ...grpc.CallOption) (*Prerequisite, error)
 	CheckPrerequisites(ctx context.Context, in *CheckPrerequisitesRequest, opts ...grpc.CallOption) (*CheckPrerequisitesResponse, error)
@@ -415,6 +419,26 @@ func (c *nasServiceClient) WatchResources(ctx context.Context, in *WatchResource
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type NasService_WatchResourcesClient = grpc.ServerStreamingClient[WatchResourceChange]
+
+func (c *nasServiceClient) CheckSystemUpdate(ctx context.Context, in *CheckSystemUpdateRequest, opts ...grpc.CallOption) (*CheckSystemUpdateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckSystemUpdateResponse)
+	err := c.cc.Invoke(ctx, NasService_CheckSystemUpdate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) ApplySystemUpdate(ctx context.Context, in *ApplySystemUpdateRequest, opts ...grpc.CallOption) (*ApplySystemUpdateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplySystemUpdateResponse)
+	err := c.cc.Invoke(ctx, NasService_ApplySystemUpdate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
 
 func (c *nasServiceClient) ListPrerequisites(ctx context.Context, in *ListPrerequisitesRequest, opts ...grpc.CallOption) (*ListPrerequisitesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -1711,6 +1735,8 @@ type NasServiceServer interface {
 	GetSystemTelemetry(context.Context, *GetSystemTelemetryRequest) (*SystemTelemetry, error)
 	StreamSystemTelemetry(*StreamSystemTelemetryRequest, grpc.ServerStreamingServer[SystemTelemetry]) error
 	WatchResources(*WatchResourcesRequest, grpc.ServerStreamingServer[WatchResourceChange]) error
+	CheckSystemUpdate(context.Context, *CheckSystemUpdateRequest) (*CheckSystemUpdateResponse, error)
+	ApplySystemUpdate(context.Context, *ApplySystemUpdateRequest) (*ApplySystemUpdateResponse, error)
 	ListPrerequisites(context.Context, *ListPrerequisitesRequest) (*ListPrerequisitesResponse, error)
 	GetPrerequisite(context.Context, *GetPrerequisiteRequest) (*Prerequisite, error)
 	CheckPrerequisites(context.Context, *CheckPrerequisitesRequest) (*CheckPrerequisitesResponse, error)
@@ -1871,6 +1897,12 @@ func (UnimplementedNasServiceServer) StreamSystemTelemetry(*StreamSystemTelemetr
 }
 func (UnimplementedNasServiceServer) WatchResources(*WatchResourcesRequest, grpc.ServerStreamingServer[WatchResourceChange]) error {
 	return status.Error(codes.Unimplemented, "method WatchResources not implemented")
+}
+func (UnimplementedNasServiceServer) CheckSystemUpdate(context.Context, *CheckSystemUpdateRequest) (*CheckSystemUpdateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckSystemUpdate not implemented")
+}
+func (UnimplementedNasServiceServer) ApplySystemUpdate(context.Context, *ApplySystemUpdateRequest) (*ApplySystemUpdateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ApplySystemUpdate not implemented")
 }
 func (UnimplementedNasServiceServer) ListPrerequisites(context.Context, *ListPrerequisitesRequest) (*ListPrerequisitesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListPrerequisites not implemented")
@@ -2412,6 +2444,42 @@ func _NasService_WatchResources_Handler(srv interface{}, stream grpc.ServerStrea
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type NasService_WatchResourcesServer = grpc.ServerStreamingServer[WatchResourceChange]
+
+func _NasService_CheckSystemUpdate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckSystemUpdateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).CheckSystemUpdate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_CheckSystemUpdate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).CheckSystemUpdate(ctx, req.(*CheckSystemUpdateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_ApplySystemUpdate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplySystemUpdateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).ApplySystemUpdate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_ApplySystemUpdate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).ApplySystemUpdate(ctx, req.(*ApplySystemUpdateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
 
 func _NasService_ListPrerequisites_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListPrerequisitesRequest)
@@ -4651,6 +4719,14 @@ var NasService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetSystemTelemetry",
 			Handler:    _NasService_GetSystemTelemetry_Handler,
+		},
+		{
+			MethodName: "CheckSystemUpdate",
+			Handler:    _NasService_CheckSystemUpdate_Handler,
+		},
+		{
+			MethodName: "ApplySystemUpdate",
+			Handler:    _NasService_ApplySystemUpdate_Handler,
 		},
 		{
 			MethodName: "ListPrerequisites",
