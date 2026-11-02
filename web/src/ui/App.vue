@@ -364,6 +364,7 @@ onMounted(() => {
     @open-system-details="showSystemDetailsModal = true"
     @open-prerequisites="showPrerequisitesModal = true"
     @open-pool-modal="showPoolModal = true"
+    @open-update="showUpdateModal = true"
     @open-vm-console="handleMobileVmConsole"
     @open-lxc-terminal="handleOpenLxcTerminal"
     @logout="handleLogout"
@@ -431,14 +432,14 @@ onMounted(() => {
         </button>
 
         <button
-          v-if="nasState.systemUpdate?.updateAvailable"
-          class="btn btn-xs btn-warning hide-mobile"
-          style="display: inline-flex; align-items: center; gap: 4px; font-weight: 600"
-          title="Software update is available! Click to inspect and apply."
+          class="btn btn-xs hide-mobile"
+          :class="nasState.systemUpdate?.updateAvailable ? 'btn-warning' : 'btn-secondary'"
+          style="display: inline-flex; align-items: center; gap: 4px; font-weight: 500"
+          :title="nasState.systemUpdate?.updateAvailable ? 'Software update is available! Click to inspect and apply.' : 'Check for Software Updates'"
           @click="showUpdateModal = true"
         >
           <MdiIcon :path="mdiUpdate" size="14" />
-          <span>Update {{ nasState.systemUpdate.latestVersion }}</span>
+          <span>{{ nasState.systemUpdate?.updateAvailable ? `Update ${nasState.systemUpdate.latestVersion}` : 'Updates' }}</span>
         </button>
 
         <SystemDetailsTopBarButton class="hide-mobile" @click="showSystemDetailsModal = true" />

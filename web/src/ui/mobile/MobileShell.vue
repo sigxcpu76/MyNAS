@@ -37,6 +37,7 @@ const emit = defineEmits<{
   (e: 'open-system-details'): void;
   (e: 'open-prerequisites'): void;
   (e: 'open-pool-modal'): void;
+  (e: 'open-update'): void;
   (e: 'open-vm-console', vmName: string): void;
   (e: 'open-lxc-terminal', c: LxcContainer): void;
   (e: 'logout'): void;
@@ -109,6 +110,7 @@ const isDegraded = computed(() => {
         v-if="isOverview"
         @open-terminal="emit('open-terminal')"
         @open-system-details="emit('open-system-details')"
+        @open-update="emit('open-update')"
       />
 
       <MobileAppsView v-else-if="isApps" />
@@ -206,6 +208,7 @@ const isDegraded = computed(() => {
       @open-terminal="emit('open-terminal')"
       @open-system-details="emit('open-system-details')"
       @open-prerequisites="emit('open-prerequisites')"
+      @open-update="emit('open-update')"
       @logout="emit('logout')"
     />
   </div>

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { mdiUpdate } from '@mdi/js';
 import { formatBytes, formatUptime } from '../../../domain/models';
-import { nasState } from '../../store';
+import { nasState, openUpdateModal } from '../../store';
+import MdiIcon from '../../components/MdiIcon.vue';
 
 const telemetry = computed(() => nasState.systemTelemetry);
 </script>
@@ -26,6 +28,23 @@ const telemetry = computed(() => nasState.systemTelemetry);
         <div class="fetch-row">
           <span class="fetch-key">OS:</span>
           <span class="fetch-val">{{ telemetry?.host?.osName || 'Linux' }} {{ telemetry?.host?.osVersion || '' }}</span>
+        </div>
+
+        <div class="fetch-row">
+          <span class="fetch-key">Software:</span>
+          <span class="fetch-val mono" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+            <span>nasctl {{ nasState.systemUpdate?.currentVersion || 'v1.6.1' }}</span>
+            <button
+              class="btn btn-xs"
+              :class="nasState.systemUpdate?.updateAvailable ? 'btn-warning' : 'btn-secondary'"
+              style="font-size: 11px; padding: 1px 7px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px"
+              title="Open Software Updates modal"
+              @click="openUpdateModal"
+            >
+              <MdiIcon :path="mdiUpdate" size="12" />
+              <span>{{ nasState.systemUpdate?.updateAvailable ? `Update ${nasState.systemUpdate.latestVersion}` : 'Check for Updates' }}</span>
+            </button>
+          </span>
         </div>
 
         <div class="fetch-row">

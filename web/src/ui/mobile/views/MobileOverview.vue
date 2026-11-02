@@ -14,6 +14,7 @@ import {
   mdiThermometer,
   mdiCellphoneArrowDown,
   mdiClose,
+  mdiUpdate,
 } from '@mdi/js';
 import MdiIcon from '../../components/MdiIcon.vue';
 import { nasState, refreshAllData } from '../../store';
@@ -23,6 +24,7 @@ import { usePwaInstall } from '../../composables/usePwaInstall';
 const emit = defineEmits<{
   (e: 'open-terminal'): void;
   (e: 'open-system-details'): void;
+  (e: 'open-update'): void;
 }>();
 
 const { isStandalone, promptInstall } = usePwaInstall();
@@ -114,6 +116,24 @@ const isDegraded = computed(() => {
       </div>
     </div>
 
+    <!-- Software Update Available Banner -->
+    <div
+      v-if="nasState.systemUpdate?.updateAvailable"
+      class="update-quick-banner"
+      @click="emit('open-update')"
+    >
+      <div class="banner-left">
+        <div class="banner-icon-update">
+          <MdiIcon :path="mdiUpdate" size="18" />
+        </div>
+        <div class="banner-text">
+          <span class="banner-title">Update Available: {{ nasState.systemUpdate.latestVersion }}</span>
+          <span class="banner-sub">Tap to view changelog & update</span>
+        </div>
+      </div>
+      <button class="btn btn-xs btn-warning" @click.stop="emit('open-update')">Update</button>
+    </div>
+
     <!-- System Health Hero Card -->
     <div class="hero-health-card" :class="{ 'hero-warning': isDegraded }">
       <div class="hero-header">
@@ -133,6 +153,7 @@ const isDegraded = computed(() => {
       <div class="hero-meta">
         <span>{{ telem?.host?.osName || 'Debian GNU/Linux' }}</span>
         <span v-if="telem?.host?.kernelVersion"> • {{ telem.host.kernelVersion }}</span>
+        <span> • nasctl {{ nasState.systemUpdate?.currentVersion || 'v1.6.1' }}</span>
       </div>
     </div>
 
@@ -296,6 +317,30 @@ const isDegraded = computed(() => {
   border-radius: 14px;
   padding: 10px 12px;
   gap: 8px;
+}
+
+.update-quick-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(217, 119, 6, 0.1) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 14px;
+  padding: 10px 12px;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.banner-icon-update {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.25);
+  color: #fbbf24;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .banner-left {

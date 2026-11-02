@@ -18,6 +18,7 @@ import {
   mdiLogout,
   mdiLaptop,
   mdiCellphoneArrowDown,
+  mdiUpdate,
 } from '@mdi/js';
 import MdiIcon from '../../components/MdiIcon.vue';
 import NanLogo from '../../components/NanLogo.vue';
@@ -37,6 +38,7 @@ const emit = defineEmits<{
   (e: 'open-terminal'): void;
   (e: 'open-system-details'): void;
   (e: 'open-prerequisites'): void;
+  (e: 'open-update'): void;
   (e: 'logout'): void;
 }>();
 
@@ -121,6 +123,16 @@ function handleSwitchToDesktop() {
 
             <div class="nav-section-title">Administration</div>
             <div class="nav-links-list">
+              <button class="nav-link-btn" @click="close(); emit('open-update')">
+                <MdiIcon :path="mdiUpdate" size="18" style="color: #fbbf24" />
+                <span>Software Updates</span>
+                <span v-if="nasState.systemUpdate?.updateAvailable" class="badge badge-warning" style="margin-left: auto; font-size: 10px; padding: 2px 6px">
+                  {{ nasState.systemUpdate.latestVersion }}
+                </span>
+                <span v-else class="text-muted" style="margin-left: auto; font-size: 11px">
+                  {{ nasState.systemUpdate?.currentVersion || 'v1.6.1' }}
+                </span>
+              </button>
               <button class="nav-link-btn" @click="nav('identity')">
                 <MdiIcon :path="mdiAccountGroupOutline" size="18" style="color: #c084fc" />
                 <span>Users & Groups</span>
