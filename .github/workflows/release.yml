@@ -61,7 +61,7 @@ jobs:
           TAG_NAME="${{ inputs.tag || github.ref_name }}"
           OUTPUT_NAME="nasctl-${TAG_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}"
           BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-          LDFLAGS="-s -w -X 'github.com/sigxcpu/nas/internal/version.Version=${TAG_NAME}' -X 'github.com/sigxcpu/nas/internal/version.GitCommit=${{ github.sha }} -X 'github.com/sigxcpu/nas/internal/version.BuildDate=${BUILD_DATE}'"
+          LDFLAGS="-s -w -X 'github.com/sigxcpu/nas/internal/version.Version=${TAG_NAME}' -X 'github.com/sigxcpu/nas/internal/version.GitCommit=${{ github.sha }}' -X 'github.com/sigxcpu/nas/internal/version.BuildDate=${BUILD_DATE}'"
           go build -v -ldflags="${LDFLAGS}" -o "dist/${OUTPUT_NAME}" ./cmd/nasctl
           objcopy --remove-section .note.gnu.property "dist/${OUTPUT_NAME}" 2>/dev/null || true
           chmod +x "dist/${OUTPUT_NAME}"
@@ -159,6 +159,8 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
 
       - name: Build Debug APK
         working-directory: android
