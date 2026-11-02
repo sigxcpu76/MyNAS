@@ -16,6 +16,7 @@ import MdiIcon from './MdiIcon.vue';
 import { checkForUpdate, nasState } from '../store';
 import { services } from '../../container';
 import { formatBytes } from '../../domain/models';
+import { marked } from 'marked';
 
 const emit = defineEmits<{
   (e: 'close'): void;
@@ -24,6 +25,11 @@ const emit = defineEmits<{
 const updateInfo = computed(() => nasState.systemUpdate);
 const isChecking = computed(() => nasState.isCheckingUpdate);
 const isApplying = computed(() => nasState.isApplyingUpdate);
+
+const renderedNotes = computed(() => {
+  if (!updateInfo.value?.releaseNotes) return '';
+  return marked.parse(updateInfo.value.releaseNotes, { gfm: true, breaks: true }) as string;
+});
 
 const updateStep = ref<'idle' | 'updating' | 'restarting' | 'error'>('idle');
 const errorMessage = ref('');
@@ -225,9 +231,7 @@ function handleClose() {
                 <MdiIcon :path="mdiOpenInNew" size="12" />
               </a>
             </div>
-            <div class="release-notes-content">
-              <pre>{{ updateInfo.releaseNotes.trim() }}</pre>
-            </div>
+            <div class="release-notes-content markdown-body" v-html="renderedNotes"></div>
           </div>
 
           <!-- Up to date confirmation -->
@@ -382,18 +386,93 @@ function handleClose() {
 }
 
 .release-notes-content {
-  padding: 12px;
-  max-height: 200px;
+  padding: 12px 16px;
+  max-height: 250px;
   overflow-y: auto;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 12.5px;
+  line-height: 1.6;
 }
 
-.release-notes-content pre {
-  margin: 0;
-  font-family: inherit;
-  white-space: pre-wrap;
-  word-break: break-word;
+.markdown-body :deep(h1),
+.markdown-body :deep(h2),
+.markdown-body :deep(h3),
+.markdown-body :deep(h4) {
+  margin: 10px 0 6px 0;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.markdown-body :deep(h1) {
+  font-size: 15px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 4px;
+}
+
+.markdown-body :deep(h2) {
+  font-size: 13.5px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 3px;
+  margin-top: 14px;
+}
+
+.markdown-body :deep(h3) {
+  font-size: 12.5px;
+  margin-top: 10px;
+}
+
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) {
+  margin: 4px 0 8px 0;
+  padding-left: 20px;
+}
+
+.markdown-body :deep(li) {
+  margin-bottom: 4px;
+}
+
+.markdown-body :deep(p) {
+  margin: 4px 0 8px 0;
+}
+
+.markdown-body :deep(a) {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+.markdown-body :deep(a:hover) {
+  text-decoration: underline;
+}
+
+.markdown-body :deep(code) {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+}
+
+.markdown-body :deep(pre) {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 8px 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 6px 0;
+  border: 1px solid var(--border-subtle);
+}
+
+.markdown-body :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  border: none;
+}
+
+.markdown-body :deep(blockquote) {
+  margin: 6px 0;
+  padding: 4px 12px;
+  border-left: 3px solid var(--accent-primary);
+  background: rgba(56, 189, 248, 0.05);
+  color: var(--text-secondary);
 }
 
 .restarting-box {
