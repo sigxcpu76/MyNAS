@@ -26,6 +26,7 @@ import { nasState } from '../../store';
 import { navigateTo } from '../../router';
 import { useDevice } from '../../composables/useDevice';
 import { usePwaInstall } from '../../composables/usePwaInstall';
+import { useClientApp } from '../../composables/useClientApp';
 import ThemeSelector from '../../components/ThemeSelector.vue';
 import FontSizeSelector from '../../components/FontSizeSelector.vue';
 
@@ -44,6 +45,7 @@ const emit = defineEmits<{
 
 const { setViewMode } = useDevice();
 const { isStandalone, promptInstall } = usePwaInstall();
+const { clientApp } = useClientApp();
 
 function close() {
   emit('update:modelValue', false);
@@ -133,6 +135,12 @@ function handleSwitchToDesktop() {
                   {{ nasState.systemUpdate?.currentVersion || 'v1.6.1' }}
                 </span>
               </button>
+              <div class="client-shell-tile" style="margin: 4px 0 6px 0; padding: 7px 10px; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border-subtle); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; font-size: 11.5px">
+                <span style="color: var(--text-secondary)">Client Shell:</span>
+                <span class="mono" :style="{ color: clientApp.isNative ? '#4ade80' : 'var(--accent-primary)', fontWeight: 600 }">
+                  {{ clientApp.label }}
+                </span>
+              </div>
               <button class="nav-link-btn" @click="nav('identity')">
                 <MdiIcon :path="mdiAccountGroupOutline" size="18" style="color: #c084fc" />
                 <span>Users & Groups</span>

@@ -55,8 +55,32 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
+    private fun getAppVersionName(): String {
+        return try {
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.6.5"
+        } catch (e: Exception) {
+            "1.6.5"
+        }
+    }
+
+    private fun getAppVersionCode(): Long {
+        return try {
+            val pInfo = packageManager.getPackageInfo(packageName, 0)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                pInfo.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                pInfo.versionCode.toLong()
+            }
+        } catch (e: Exception) {
+            5L
+        }
+    }
+
     private fun setupToolbar() {
-        binding.tvToolbarSubtitle.text = "${profile?.host}:${profile?.port}"
+        val ver = getAppVersionName()
+        val build = getAppVersionCode()
+        binding.tvToolbarSubtitle.text = "${profile?.host}:${profile?.port} • APK v$ver (b$build)"
 
         binding.btnReload.setOnClickListener {
             binding.webView.reload()
@@ -81,9 +105,21 @@ class MainActivity : AppCompatActivity() {
         webSettings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         webSettings.mediaPlaybackRequiresUserGesture = false
 
+        val ver = getAppVersionName()
+        val build = getAppVersionCode()
+
         // Custom User-Agent to allow web application to identify Android native shell
         val defaultUA = webSettings.userAgentString
-        webSettings.userAgentString = "$defaultUA NaN-NAS-Android/1.6.4"
+        webSettings.userAgentString = "$defaultUA NaN-NAS-Android/$ver (Build $build)"
+
+        binding.webView.addJavascriptInterface(object : Any() {
+            @android.webkit.JavascriptInterface
+            fun getVersionName(): String = ver
+            @android.webkit.JavascriptInterface
+            fun getVersionCode(): Long = build
+            @android.webkit.JavascriptInterface
+            fun isNativeApp(): Boolean = true
+        }, "NanAndroidNative")
 
         binding.webView.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
@@ -130,15 +166,25 @@ class MainActivity : AppCompatActivity() {
 
     private fun injectTokenAndPreferences() {
         val token = profile?.token ?: ""
-        if (token.isEmpty()) return
+        val ver = getAppVersionName()
+        val build = getAppVersionCode()
 
-        // Inject stored auth token and force mobile-specific layout
+        // Inject stored auth token, APK version metadata, and force mobile-specific layout
         val js = """
             (function() {
                 try {
+                    window.nanNativeApp = {
+                        platform: 'android',
+                        version: '$ver',
+                        build: $build
+                    };
                     if (typeof window !== 'undefined' && window.localStorage) {
-                        if (!window.localStorage.getItem('nas_jwt_token') || window.localStorage.getItem('nas_jwt_token') !== '$token') {
-                            window.localStorage.setItem('nas_jwt_token', '$token');
+                        window.localStorage.setItem('nan_apk_version', '$ver');
+                        window.localStorage.setItem('nan_apk_build', '$build');
+                        if ('$token'.length > 0) {
+                            if (!window.localStorage.getItem('nas_jwt_token') || window.localStorage.getItem('nas_jwt_token') !== '$token') {
+                                window.localStorage.setItem('nas_jwt_token', '$token');
+                            }
                         }
                         window.localStorage.setItem('device_ui_mode_override', 'mobile');
                     }

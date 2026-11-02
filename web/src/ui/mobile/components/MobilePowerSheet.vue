@@ -14,6 +14,7 @@ import MdiIcon from '../../components/MdiIcon.vue';
 import BottomSheet from '../../components/BottomSheet.vue';
 import { nasState, refreshAllData } from '../../store';
 import { useDevice, type DeviceViewMode } from '../../composables/useDevice';
+import { useClientApp } from '../../composables/useClientApp';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -28,6 +29,7 @@ const emit = defineEmits<{
 }>();
 
 const { viewMode, setViewMode } = useDevice();
+const { clientApp } = useClientApp();
 
 const hostname = computed(() => nasState.systemTelemetry?.host?.hostname || 'NaN Appliance');
 const uptime = computed(() => {
@@ -82,6 +84,7 @@ function selectMode(mode: DeviceViewMode) {
         <div class="host-specs">
           <span>OS: {{ nasState.systemTelemetry?.host?.osName || 'Debian / Proxmox' }}</span>
           <span>Kernel: {{ nasState.systemTelemetry?.host?.kernelVersion || '-' }}</span>
+          <span class="mono" :style="{ color: clientApp.isNative ? '#4ade80' : 'inherit' }">Client: {{ clientApp.label }}</span>
         </div>
       </div>
 

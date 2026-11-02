@@ -20,12 +20,15 @@ import {
 import { formatBytes, formatUptime } from '../../domain/models';
 import MdiIcon from './MdiIcon.vue';
 import { nasState, notify, refreshTelemetry } from '../store';
+import { useClientApp } from '../composables/useClientApp';
 
 const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'openTerminal'): void;
   (e: 'openUpdate'): void;
 }>();
+
+const { clientApp } = useClientApp();
 
 const telemetry = computed(() => nasState.systemTelemetry);
 const isRefreshing = ref(false);
@@ -337,6 +340,12 @@ async function copySystemSummary() {
                   <MdiIcon :path="mdiUpdate" size="12" />
                   <span>{{ nasState.systemUpdate?.updateAvailable ? 'Update Available' : 'Check Updates' }}</span>
                 </button>
+              </span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-label">Client Shell:</span>
+              <span class="spec-val mono" :style="{ color: clientApp.isNative ? '#4ade80' : 'var(--accent-primary)', fontWeight: 600 }">
+                {{ clientApp.label }}
               </span>
             </div>
             <div class="spec-row">
