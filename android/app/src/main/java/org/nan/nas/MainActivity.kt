@@ -57,9 +57,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun getAppVersionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.6.7"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.6.8"
         } catch (e: Exception) {
-            "1.6.7"
+            "1.6.8"
         }
     }
 
@@ -73,7 +73,7 @@ class MainActivity : AppCompatActivity() {
                 pInfo.versionCode.toLong()
             }
         } catch (e: Exception) {
-            5L
+            8L
         }
     }
 

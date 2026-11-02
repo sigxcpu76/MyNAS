@@ -153,7 +153,7 @@ const isDegraded = computed(() => {
       <div class="hero-meta">
         <span>{{ telem?.host?.osName || 'Debian GNU/Linux' }}</span>
         <span v-if="telem?.host?.kernelVersion"> • {{ telem.host.kernelVersion }}</span>
-        <span> • nasctl {{ nasState.systemUpdate?.currentVersion || 'v1.6.1' }}</span>
+        <span> • nasctl {{ nasState.systemUpdate?.currentVersion || 'v1.6.8' }}</span>
       </div>
     </div>
 
