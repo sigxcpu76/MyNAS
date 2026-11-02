@@ -10,6 +10,7 @@ import {
   mdiLockAlertOutline,
   mdiCertificateOutline,
   mdiOpenInNew,
+  mdiAndroid,
 } from '@mdi/js';
 import MdiIcon from './MdiIcon.vue';
 import BottomSheet from './BottomSheet.vue';
@@ -138,6 +139,21 @@ async function handleInstallClick() {
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- Direct Native APK Download -->
+        <div class="native-apk-box">
+          <div class="apk-box-header">
+            <MdiIcon :path="mdiAndroid" size="18" style="color: #4ade80" />
+            <span class="apk-box-title">Or Get the Native Android App (.apk)</span>
+          </div>
+          <p class="apk-box-desc">
+            Prefer a standalone APK? Includes built-in self-signed SSL trust, server switcher, and offline persistence:
+          </p>
+          <a href="/nan-nas.apk" download="nan-nas.apk" class="btn btn-success btn-block btn-apk-download">
+            <MdiIcon :path="mdiDownload" size="18" style="margin-right: 6px;" />
+            <span>Download NaN App (.apk)</span>
+          </a>
         </div>
       </div>
 
@@ -440,5 +456,52 @@ async function handleInstallClick() {
   font-size: 11.5px;
   line-height: 1.4;
   color: var(--text-secondary, #cbd5e1);
+}
+
+.native-apk-box {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border-color, #334155);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.apk-box-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.apk-box-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #4ade80;
+}
+
+.apk-box-desc {
+  font-size: 12px;
+  color: var(--text-secondary, #94a3b8);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.btn-apk-download {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  padding: 10px 14px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.btn-apk-download:hover {
+  background: rgba(34, 197, 94, 0.25);
 }
 </style>

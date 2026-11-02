@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">NaN NAS</string>
+    <string name="login_title">Connect to NaN</string>
+    <string name="login_subtitle">Enter server details and login credentials</string>
+    <string name="server_host_hint">Server address (e.g. 192.168.27.23)</string>
+    <string name="server_port_hint">Port (8443 for HTTPS, 8080 for HTTP)</string>
+    <string name="username_hint">Username</string>
+    <string name="password_hint">Password</string>
+    <string name="protocol_https">HTTPS (Secure)</string>
+    <string name="protocol_http">HTTP (Unencrypted)</string>
+    <string name="trust_ssl">Trust self-signed certificates</string>
+    <string name="trust_ssl_hint">Bypasses certificate warnings on local LAN appliances</string>
+    <string name="remember_server">Remember this server &amp; login</string>
+    <string name="btn_connect">Connect &amp; Login</string>
+    <string name="btn_switch_server">Switch Server</string>
+    <string name="btn_refresh">Reload</string>
+    <string name="error_invalid_host">Please enter a valid host address</string>
+    <string name="error_invalid_port">Please enter a valid port number</string>
+    <string name="error_empty_creds">Username and password are required</string>
+    <string name="connecting">Connecting to server...</string>
+    <string name="login_success">Connected successfully</string>
+</resources>

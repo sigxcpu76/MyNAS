@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Server Rack Symbol -->
+    <path
+        android:fillColor="#0284C7"
+        android:pathData="M28,30 h52 a4,4 0 0,1 4,4 v10 a4,4 0 0,1 -4,4 h-52 a4,4 0 0,1 -4,-4 v-10 a4,4 0 0,1 4,-4 z"/>
+    <path
+        android:fillColor="#22C55E"
+        android:pathData="M34,37 a2,2 0 1,0 0.001,0 z"/>
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M28,50 h52 a4,4 0 0,1 4,4 v10 a4,4 0 0,1 -4,4 h-52 a4,4 0 0,1 -4,-4 v-10 a4,4 0 0,1 4,-4 z"/>
+    <path
+        android:fillColor="#22C55E"
+        android:pathData="M34,57 a2,2 0 1,0 0.001,0 z"/>
+    <path
+        android:fillColor="#0284C7"
+        android:pathData="M28,70 h52 a4,4 0 0,1 4,4 v10 a4,4 0 0,1 -4,4 h-52 a4,4 0 0,1 -4,-4 v-10 a4,4 0 0,1 4,-4 z"/>
+    <path
+        android:fillColor="#22C55E"
+        android:pathData="M34,77 a2,2 0 1,0 0.001,0 z"/>
+</vector>
