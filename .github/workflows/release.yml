@@ -15,8 +15,45 @@ permissions:
   contents: write
 
 jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+
+      - name: Build Debug APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Stage APK Release Asset
+        run: |
+          mkdir -p apk-artifact
+          cp android/app/build/outputs/apk/debug/app-debug.apk apk-artifact/NaN-NAS.apk
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nan-nas-apk
+          path: apk-artifact/NaN-NAS.apk
+          retention-days: 1
+
   build-binaries:
     name: Build Binaries (${{ matrix.goos }}/${{ matrix.goarch }})
+    needs: [build-apk]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -26,6 +63,17 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Download Built APK
+        uses: actions/download-artifact@v4
+        with:
+          name: nan-nas-apk
+          path: apk-dl
+
+      - name: Sync APK into Web Bundle
+        run: |
+          mkdir -p web/public
+          cp -f apk-dl/NaN-NAS.apk web/public/nan-nas.apk
 
       - name: Install System Build Dependencies (PAM & Crypt)
         if: matrix.goarch == 'amd64'
@@ -82,11 +130,23 @@ jobs:
 
   build-iso:
     name: Build Appliance ISO
+    needs: [build-apk]
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Download Built APK
+        uses: actions/download-artifact@v4
+        with:
+          name: nan-nas-apk
+          path: apk-dl
+
+      - name: Sync APK into Web Bundle
+        run: |
+          mkdir -p web/public
+          cp -f apk-dl/NaN-NAS.apk web/public/nan-nas.apk
 
       - name: Free Disk Space on Runner
         run: |
@@ -142,42 +202,6 @@ jobs:
         with:
           name: appliance-iso
           path: release-iso/*
-          retention-days: 1
-
-  build-apk:
-    name: Build Android APK
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: 'platform-tools'
-
-      - name: Build Debug APK
-        working-directory: android
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug
-
-      - name: Stage APK Release Asset
-        run: |
-          mkdir -p apk-artifact
-          cp android/app/build/outputs/apk/debug/app-debug.apk apk-artifact/NaN-NAS.apk
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: nan-nas-apk
-          path: apk-artifact/NaN-NAS.apk
           retention-days: 1
 
   publish-release:

@@ -1,4 +1,9 @@
-.PHONY: all generate proto web test build run clean iso deploy
+.PHONY: all generate proto web test build run clean iso deploy apk
+
+apk:
+	export JAVA_HOME=$$(test -d /usr/lib/jvm/java-17-openjdk && echo "/usr/lib/jvm/java-17-openjdk" || echo "$$JAVA_HOME"); cd android && ./gradlew assembleDebug
+	cp -f android/app/build/outputs/apk/debug/app-debug.apk web/public/nan-nas.apk
+	cp -f android/app/build/outputs/apk/debug/app-debug.apk web/dist/nan-nas.apk
 
 export PATH := $(HOME)/go/bin:$(PATH)
 
