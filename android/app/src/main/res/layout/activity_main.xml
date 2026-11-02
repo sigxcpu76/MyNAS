@@ -80,18 +80,12 @@
         android:progressDrawable="@drawable/ic_launcher_background"
         android:visibility="gone" />
 
-    <!-- Swipe Refresh & WebView -->
-    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-        android:id="@+id/swipeRefresh"
+    <!-- Direct WebView Container (Eliminates SwipeRefreshLayout touch-hijacking on tables) -->
+    <WebView
+        android:id="@+id/webView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
-
-        <WebView
-            android:id="@+id/webView"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@color/bg_base" />
-    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+        android:layout_weight="1"
+        android:background="@color/bg_base" />
 
 </LinearLayout>

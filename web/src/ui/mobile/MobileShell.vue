@@ -222,6 +222,7 @@ const isDegraded = computed(() => {
   height: 100dvh;
   width: 100%;
   overflow: hidden;
+  overscroll-behavior-y: none;
   background: var(--bg-base, #0f172a);
   color: var(--text-primary, #f8fafc);
 }
@@ -279,6 +280,7 @@ const isDegraded = computed(() => {
 .mobile-main-viewport {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
   padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
   scroll-padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
@@ -286,6 +288,7 @@ const isDegraded = computed(() => {
 
 .mobile-fallback-wrap {
   padding: 12px;
+  overscroll-behavior-y: contain;
 }
 
 .mobile-bottom-nav {

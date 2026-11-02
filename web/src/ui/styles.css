@@ -1889,6 +1889,7 @@ select option {
   .table-wrap {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain;
     width: 100% !important;
     max-width: 100% !important;
     border-radius: 6px;

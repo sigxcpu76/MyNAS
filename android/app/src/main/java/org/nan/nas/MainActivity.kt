@@ -65,11 +65,6 @@ class MainActivity : AppCompatActivity() {
         binding.btnSwitchServer.setOnClickListener {
             redirectToLogin()
         }
-
-        binding.swipeRefresh.setColorSchemeColors(getColor(R.color.accent_primary))
-        binding.swipeRefresh.setOnRefreshListener {
-            binding.webView.reload()
-        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -86,7 +81,7 @@ class MainActivity : AppCompatActivity() {
 
         // Custom User-Agent to allow web application to identify Android native shell
         val defaultUA = webSettings.userAgentString
-        webSettings.userAgentString = "$defaultUA NaN-NAS-Android/1.5.0"
+        webSettings.userAgentString = "$defaultUA NaN-NAS-Android/1.6.2"
 
         binding.webView.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
@@ -95,7 +90,6 @@ class MainActivity : AppCompatActivity() {
                     binding.pageProgressBar.progress = newProgress
                 } else {
                     binding.pageProgressBar.visibility = View.GONE
-                    binding.swipeRefresh.isRefreshing = false
                 }
             }
         }
@@ -118,7 +112,6 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 injectTokenAndPreferences()
-                binding.swipeRefresh.isRefreshing = false
             }
 
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
