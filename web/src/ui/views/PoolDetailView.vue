@@ -19,6 +19,12 @@ import {
   mdiPlus,
   mdiRefresh,
   mdiTrashCanOutline,
+  mdiDragVariant,
+  mdiMagnify,
+  mdiFlash,
+  mdiCheckCircleOutline,
+  mdiAlertCircleOutline,
+  mdiCheck,
 } from '@mdi/js';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
@@ -30,9 +36,11 @@ import {
   type ZfsDataset,
   type ZfsPool,
   type ZfsVolume,
+  type Disk,
   isDotDataset,
 } from '../../domain/models';
 import {
+  confirmModal,
   nasState,
   notify,
   refreshAllData,
@@ -226,6 +234,386 @@ async function handleSaveConfig() {
     await refreshAllData();
   } catch (err: any) {
     notify('error', `Failed to update pool: ${err.message}`);
+  } finally {
+    isBusy.value = false;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Drag-and-Drop VDEV Infrastructure Designer State (Pool Entity Level)
+// -----------------------------------------------------------------------------
+interface BuilderVdev {
+  id: string;
+  type: 'data' | 'cache' | 'log' | 'spare' | 'special';
+  layout: 'stripe' | 'mirror' | 'raidz1' | 'raidz2' | 'raidz3';
+  devicePaths: string[];
+}
+
+interface ExistingVdevCard {
+  name: string;
+  type: 'data' | 'cache' | 'log' | 'spare' | 'special';
+  layout: string;
+  state: string;
+  devicePaths: string[];
+}
+
+const editBuilderVdevs = ref<BuilderVdev[]>([]);
+const editDriveSearchQuery = ref('');
+const draggedDevicePath = ref<string | null>(null);
+const hoveredVdevId = ref<string | null>(null);
+let vdevCounter = 1;
+
+// Active VDEVs currently in this pool
+const existingActiveVdevs = computed<ExistingVdevCard[]>(() => {
+  if (!pool.value) return [];
+  const p = pool.value;
+  if (p.vdevs && p.vdevs.length > 0) {
+    return p.vdevs.map((v) => {
+      const paths: string[] = [];
+      if (v.children && v.children.length > 0) {
+        for (const c of v.children) {
+          if (c.path) paths.push(c.path);
+          else if (c.name) paths.push(c.name);
+        }
+      } else if (v.path) {
+        paths.push(v.path);
+      }
+      return {
+        name: v.name,
+        type: (v.type as any) || 'data',
+        layout: v.layout || (v.type === 'mirror' ? 'mirror' : 'stripe'),
+        state: v.state || 'ONLINE',
+        devicePaths: paths,
+      };
+    });
+  }
+  if (p.devices && p.devices.length > 0) {
+    return [
+      {
+        name: 'data-0',
+        type: 'data',
+        layout: (p.vdevLayout as any) || 'mirror',
+        state: 'ONLINE',
+        devicePaths: [...p.devices],
+      },
+    ];
+  }
+  return [];
+});
+
+const existingPoolDevicePaths = computed(() => {
+  if (!pool.value) return new Set<string>();
+  const set = new Set<string>();
+  if (pool.value.devices) {
+    for (const d of pool.value.devices) set.add(d);
+  }
+  if (pool.value.vdevs) {
+    for (const v of pool.value.vdevs) {
+      if (v.path) set.add(v.path);
+      if (v.children) {
+        for (const c of v.children) {
+          if (c.path) set.add(c.path);
+        }
+      }
+    }
+  }
+  return set;
+});
+
+const unassignedDisks = computed(() => {
+  return nasState.disks.filter(
+    (d) =>
+      !d.owningZfsPool &&
+      !d.isSystem &&
+      !d.diskId.startsWith('zd') &&
+      !d.devicePath.startsWith('/dev/zd')
+  );
+});
+
+const editAvailableDisks = computed(() => {
+  return unassignedDisks.value.filter((d) => !existingPoolDevicePaths.value.has(d.devicePath));
+});
+
+const editBuilderAssignedPaths = computed(() => {
+  return new Set(editBuilderVdevs.value.flatMap((v) => v.devicePaths));
+});
+
+const filteredEditAvailableDisks = computed(() => {
+  const q = editDriveSearchQuery.value.trim().toLowerCase();
+  return editAvailableDisks.value.filter((d) => {
+    if (!q) return true;
+    return (
+      d.devicePath.toLowerCase().includes(q) ||
+      d.diskId.toLowerCase().includes(q) ||
+      (d.model || '').toLowerCase().includes(q) ||
+      (d.serial || '').toLowerCase().includes(q) ||
+      (d.type || '').toLowerCase().includes(q) ||
+      (d.transport || '').toLowerCase().includes(q)
+    );
+  });
+});
+
+function getDiskByPath(path: string): Disk | undefined {
+  return nasState.disks.find((d) => d.devicePath === path || d.diskId === path);
+}
+
+function getVdevValidation(vdev: BuilderVdev): { valid: boolean; message: string; state: 'ok' | 'warn' | 'info' } {
+  const count = vdev.devicePaths.length;
+  if (count === 0) {
+    return { valid: false, message: 'No drives assigned yet. Drag unassigned drives here.', state: 'info' };
+  }
+  if (vdev.type === 'data') {
+    if (vdev.layout === 'mirror') {
+      if (count < 2) return { valid: false, message: 'Mirror requires at least 2 drives (currently 1).', state: 'warn' };
+      return { valid: true, message: `✓ Valid ${count}-way Mirror. Tolerates ${count - 1} drive failure(s).`, state: 'ok' };
+    }
+    if (vdev.layout === 'raidz1') {
+      if (count < 3) return { valid: false, message: `RAIDZ1 requires at least 3 drives (currently ${count}).`, state: 'warn' };
+      return { valid: true, message: `✓ Valid RAIDZ1 (${count} drives, 1 parity disk).`, state: 'ok' };
+    }
+    if (vdev.layout === 'raidz2') {
+      if (count < 4) return { valid: false, message: `RAIDZ2 requires at least 4 drives (currently ${count}).`, state: 'warn' };
+      return { valid: true, message: `✓ Valid RAIDZ2 (${count} drives, 2 parity disks).`, state: 'ok' };
+    }
+    if (vdev.layout === 'raidz3') {
+      if (count < 5) return { valid: false, message: `RAIDZ3 requires at least 5 drives (currently ${count}).`, state: 'warn' };
+      return { valid: true, message: `✓ Valid RAIDZ3 (${count} drives, 3 parity disks).`, state: 'ok' };
+    }
+    return { valid: true, message: `✓ Stripe layout (${count} concatenated drive(s), no parity).`, state: 'ok' };
+  }
+  if (vdev.type === 'log') {
+    if (vdev.layout === 'mirror') {
+      if (count < 2) return { valid: false, message: 'Mirrored SLOG requires at least 2 drives.', state: 'warn' };
+      return { valid: true, message: `✓ Mirrored SLOG write accelerator (${count} drives).`, state: 'ok' };
+    }
+    return { valid: true, message: `SLOG write accelerator (${count} drive(s)). Mirrored SLOG is recommended for write safety.`, state: 'ok' };
+  }
+  if (vdev.type === 'cache') {
+    return { valid: true, message: `✓ L2ARC Read Cache (${count} drive(s)).`, state: 'ok' };
+  }
+  if (vdev.type === 'spare') {
+    return { valid: true, message: `✓ Hot Spare (${count} drive(s)).`, state: 'ok' };
+  }
+  if (vdev.type === 'special') {
+    if (vdev.layout === 'mirror' && count < 2) {
+      return { valid: false, message: 'Special metadata vdev strongly recommends at least 2 drives in mirror.', state: 'warn' };
+    }
+    return { valid: true, message: `✓ Special Metadata / Small-Blocks VDEV (${count} drive(s)).`, state: 'ok' };
+  }
+  return { valid: true, message: 'Custom configuration', state: 'ok' };
+}
+
+function onDragStartDrive(ev: DragEvent, devicePath: string) {
+  draggedDevicePath.value = devicePath;
+  if (ev.dataTransfer) {
+    ev.dataTransfer.setData('text/plain', devicePath);
+    ev.dataTransfer.effectAllowed = 'move';
+  }
+}
+
+function onDragEndDrive() {
+  draggedDevicePath.value = null;
+  hoveredVdevId.value = null;
+}
+
+function onDragOverVdev(ev: DragEvent, vdevId: string) {
+  ev.preventDefault();
+  hoveredVdevId.value = vdevId;
+  if (ev.dataTransfer) {
+    ev.dataTransfer.dropEffect = 'move';
+  }
+}
+
+function onDragLeaveVdev(vdevId: string) {
+  if (hoveredVdevId.value === vdevId) {
+    hoveredVdevId.value = null;
+  }
+}
+
+function onDropEditDrive(vdevId: string, evt?: DragEvent) {
+  const path = draggedDevicePath.value || evt?.dataTransfer?.getData('text/plain');
+  if (path) {
+    assignDriveToEditVdev(path, vdevId);
+  }
+  hoveredVdevId.value = null;
+  draggedDevicePath.value = null;
+}
+
+function addEditBuilderVdev(type: 'data' | 'cache' | 'log' | 'spare' | 'special') {
+  vdevCounter++;
+  const defaultLayout = type === 'data' ? 'mirror' : type === 'cache' || type === 'spare' ? 'stripe' : 'mirror';
+  editBuilderVdevs.value.push({
+    id: `edit-vdev-${type}-${Date.now()}-${vdevCounter}`,
+    type,
+    layout: defaultLayout as any,
+    devicePaths: [],
+  });
+}
+
+function removeEditBuilderVdev(vdevId: string) {
+  editBuilderVdevs.value = editBuilderVdevs.value.filter((v) => v.id !== vdevId);
+}
+
+function assignDriveToEditVdev(devicePath: string, vdevId: string) {
+  for (const v of editBuilderVdevs.value) {
+    const idx = v.devicePaths.indexOf(devicePath);
+    if (idx !== -1) v.devicePaths.splice(idx, 1);
+  }
+  const target = editBuilderVdevs.value.find((v) => v.id === vdevId);
+  if (target && !target.devicePaths.includes(devicePath)) {
+    target.devicePaths.push(devicePath);
+  }
+}
+
+function removeDriveFromEditVdev(vdevId: string, devicePath: string) {
+  const target = editBuilderVdevs.value.find((v) => v.id === vdevId);
+  if (target) {
+    const idx = target.devicePaths.indexOf(devicePath);
+    if (idx !== -1) target.devicePaths.splice(idx, 1);
+  }
+}
+
+const editPoolCapacitySummary = computed(() => {
+  if (!pool.value) {
+    return {
+      totalRawBytes: 0,
+      estimatedUsableBytes: 0,
+      dataDrivesCount: 0,
+      cacheDrivesCount: 0,
+      logDrivesCount: 0,
+      spareDrivesCount: 0,
+    };
+  }
+  const currentPool = pool.value;
+  let rawBytes = currentPool.sizeBytes || 0;
+  let usableBytes = currentPool.freeBytes + currentPool.allocatedBytes;
+  let dataCount = currentPool.devices?.length || 0;
+  let cacheCount = 0;
+  let logCount = 0;
+  let spareCount = 0;
+
+  for (const v of editBuilderVdevs.value) {
+    const disks = v.devicePaths.map((p) => getDiskByPath(p)).filter(Boolean) as Disk[];
+    const vRaw = disks.reduce((acc, d) => acc + d.sizeBytes, 0);
+    rawBytes += vRaw;
+
+    if (v.type === 'data') {
+      dataCount += disks.length;
+      if (v.layout === 'mirror') {
+        const minDisk = disks.reduce((min, d) => Math.min(min, d.sizeBytes), Infinity);
+        usableBytes += minDisk === Infinity ? 0 : minDisk;
+      } else if (v.layout.startsWith('raidz')) {
+        const parity = v.layout === 'raidz1' ? 1 : v.layout === 'raidz2' ? 2 : 3;
+        const dataDisks = Math.max(0, disks.length - parity);
+        const minDisk = disks.reduce((min, d) => Math.min(min, d.sizeBytes), Infinity);
+        usableBytes += minDisk === Infinity ? 0 : minDisk * dataDisks;
+      } else {
+        usableBytes += vRaw;
+      }
+    } else if (v.type === 'cache') {
+      cacheCount += disks.length;
+    } else if (v.type === 'log') {
+      logCount += disks.length;
+    } else if (v.type === 'spare') {
+      spareCount += disks.length;
+    }
+  }
+
+  return {
+    totalRawBytes: rawBytes,
+    estimatedUsableBytes: usableBytes,
+    dataDrivesCount: dataCount,
+    cacheDrivesCount: cacheCount,
+    logDrivesCount: logCount,
+    spareDrivesCount: spareCount,
+  };
+});
+
+const isEditPoolBuilderValid = computed(() => {
+  if (!pool.value) return false;
+  const p = pool.value;
+  const hasSettingsChanges =
+    configForm.sync !== ((p.sync as any) || 'standard') ||
+    configForm.autotrim !== ((p.autotrim as any) || 'off') ||
+    configForm.compression !== (p.compression || 'lz4');
+
+  const newVdevsWithDisks = editBuilderVdevs.value.filter((v) => v.devicePaths.length > 0);
+  if (newVdevsWithDisks.length > 0) {
+    return newVdevsWithDisks.every((v) => getVdevValidation(v).valid);
+  }
+
+  return hasSettingsChanges;
+});
+
+async function handleRemoveExistingDevice(devicePath: string) {
+  if (!pool.value) return;
+  const confirmed = await confirmModal({
+    title: 'Remove Device from Pool',
+    tone: 'danger',
+    message: `Remove device "${devicePath}" from pool "${cleanName.value}"?`,
+    details: 'This device will be detached from the pool. Ensure data redundancy is preserved before detaching.',
+    confirmText: 'Remove Device',
+  });
+  if (!confirmed) return;
+
+  isBusy.value = true;
+  try {
+    await services.zfs.removeVdev(pool.value.name, devicePath);
+    notify('success', `Removed device "${devicePath}" from pool "${cleanName.value}"`);
+    await refreshAllData();
+    await refreshZfsSubresources(cleanName.value);
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to remove device');
+  } finally {
+    isBusy.value = false;
+  }
+}
+
+async function handleApplyPoolConfig() {
+  if (!pool.value || isBusy.value) return;
+  isBusy.value = true;
+
+  try {
+    const p = pool.value;
+    const hasSettingsChanges =
+      configForm.sync !== ((p.sync as any) || 'standard') ||
+      configForm.autotrim !== ((p.autotrim as any) || 'off') ||
+      configForm.compression !== (p.compression || 'lz4');
+
+    if (hasSettingsChanges) {
+      await services.zfs.updatePool(p.name, {
+        sync: configForm.sync,
+        autotrim: configForm.autotrim,
+        compression: configForm.compression,
+      });
+    }
+
+    const newVdevs = editBuilderVdevs.value.filter((v) => v.devicePaths.length > 0);
+    for (const v of newVdevs) {
+      const val = getVdevValidation(v);
+      if (!val.valid) {
+        notify('error', `VDEV ${v.type.toUpperCase()}: ${val.message}`);
+        isBusy.value = false;
+        return;
+      }
+      await services.zfs.addVdev(p.name, {
+        type: v.type,
+        layout: v.layout,
+        devices: v.devicePaths,
+      });
+    }
+
+    notify(
+      'success',
+      newVdevs.length > 0
+        ? `Expanded pool "${cleanName.value}" with ${newVdevs.length} new VDEV tier(s)`
+        : `Updated properties for pool "${cleanName.value}"`
+    );
+    editBuilderVdevs.value = [];
+    await refreshAllData();
+    await refreshZfsSubresources(cleanName.value);
+  } catch (err: any) {
+    notify('error', err?.message || 'Failed to update pool layout');
   } finally {
     isBusy.value = false;
   }
@@ -670,48 +1058,466 @@ const poolDisks = computed(() => {
       </div>
     </div>
 
-    <!-- Subtab 5: Configuration Properties -->
-    <div v-else-if="props.activeSubTab === 'config'" class="pool-tab-content">
-      <div class="card" style="max-width: 720px">
+    <!-- Subtab 5: Configuration & VDEV Infrastructure Designer -->
+    <div v-else-if="props.activeSubTab === 'config'" class="pool-tab-content" style="display: flex; flex-direction: column; gap: 20px">
+      <!-- 1. Pool Properties Card -->
+      <div class="card">
         <div class="card-header">
           <div>
-            <h3 class="card-title">Pool Properties</h3>
-            <p class="card-subtitle">Configure synchronization, compression, and trimming</p>
+            <h3 class="card-title">Storage Policies &amp; Properties</h3>
+            <p class="card-subtitle">Configure synchronization, compression, and TRIM policies for {{ cleanName }}</p>
+          </div>
+          <button class="btn btn-primary btn-sm" :disabled="isBusy" @click="handleSaveConfig">
+            <MdiIcon :path="mdiCheck" size="14" style="margin-right: 4px" />
+            Save Properties
+          </button>
+        </div>
+
+        <div class="card-body">
+          <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px">
+            <div class="form-group">
+              <label class="form-label">Sync Policy</label>
+              <select v-model="configForm.sync" class="form-select">
+                <option value="standard">standard (Default POSIX fsync handling)</option>
+                <option value="always">always (Force synchronous writes to SLOG/ZIL)</option>
+                <option value="disabled">disabled (Ignore fsync, maximize write throughput)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Autotrim (SSD / NVMe TRIM)</label>
+              <select v-model="configForm.autotrim" class="form-select">
+                <option value="off">off (TRIM disabled)</option>
+                <option value="on">on (Continuous background TRIM of freed LBAs)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Default Compression Algorithm</label>
+              <select v-model="configForm.compression" class="form-select">
+                <option value="lz4">lz4 (Recommended - High throughput, low CPU)</option>
+                <option value="zstd">zstd (Higher ratio, modern Zstandard)</option>
+                <option value="gzip">gzip (Legacy high compression)</option>
+                <option value="off">off (No compression)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. VDEV Layout & Storage Expansion Drag & Drop Workspace -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h3 class="card-title">VDEV Infrastructure &amp; Storage Expansion</h3>
+            <p class="card-subtitle">Drag and drop unattached physical drives to expand storage or add cache, log, and spare tiers</p>
+          </div>
+          <div style="display: flex; gap: 8px">
+            <button
+              class="btn btn-primary btn-sm"
+              :disabled="!isEditPoolBuilderValid || isBusy"
+              @click="handleApplyPoolConfig"
+            >
+              <MdiIcon v-if="isBusy" :path="mdiRefresh" size="14" class="spin" style="margin-right: 4px" />
+              <MdiIcon v-else :path="mdiCheck" size="14" style="margin-right: 4px" />
+              {{ isBusy ? 'Applying...' : 'Apply Layout & Expand' }}
+            </button>
           </div>
         </div>
 
-        <div class="card-body" style="display: flex; flex-direction: column; gap: 16px">
-          <div class="form-group">
-            <label class="form-label">Sync Policy</label>
-            <select v-model="configForm.sync" class="form-select">
-              <option value="standard">standard (Default POSIX fsync handling)</option>
-              <option value="always">always (Force synchronous writes to SLOG/ZIL)</option>
-              <option value="disabled">disabled (Ignore fsync, maximize write throughput)</option>
-            </select>
-          </div>
+        <div class="card-body">
+          <div class="builder-workspace">
+            <!-- Left Column: Available Drives Bank -->
+            <div class="drives-bank-panel">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px">
+                <div style="font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px">
+                  <MdiIcon :path="mdiHarddisk" size="16" style="color: var(--accent-primary)" />
+                  <span>Available Drives</span>
+                </div>
+                <span class="badge badge-neutral" style="font-size: 11px">
+                  {{ filteredEditAvailableDisks.length }} unattached
+                </span>
+              </div>
 
-          <div class="form-group">
-            <label class="form-label">Autotrim (SSD / NVMe TRIM)</label>
-            <select v-model="configForm.autotrim" class="form-select">
-              <option value="off">off (TRIM disabled)</option>
-              <option value="on">on (Continuous background TRIM of freed LBAs)</option>
-            </select>
-          </div>
+              <!-- Drive Search Filter -->
+              <div style="position: relative; margin-bottom: 12px">
+                <MdiIcon
+                  :path="mdiMagnify"
+                  size="15"
+                  style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--text-muted)"
+                />
+                <input
+                  v-model="editDriveSearchQuery"
+                  class="form-input"
+                  placeholder="Filter device, model, serial..."
+                  style="padding-left: 28px; font-size: 12px; height: 32px"
+                />
+              </div>
 
-          <div class="form-group">
-            <label class="form-label">Default Compression Algorithm</label>
-            <select v-model="configForm.compression" class="form-select">
-              <option value="lz4">lz4 (Recommended - High throughput, low CPU)</option>
-              <option value="zstd">zstd (Higher ratio, modern Zstandard)</option>
-              <option value="gzip">gzip (Legacy high compression)</option>
-              <option value="off">off (No compression)</option>
-            </select>
-          </div>
+              <!-- Drive Cards List -->
+              <div class="drives-list">
+                <div
+                  v-if="filteredEditAvailableDisks.length === 0"
+                  style="text-align: center; padding: 28px 12px; color: var(--text-muted); font-size: 12px"
+                >
+                  <MdiIcon :path="mdiAlertCircleOutline" size="24" style="margin-bottom: 6px; opacity: 0.6" /><br />
+                  No unassigned drives available on this host.
+                </div>
 
-          <div style="display: flex; justify-content: flex-end; margin-top: 10px">
-            <button class="btn btn-primary" :disabled="isBusy" @click="handleSaveConfig">
-              Save Properties
-            </button>
+                <div
+                  v-for="d in filteredEditAvailableDisks"
+                  :key="d.devicePath"
+                  class="drive-card"
+                  :class="{ 'is-assigned': editBuilderAssignedPaths.has(d.devicePath) }"
+                  draggable="true"
+                  @dragstart="onDragStartDrive($event, d.devicePath)"
+                  @dragend="onDragEndDrive"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: flex-start">
+                    <div style="display: flex; align-items: center; gap: 6px">
+                      <MdiIcon :path="mdiDragVariant" size="16" style="color: var(--text-muted); cursor: grab" />
+                      <span class="mono" style="font-weight: 700; font-size: 13px; color: var(--text-primary)">
+                        {{ d.devicePath }}
+                      </span>
+                    </div>
+                    <span class="badge badge-info mono" style="font-weight: 700; font-size: 11px">
+                      {{ formatBytes(d.sizeBytes) }}
+                    </span>
+                  </div>
+
+                  <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap" :title="d.model || d.vendor">
+                    {{ d.model || d.vendor || 'Physical Disk' }}
+                  </div>
+
+                  <div v-if="d.serial" class="mono" style="font-size: 10px; color: var(--text-muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
+                    S/N: {{ d.serial }}
+                  </div>
+
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 10.5px">
+                    <div style="display: flex; gap: 4px">
+                      <span class="badge badge-neutral" style="font-size: 9.5px">{{ d.type }}</span>
+                      <span class="badge badge-neutral" style="font-size: 9.5px">{{ (d.transport || 'disk').toUpperCase() }}</span>
+                      <span v-if="d.smartStatus" class="badge badge-success" style="font-size: 9.5px">{{ d.smartStatus }}</span>
+                    </div>
+
+                    <span v-if="editBuilderAssignedPaths.has(d.devicePath)" class="badge badge-success" style="font-size: 9.5px">
+                      In VDEV
+                    </span>
+                  </div>
+
+                  <!-- Quick Assign Buttons for Direct Click Placement -->
+                  <div
+                    v-if="!editBuilderAssignedPaths.has(d.devicePath) && editBuilderVdevs.length > 0"
+                    style="margin-top: 8px; border-top: 1px dashed var(--border-subtle); padding-top: 6px; display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 4px"
+                  >
+                    <button
+                      v-for="(v, vIdx) in editBuilderVdevs"
+                      :key="v.id"
+                      type="button"
+                      class="btn btn-xs"
+                      style="font-size: 9.5px; padding: 2px 6px"
+                      :title="`Assign to ${v.type.toUpperCase()}`"
+                      @click="assignDriveToEditVdev(d.devicePath, v.id)"
+                    >
+                      + {{ v.type.toUpperCase() }} {{ existingActiveVdevs.filter(e => e.type === v.type).length + vIdx + 1 }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Column: VDEV Infrastructure Canvas -->
+            <div class="vdev-canvas-panel">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
+                <div style="font-weight: 700; font-size: 13.5px; color: var(--text-primary); display: flex; align-items: center; gap: 6px">
+                  <span>Pool VDEV Tiers</span>
+                </div>
+
+                <!-- Add Tier VDEV Buttons -->
+                <div style="display: flex; gap: 6px; flex-wrap: wrap">
+                  <button type="button" class="btn btn-xs btn-primary-outline" @click="addEditBuilderVdev('data')">
+                    <MdiIcon :path="mdiPlus" size="12" /> Data VDEV
+                  </button>
+                  <button type="button" class="btn btn-xs" style="background: var(--accent-bg-subtle); color: var(--purple-text); border: 1px solid var(--border-subtle)" @click="addEditBuilderVdev('cache')">
+                    <MdiIcon :path="mdiFlash" size="12" /> + Cache (L2ARC)
+                  </button>
+                  <button type="button" class="btn btn-xs" style="background: var(--warning-bg); color: var(--warning-text); border: 1px solid var(--warning-border)" @click="addEditBuilderVdev('log')">
+                    <MdiIcon :path="mdiPlus" size="12" /> + Log (SLOG)
+                  </button>
+                  <button type="button" class="btn btn-xs btn-neutral" @click="addEditBuilderVdev('spare')">
+                    <MdiIcon :path="mdiPlus" size="12" /> + Hot Spare
+                  </button>
+                  <button type="button" class="btn btn-xs" style="background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border)" @click="addEditBuilderVdev('special')">
+                    <MdiIcon :path="mdiPlus" size="12" /> + Special
+                  </button>
+                </div>
+              </div>
+
+              <!-- List of VDEVs with Drop Zones -->
+              <div style="display: flex; flex-direction: column; gap: 12px">
+                <!-- 1. Existing Active VDEVs -->
+                <div
+                  v-for="(vdev, evIdx) in existingActiveVdevs"
+                  :key="vdev.name"
+                  class="vdev-builder-card"
+                  :class="{
+                    'is-data': vdev.type === 'data',
+                    'is-cache': vdev.type === 'cache',
+                    'is-log': vdev.type === 'log',
+                    'is-spare': vdev.type === 'spare',
+                    'is-special': vdev.type === 'special',
+                  }"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px">
+                    <div style="display: flex; align-items: center; gap: 8px">
+                      <span
+                        class="badge mono font-semibold"
+                        :class="
+                          vdev.type === 'data'
+                            ? 'badge-info'
+                            : vdev.type === 'cache'
+                            ? 'badge-purple'
+                            : vdev.type === 'log'
+                            ? 'badge-warning'
+                            : vdev.type === 'special'
+                            ? 'badge-success'
+                            : 'badge-neutral'
+                        "
+                        style="font-size: 11px"
+                      >
+                        {{ vdev.type.toUpperCase() }} TIER #{{ evIdx + 1 }}
+                      </span>
+                      <span class="badge badge-success mono" style="font-size: 10px">ACTIVE</span>
+                      <span class="mono" style="font-size: 11px; color: var(--text-secondary)">
+                        Layout: <strong class="mono" style="color: var(--text-primary)">{{ (vdev.layout || 'stripe').toUpperCase() }}</strong>
+                      </span>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 8px">
+                      <span class="mono" style="font-size: 11px; color: var(--text-secondary)">
+                        {{ vdev.devicePaths.length }} drive{{ vdev.devicePaths.length === 1 ? '' : 's' }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- Existing Devices Chips -->
+                  <div class="vdev-drop-target has-drives">
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px; width: 100%">
+                      <div
+                        v-for="dp in vdev.devicePaths"
+                        :key="dp"
+                        class="vdev-drive-chip"
+                      >
+                        <div style="display: flex; align-items: center; gap: 6px">
+                          <MdiIcon :path="mdiHarddisk" size="14" style="color: var(--accent-primary)" />
+                          <span class="mono font-semibold" style="font-size: 12px">{{ dp }}</span>
+                          <span class="badge badge-neutral mono" style="font-size: 10px">
+                            {{ formatBytes(getDiskByPath(dp)?.sizeBytes || 0) }}
+                          </span>
+                        </div>
+                        <button
+                          v-if="['cache', 'log', 'spare'].includes(vdev.type)"
+                          type="button"
+                          class="chip-remove-btn"
+                          title="Detach device from pool"
+                          @click.stop="handleRemoveExistingDevice(dp)"
+                        >
+                          <MdiIcon :path="mdiClose" size="12" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Validation Feedback Alert -->
+                  <div class="vdev-validation-bar ok">
+                    <MdiIcon :path="mdiCheckCircleOutline" size="14" />
+                    <span>Active ({{ vdev.state || 'ONLINE' }})</span>
+                  </div>
+                </div>
+
+                <!-- 2. Staged Expansion VDEVs -->
+                <div
+                  v-for="(vdev, vIdx) in editBuilderVdevs"
+                  :key="vdev.id"
+                  class="vdev-builder-card"
+                  :class="{
+                    'drag-hover': hoveredVdevId === vdev.id,
+                    'is-data': vdev.type === 'data',
+                    'is-cache': vdev.type === 'cache',
+                    'is-log': vdev.type === 'log',
+                    'is-spare': vdev.type === 'spare',
+                    'is-special': vdev.type === 'special',
+                  }"
+                  @dragover="onDragOverVdev($event, vdev.id)"
+                  @dragleave="onDragLeaveVdev(vdev.id)"
+                  @drop="onDropEditDrive(vdev.id, $event)"
+                >
+                  <!-- VDEV Card Header -->
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px">
+                    <div style="display: flex; align-items: center; gap: 8px">
+                      <span
+                        class="badge mono font-semibold"
+                        :class="
+                          vdev.type === 'data'
+                            ? 'badge-info'
+                            : vdev.type === 'cache'
+                            ? 'badge-purple'
+                            : vdev.type === 'log'
+                            ? 'badge-warning'
+                            : vdev.type === 'special'
+                            ? 'badge-success'
+                            : 'badge-neutral'
+                        "
+                        style="font-size: 11px"
+                      >
+                        NEW {{ vdev.type.toUpperCase() }} TIER #{{ existingActiveVdevs.filter(e => e.type === vdev.type).length + vIdx + 1 }}
+                      </span>
+
+                      <!-- Layout Selector -->
+                      <div style="display: flex; align-items: center; gap: 6px">
+                        <span style="font-size: 11px; color: var(--text-secondary)">Layout:</span>
+                        <select
+                          v-if="vdev.type === 'data'"
+                          v-model="vdev.layout"
+                          class="form-select mono"
+                          style="font-size: 11px; height: 26px; padding: 2px 20px 2px 8px"
+                        >
+                          <option value="mirror">Mirror (RAID-1)</option>
+                          <option value="raidz1">RAIDZ1 (Single Parity)</option>
+                          <option value="raidz2">RAIDZ2 (Dual Parity)</option>
+                          <option value="raidz3">RAIDZ3 (Triple Parity)</option>
+                          <option value="stripe">Stripe (No Parity)</option>
+                        </select>
+                        <select
+                          v-else-if="vdev.type === 'log'"
+                          v-model="vdev.layout"
+                          class="form-select mono"
+                          style="font-size: 11px; height: 26px; padding: 2px 20px 2px 8px"
+                        >
+                          <option value="mirror">Mirror (Recommended)</option>
+                          <option value="stripe">Stripe (Single SLOG)</option>
+                        </select>
+                        <select
+                          v-else-if="vdev.type === 'special'"
+                          v-model="vdev.layout"
+                          class="form-select mono"
+                          style="font-size: 11px; height: 26px; padding: 2px 20px 2px 8px"
+                        >
+                          <option value="mirror">Mirror (Redundant)</option>
+                          <option value="stripe">Stripe</option>
+                        </select>
+                        <span v-else class="mono" style="font-size: 11px; color: var(--text-muted)">
+                          STRIPE
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 8px">
+                      <span class="mono" style="font-size: 11px; color: var(--text-secondary)">
+                        {{ vdev.devicePaths.length }} drive{{ vdev.devicePaths.length === 1 ? '' : 's' }}
+                      </span>
+                      <button
+                        type="button"
+                        class="btn btn-xs btn-icon btn-danger"
+                        title="Remove this expansion VDEV"
+                        @click="removeEditBuilderVdev(vdev.id)"
+                      >
+                        <MdiIcon :path="mdiClose" size="14" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Drop Zone -->
+                  <div
+                    class="vdev-drop-target"
+                    :class="{ 'has-drives': vdev.devicePaths.length > 0 }"
+                  >
+                    <div
+                      v-if="vdev.devicePaths.length === 0"
+                      class="drop-placeholder"
+                    >
+                      <MdiIcon :path="mdiDragVariant" size="20" style="opacity: 0.5; margin-bottom: 4px" />
+                      <span>Drag unassigned drives here, or click quick-assign on the left.</span>
+                    </div>
+
+                    <!-- Dropped Drives Chips -->
+                    <div
+                      v-else
+                      style="display: flex; flex-wrap: wrap; gap: 8px; width: 100%"
+                    >
+                      <div
+                        v-for="dp in vdev.devicePaths"
+                        :key="dp"
+                        class="vdev-drive-chip"
+                      >
+                        <div style="display: flex; align-items: center; gap: 6px">
+                          <MdiIcon :path="mdiHarddisk" size="14" style="color: var(--accent-primary)" />
+                          <span class="mono font-semibold" style="font-size: 12px">{{ dp }}</span>
+                          <span class="badge badge-neutral mono" style="font-size: 10px">
+                            {{ formatBytes(getDiskByPath(dp)?.sizeBytes || 0) }}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          class="chip-remove-btn"
+                          title="Remove drive from VDEV"
+                          @click.stop="removeDriveFromEditVdev(vdev.id, dp)"
+                        >
+                          <MdiIcon :path="mdiClose" size="12" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Validation Feedback Alert -->
+                  <div
+                    class="vdev-validation-bar"
+                    :class="getVdevValidation(vdev).state"
+                  >
+                    <MdiIcon
+                      :path="getVdevValidation(vdev).state === 'ok' ? mdiCheckCircleOutline : mdiAlertCircleOutline"
+                      size="14"
+                    />
+                    <span>{{ getVdevValidation(vdev).message }}</span>
+                  </div>
+                </div>
+
+                <!-- Empty Builder State if No Expansion VDEVs -->
+                <div
+                  v-if="editBuilderVdevs.length === 0"
+                  style="text-align: center; padding: 24px; border: 1px dashed var(--border-subtle); border-radius: 8px; color: var(--text-muted); font-size: 12px"
+                >
+                  <span>No expansion VDEVs staged. Click <strong>+ Data VDEV</strong>, <strong>+ Cache</strong>, or <strong>+ Log</strong> above to add more tiers.</span>
+                </div>
+              </div>
+
+              <!-- Topology Capacity & Usable Storage Summary Banner -->
+              <div class="capacity-summary-card" style="margin-top: 8px">
+                <div style="font-weight: 700; font-size: 12.5px; color: var(--text-primary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px">
+                  <span>Estimated Total Capacity After Expansion</span>
+                </div>
+                <div class="summary-metrics-grid">
+                  <div>
+                    <div style="font-size: 11px; color: var(--text-secondary)">Total Raw Capacity</div>
+                    <div class="mono" style="font-weight: 700; font-size: 15px; color: var(--text-primary)">
+                      {{ formatBytes(editPoolCapacitySummary.totalRawBytes) }}
+                    </div>
+                  </div>
+                  <div>
+                    <div style="font-size: 11px; color: var(--text-secondary)">Estimated Usable Space</div>
+                    <div class="mono" style="font-weight: 700; font-size: 15px; color: var(--accent-primary)">
+                      {{ formatBytes(editPoolCapacitySummary.estimatedUsableBytes) }}
+                    </div>
+                  </div>
+                  <div>
+                    <div style="font-size: 11px; color: var(--text-secondary)">Drive Tiers</div>
+                    <div style="font-size: 12px; font-weight: 600; color: var(--text-primary)">
+                      {{ editPoolCapacitySummary.dataDrivesCount }} Data · {{ editPoolCapacitySummary.cacheDrivesCount }} Cache · {{ editPoolCapacitySummary.logDrivesCount }} Log · {{ editPoolCapacitySummary.spareDrivesCount }} Spare
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1023,5 +1829,196 @@ const poolDisks = computed(() => {
 
 .font-xs {
   font-size: 11.5px;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Builder Workspace Styles                                                  */
+/* -------------------------------------------------------------------------- */
+.builder-workspace {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 18px;
+}
+
+@media (max-width: 960px) {
+  .builder-workspace {
+    grid-template-columns: 1fr;
+  }
+}
+
+.drives-bank-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  max-height: 580px;
+}
+
+.drives-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.drive-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: grab;
+  user-select: none;
+  box-shadow: none;
+  transition: border-color 0.12s ease;
+}
+
+.drive-card:hover {
+  border-color: var(--accent-primary);
+}
+
+.drive-card.is-assigned {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+.vdev-canvas-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  max-height: 580px;
+  padding-right: 4px;
+}
+
+.vdev-builder-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 14px;
+  transition: border-color 0.15s ease;
+}
+
+.vdev-builder-card.is-data {
+  border-left: 3px solid var(--accent-primary);
+}
+
+.vdev-builder-card.is-cache {
+  border-left: 3px solid var(--purple-text, #a855f7);
+}
+
+.vdev-builder-card.is-log {
+  border-left: 3px solid var(--warning-text, #f59e0b);
+}
+
+.vdev-builder-card.is-spare {
+  border-left: 3px solid var(--text-secondary);
+}
+
+.vdev-builder-card.is-special {
+  border-left: 3px solid var(--success-text, #22c55e);
+}
+
+.vdev-builder-card.drag-hover {
+  border-color: var(--accent-primary);
+  background: var(--accent-bg-subtle, rgba(2, 132, 199, 0.08));
+}
+
+.vdev-drop-target {
+  min-height: 64px;
+  border: 1px dashed var(--border-strong, #475569);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.vdev-drop-target.has-drives {
+  border-style: solid;
+  border-color: var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.drop-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  text-align: center;
+  pointer-events: none;
+  gap: 4px;
+}
+
+.vdev-drive-chip {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 6px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: none;
+}
+
+.chip-remove-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s ease;
+}
+
+.chip-remove-btn:hover {
+  color: var(--danger-text, #ef4444);
+}
+
+.vdev-validation-bar {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vdev-validation-bar.ok {
+  background: var(--success-bg, rgba(34, 197, 94, 0.12));
+  color: var(--success-text, #4ade80);
+  border: 1px solid var(--success-border, rgba(34, 197, 94, 0.25));
+}
+
+.vdev-validation-bar.warn {
+  background: var(--warning-bg, rgba(245, 158, 11, 0.12));
+  color: var(--warning-text, #fbbf24);
+  border: 1px solid var(--warning-border, rgba(245, 158, 11, 0.25));
+}
+
+.vdev-validation-bar.info {
+  background: var(--bg-surface-elevated, #1e293b);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+}
+
+.capacity-summary-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.summary-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
 }
 </style>
