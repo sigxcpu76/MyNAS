@@ -2730,6 +2730,11 @@ func (a *Adapter) ListDirectories(ctx context.Context, reqPath string) (*domain.
 		cleanPath = "/" + cleanPath
 	}
 
+	// If cleanPath points to a regular file, browse its parent directory
+	if fi, err := os.Stat(cleanPath); err == nil && !fi.IsDir() {
+		cleanPath = filepath.Dir(cleanPath)
+	}
+
 	parentPath := filepath.Dir(cleanPath)
 	if cleanPath == "/" {
 		parentPath = "/"

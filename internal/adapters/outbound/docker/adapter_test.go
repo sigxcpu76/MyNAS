@@ -503,6 +503,27 @@ func TestDockerConfigAndDirectoryListing(t *testing.T) {
 	if !hasAppdata {
 		t.Fatalf("expected 'appdata' directory in testDir entries, got %v", dirs.Entries)
 	}
+
+	// 5. Directory listing when given a regular file path (should browse parent directory)
+	filePath := filepath.Join(testDir, "config.yaml")
+	_ = os.WriteFile(filePath, []byte("key: value"), 0644)
+	fileDirs, err := adapter.ListDirectories(ctx, filePath)
+	if err != nil {
+		t.Fatalf("ListDirectories on file failed: %v", err)
+	}
+	if fileDirs.CurrentPath != testDir {
+		t.Fatalf("expected CurrentPath to be parent dir %q, got %q", testDir, fileDirs.CurrentPath)
+	}
+	hasConfigFile := false
+	for _, e := range fileDirs.Entries {
+		if e.Name == "config.yaml" && !e.IsDir {
+			hasConfigFile = true
+			break
+		}
+	}
+	if !hasConfigFile {
+		t.Fatalf("expected 'config.yaml' file in fileDirs entries, got %v", fileDirs.Entries)
+	}
 }
 
 func TestDockerAdapter_MainPoolEnforcement(t *testing.T) {

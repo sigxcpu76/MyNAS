@@ -425,6 +425,8 @@ watch(
                         v-model="answers[q.variable]"
                         :placeholder="`/mnt/${cleanAppsPool}/apps/${cleanAppId}/...`"
                         :root-hint="`/mnt/${cleanAppsPool}`"
+                        :select-files="true"
+                        modal-title="Select Host Folder or File"
                       />
                     </div>
                     <button

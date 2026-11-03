@@ -10,6 +10,7 @@ import {
   mdiFolderPlusOutline,
   mdiDisc,
   mdiFileDocumentOutline,
+  mdiFileCodeOutline,
 } from '@mdi/js';
 import { services } from '../../container';
 import { nasState } from '../store';
@@ -36,11 +37,39 @@ const props = withDefaults(
     disabled: false,
     buttonLabel: 'Browse',
     inputClass: 'input mono',
-    modalTitle: 'Select Host Folder',
+    modalTitle: '',
     selectFiles: false,
     fileExtensions: () => [],
   }
 );
+
+const effectiveModalTitle = computed(() => {
+  if (props.modalTitle) return props.modalTitle;
+  if (props.selectFiles && props.fileExtensions && props.fileExtensions.length > 0) {
+    return 'Select Image File';
+  }
+  if (props.selectFiles) {
+    return 'Select Host Folder or File';
+  }
+  return 'Select Host Folder';
+});
+
+function isCodeOrConfigFile(name: string): boolean {
+  const lower = name.toLowerCase();
+  return (
+    lower.endsWith('.yaml') ||
+    lower.endsWith('.yml') ||
+    lower.endsWith('.json') ||
+    lower.endsWith('.conf') ||
+    lower.endsWith('.ini') ||
+    lower.endsWith('.xml') ||
+    lower.endsWith('.sh') ||
+    lower.endsWith('.env') ||
+    lower.endsWith('.cfg') ||
+    lower.endsWith('.toml') ||
+    lower.endsWith('.txt')
+  );
+}
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void;
@@ -274,7 +303,7 @@ function selectFolderEntry(entry: DirectoryEntry) {
           <div style="display: flex; align-items: center; gap: 8px">
             <MdiIcon :path="mdiFolderOpenOutline" size="20" style="color: var(--accent-primary)" />
             <h4 style="font-size: 16px; font-weight: 700; color: var(--text-primary); margin: 0">
-              {{ modalTitle }}
+              {{ effectiveModalTitle }}
             </h4>
           </div>
           <button class="btn btn-sm" style="padding: 2px 6px" @click="isBrowserOpen = false">
@@ -356,6 +385,7 @@ function selectFolderEntry(entry: DirectoryEntry) {
               :key="entry.path"
               style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; transition: background 0.1s"
               class="folder-row"
+              :class="{ 'selected-row': entry.path === modelValue }"
               @click="entry.isDir ? navigateTo(entry.path) : selectFolderEntry(entry)"
             >
               <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; text-overflow: ellipsis">
@@ -372,6 +402,12 @@ function selectFolderEntry(entry: DirectoryEntry) {
                   style="color: var(--accent-primary); flex-shrink: 0"
                 />
                 <MdiIcon
+                  v-else-if="isCodeOrConfigFile(entry.name)"
+                  :path="mdiFileCodeOutline"
+                  size="18"
+                  style="color: var(--accent-primary); flex-shrink: 0"
+                />
+                <MdiIcon
                   v-else
                   :path="mdiFileDocumentOutline"
                   size="18"
@@ -379,6 +415,9 @@ function selectFolderEntry(entry: DirectoryEntry) {
                 />
                 <span class="mono" style="font-size: 12.5px; color: var(--text-primary)">
                   {{ entry.name }}
+                </span>
+                <span v-if="entry.path === modelValue" class="badge badge-info" style="font-size: 10px; padding: 1px 5px">
+                  Current
                 </span>
               </div>
 
@@ -395,7 +434,7 @@ function selectFolderEntry(entry: DirectoryEntry) {
                 <button
                   type="button"
                   class="btn btn-sm"
-                  :class="{ 'btn-primary': !entry.isDir }"
+                  :class="{ 'btn-primary': !entry.isDir || entry.path === modelValue }"
                   style="padding: 2px 8px; font-size: 11px"
                   @click.stop="selectFolderEntry(entry)"
                 >
@@ -406,8 +445,8 @@ function selectFolderEntry(entry: DirectoryEntry) {
           </div>
         </div>
 
-        <!-- Optional Subfolder or New Subfolder field (only when selecting directories) -->
-        <div v-if="!selectFiles" style="margin-top: 12px; display: flex; align-items: center; gap: 8px">
+        <!-- Optional Subfolder or New Subfolder field (when selecting directories or general paths) -->
+        <div v-if="!fileExtensions || fileExtensions.length === 0" style="margin-top: 12px; display: flex; align-items: center; gap: 8px">
           <MdiIcon :path="mdiFolderPlusOutline" size="18" style="color: var(--accent-primary); flex-shrink: 0" />
           <span style="font-size: 12px; color: var(--text-secondary); white-space: nowrap">Subfolder (optional):</span>
           <input
@@ -422,11 +461,11 @@ function selectFolderEntry(entry: DirectoryEntry) {
         <!-- Footer / Confirmation -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border-subtle); flex-shrink: 0">
           <div class="mono" style="font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; max-width: 380px">
-            <span v-if="selectFiles" style="color: var(--text-muted); font-size: 11.5px">
+            <span v-if="fileExtensions && fileExtensions.length > 0" style="color: var(--text-muted); font-size: 11.5px">
               Click any file row or "Select" to use it as boot / media image.
             </span>
             <span v-else>
-              Selected: <span style="color: var(--text-primary); font-weight: 600">{{ finalSelectedPath }}</span>
+              Folder: <span style="color: var(--text-primary); font-weight: 600">{{ finalSelectedPath }}</span>
             </span>
           </div>
 
@@ -435,14 +474,14 @@ function selectFolderEntry(entry: DirectoryEntry) {
               Cancel
             </button>
             <button
-              v-if="!selectFiles"
+              v-if="!fileExtensions || fileExtensions.length === 0"
               type="button"
               class="btn btn-sm btn-primary"
               style="display: inline-flex; align-items: center; gap: 4px"
               @click="selectCurrentFolder"
             >
               <MdiIcon :path="mdiCheck" size="14" />
-              <span>Select This Folder</span>
+              <span>Select Current Folder</span>
             </button>
           </div>
         </div>
@@ -454,5 +493,8 @@ function selectFolderEntry(entry: DirectoryEntry) {
 <style scoped>
 .folder-row:hover {
   background: rgba(255, 255, 255, 0.05);
+}
+.folder-row.selected-row {
+  background: rgba(122, 162, 247, 0.12);
 }
 </style>

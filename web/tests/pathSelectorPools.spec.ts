@@ -5,6 +5,7 @@ import { nasState } from '../src/ui/store';
 import PathSelector from '../src/ui/components/PathSelector.vue';
 import WidgetPools from '../src/ui/dashboard/widgets/WidgetPools.vue';
 import { mapZfsPool, mapSystemConfig } from '../src/adapters/http/httpAdapters';
+import { services } from '../src/container';
 
 describe('Pool Mountpoints & Path Suggestions', () => {
   beforeEach(() => {
@@ -178,5 +179,44 @@ describe('Pool Mountpoints & Path Suggestions', () => {
     await nextTick();
 
     expect(wrapper.text()).toContain('Click any file row or "Select" to use it as boot / media image');
+  });
+
+  it('supports selecting files and folders in PathSelector when selectFiles is true without fileExtensions', async () => {
+    vi.spyOn(services.apps, 'listDirectories').mockResolvedValue({
+      currentPath: '/mnt/fast/kubernetes-data/quasar',
+      parentPath: '/mnt/fast/kubernetes-data',
+      entries: [
+        { name: 'subfolder', path: '/mnt/fast/kubernetes-data/quasar/subfolder', isDir: true },
+        { name: 'config.yaml', path: '/mnt/fast/kubernetes-data/quasar/config.yaml', isDir: false },
+      ],
+    });
+
+    const wrapper = mount(PathSelector, {
+      props: {
+        modelValue: '/mnt/fast/kubernetes-data/quasar/config.yaml',
+        selectFiles: true,
+      },
+    });
+
+    const browseBtn = wrapper.find('button[title="Browse Folders..."]');
+    await browseBtn.trigger('click');
+    await nextTick();
+
+    const text = wrapper.text();
+    // Modal header
+    expect(text).toContain('Select Host Folder or File');
+    // Both directory and file should be rendered
+    expect(text).toContain('subfolder');
+    expect(text).toContain('config.yaml');
+    // Folder selection button is still available
+    expect(text).toContain('Select Current Folder');
+
+    // Clicking file row selects the file
+    const fileRow = wrapper.findAll('.folder-row').find((r) => r.text().includes('config.yaml'));
+    expect(fileRow).toBeDefined();
+    await fileRow!.trigger('click');
+
+    expect(wrapper.emitted('update:modelValue')).toBeDefined();
+    expect(wrapper.emitted('update:modelValue')![0]).toEqual(['/mnt/fast/kubernetes-data/quasar/config.yaml']);
   });
 });

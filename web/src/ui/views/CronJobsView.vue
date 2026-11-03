@@ -1084,6 +1084,8 @@ async function saveForm() {
                     v-model="v.hostPath"
                     placeholder="Host Path (e.g. /mnt/tank/...)"
                     button-label="Browse"
+                    :select-files="true"
+                    modal-title="Select Host Folder or File"
                   />
                 </div>
                 <div>

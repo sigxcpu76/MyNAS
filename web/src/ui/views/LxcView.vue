@@ -855,6 +855,8 @@ function copyTemplatePath(path: string) {
               v-model="form.templateArchive"
               :placeholder="lxcTemplatesDir + '/debian-12.tar.xz or custom archive path'"
               :root-hint="lxcTemplatesDir"
+              :select-files="true"
+              modal-title="Select LXC Template Archive"
             />
           </div>
         </div>

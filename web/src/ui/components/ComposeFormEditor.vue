@@ -1550,6 +1550,8 @@ function copyYaml() {
                         v-model="v.source"
                         :placeholder="defaultAppdataMount(form.appId, 'data')"
                         :root-hint="`/mnt/${appsPoolName}`"
+                        :select-files="true"
+                        modal-title="Select Host Folder or File to Mount"
                       />
                     </div>
                   </div>
