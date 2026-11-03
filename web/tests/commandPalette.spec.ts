@@ -4,7 +4,7 @@ import CommandPalette from '../src/ui/components/CommandPalette.vue';
 import { nasState } from '../src/ui/store';
 import type { DockerApp, LxcContainer, VirtualMachine, ZfsPool } from '../src/domain/models';
 
-describe('CommandPalette Multi-word & Compound Action Search', () => {
+describe('CommandPalette Multi-word, Compound & Fuzzy Subsequence Search', () => {
   beforeEach(() => {
     // Populate mock resources
     nasState.dockerApps = [
@@ -69,11 +69,56 @@ describe('CommandPalette Multi-word & Compound Action Search', () => {
     // Base resource Quasar should be at index 0 because single token boosts Resources
     expect(titles[0]).toBe('Quasar');
     // Contextual actions also present
-    expect(titles).toContain('Quasar: Terminal / Console');
+    expect(titles).toContain('Quasar: Console / Terminal');
     expect(titles).toContain('Quasar: Logs');
   });
 
-  it('selects Quasar: Terminal / Console when searching two words "qua term"', async () => {
+  it('fuzzy matches "qualo" to "Quasar: Logs" at index 0', async () => {
+    const wrapper = mount(CommandPalette, {
+      props: {
+        modelValue: true,
+      },
+    });
+
+    const input = wrapper.find('input.palette-input');
+    await input.setValue('qualo');
+
+    const titles = wrapper.findAll('.item-title').map((el) => el.text());
+    expect(titles.length).toBeGreaterThan(0);
+    expect(titles[0]).toBe('Quasar: Logs');
+  });
+
+  it('fuzzy matches "quaterm" to "Quasar: Console / Terminal" at index 0', async () => {
+    const wrapper = mount(CommandPalette, {
+      props: {
+        modelValue: true,
+      },
+    });
+
+    const input = wrapper.find('input.palette-input');
+    await input.setValue('quaterm');
+
+    const titles = wrapper.findAll('.item-title').map((el) => el.text());
+    expect(titles.length).toBeGreaterThan(0);
+    expect(titles[0]).toBe('Quasar: Console / Terminal');
+  });
+
+  it('fuzzy matches "quacon" to "Quasar: Console / Terminal" at index 0', async () => {
+    const wrapper = mount(CommandPalette, {
+      props: {
+        modelValue: true,
+      },
+    });
+
+    const input = wrapper.find('input.palette-input');
+    await input.setValue('quacon');
+
+    const titles = wrapper.findAll('.item-title').map((el) => el.text());
+    expect(titles.length).toBeGreaterThan(0);
+    expect(titles[0]).toBe('Quasar: Console / Terminal');
+  });
+
+  it('selects Quasar: Console / Terminal when searching two words "qua term"', async () => {
     const wrapper = mount(CommandPalette, {
       props: {
         modelValue: true,
@@ -85,13 +130,12 @@ describe('CommandPalette Multi-word & Compound Action Search', () => {
 
     const titles = wrapper.findAll('.item-title').map((el) => el.text());
     expect(titles.length).toBeGreaterThan(0);
-    expect(titles[0]).toBe('Quasar: Terminal / Console');
-    // Main resource Quasar shouldn't match "term" and should be excluded
+    expect(titles[0]).toBe('Quasar: Console / Terminal');
     expect(titles).not.toContain('Quasar');
     expect(titles).not.toContain('Quasar: Logs');
   });
 
-  it('selects Quasar: Terminal / Console when searching two words "qua con"', async () => {
+  it('selects Quasar: Console / Terminal when searching two words "qua con"', async () => {
     const wrapper = mount(CommandPalette, {
       props: {
         modelValue: true,
@@ -103,8 +147,7 @@ describe('CommandPalette Multi-word & Compound Action Search', () => {
 
     const titles = wrapper.findAll('.item-title').map((el) => el.text());
     expect(titles.length).toBeGreaterThan(0);
-    // Console ranks ahead of Configuration
-    expect(titles[0]).toBe('Quasar: Terminal / Console');
+    expect(titles[0]).toBe('Quasar: Console / Terminal');
   });
 
   it('supports inverted word order like "term qua"', async () => {
@@ -119,10 +162,10 @@ describe('CommandPalette Multi-word & Compound Action Search', () => {
 
     const titles = wrapper.findAll('.item-title').map((el) => el.text());
     expect(titles.length).toBeGreaterThan(0);
-    expect(titles[0]).toBe('Quasar: Terminal / Console');
+    expect(titles[0]).toBe('Quasar: Console / Terminal');
   });
 
-  it('selects VM console when searching "win con"', async () => {
+  it('fuzzy matches "wincon" to "windows11: Console"', async () => {
     const wrapper = mount(CommandPalette, {
       props: {
         modelValue: true,
@@ -130,13 +173,13 @@ describe('CommandPalette Multi-word & Compound Action Search', () => {
     });
 
     const input = wrapper.find('input.palette-input');
-    await input.setValue('win con');
+    await input.setValue('wincon');
 
     const titles = wrapper.findAll('.item-title').map((el) => el.text());
     expect(titles[0]).toBe('windows11: Console');
   });
 
-  it('selects LXC terminal when searching "ct100 term"', async () => {
+  it('fuzzy matches "ctterm" to "ct100: Terminal / Console"', async () => {
     const wrapper = mount(CommandPalette, {
       props: {
         modelValue: true,
@@ -144,13 +187,13 @@ describe('CommandPalette Multi-word & Compound Action Search', () => {
     });
 
     const input = wrapper.find('input.palette-input');
-    await input.setValue('ct100 term');
+    await input.setValue('ctterm');
 
     const titles = wrapper.findAll('.item-title').map((el) => el.text());
     expect(titles[0]).toBe('ct100: Terminal / Console');
   });
 
-  it('executing "qua term" switches to docker and sets dockerSubTab to console', async () => {
+  it('fuzzy matches acronym "npm" to "Nginx Proxy Manager"', async () => {
     const wrapper = mount(CommandPalette, {
       props: {
         modelValue: true,
@@ -158,14 +201,28 @@ describe('CommandPalette Multi-word & Compound Action Search', () => {
     });
 
     const input = wrapper.find('input.palette-input');
-    await input.setValue('qua term');
+    await input.setValue('npm');
+
+    const titles = wrapper.findAll('.item-title').map((el) => el.text());
+    expect(titles[0]).toBe('Nginx Proxy Manager');
+  });
+
+  it('executing "qualo" switches to docker and sets dockerSubTab to logs', async () => {
+    const wrapper = mount(CommandPalette, {
+      props: {
+        modelValue: true,
+      },
+    });
+
+    const input = wrapper.find('input.palette-input');
+    await input.setValue('qualo');
 
     const firstItem = wrapper.find('.palette-item');
     await firstItem.trigger('click');
 
     expect(nasState.selectedResourceId).toBe('docker:quasar');
     expect(nasState.activeTab).toBe('docker');
-    expect(nasState.dockerSubTab).toBe('console');
+    expect(nasState.dockerSubTab).toBe('logs');
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([false]);
   });
 });

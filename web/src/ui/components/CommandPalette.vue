@@ -388,11 +388,11 @@ const allItems = computed<CommandItem[]>(() => {
       },
     });
 
-    // Docker Action: Terminal / Console
+    // Docker Action: Console / Terminal
     items.push({
       id: `docker:${rawId}:console`,
       category: 'Actions',
-      title: `${title}: Terminal / Console`,
+      title: `${title}: Console / Terminal`,
       subtitle: `Open interactive container terminal for ${title}`,
       icon: mdiConsole,
       badge: 'Console',
@@ -792,8 +792,81 @@ const allItems = computed<CommandItem[]>(() => {
   return items;
 });
 
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function isWordBoundary(str: string, idx: number): boolean {
+  if (idx === 0) return true;
+  const prev = str[idx - 1];
+  return /[^a-zA-Z0-9]/.test(prev);
+}
+
+function fuzzyScore(pattern: string, target: string): { matched: boolean; score: number } {
+  pattern = pattern.toLowerCase();
+  target = target.toLowerCase();
+
+  if (!pattern) return { matched: true, score: 0 };
+  if (pattern.length > target.length) return { matched: false, score: 0 };
+
+  if (target === pattern) return { matched: true, score: 400 };
+  if (target.startsWith(pattern)) return { matched: true, score: 250 + pattern.length * 5 };
+
+  let pIdx = 0;
+  let tIdx = 0;
+  let score = 0;
+  let prevMatchIdx = -1;
+  let consecutiveMatches = 0;
+
+  while (pIdx < pattern.length && tIdx < target.length) {
+    const pChar = pattern[pIdx];
+    let bestTIdx = -1;
+
+    // Check if immediate next character is consecutive match
+    if (target[tIdx] === pChar) {
+      bestTIdx = tIdx;
+    } else {
+      // Look ahead for matching character, preferring word boundary
+      for (let i = tIdx; i < target.length; i++) {
+        if (target[i] === pChar) {
+          if (bestTIdx === -1) bestTIdx = i;
+          if (isWordBoundary(target, i)) {
+            bestTIdx = i;
+            break;
+          }
+        }
+      }
+    }
+
+    if (bestTIdx === -1) {
+      return { matched: false, score: 0 };
+    }
+
+    tIdx = bestTIdx;
+    let charScore = 10;
+
+    if (isWordBoundary(target, tIdx)) {
+      charScore += 35;
+    }
+
+    if (prevMatchIdx !== -1 && tIdx === prevMatchIdx + 1) {
+      consecutiveMatches++;
+      charScore += 25 * consecutiveMatches;
+    } else {
+      consecutiveMatches = 0;
+      if (prevMatchIdx !== -1) {
+        const gap = tIdx - prevMatchIdx - 1;
+        charScore -= Math.min(gap * 2, 20);
+      }
+    }
+
+    score += charScore;
+    prevMatchIdx = tIdx;
+    pIdx++;
+    tIdx++;
+  }
+
+  if (pIdx < pattern.length) {
+    return { matched: false, score: 0 };
+  }
+
+  return { matched: true, score };
 }
 
 const filteredItems = computed<CommandItem[]>(() => {
@@ -802,72 +875,70 @@ const filteredItems = computed<CommandItem[]>(() => {
     return allItems.value;
   }
 
-  // Tokenize multi-word queries by whitespace
-  // (e.g. "qua term" -> ["qua", "term"])
   const tokens = query.split(/\s+/).filter(Boolean);
+  const combinedNoSpaces = query.replace(/\s+/g, '');
 
   const matched: { item: CommandItem; score: number }[] = [];
 
   for (const item of allItems.value) {
     const title = item.title.toLowerCase();
-    const subtitle = item.subtitle.toLowerCase();
-    const category = item.category.toLowerCase();
     const badge = (item.badge || '').toLowerCase();
     const keywords = (item.keywords || []).map((k) => k.toLowerCase()).join(' ');
+    const composite = `${title} ${badge} ${keywords}`;
 
-    const haystack = `${title} ${subtitle} ${category} ${badge} ${keywords}`;
-
-    // Contextual compound check: Every token must match somewhere in the haystack!
-    const allTokensMatch = tokens.every((token) => haystack.includes(token));
-    if (!allTokensMatch) continue;
-
-    // Calculate ranking score
     let score = 0;
+    let matches = false;
 
-    for (const token of tokens) {
-      // 1. Exact match on title
-      if (title === token) {
-        score += 100;
-      } else if (title.startsWith(token)) {
-        // Starts with token (e.g. "qua" in "quasar: Console")
-        score += 65;
-      } else if (new RegExp(`\\b${escapeRegex(token)}`).test(title)) {
-        // Word boundary match in title (e.g. "term" in "Quasar: Terminal / Console")
-        score += 50;
-      } else if (title.includes(token)) {
-        score += 30;
+    // 1. Direct or fuzzy match of combined string across title or composite
+    // (e.g. "qualo" matches "Quasar: Logs", "quaterm" matches "Quasar: Console / Terminal")
+    const titleFuzzy = fuzzyScore(combinedNoSpaces, title);
+    const compositeFuzzy = fuzzyScore(combinedNoSpaces, composite);
+
+    if (titleFuzzy.matched) {
+      matches = true;
+      score = Math.max(score, titleFuzzy.score * 1.5);
+    } else if (compositeFuzzy.matched) {
+      matches = true;
+      score = Math.max(score, compositeFuzzy.score);
+    }
+
+    // 2. Multi-token match if spaces present (e.g. "qua lo" or "term qua")
+    if (tokens.length > 1) {
+      let tokensScore = 0;
+      let allTokensMatch = true;
+
+      for (const token of tokens) {
+        const tFuzzyTitle = fuzzyScore(token, title);
+        const tFuzzyComp = fuzzyScore(token, composite);
+        if (tFuzzyTitle.matched) {
+          tokensScore += tFuzzyTitle.score * 1.5;
+        } else if (tFuzzyComp.matched) {
+          tokensScore += tFuzzyComp.score;
+        } else {
+          allTokensMatch = false;
+          break;
+        }
       }
 
-      // 2. Keyword exact / prefix match
-      if ((item.keywords || []).some((k) => k.toLowerCase() === token)) {
-        score += 40;
-      } else if ((item.keywords || []).some((k) => k.toLowerCase().startsWith(token))) {
-        score += 25;
-      }
-
-      // 3. Badge match (e.g. badge is "Console" and token is "con")
-      if (badge && (badge === token || badge.startsWith(token))) {
-        score += 30;
-      }
-
-      // 4. Subtitle match
-      if (subtitle.includes(token)) {
-        score += 15;
-      }
-
-      // 5. Category match
-      if (category.startsWith(token)) {
-        score += 10;
+      if (allTokensMatch) {
+        matches = true;
+        score = Math.max(score, tokensScore);
       }
     }
 
-    // Single-word query boost for base Resources:
-    // If the user only typed "qua", show the Quasar main resource first
-    if (tokens.length === 1 && item.category === 'Resources') {
-      score += 25;
+    // Bonus for exact word prefix in title
+    if (title.startsWith(query)) {
+      score += 100;
     }
 
-    matched.push({ item, score });
+    // Single token boost for base Resources (e.g. "qua" -> Quasar over actions)
+    if (tokens.length === 1 && item.category === 'Resources' && title.startsWith(query)) {
+      score += 80;
+    }
+
+    if (matches && score > 0) {
+      matched.push({ item, score });
+    }
   }
 
   // Sort descending by score
@@ -940,7 +1011,7 @@ watch(
           v-model="searchQuery"
           type="text"
           class="palette-input"
-          placeholder="Search resources & actions (e.g. 'qua term', 'qua con', 'win vnc', 'pool scrub')..."
+          placeholder="Fuzzy search resources & actions (e.g. 'qualo', 'quaterm', 'quacon', 'wincon')..."
           spellcheck="false"
         />
         <kbd class="palette-kbd">ESC</kbd>
@@ -997,7 +1068,7 @@ watch(
           <kbd>ESC</kbd> <span>Close</span>
         </div>
         <div class="footer-tip hide-mobile" style="margin-left: auto; color: var(--text-muted)">
-          <span>Try: <code style="color: var(--accent-primary)">qua term</code> · <code style="color: var(--accent-primary)">qua con</code> · <code style="color: var(--accent-primary)">win con</code></span>
+          <span>Fuzzy: <code style="color: var(--accent-primary)">qualo</code> · <code style="color: var(--accent-primary)">quacon</code> · <code style="color: var(--accent-primary)">quaterm</code> · <code style="color: var(--accent-primary)">wincon</code></span>
         </div>
       </div>
     </div>
