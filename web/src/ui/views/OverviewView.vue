@@ -7,6 +7,7 @@ import {
   mdiClose,
   mdiDrag,
   mdiPlus,
+  mdiPuzzleOutline,
   mdiRestore,
   mdiTune,
 } from '@mdi/js';
@@ -16,6 +17,7 @@ import OverviewSkeleton from '../components/OverviewSkeleton.vue';
 import AddWidgetModal from '../dashboard/AddWidgetModal.vue';
 import {
   DEFAULT_DASHBOARD_LAYOUT,
+  PUZZLE_BENTO_LAYOUT,
   loadDashboardLayout,
   saveDashboardLayout,
   WIDGET_CATALOG,
@@ -144,6 +146,11 @@ function getAllowedSpans(type: string): number[] {
   return item?.allowedColSpans || [4, 6, 8, 12];
 }
 
+function getAllowedRowSpans(type: string): number[] {
+  const item = getWidgetCatalogItem(type);
+  return item?.allowedRowSpans || [1, 2, 3, 4];
+}
+
 function getSpanLabel(span: number): string {
   switch (span) {
     case 3:
@@ -161,6 +168,10 @@ function getSpanLabel(span: number): string {
   }
 }
 
+function getRowSpanLabel(span: number): string {
+  return `${span}x`;
+}
+
 function persistLayout() {
   saveDashboardLayout(dashboardLayout.value);
 }
@@ -168,6 +179,13 @@ function persistLayout() {
 function setWidgetColSpan(index: number, colSpan: number) {
   if (dashboardLayout.value[index]) {
     dashboardLayout.value[index].colSpan = colSpan;
+    persistLayout();
+  }
+}
+
+function setWidgetRowSpan(index: number, rowSpan: number) {
+  if (dashboardLayout.value[index]) {
+    dashboardLayout.value[index].rowSpan = rowSpan;
     persistLayout();
   }
 }
@@ -188,10 +206,12 @@ function moveWidget(index: number, direction: -1 | 1) {
 function handleAddWidget(type: string) {
   const cat = getWidgetCatalogItem(type);
   const defaultSpan = cat?.defaultColSpan || 6;
+  const defaultRowSpan = cat?.defaultRowSpan || 2;
   const newWidget: DashboardWidgetConfig = {
     id: `widget-${type}-${Date.now()}`,
     type,
     colSpan: defaultSpan,
+    rowSpan: defaultRowSpan,
   };
   dashboardLayout.value.push(newWidget);
   persistLayout();
@@ -199,6 +219,11 @@ function handleAddWidget(type: string) {
 
 function resetToDefault() {
   dashboardLayout.value = JSON.parse(JSON.stringify(DEFAULT_DASHBOARD_LAYOUT));
+  persistLayout();
+}
+
+function applyPuzzlePreset() {
+  dashboardLayout.value = JSON.parse(JSON.stringify(PUZZLE_BENTO_LAYOUT));
   persistLayout();
 }
 
@@ -251,13 +276,17 @@ function onDragEnd() {
         </div>
         <div>
           <div class="banner-title">Customize Dashboard</div>
-          <div class="banner-subtitle">Resize with width pills, drag or use arrows to reorder, or add new telemetry widgets.</div>
+          <div class="banner-subtitle">Configure 2D width and height, drag to interleave cards like puzzle pieces, or apply presets.</div>
         </div>
       </div>
       <div class="edit-banner-actions">
         <button class="btn btn-sm btn-secondary add-widget-btn" @click="showAddModal = true">
           <svg viewBox="0 0 24 24" class="btn-svg"><path :d="mdiPlus" /></svg>
           Add Widget
+        </button>
+        <button class="btn btn-sm btn-secondary puzzle-preset-btn" @click="applyPuzzlePreset" title="Apply optimal interleaved puzzle layout">
+          <svg viewBox="0 0 24 24" class="btn-svg"><path :d="mdiPuzzleOutline" /></svg>
+          Puzzle Layout
         </button>
         <button class="btn btn-sm btn-secondary reset-layout-btn" @click="resetToDefault" title="Reset layout to default">
           <svg viewBox="0 0 24 24" class="btn-svg"><path :d="mdiRestore" /></svg>
@@ -277,14 +306,15 @@ function onDragEnd() {
       </button>
     </div>
 
-    <!-- Responsive 12-Column Dashboard Grid -->
-    <div class="dashboard-grid">
+    <!-- Responsive 2D Puzzle Matrix Dashboard Grid -->
+    <div class="dashboard-grid" :class="{ editing: isEditMode }">
       <div
         v-for="(widget, index) in dashboardLayout"
         :key="widget.id"
         class="widget-wrapper"
         :class="[
           `col-span-${widget.colSpan || 12}`,
+          `row-span-${widget.rowSpan || 2}`,
           {
             editing: isEditMode,
             'is-dragging': draggedIndex === index,
@@ -313,22 +343,46 @@ function onDragEnd() {
             <span class="widget-type-label">
               {{ getWidgetCatalogItem(widget.type)?.name || widget.type }}
             </span>
+            <span class="tile-dim-badge" title="Tile dimensions: Width × Height">
+              {{ getSpanLabel(widget.colSpan) }} × {{ widget.rowSpan || 2 }}x
+            </span>
           </div>
 
           <div class="edit-center">
-            <!-- ColSpan Resizing Pills -->
-            <div class="span-pill-group">
-              <button
-                v-for="span in getAllowedSpans(widget.type)"
-                :key="span"
-                type="button"
-                class="span-btn"
-                :class="{ active: widget.colSpan === span }"
-                @click="setWidgetColSpan(index, span)"
-                :title="`Set width to ${getSpanLabel(span)} (${span} columns)`"
-              >
-                {{ getSpanLabel(span) }}
-              </button>
+            <!-- ColSpan (Width) Resizing Pills -->
+            <div class="dim-pill-control" title="Width (Columns)">
+              <span class="dim-axis-label">W</span>
+              <div class="span-pill-group">
+                <button
+                  v-for="span in getAllowedSpans(widget.type)"
+                  :key="span"
+                  type="button"
+                  class="span-btn"
+                  :class="{ active: widget.colSpan === span }"
+                  @click="setWidgetColSpan(index, span)"
+                  :title="`Set width to ${getSpanLabel(span)} (${span} columns)`"
+                >
+                  {{ getSpanLabel(span) }}
+                </button>
+              </div>
+            </div>
+
+            <!-- RowSpan (Height) Resizing Pills -->
+            <div class="dim-pill-control" title="Height (Rows)">
+              <span class="dim-axis-label">H</span>
+              <div class="span-pill-group">
+                <button
+                  v-for="rSpan in getAllowedRowSpans(widget.type)"
+                  :key="rSpan"
+                  type="button"
+                  class="span-btn row-span-btn"
+                  :class="{ active: (widget.rowSpan || 2) === rSpan }"
+                  @click="setWidgetRowSpan(index, rSpan)"
+                  :title="`Set height to ${rSpan}x (${rSpan} row units)`"
+                >
+                  {{ rSpan }}x
+                </button>
+              </div>
             </div>
           </div>
 
@@ -463,13 +517,25 @@ function onDragEnd() {
   fill: currentColor;
 }
 
-/* 12-Column Responsive CSS Grid */
+/* 2D Matrix Interleaved Puzzle CSS Grid */
 .dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(12, 1fr);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: 155px;
   grid-auto-flow: dense;
   gap: 16px;
   width: 100%;
+  align-items: stretch;
+}
+
+.dashboard-grid.editing {
+  background-image: 
+    linear-gradient(to right, rgba(122, 162, 247, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(122, 162, 247, 0.05) 1px, transparent 1px);
+  background-size: calc((100% - 11 * 16px) / 12 + 16px) 171px;
+  border-radius: 12px;
+  padding: 8px;
+  margin: -8px;
 }
 
 .widget-wrapper {
@@ -478,9 +544,16 @@ function onDragEnd() {
   flex-direction: column;
   position: relative;
   transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  height: 100%;
 }
 
-/* Column Spans */
+.widget-wrapper > :not(.widget-edit-toolbar) {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+/* Horizontal Column Spans */
 .col-span-3 {
   grid-column: span 3;
 }
@@ -499,6 +572,23 @@ function onDragEnd() {
 
 .col-span-12 {
   grid-column: span 12;
+}
+
+/* Vertical Row Spans */
+.row-span-1 {
+  grid-row: span 1;
+}
+
+.row-span-2 {
+  grid-row: span 2;
+}
+
+.row-span-3 {
+  grid-row: span 3;
+}
+
+.row-span-4 {
+  grid-row: span 4;
 }
 
 /* Edit Mode Styles */
@@ -526,11 +616,12 @@ function onDragEnd() {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  padding: 5px 8px;
-  margin-bottom: 8px;
+  padding: 4px 8px;
+  margin-bottom: 6px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   gap: 8px;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .edit-left,
@@ -559,6 +650,31 @@ function onDragEnd() {
   color: var(--text-primary);
 }
 
+.tile-dim-badge {
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  background: var(--bg-tertiary);
+  color: var(--accent-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 1px 5px;
+  letter-spacing: 0.3px;
+}
+
+.dim-pill-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dim-axis-label {
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-muted);
+}
+
 .span-pill-group {
   display: inline-flex;
   background: var(--bg-tertiary);
@@ -572,7 +688,7 @@ function onDragEnd() {
   background: transparent;
   border: none;
   border-radius: 10px;
-  padding: 2px 7px;
+  padding: 2px 6px;
   font-size: 10.5px;
   font-weight: 500;
   color: var(--text-muted);
@@ -589,6 +705,10 @@ function onDragEnd() {
   color: var(--accent-primary);
   font-weight: 600;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.row-span-btn {
+  font-family: var(--font-mono, monospace);
 }
 
 .toolbar-btn {
@@ -652,6 +772,11 @@ function onDragEnd() {
   }
   .widget-wrapper {
     grid-column: span 12 !important;
+    grid-row: auto !important;
+    height: auto !important;
+  }
+  .widget-wrapper > :not(.widget-edit-toolbar) {
+    height: auto;
   }
   .dashboard-edit-banner {
     flex-direction: column;

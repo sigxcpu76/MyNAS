@@ -88,8 +88,9 @@ function getTempClass(temp?: number): string {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
-  max-height: 280px;
 }
 
 .disk-item {

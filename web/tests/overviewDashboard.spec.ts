@@ -406,6 +406,84 @@ describe('Overview Dashboard & Telemetry', () => {
       expect(widgets[0].find('.widget-type-label').text()).toBe(secondLabel);
       expect(widgets[1].find('.widget-type-label').text()).toBe(firstLabel);
     });
+
+    it('allows resizing a widget vertically using row span pills in edit mode', async () => {
+      const wrapper = mount(OverviewView);
+      await wrapper.find('.edit-dashboard-btn').trigger('click');
+
+      const firstWidget = wrapper.find('.widget-wrapper');
+      // KPIs defaults to row-span-1
+      expect(firstWidget.classes()).toContain('row-span-1');
+
+      // Find row span buttons (.row-span-btn)
+      const rowSpanButtons = firstWidget.findAll('.row-span-btn');
+      expect(rowSpanButtons.length).toBeGreaterThanOrEqual(2);
+
+      // Click the 2x row span button
+      const twoXBtn = rowSpanButtons.find((btn) => btn.text().includes('2x'));
+      expect(twoXBtn).toBeDefined();
+      await twoXBtn!.trigger('click');
+
+      // Should now have class row-span-2 and persisted to localStorage
+      expect(firstWidget.classes()).toContain('row-span-2');
+      expect(store.get('nas_dashboard_layout_v3')).toContain('"rowSpan":2');
+    });
+
+    it('displays 2D tile dimension badge in widget edit toolbar', async () => {
+      const wrapper = mount(OverviewView);
+      await wrapper.find('.edit-dashboard-btn').trigger('click');
+
+      const firstWidget = wrapper.find('.widget-wrapper');
+      const dimBadge = firstWidget.find('.tile-dim-badge');
+      expect(dimBadge.exists()).toBe(true);
+      expect(dimBadge.text()).toContain('Full × 1x');
+    });
+
+    it('applies interleaved puzzle layout preset when clicking puzzle layout button', async () => {
+      const wrapper = mount(OverviewView);
+      await wrapper.find('.edit-dashboard-btn').trigger('click');
+
+      const puzzleBtn = wrapper.find('.puzzle-preset-btn');
+      expect(puzzleBtn.exists()).toBe(true);
+      await puzzleBtn.trigger('click');
+
+      const widgets = wrapper.findAll('.widget-wrapper');
+      expect(widgets.length).toBe(9);
+
+      // Check puzzle elements: KPIs (12x1), Pools (8x2), CPU (4x1), Memory (4x1)
+      expect(widgets[0].classes()).toContain('col-span-12');
+      expect(widgets[0].classes()).toContain('row-span-1');
+
+      expect(widgets[1].classes()).toContain('col-span-8');
+      expect(widgets[1].classes()).toContain('row-span-2');
+
+      expect(widgets[2].classes()).toContain('col-span-4');
+      expect(widgets[2].classes()).toContain('row-span-1');
+
+      expect(widgets[3].classes()).toContain('col-span-4');
+      expect(widgets[3].classes()).toContain('row-span-1');
+
+      expect(store.get('nas_dashboard_layout_v3')).toContain('widget-cpu');
+      expect(store.get('nas_dashboard_layout_v3')).toContain('widget-memory');
+    });
+
+    it('migrates legacy saved layout without rowSpan and applies catalog default rowSpan', () => {
+      // Simulate legacy layout saved without rowSpan field
+      const legacyLayout = [
+        { id: 'widget-kpis', type: 'kpis', colSpan: 12 },
+        { id: 'widget-pools', type: 'pools', colSpan: 6 },
+      ];
+      store.set('nas_dashboard_layout_v3', JSON.stringify(legacyLayout));
+
+      const wrapper = mount(OverviewView);
+      const widgets = wrapper.findAll('.widget-wrapper');
+      expect(widgets.length).toBe(2);
+
+      // KPIs should receive default row-span-1
+      expect(widgets[0].classes()).toContain('row-span-1');
+      // Pools should receive default row-span-2
+      expect(widgets[1].classes()).toContain('row-span-2');
+    });
   });
 
   describe('WidgetSensors (Hardware Sensors, Power & Temperatures)', () => {

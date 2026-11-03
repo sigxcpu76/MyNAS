@@ -16,6 +16,7 @@ export interface DashboardWidgetConfig {
   id: string;
   type: string;
   colSpan: number; // 3, 4, 6, 8, 12
+  rowSpan?: number; // 1, 2, 3, 4
 }
 
 export interface WidgetCatalogItem {
@@ -25,6 +26,8 @@ export interface WidgetCatalogItem {
   icon: string;
   defaultColSpan: number;
   allowedColSpans: number[];
+  defaultRowSpan: number;
+  allowedRowSpans: number[];
   category: 'system' | 'storage' | 'network' | 'workloads';
 }
 
@@ -36,6 +39,8 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     icon: mdiViewDashboard,
     defaultColSpan: 12,
     allowedColSpans: [3, 4, 6, 8, 12],
+    defaultRowSpan: 1,
+    allowedRowSpans: [1, 2],
     category: 'system',
   },
   {
@@ -45,6 +50,8 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     icon: mdiDatabase,
     defaultColSpan: 12,
     allowedColSpans: [4, 6, 8, 12],
+    defaultRowSpan: 2,
+    allowedRowSpans: [2, 3, 4],
     category: 'storage',
   },
   {
@@ -54,6 +61,8 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     icon: mdiCpu64Bit,
     defaultColSpan: 6,
     allowedColSpans: [3, 4, 6, 8, 12],
+    defaultRowSpan: 2,
+    allowedRowSpans: [1, 2, 3],
     category: 'system',
   },
   {
@@ -63,6 +72,8 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     icon: mdiMemory,
     defaultColSpan: 6,
     allowedColSpans: [3, 4, 6, 8, 12],
+    defaultRowSpan: 2,
+    allowedRowSpans: [1, 2, 3],
     category: 'system',
   },
   {
@@ -72,6 +83,8 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     icon: mdiLanConnect,
     defaultColSpan: 12,
     allowedColSpans: [4, 6, 8, 12],
+    defaultRowSpan: 2,
+    allowedRowSpans: [2, 3, 4],
     category: 'network',
   },
   {
@@ -81,6 +94,8 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     icon: mdiServer,
     defaultColSpan: 6,
     allowedColSpans: [3, 4, 6, 8, 12],
+    defaultRowSpan: 2,
+    allowedRowSpans: [1, 2, 3],
     category: 'system',
   },
   {
@@ -90,6 +105,8 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     icon: mdiHarddisk,
     defaultColSpan: 6,
     allowedColSpans: [3, 4, 6, 8, 12],
+    defaultRowSpan: 2,
+    allowedRowSpans: [1, 2, 3, 4],
     category: 'storage',
   },
   {
@@ -99,6 +116,8 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     icon: mdiServerNetwork,
     defaultColSpan: 4,
     allowedColSpans: [3, 4, 6, 8, 12],
+    defaultRowSpan: 2,
+    allowedRowSpans: [1, 2, 3],
     category: 'workloads',
   },
   {
@@ -108,6 +127,8 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     icon: mdiDocker,
     defaultColSpan: 4,
     allowedColSpans: [3, 4, 6, 8, 12],
+    defaultRowSpan: 2,
+    allowedRowSpans: [1, 2, 3],
     category: 'workloads',
   },
   {
@@ -117,6 +138,8 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     icon: mdiFolderNetworkOutline,
     defaultColSpan: 4,
     allowedColSpans: [3, 4, 6, 8, 12],
+    defaultRowSpan: 2,
+    allowedRowSpans: [1, 2, 3],
     category: 'workloads',
   },
   {
@@ -126,6 +149,8 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     icon: mdiDocker,
     defaultColSpan: 12,
     allowedColSpans: [4, 6, 8, 12],
+    defaultRowSpan: 2,
+    allowedRowSpans: [2, 3, 4],
     category: 'workloads',
   },
   {
@@ -135,14 +160,28 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     icon: mdiThermometer,
     defaultColSpan: 12,
     allowedColSpans: [4, 6, 8, 12],
+    defaultRowSpan: 3,
+    allowedRowSpans: [2, 3, 4],
     category: 'system',
   },
 ];
 
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardWidgetConfig[] = [
-  { id: 'widget-kpis', type: 'kpis', colSpan: 12 },
-  { id: 'widget-pools', type: 'pools', colSpan: 12 },
-  { id: 'widget-network', type: 'network', colSpan: 12 },
+  { id: 'widget-kpis', type: 'kpis', colSpan: 12, rowSpan: 1 },
+  { id: 'widget-pools', type: 'pools', colSpan: 12, rowSpan: 2 },
+  { id: 'widget-network', type: 'network', colSpan: 12, rowSpan: 2 },
+];
+
+export const PUZZLE_BENTO_LAYOUT: DashboardWidgetConfig[] = [
+  { id: 'widget-kpis', type: 'kpis', colSpan: 12, rowSpan: 1 },
+  { id: 'widget-pools', type: 'pools', colSpan: 8, rowSpan: 2 },
+  { id: 'widget-cpu', type: 'cpu', colSpan: 4, rowSpan: 1 },
+  { id: 'widget-memory', type: 'memory', colSpan: 4, rowSpan: 1 },
+  { id: 'widget-network', type: 'network', colSpan: 6, rowSpan: 2 },
+  { id: 'widget-system', type: 'system', colSpan: 6, rowSpan: 2 },
+  { id: 'widget-vms', type: 'vms', colSpan: 4, rowSpan: 2 },
+  { id: 'widget-apps', type: 'apps', colSpan: 4, rowSpan: 2 },
+  { id: 'widget-shares', type: 'shares', colSpan: 4, rowSpan: 2 },
 ];
 
 export const STORAGE_KEY = 'nas_dashboard_layout_v3';
@@ -164,6 +203,10 @@ export function loadDashboardLayout(): DashboardWidgetConfig[] {
               if (w.type === 'network' && w.colSpan === 6) {
                 w.colSpan = 12;
               }
+              const cat = WIDGET_CATALOG.find((c) => c.type === w.type);
+              if (!w.rowSpan) {
+                w.rowSpan = cat?.defaultRowSpan || 2;
+              }
             });
             saveDashboardLayout(migrated);
             return migrated;
@@ -173,14 +216,26 @@ export function loadDashboardLayout(): DashboardWidgetConfig[] {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Sanitize items against known catalog types
-          const valid = parsed.filter(
-            (item: any) =>
-              item &&
-              typeof item.id === 'string' &&
-              typeof item.type === 'string' &&
-              WIDGET_CATALOG.some((c) => c.type === item.type)
-          );
+          // Sanitize items against known catalog types and ensure valid rowSpan
+          const valid = parsed
+            .filter(
+              (item: any) =>
+                item &&
+                typeof item.id === 'string' &&
+                typeof item.type === 'string' &&
+                WIDGET_CATALOG.some((c) => c.type === item.type)
+            )
+            .map((item: any) => {
+              const cat = WIDGET_CATALOG.find((c) => c.type === item.type);
+              const rowSpan =
+                typeof item.rowSpan === 'number' && item.rowSpan > 0
+                  ? item.rowSpan
+                  : cat?.defaultRowSpan || 2;
+              return {
+                ...item,
+                rowSpan,
+              };
+            });
           if (valid.length > 0) {
             return valid;
           }

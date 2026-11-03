@@ -46,6 +46,10 @@ function getColSpanLabel(span: number): string {
       return `${span} Cols`;
   }
 }
+
+function getRowSpanLabel(span: number): string {
+  return `${span}x Height`;
+}
 </script>
 
 <template>
@@ -129,7 +133,7 @@ function getColSpanLabel(span: number): string {
 
             <div class="catalog-card-footer">
               <span class="span-tag">
-                Default: {{ getColSpanLabel(item.defaultColSpan) }}
+                Default: {{ getColSpanLabel(item.defaultColSpan) }} × {{ getRowSpanLabel(item.defaultRowSpan) }}
               </span>
 
               <button

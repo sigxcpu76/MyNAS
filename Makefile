@@ -29,7 +29,7 @@ test:
 	go test -v -race ./cmd/... ./internal/...
 	cd web && npm test -- --run
 
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "v1.6.10-dev")
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "v1.6.11-dev")
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "HEAD")
 BUILD_DATE ?= $(shell date -u +'%Y-%m-%d')
 LDFLAGS := -s -w -X 'github.com/sigxcpu/nas/internal/version.Version=$(VERSION)' -X 'github.com/sigxcpu/nas/internal/version.GitCommit=$(COMMIT)' -X 'github.com/sigxcpu/nas/internal/version.BuildDate=$(BUILD_DATE)'
