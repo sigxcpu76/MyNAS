@@ -211,3 +211,10 @@ type CronJobPort interface {
 	Start(ctx context.Context) error
 	Stop() error
 }
+
+// PreferencesPort manages per-user preference storage in ~/.config/nas_preferences.yaml.
+type PreferencesPort interface {
+	GetPreferences(ctx context.Context, user *domain.User) (*domain.UserPreferences, error)
+	UpdatePreferences(ctx context.Context, user *domain.User, prefs *domain.UserPreferences) (*domain.UserPreferences, error)
+}
+

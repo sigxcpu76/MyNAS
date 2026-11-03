@@ -53,6 +53,7 @@ import type {
   ZfsVolume,
   DockerRegistry,
   DockerRegistryInput,
+  UserPreferences,
 } from '../../domain/models';
 import type {
   AuthPort,
@@ -136,6 +137,22 @@ export function mapGroup(raw: any): Group {
     gid: Number(raw?.gid ?? 0),
     members: Array.isArray(raw?.members) ? raw.members : [],
     systemGroup: Boolean(raw?.systemGroup ?? raw?.system_group ?? false),
+  };
+}
+
+export function mapUserPreferences(raw: any): UserPreferences {
+  const dash = raw?.dashboard ?? {};
+  const rawLayout = Array.isArray(dash.layout) ? dash.layout : [];
+  return {
+    dashboard: {
+      columnCount: Number(dash.columnCount ?? dash.column_count ?? 3) || 3,
+      layout: rawLayout.map((w: any) => ({
+        id: String(w?.id ?? ''),
+        type: String(w?.type ?? ''),
+        lane: Number(w?.lane ?? 0),
+      })),
+    },
+    custom: raw?.custom && typeof raw.custom === 'object' ? raw.custom : {},
   };
 }
 
@@ -885,6 +902,16 @@ export class HttpAuthAdapter implements AuthPort {
   async getCurrentUser(): Promise<User> {
     const raw = await this.client.get<any>('auth:me');
     return mapUser(raw);
+  }
+
+  async getUserPreferences(): Promise<UserPreferences> {
+    const raw = await this.client.get<any>('auth:preferences');
+    return mapUserPreferences(raw);
+  }
+
+  async updateUserPreferences(preferences: Partial<UserPreferences>): Promise<UserPreferences> {
+    const raw = await this.client.put<any>('auth:preferences', preferences);
+    return mapUserPreferences(raw);
   }
 
   logout(): void {

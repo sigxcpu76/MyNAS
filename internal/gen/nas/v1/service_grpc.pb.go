@@ -22,6 +22,8 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	NasService_Login_FullMethodName                          = "/nas.v1.NasService/Login"
 	NasService_GetCurrentUser_FullMethodName                 = "/nas.v1.NasService/GetCurrentUser"
+	NasService_GetUserPreferences_FullMethodName             = "/nas.v1.NasService/GetUserPreferences"
+	NasService_UpdateUserPreferences_FullMethodName          = "/nas.v1.NasService/UpdateUserPreferences"
 	NasService_GetSystemConfig_FullMethodName                = "/nas.v1.NasService/GetSystemConfig"
 	NasService_UpdateSystemConfig_FullMethodName             = "/nas.v1.NasService/UpdateSystemConfig"
 	NasService_SelectMainPool_FullMethodName                 = "/nas.v1.NasService/SelectMainPool"
@@ -169,6 +171,10 @@ type NasServiceClient interface {
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
 	// GetCurrentUser returns the currently authenticated user profile.
 	GetCurrentUser(ctx context.Context, in *GetCurrentUserRequest, opts ...grpc.CallOption) (*User, error)
+	// GetUserPreferences returns preferences for the currently authenticated user.
+	GetUserPreferences(ctx context.Context, in *GetUserPreferencesRequest, opts ...grpc.CallOption) (*UserPreferences, error)
+	// UpdateUserPreferences updates preferences for the currently authenticated user.
+	UpdateUserPreferences(ctx context.Context, in *UpdateUserPreferencesRequest, opts ...grpc.CallOption) (*UserPreferences, error)
 	GetSystemConfig(ctx context.Context, in *GetSystemConfigRequest, opts ...grpc.CallOption) (*SystemConfig, error)
 	UpdateSystemConfig(ctx context.Context, in *UpdateSystemConfigRequest, opts ...grpc.CallOption) (*SystemConfig, error)
 	SelectMainPool(ctx context.Context, in *SelectMainPoolRequest, opts ...grpc.CallOption) (*SystemConfig, error)
@@ -326,6 +332,26 @@ func (c *nasServiceClient) GetCurrentUser(ctx context.Context, in *GetCurrentUse
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(User)
 	err := c.cc.Invoke(ctx, NasService_GetCurrentUser_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) GetUserPreferences(ctx context.Context, in *GetUserPreferencesRequest, opts ...grpc.CallOption) (*UserPreferences, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UserPreferences)
+	err := c.cc.Invoke(ctx, NasService_GetUserPreferences_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nasServiceClient) UpdateUserPreferences(ctx context.Context, in *UpdateUserPreferencesRequest, opts ...grpc.CallOption) (*UserPreferences, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UserPreferences)
+	err := c.cc.Invoke(ctx, NasService_UpdateUserPreferences_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1728,6 +1754,10 @@ type NasServiceServer interface {
 	Login(context.Context, *LoginRequest) (*LoginResponse, error)
 	// GetCurrentUser returns the currently authenticated user profile.
 	GetCurrentUser(context.Context, *GetCurrentUserRequest) (*User, error)
+	// GetUserPreferences returns preferences for the currently authenticated user.
+	GetUserPreferences(context.Context, *GetUserPreferencesRequest) (*UserPreferences, error)
+	// UpdateUserPreferences updates preferences for the currently authenticated user.
+	UpdateUserPreferences(context.Context, *UpdateUserPreferencesRequest) (*UserPreferences, error)
 	GetSystemConfig(context.Context, *GetSystemConfigRequest) (*SystemConfig, error)
 	UpdateSystemConfig(context.Context, *UpdateSystemConfigRequest) (*SystemConfig, error)
 	SelectMainPool(context.Context, *SelectMainPoolRequest) (*SystemConfig, error)
@@ -1876,6 +1906,12 @@ func (UnimplementedNasServiceServer) Login(context.Context, *LoginRequest) (*Log
 }
 func (UnimplementedNasServiceServer) GetCurrentUser(context.Context, *GetCurrentUserRequest) (*User, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCurrentUser not implemented")
+}
+func (UnimplementedNasServiceServer) GetUserPreferences(context.Context, *GetUserPreferencesRequest) (*UserPreferences, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetUserPreferences not implemented")
+}
+func (UnimplementedNasServiceServer) UpdateUserPreferences(context.Context, *UpdateUserPreferencesRequest) (*UserPreferences, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateUserPreferences not implemented")
 }
 func (UnimplementedNasServiceServer) GetSystemConfig(context.Context, *GetSystemConfigRequest) (*SystemConfig, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSystemConfig not implemented")
@@ -2329,6 +2365,42 @@ func _NasService_GetCurrentUser_Handler(srv interface{}, ctx context.Context, de
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NasServiceServer).GetCurrentUser(ctx, req.(*GetCurrentUserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_GetUserPreferences_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUserPreferencesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).GetUserPreferences(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_GetUserPreferences_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).GetUserPreferences(ctx, req.(*GetUserPreferencesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NasService_UpdateUserPreferences_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateUserPreferencesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NasServiceServer).UpdateUserPreferences(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NasService_UpdateUserPreferences_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NasServiceServer).UpdateUserPreferences(ctx, req.(*UpdateUserPreferencesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -4699,6 +4771,14 @@ var NasService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetCurrentUser",
 			Handler:    _NasService_GetCurrentUser_Handler,
+		},
+		{
+			MethodName: "GetUserPreferences",
+			Handler:    _NasService_GetUserPreferences_Handler,
+		},
+		{
+			MethodName: "UpdateUserPreferences",
+			Handler:    _NasService_UpdateUserPreferences_Handler,
 		},
 		{
 			MethodName: "GetSystemConfig",

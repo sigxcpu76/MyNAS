@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import {
   mdiArrowDown,
   mdiArrowLeft,
@@ -14,6 +14,7 @@ import {
   mdiViewColumn,
 } from '@mdi/js';
 import type { NetworkInterfaceTelemetry } from '../../domain/models';
+import { services } from '../../container';
 import { nasState, refreshTelemetry } from '../store';
 import OverviewSkeleton from '../components/OverviewSkeleton.vue';
 import AddWidgetModal from '../dashboard/AddWidgetModal.vue';
@@ -21,7 +22,10 @@ import {
   DEFAULT_DASHBOARD_LAYOUT,
   BALANCED_DASHBOARD_LAYOUT,
   loadDashboardLayout,
+  loadDashboardColumnCount,
   saveDashboardLayout,
+  syncPreferencesFromBackend,
+  persistPreferencesToBackend,
   WIDGET_CATALOG,
   type DashboardWidgetConfig,
 } from '../dashboard/dashboardConfig';
@@ -84,6 +88,7 @@ const systemInterface = computed<NetworkInterfaceTelemetry | null>(() => {
 let telemetryPollInterval: ReturnType<typeof setInterval> | null = null;
 
 onMounted(() => {
+  syncBackendPreferences();
   refreshTelemetry();
   telemetryPollInterval = setInterval(() => {
     if (!nasState.liveSyncActive) {
@@ -104,8 +109,43 @@ onBeforeUnmount(() => {
 // ---------------------------------------------------------------------------
 const isEditMode = ref(false);
 const showAddModal = ref(false);
-const columnCount = ref<number>(3); // 2 or 3 fluid columns
+const columnCount = ref<number>(loadDashboardColumnCount());
 const dashboardLayout = ref<DashboardWidgetConfig[]>(loadDashboardLayout());
+
+function setColumnCount(count: number) {
+  columnCount.value = count;
+  persistLayout();
+}
+
+async function syncBackendPreferences() {
+  const remote = await syncPreferencesFromBackend(services);
+  if (remote) {
+    dashboardLayout.value = remote.layout;
+    columnCount.value = remote.columnCount;
+  }
+}
+
+watch(
+  () => nasState.userPreferences,
+  (prefs) => {
+    if (prefs?.dashboard) {
+      if (
+        typeof prefs.dashboard.columnCount === 'number' &&
+        (prefs.dashboard.columnCount === 2 || prefs.dashboard.columnCount === 3)
+      ) {
+        columnCount.value = prefs.dashboard.columnCount;
+      }
+      if (Array.isArray(prefs.dashboard.layout) && prefs.dashboard.layout.length > 0) {
+        dashboardLayout.value = prefs.dashboard.layout.map((w) => ({
+          id: w.id,
+          type: w.type,
+          lane: w.lane,
+        }));
+      }
+    }
+  },
+  { deep: true }
+);
 
 const existingTypes = computed(() => dashboardLayout.value.map((w) => w.type));
 
@@ -159,7 +199,7 @@ function getLaneWidgets(laneIndex: number): DashboardWidgetConfig[] {
 }
 
 function persistLayout() {
-  saveDashboardLayout(dashboardLayout.value);
+  persistPreferencesToBackend(services, dashboardLayout.value, columnCount.value);
 }
 
 function removeWidget(id: string) {
@@ -351,7 +391,7 @@ function onDragEnd() {
             type="button"
             class="col-toggle-btn"
             :class="{ active: columnCount === 2 }"
-            @click="columnCount = 2"
+            @click="setColumnCount(2)"
           >
             2 Columns
           </button>
@@ -359,7 +399,7 @@ function onDragEnd() {
             type="button"
             class="col-toggle-btn"
             :class="{ active: columnCount === 3 }"
-            @click="columnCount = 3"
+            @click="setColumnCount(3)"
           >
             3 Columns
           </button>

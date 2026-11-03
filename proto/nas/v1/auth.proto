@@ -24,3 +24,30 @@ message LoginResponse {
 }
 
 message GetCurrentUserRequest {}
+
+// =============================================================================
+// User Preferences Messages
+// =============================================================================
+
+message DashboardWidgetPreference {
+  string id = 1;
+  string type = 2;
+  int32 lane = 3;
+}
+
+message DashboardPreferences {
+  int32 column_count = 1;
+  repeated DashboardWidgetPreference layout = 2;
+}
+
+message UserPreferences {
+  DashboardPreferences dashboard = 1;
+  map<string, string> custom = 2;
+}
+
+message GetUserPreferencesRequest {}
+
+message UpdateUserPreferencesRequest {
+  UserPreferences preferences = 1 [(google.api.field_behavior) = REQUIRED];
+}
+

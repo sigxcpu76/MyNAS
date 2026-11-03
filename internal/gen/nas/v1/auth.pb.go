@@ -178,6 +178,250 @@ func (*GetCurrentUserRequest) Descriptor() ([]byte, []int) {
 	return file_nas_v1_auth_proto_rawDescGZIP(), []int{2}
 }
 
+type DashboardWidgetPreference struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	Lane          int32                  `protobuf:"varint,3,opt,name=lane,proto3" json:"lane,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DashboardWidgetPreference) Reset() {
+	*x = DashboardWidgetPreference{}
+	mi := &file_nas_v1_auth_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DashboardWidgetPreference) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DashboardWidgetPreference) ProtoMessage() {}
+
+func (x *DashboardWidgetPreference) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_auth_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DashboardWidgetPreference.ProtoReflect.Descriptor instead.
+func (*DashboardWidgetPreference) Descriptor() ([]byte, []int) {
+	return file_nas_v1_auth_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *DashboardWidgetPreference) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *DashboardWidgetPreference) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *DashboardWidgetPreference) GetLane() int32 {
+	if x != nil {
+		return x.Lane
+	}
+	return 0
+}
+
+type DashboardPreferences struct {
+	state         protoimpl.MessageState       `protogen:"open.v1"`
+	ColumnCount   int32                        `protobuf:"varint,1,opt,name=column_count,json=columnCount,proto3" json:"column_count,omitempty"`
+	Layout        []*DashboardWidgetPreference `protobuf:"bytes,2,rep,name=layout,proto3" json:"layout,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DashboardPreferences) Reset() {
+	*x = DashboardPreferences{}
+	mi := &file_nas_v1_auth_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DashboardPreferences) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DashboardPreferences) ProtoMessage() {}
+
+func (x *DashboardPreferences) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_auth_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DashboardPreferences.ProtoReflect.Descriptor instead.
+func (*DashboardPreferences) Descriptor() ([]byte, []int) {
+	return file_nas_v1_auth_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *DashboardPreferences) GetColumnCount() int32 {
+	if x != nil {
+		return x.ColumnCount
+	}
+	return 0
+}
+
+func (x *DashboardPreferences) GetLayout() []*DashboardWidgetPreference {
+	if x != nil {
+		return x.Layout
+	}
+	return nil
+}
+
+type UserPreferences struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Dashboard     *DashboardPreferences  `protobuf:"bytes,1,opt,name=dashboard,proto3" json:"dashboard,omitempty"`
+	Custom        map[string]string      `protobuf:"bytes,2,rep,name=custom,proto3" json:"custom,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UserPreferences) Reset() {
+	*x = UserPreferences{}
+	mi := &file_nas_v1_auth_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UserPreferences) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UserPreferences) ProtoMessage() {}
+
+func (x *UserPreferences) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_auth_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UserPreferences.ProtoReflect.Descriptor instead.
+func (*UserPreferences) Descriptor() ([]byte, []int) {
+	return file_nas_v1_auth_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *UserPreferences) GetDashboard() *DashboardPreferences {
+	if x != nil {
+		return x.Dashboard
+	}
+	return nil
+}
+
+func (x *UserPreferences) GetCustom() map[string]string {
+	if x != nil {
+		return x.Custom
+	}
+	return nil
+}
+
+type GetUserPreferencesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetUserPreferencesRequest) Reset() {
+	*x = GetUserPreferencesRequest{}
+	mi := &file_nas_v1_auth_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetUserPreferencesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetUserPreferencesRequest) ProtoMessage() {}
+
+func (x *GetUserPreferencesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_auth_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetUserPreferencesRequest.ProtoReflect.Descriptor instead.
+func (*GetUserPreferencesRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_auth_proto_rawDescGZIP(), []int{6}
+}
+
+type UpdateUserPreferencesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Preferences   *UserPreferences       `protobuf:"bytes,1,opt,name=preferences,proto3" json:"preferences,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateUserPreferencesRequest) Reset() {
+	*x = UpdateUserPreferencesRequest{}
+	mi := &file_nas_v1_auth_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateUserPreferencesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateUserPreferencesRequest) ProtoMessage() {}
+
+func (x *UpdateUserPreferencesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nas_v1_auth_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateUserPreferencesRequest.ProtoReflect.Descriptor instead.
+func (*UpdateUserPreferencesRequest) Descriptor() ([]byte, []int) {
+	return file_nas_v1_auth_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *UpdateUserPreferencesRequest) GetPreferences() *UserPreferences {
+	if x != nil {
+		return x.Preferences
+	}
+	return nil
+}
+
 var File_nas_v1_auth_proto protoreflect.FileDescriptor
 
 const file_nas_v1_auth_proto_rawDesc = "" +
@@ -193,7 +437,23 @@ const file_nas_v1_auth_proto_rawDesc = "" +
 	"\n" +
 	"expires_in\x18\x03 \x01(\x03R\texpiresIn\x12 \n" +
 	"\x04user\x18\x04 \x01(\v2\f.nas.v1.UserR\x04user\"\x17\n" +
-	"\x15GetCurrentUserRequestB2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
+	"\x15GetCurrentUserRequest\"S\n" +
+	"\x19DashboardWidgetPreference\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12\x12\n" +
+	"\x04lane\x18\x03 \x01(\x05R\x04lane\"t\n" +
+	"\x14DashboardPreferences\x12!\n" +
+	"\fcolumn_count\x18\x01 \x01(\x05R\vcolumnCount\x129\n" +
+	"\x06layout\x18\x02 \x03(\v2!.nas.v1.DashboardWidgetPreferenceR\x06layout\"\xc5\x01\n" +
+	"\x0fUserPreferences\x12:\n" +
+	"\tdashboard\x18\x01 \x01(\v2\x1c.nas.v1.DashboardPreferencesR\tdashboard\x12;\n" +
+	"\x06custom\x18\x02 \x03(\v2#.nas.v1.UserPreferences.CustomEntryR\x06custom\x1a9\n" +
+	"\vCustomEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x1b\n" +
+	"\x19GetUserPreferencesRequest\"_\n" +
+	"\x1cUpdateUserPreferencesRequest\x12?\n" +
+	"\vpreferences\x18\x01 \x01(\v2\x17.nas.v1.UserPreferencesB\x04\xe2A\x01\x02R\vpreferencesB2Z0github.com/sigxcpu/nas/internal/gen/nas/v1;nasv1b\x06proto3"
 
 var (
 	file_nas_v1_auth_proto_rawDescOnce sync.Once
@@ -207,20 +467,30 @@ func file_nas_v1_auth_proto_rawDescGZIP() []byte {
 	return file_nas_v1_auth_proto_rawDescData
 }
 
-var file_nas_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_nas_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_nas_v1_auth_proto_goTypes = []any{
-	(*LoginRequest)(nil),          // 0: nas.v1.LoginRequest
-	(*LoginResponse)(nil),         // 1: nas.v1.LoginResponse
-	(*GetCurrentUserRequest)(nil), // 2: nas.v1.GetCurrentUserRequest
-	(*User)(nil),                  // 3: nas.v1.User
+	(*LoginRequest)(nil),                 // 0: nas.v1.LoginRequest
+	(*LoginResponse)(nil),                // 1: nas.v1.LoginResponse
+	(*GetCurrentUserRequest)(nil),        // 2: nas.v1.GetCurrentUserRequest
+	(*DashboardWidgetPreference)(nil),    // 3: nas.v1.DashboardWidgetPreference
+	(*DashboardPreferences)(nil),         // 4: nas.v1.DashboardPreferences
+	(*UserPreferences)(nil),              // 5: nas.v1.UserPreferences
+	(*GetUserPreferencesRequest)(nil),    // 6: nas.v1.GetUserPreferencesRequest
+	(*UpdateUserPreferencesRequest)(nil), // 7: nas.v1.UpdateUserPreferencesRequest
+	nil,                                  // 8: nas.v1.UserPreferences.CustomEntry
+	(*User)(nil),                         // 9: nas.v1.User
 }
 var file_nas_v1_auth_proto_depIdxs = []int32{
-	3, // 0: nas.v1.LoginResponse.user:type_name -> nas.v1.User
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	9, // 0: nas.v1.LoginResponse.user:type_name -> nas.v1.User
+	3, // 1: nas.v1.DashboardPreferences.layout:type_name -> nas.v1.DashboardWidgetPreference
+	4, // 2: nas.v1.UserPreferences.dashboard:type_name -> nas.v1.DashboardPreferences
+	8, // 3: nas.v1.UserPreferences.custom:type_name -> nas.v1.UserPreferences.CustomEntry
+	5, // 4: nas.v1.UpdateUserPreferencesRequest.preferences:type_name -> nas.v1.UserPreferences
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_nas_v1_auth_proto_init() }
@@ -235,7 +505,7 @@ func file_nas_v1_auth_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nas_v1_auth_proto_rawDesc), len(file_nas_v1_auth_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

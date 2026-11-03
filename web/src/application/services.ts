@@ -32,6 +32,7 @@ import {
   type UploadProgressCallback,
   type DiscoveredPool,
   type User,
+  type UserPreferences,
   validateSshPublicKey,
   type VirtualMachine,
   type VirtualMachineConsoleSession,
@@ -78,6 +79,14 @@ export class AuthService {
 
   async getCurrentUser(): Promise<User> {
     return this.authPort.getCurrentUser();
+  }
+
+  async getUserPreferences(): Promise<UserPreferences> {
+    return this.authPort.getUserPreferences();
+  }
+
+  async updateUserPreferences(preferences: Partial<UserPreferences>): Promise<UserPreferences> {
+    return this.authPort.updateUserPreferences(preferences);
   }
 
   logout(): void {

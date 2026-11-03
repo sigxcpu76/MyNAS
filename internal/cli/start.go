@@ -26,6 +26,7 @@ import (
 	"github.com/sigxcpu/nas/internal/adapters/outbound/kvm"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/lxc"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/lxc_catalog"
+	"github.com/sigxcpu/nas/internal/adapters/outbound/preferences"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/prereq"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/share"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/system"
@@ -327,6 +328,9 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	}
 	catalogSvc := application.NewCatalogService(catalogAdapter)
 
+	preferencesAdapter := preferences.NewFileAdapter()
+	preferencesSvc := application.NewPreferencesService(preferencesAdapter)
+
 	cronAdapter.SetEventCallback(func(action, jobID, message string) {
 		eventBus.Publish(domain.NewEvent("cron", action, domain.FormatCronJobResourceName(jobID), message))
 	})
@@ -342,6 +346,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	nasGRPC := grpcadapter.NewServer(systemSvc, prereqSvc, diskSvc, zfsSvc, kvmSvc, dockerSvc, dockerAppSvc, lxcSvc, shareSvc, identitySvc, catalogSvc)
 	nasGRPC.SetRegistryService(application.NewDockerRegistryService(dockerAdapter))
 	nasGRPC.SetCronJobService(cronSvc)
+	nasGRPC.SetPreferencesService(preferencesSvc)
 	nasGRPC.SetEventBus(eventBus)
 
 	lxcCatalogCacheDir := filepath.Join(stateDir, "lxc-catalog")

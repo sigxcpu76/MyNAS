@@ -834,6 +834,22 @@ export interface Group {
   systemGroup: boolean;
 }
 
+export interface DashboardWidgetPreference {
+  id: string;
+  type: string;
+  lane: number;
+}
+
+export interface DashboardPreferences {
+  columnCount: number;
+  layout: DashboardWidgetPreference[];
+}
+
+export interface UserPreferences {
+  dashboard: DashboardPreferences;
+  custom?: Record<string, string>;
+}
+
 // ---------------------------------------------------------------------------
 // Domain Helpers: Google AIP Resource Name Builders & Parsers
 // ---------------------------------------------------------------------------

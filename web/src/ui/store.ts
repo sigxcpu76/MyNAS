@@ -33,6 +33,7 @@ import type {
   SystemUpdateInfo,
   ApplyUpdateResult,
   User,
+  UserPreferences,
   VirtualMachine,
   WebdavShare,
   ZfsDataset,
@@ -214,6 +215,7 @@ export const nasState = reactive({
   activeUploads: [] as ActiveUpload[],
   authenticated: services.auth.isAuthenticated(),
   currentUser: null as User | null,
+  userPreferences: null as UserPreferences | null,
   loading: false,
   initialLoaded: Boolean(cached?.systemConfig),
   lastRefreshed: cached?.lastRefreshed || '',
@@ -547,6 +549,18 @@ export async function refreshCronJobs(): Promise<void> {
   }
 }
 
+export async function refreshUserPreferences(): Promise<UserPreferences | null> {
+  if (!services.auth.isAuthenticated()) return null;
+  try {
+    const prefs = await services.auth.getUserPreferences();
+    nasState.userPreferences = prefs;
+    return prefs;
+  } catch (err) {
+    console.warn('Failed to refresh user preferences:', err);
+    return null;
+  }
+}
+
 export async function refreshZfsSubresources(poolName: string): Promise<void> {
   if (!poolName || !getModuleAvailability('zfs').enabled) return;
   const [datasets, volumes] = await Promise.all([
@@ -578,6 +592,9 @@ export async function refreshAllData(): Promise<void> {
       nasState.systemTelemetry = telem;
     }
     nasState.initialLoaded = true;
+
+    // Refresh per-user preferences in background
+    refreshUserPreferences().catch(() => null);
 
     const zfsOk = getModuleAvailability('zfs').enabled;
     const kvmOk = getModuleAvailability('kvm').enabled;
@@ -1109,6 +1126,7 @@ aipClient.onUnauthorized = () => {
   services.auth.logout();
   nasState.authenticated = false;
   nasState.currentUser = null;
+  nasState.userPreferences = null;
 };
 
 export async function initSession(): Promise<void> {
@@ -1124,6 +1142,7 @@ export async function initSession(): Promise<void> {
       services.auth.logout();
       nasState.authenticated = false;
       nasState.currentUser = null;
+      nasState.userPreferences = null;
     }
   }
   try {

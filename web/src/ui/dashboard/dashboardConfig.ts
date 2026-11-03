@@ -146,6 +146,32 @@ export const BALANCED_DASHBOARD_LAYOUT: DashboardWidgetConfig[] = [
 ];
 
 export const STORAGE_KEY = 'nas_dashboard_layout_v4';
+export const STORAGE_KEY_COLUMNS = 'nas_dashboard_column_count_v4';
+
+export function loadDashboardColumnCount(): number {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(STORAGE_KEY_COLUMNS);
+      if (raw) {
+        const val = parseInt(raw, 10);
+        if (val === 2 || val === 3) return val;
+      }
+    }
+  } catch {
+    // fallback
+  }
+  return 3;
+}
+
+export function saveDashboardColumnCount(count: number): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(STORAGE_KEY_COLUMNS, String(count));
+    }
+  } catch {
+    // ignore
+  }
+}
 
 export function loadDashboardLayout(): DashboardWidgetConfig[] {
   try {
@@ -240,12 +266,72 @@ export function loadDashboardLayout(): DashboardWidgetConfig[] {
   return JSON.parse(JSON.stringify(DEFAULT_DASHBOARD_LAYOUT));
 }
 
-export function saveDashboardLayout(layout: DashboardWidgetConfig[]): void {
+export function saveDashboardLayout(layout: DashboardWidgetConfig[], columnCount?: number): void {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
+      if (columnCount !== undefined) {
+        window.localStorage.setItem(STORAGE_KEY_COLUMNS, String(columnCount));
+      }
     }
   } catch (err) {
     console.error('Failed to save dashboard layout', err);
+  }
+}
+
+export async function syncPreferencesFromBackend(services: any): Promise<{ layout: DashboardWidgetConfig[]; columnCount: number } | null> {
+  try {
+    if (!services?.auth?.isAuthenticated?.()) return null;
+    const prefs = await services.auth.getUserPreferences();
+    if (prefs?.dashboard) {
+      const col = Number(prefs.dashboard.columnCount) || 3;
+      const layout = prefs.dashboard.layout;
+      if (Array.isArray(layout) && layout.length > 0) {
+        const cleanLayout: DashboardWidgetConfig[] = layout
+          .filter(
+            (item: any) =>
+              item &&
+              typeof item.id === 'string' &&
+              typeof item.type === 'string' &&
+              WIDGET_CATALOG.some((c) => c.type === item.type)
+          )
+          .map((w: any) => ({
+            id: String(w.id),
+            type: String(w.type),
+            lane: Number(w.lane),
+          }));
+        if (cleanLayout.length > 0) {
+          saveDashboardLayout(cleanLayout, col);
+          return { layout: cleanLayout, columnCount: col };
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Could not sync preferences from backend:', err);
+  }
+  return null;
+}
+
+export async function persistPreferencesToBackend(
+  services: any,
+  layout: DashboardWidgetConfig[],
+  columnCount: number
+): Promise<void> {
+  // Always save locally first for instant cache & offline resilience
+  saveDashboardLayout(layout, columnCount);
+  try {
+    if (!services?.auth?.isAuthenticated?.()) return;
+    await services.auth.updateUserPreferences({
+      dashboard: {
+        columnCount,
+        layout: layout.map((w) => ({
+          id: w.id,
+          type: w.type,
+          lane: w.lane,
+        })),
+      },
+    });
+  } catch (err) {
+    console.warn('Could not persist preferences to backend:', err);
   }
 }

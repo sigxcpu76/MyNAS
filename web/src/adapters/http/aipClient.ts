@@ -120,6 +120,14 @@ export class AipClient {
     return this.request<T>('POST', this.buildUrl(resourcePath, query), body ?? {});
   }
 
+  async put<T>(
+    resourcePath: string,
+    body?: unknown,
+    query?: Record<string, string | number | boolean | undefined>
+  ): Promise<T> {
+    return this.request<T>('PUT', this.buildUrl(resourcePath, query), body ?? {});
+  }
+
   async patch<T>(
     resourcePath: string,
     body: unknown,

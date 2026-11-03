@@ -60,8 +60,14 @@ type Server struct {
 	catalog    *application.CatalogService
 	registry   *application.DockerRegistryService
 	cron       *application.CronJobService
+	preferences *application.PreferencesService
 	eventBus   *application.EventBus
 	updater    *updater.Updater
+}
+
+// SetPreferencesService enables per-user preference storage.
+func (s *Server) SetPreferencesService(svc *application.PreferencesService) {
+	s.preferences = svc
 }
 
 // SetCronJobService enables the native scheduled tasks / CronJob RPCs.
@@ -131,18 +137,111 @@ func (s *Server) Login(ctx context.Context, req *nasv1.LoginRequest) (*nasv1.Log
 }
 
 func (s *Server) GetCurrentUser(ctx context.Context, req *nasv1.GetCurrentUserRequest) (*nasv1.User, error) {
+	u, err := s.resolveCallerUser(ctx)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoUser(*u), nil
+}
+
+func (s *Server) resolveCallerUser(ctx context.Context) (*domain.User, error) {
+	if u := CallerFromContext(ctx); u != nil {
+		return u, nil
+	}
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
 		authVals := md.Get("authorization")
-		if len(authVals) > 0 {
+		if len(authVals) > 0 && s.identity != nil {
 			u, err := s.identity.VerifyToken(ctx, authVals[0])
-			if err != nil {
-				return nil, ToGRPCError(err)
+			if err == nil && u != nil {
+				return u, nil
 			}
-			return toProtoUser(*u), nil
 		}
 	}
-	return nil, ToGRPCError(domain.ErrUnauthorized)
+	return nil, domain.ErrUnauthorized
 }
+
+func (s *Server) GetUserPreferences(ctx context.Context, req *nasv1.GetUserPreferencesRequest) (*nasv1.UserPreferences, error) {
+	u, err := s.resolveCallerUser(ctx)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	if s.preferences == nil {
+		return &nasv1.UserPreferences{
+			Dashboard: &nasv1.DashboardPreferences{
+				ColumnCount: 3,
+			},
+		}, nil
+	}
+	prefs, err := s.preferences.GetPreferences(ctx, u)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoUserPreferences(*prefs), nil
+}
+
+func (s *Server) UpdateUserPreferences(ctx context.Context, req *nasv1.UpdateUserPreferencesRequest) (*nasv1.UserPreferences, error) {
+	u, err := s.resolveCallerUser(ctx)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	if s.preferences == nil {
+		return nil, status.Error(codes.FailedPrecondition, "preferences service not configured")
+	}
+	domainPrefs := fromProtoUserPreferences(req.GetPreferences())
+	updated, err := s.preferences.UpdatePreferences(ctx, u, &domainPrefs)
+	if err != nil {
+		return nil, ToGRPCError(err)
+	}
+	return toProtoUserPreferences(*updated), nil
+}
+
+func toProtoUserPreferences(p domain.UserPreferences) *nasv1.UserPreferences {
+	resp := &nasv1.UserPreferences{
+		Dashboard: &nasv1.DashboardPreferences{
+			ColumnCount: p.Dashboard.ColumnCount,
+			Layout:      make([]*nasv1.DashboardWidgetPreference, len(p.Dashboard.Layout)),
+		},
+		Custom: make(map[string]string),
+	}
+	for i, w := range p.Dashboard.Layout {
+		resp.Dashboard.Layout[i] = &nasv1.DashboardWidgetPreference{
+			Id:   w.ID,
+			Type: w.Type,
+			Lane: w.Lane,
+		}
+	}
+	for k, v := range p.Custom {
+		resp.Custom[k] = fmt.Sprintf("%v", v)
+	}
+	return resp
+}
+
+func fromProtoUserPreferences(p *nasv1.UserPreferences) domain.UserPreferences {
+	prefs := domain.UserPreferences{}
+	if p == nil {
+		return prefs
+	}
+	if p.Dashboard != nil {
+		prefs.Dashboard.ColumnCount = p.Dashboard.ColumnCount
+		for _, w := range p.Dashboard.Layout {
+			if w != nil {
+				prefs.Dashboard.Layout = append(prefs.Dashboard.Layout, domain.DashboardWidgetPreference{
+					ID:   w.Id,
+					Type: w.Type,
+					Lane: w.Lane,
+				})
+			}
+		}
+	}
+	if p.Custom != nil {
+		prefs.Custom = make(map[string]any)
+		for k, v := range p.Custom {
+			prefs.Custom[k] = v
+		}
+	}
+	return prefs
+}
+
 
 // =============================================================================
 // System Configuration & Main Pool Management

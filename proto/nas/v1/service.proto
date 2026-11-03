@@ -44,6 +44,28 @@ service NasService {
     };
   }
 
+  // GetUserPreferences returns preferences for the currently authenticated user.
+  rpc GetUserPreferences(GetUserPreferencesRequest) returns (UserPreferences) {
+    option (google.api.http) = {
+      get: "/v1/auth:preferences"
+      additional_bindings {
+        get: "/v1/users/me/preferences"
+      }
+    };
+  }
+
+  // UpdateUserPreferences updates preferences for the currently authenticated user.
+  rpc UpdateUserPreferences(UpdateUserPreferencesRequest) returns (UserPreferences) {
+    option (google.api.http) = {
+      put: "/v1/auth:preferences"
+      body: "preferences"
+      additional_bindings {
+        put: "/v1/users/me/preferences"
+        body: "preferences"
+      }
+    };
+  }
+
   // ---------------------------------------------------------------------------
   // System Configuration & Main Storage Pool Management
   // ---------------------------------------------------------------------------

@@ -37,11 +37,14 @@ import type {
   ZfsVolume,
   DockerRegistry,
   DockerRegistryInput,
+  UserPreferences,
 } from '../domain/models';
 
 export interface AuthPort {
   login(username: string, password: string): Promise<AuthSession>;
   getCurrentUser(): Promise<User>;
+  getUserPreferences(): Promise<UserPreferences>;
+  updateUserPreferences(preferences: Partial<UserPreferences>): Promise<UserPreferences>;
   logout(): void;
   getToken(): string | null;
   setToken(token: string | null): void;

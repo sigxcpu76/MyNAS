@@ -22,6 +22,7 @@ import (
 	"github.com/sigxcpu/nas/internal/adapters/outbound/disk"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/identity"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/lxc"
+	"github.com/sigxcpu/nas/internal/adapters/outbound/preferences"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/prereq"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/share"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/system"
@@ -336,6 +337,8 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	catalogSvc := application.NewCatalogService(catalog.NewAdapter(t.TempDir()))
 
 	grpcSrv := grpcadapter.NewServer(systemSvc, prereqSvc, diskSvc, zfsSvc, kvmSvc, dockerSvc, dockerAppSvc, lxcSvc, shareSvc, identitySvc, catalogSvc)
+	prefAdapter := preferences.NewFileAdapterWithBase(t.TempDir())
+	grpcSrv.SetPreferencesService(application.NewPreferencesService(prefAdapter))
 	uiFS, err := nas.WebUIFS()
 	if err != nil {
 		t.Fatalf("failed to load embedded UI FS: %v", err)
@@ -661,6 +664,48 @@ func TestGoogleAIPGatewayEndToEnd(t *testing.T) {
 		t.Fatalf("DELETE /v1/storage/lxc-templates failed: status=%v err=%v", tDelResp.StatusCode, err)
 	}
 	_ = tDelResp.Body.Close()
+
+	// 11. User Preferences API
+	prefGetResp, err := client.Get(srv.URL + "/v1/auth:preferences")
+	if err != nil || prefGetResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /v1/auth:preferences failed: status=%v err=%v", prefGetResp.StatusCode, err)
+	}
+	var prefData struct {
+		Dashboard struct {
+			ColumnCount int `json:"columnCount"`
+			Layout      []struct {
+				ID   string `json:"id"`
+				Type string `json:"type"`
+				Lane int    `json:"lane"`
+			} `json:"layout"`
+		} `json:"dashboard"`
+	}
+	_ = json.NewDecoder(prefGetResp.Body).Decode(&prefData)
+	_ = prefGetResp.Body.Close()
+	if prefData.Dashboard.ColumnCount != 3 {
+		t.Fatalf("expected default column count 3, got %d", prefData.Dashboard.ColumnCount)
+	}
+
+	// Update preferences via PUT /v1/auth:preferences
+	updatePrefBody := `{"dashboard":{"columnCount":2,"layout":[{"id":"widget-kpis","type":"kpis","lane":-1},{"id":"widget-pools","type":"pools","lane":0}]}}`
+	prefPutReq, _ := http.NewRequest(http.MethodPut, srv.URL+"/v1/auth:preferences", strings.NewReader(updatePrefBody))
+	prefPutReq.Header.Set("Content-Type", "application/json")
+	prefPutResp, err := client.Do(prefPutReq)
+	if err != nil || prefPutResp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT /v1/auth:preferences failed: status=%v err=%v", prefPutResp.StatusCode, err)
+	}
+	_ = prefPutResp.Body.Close()
+
+	// Verify via GET /v1/users/me/preferences
+	prefReadBackResp, err := client.Get(srv.URL + "/v1/users/me/preferences")
+	if err != nil || prefReadBackResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /v1/users/me/preferences failed: status=%v err=%v", prefReadBackResp.StatusCode, err)
+	}
+	_ = json.NewDecoder(prefReadBackResp.Body).Decode(&prefData)
+	_ = prefReadBackResp.Body.Close()
+	if prefData.Dashboard.ColumnCount != 2 || len(prefData.Dashboard.Layout) != 2 {
+		t.Fatalf("unexpected readback preferences: %+v", prefData)
+	}
 }
 
 func TestWatchStreamingWithDeltas(t *testing.T) {

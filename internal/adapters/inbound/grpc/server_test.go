@@ -16,6 +16,7 @@ import (
 	"github.com/sigxcpu/nas/internal/adapters/outbound/kvm"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/lxc"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/lxc_catalog"
+	"github.com/sigxcpu/nas/internal/adapters/outbound/preferences"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/prereq"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/share"
 	"github.com/sigxcpu/nas/internal/adapters/outbound/system"
@@ -611,3 +612,78 @@ func TestServer_LxcCatalog(t *testing.T) {
 		t.Fatalf("unexpected sync response: %+v", syncResp)
 	}
 }
+
+func TestServer_UserPreferences(t *testing.T) {
+	tempDir := t.TempDir()
+	prefAdapter := preferences.NewFileAdapterWithBase(tempDir)
+	prefSvc := application.NewPreferencesService(prefAdapter)
+
+	srv := newTestServerWithLxcCatalog(t)
+	srv.SetPreferencesService(prefSvc)
+
+	user := &domain.User{
+		Username:      "nasadmin",
+		HomeDirectory: filepath.Join(tempDir, "nasadmin"),
+	}
+	ctx := grpcadapter.WithCaller(context.Background(), user)
+
+	// 1. Get default preferences
+	getResp, err := srv.GetUserPreferences(ctx, &nasv1.GetUserPreferencesRequest{})
+	if err != nil {
+		t.Fatalf("GetUserPreferences failed: %v", err)
+	}
+	if getResp.GetDashboard().GetColumnCount() != 3 {
+		t.Errorf("expected default column count 3, got %d", getResp.GetDashboard().GetColumnCount())
+	}
+	if len(getResp.GetDashboard().GetLayout()) != 4 {
+		t.Errorf("expected 4 default widgets, got %d", len(getResp.GetDashboard().GetLayout()))
+	}
+
+	// 2. Update preferences
+	updateResp, err := srv.UpdateUserPreferences(ctx, &nasv1.UpdateUserPreferencesRequest{
+		Preferences: &nasv1.UserPreferences{
+			Dashboard: &nasv1.DashboardPreferences{
+				ColumnCount: 2,
+				Layout: []*nasv1.DashboardWidgetPreference{
+					{Id: "widget-kpis", Type: "kpis", Lane: -1},
+					{Id: "widget-pools", Type: "pools", Lane: 0},
+					{Id: "widget-network", Type: "network", Lane: 1},
+				},
+			},
+			Custom: map[string]string{
+				"theme": "dark",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdateUserPreferences failed: %v", err)
+	}
+	if updateResp.GetDashboard().GetColumnCount() != 2 {
+		t.Errorf("expected column count 2, got %d", updateResp.GetDashboard().GetColumnCount())
+	}
+	if len(updateResp.GetDashboard().GetLayout()) != 3 {
+		t.Errorf("expected 3 widgets, got %d", len(updateResp.GetDashboard().GetLayout()))
+	}
+
+	// 3. Verify on disk in ~/.config/nas_preferences.yaml
+	onDiskPath := filepath.Join(tempDir, "nasadmin", ".config", "nas_preferences.yaml")
+	if _, err := os.Stat(onDiskPath); err != nil {
+		t.Fatalf("expected preferences file to exist on disk at %s: %v", onDiskPath, err)
+	}
+
+	// 4. Read back
+	getResp2, err := srv.GetUserPreferences(ctx, &nasv1.GetUserPreferencesRequest{})
+	if err != nil {
+		t.Fatalf("GetUserPreferences readback failed: %v", err)
+	}
+	if getResp2.GetDashboard().GetColumnCount() != 2 {
+		t.Errorf("expected readback column count 2, got %d", getResp2.GetDashboard().GetColumnCount())
+	}
+	if len(getResp2.GetDashboard().GetLayout()) != 3 {
+		t.Errorf("expected readback 3 widgets, got %d", len(getResp2.GetDashboard().GetLayout()))
+	}
+	if getResp2.GetCustom()["theme"] != "dark" {
+		t.Errorf("expected theme dark, got %v", getResp2.GetCustom()["theme"])
+	}
+}
+
