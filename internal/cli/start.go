@@ -11,9 +11,12 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
+
+	"log/slog"
 
 	"github.com/sigxcpu/nas"
 	grpcadapter "github.com/sigxcpu/nas/internal/adapters/inbound/grpc"
@@ -150,8 +153,9 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	systemAdapter := system.NewAdapter(zfsAdapter, prereqAdapter)
 	systemSvc := application.NewSystemService(systemAdapter)
 
-	// 0. Ensure /etc/zfs exists
+	// 0. Ensure /etc/zfs exists and configure systemd ZFS boot-import services to use altroot /mnt
 	_ = os.MkdirAll("/etc/zfs", 0755)
+	ensureZfsBootAltrootConfig(logger)
 
 	// Step A: Auto-Import Configured Main Pool on Boot / Reboot
 	if cfg.System.MainPool != "" {
@@ -195,6 +199,23 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	// Step C: Ensure /etc/zfs/zpool.cache is synchronized for all active pools and mount all datasets
 	_ = zfsAdapter.SyncCacheFile(ctx)
 	_ = exec.CommandContext(ctx, "zfs", "mount", "-a").Run()
+
+	// Verify imported data pools use altroot /mnt
+	if pools, err := zfsAdapter.ListPools(ctx); err == nil {
+		for _, p := range pools {
+			cleanName := strings.TrimPrefix(p.ID, "zfsPools/")
+			if cleanName == "rpool" || cleanName == "bpool" {
+				continue
+			}
+			out, err := exec.CommandContext(ctx, "zpool", "get", "-H", "-o", "value", "altroot", cleanName).Output()
+			if err == nil {
+				val := strings.TrimSpace(string(out))
+				if val == "-" || val == "" {
+					logger.Warn("ZFS storage pool is mounted directly without altroot (/mnt); rebooting with configured systemd altroot will ensure /mnt mounts", "pool", cleanName)
+				}
+			}
+		}
+	}
 
 	// Resolve State Storage Location:
 	// If a main pool is selected, use its persistent .nas-system dataset; otherwise fallback to stateDir
@@ -556,4 +577,63 @@ func resolveJWTSecret(configured, stateDir string) (string, error) {
 		return "", err
 	}
 	return secret, nil
+}
+
+// ensureZfsBootAltrootConfig configures systemd ZFS import services to import
+// non-root storage pools with -R /mnt on boot, matching the TrueNAS SCALE storage layout.
+func ensureZfsBootAltrootConfig(logger *slog.Logger) {
+	if os.Geteuid() != 0 {
+		return
+	}
+	systemdDir := "/etc/systemd/system"
+	if fi, err := os.Stat(systemdDir); err != nil || !fi.IsDir() {
+		return
+	}
+
+	cacheDir := filepath.Join(systemdDir, "zfs-import-cache.service.d")
+	scanDir := filepath.Join(systemdDir, "zfs-import-scan.service.d")
+	_ = os.MkdirAll(cacheDir, 0755)
+	_ = os.MkdirAll(scanDir, 0755)
+
+	cacheDropin := filepath.Join(cacheDir, "altroot.conf")
+	scanDropin := filepath.Join(scanDir, "altroot.conf")
+
+	cacheContent := `[Service]
+ExecStart=
+ExecStart=/usr/sbin/zpool import -c /etc/zfs/zpool.cache -aN -R /mnt $ZPOOL_IMPORT_OPTS
+`
+	scanContent := `[Service]
+ExecStart=
+ExecStart=/usr/sbin/zpool import -aN -d /dev/disk/by-id -o cachefile=none -R /mnt $ZPOOL_IMPORT_OPTS
+`
+
+	modified := false
+	if current, err := os.ReadFile(cacheDropin); err != nil || string(current) != cacheContent {
+		if err := os.WriteFile(cacheDropin, []byte(cacheContent), 0644); err == nil {
+			modified = true
+		}
+	}
+	if current, err := os.ReadFile(scanDropin); err != nil || string(current) != scanContent {
+		if err := os.WriteFile(scanDropin, []byte(scanContent), 0644); err == nil {
+			modified = true
+		}
+	}
+
+	defaultZfsPath := "/etc/default/zfs"
+	if data, err := os.ReadFile(defaultZfsPath); err == nil {
+		content := string(data)
+		if !strings.Contains(content, `ZPOOL_IMPORT_OPTS="-R /mnt"`) &&
+			!strings.Contains(content, `ZPOOL_IMPORT_OPTS='-R /mnt'`) {
+			if strings.Contains(content, `ZPOOL_IMPORT_OPTS=`) {
+				re := regexp.MustCompile(`(?m)^ZPOOL_IMPORT_OPTS=.*$`)
+				newContent := re.ReplaceAllString(content, `ZPOOL_IMPORT_OPTS="-R /mnt"`)
+				_ = os.WriteFile(defaultZfsPath, []byte(newContent), 0644)
+			}
+		}
+	}
+
+	if modified {
+		logger.Info("configured systemd ZFS import services with altroot (-R /mnt) for boot-time persistence")
+		_ = exec.Command("systemctl", "daemon-reload").Run()
+	}
 }

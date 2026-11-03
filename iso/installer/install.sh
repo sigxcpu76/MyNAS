@@ -460,6 +460,25 @@ EOF
     chroot "$TARGET" systemctl enable zfs-import-cache.service 2>/dev/null || true
     chroot "$TARGET" systemctl enable zfs-mount.service 2>/dev/null || true
 
+    # Configure systemd ZFS import services to automatically import storage pools with -R /mnt on boot
+    mkdir -p "$TARGET/etc/systemd/system/zfs-import-cache.service.d"
+    cat << 'EOF' > "$TARGET/etc/systemd/system/zfs-import-cache.service.d/altroot.conf"
+[Service]
+ExecStart=
+ExecStart=/usr/sbin/zpool import -c /etc/zfs/zpool.cache -aN -R /mnt $ZPOOL_IMPORT_OPTS
+EOF
+
+    mkdir -p "$TARGET/etc/systemd/system/zfs-import-scan.service.d"
+    cat << 'EOF' > "$TARGET/etc/systemd/system/zfs-import-scan.service.d/altroot.conf"
+[Service]
+ExecStart=
+ExecStart=/usr/sbin/zpool import -aN -d /dev/disk/by-id -o cachefile=none -R /mnt $ZPOOL_IMPORT_OPTS
+EOF
+
+    if [ -f "$TARGET/etc/default/zfs" ]; then
+        sed -i 's/^ZPOOL_IMPORT_OPTS=.*/ZPOOL_IMPORT_OPTS="-R \/mnt"/' "$TARGET/etc/default/zfs" 2>/dev/null || true
+    fi
+
     # Create zpool.cache for appliance boot
     mkdir -p "$TARGET/etc/zfs"
     zpool set cachefile=/etc/zfs/zpool.cache rpool || true
