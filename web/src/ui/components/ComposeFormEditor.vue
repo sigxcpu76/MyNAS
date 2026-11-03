@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import {
   type ComposeAppFormModel,
   type ComposeEnvModel,
@@ -27,6 +27,7 @@ import { services } from '../../container';
 import {
   mdiAlert,
   mdiAlertCircle,
+  mdiArrowExpand,
   mdiCheck,
   mdiCheckCircle,
   mdiChip,
@@ -235,6 +236,43 @@ function getConfigByName(name: string): ComposeTopLevelConfig | undefined {
   return form.configs?.find((c) => c.name === name);
 }
 
+const activeModalConfig = ref<ComposeTopLevelConfig | null>(null);
+
+function openModalEditor(cfg: ComposeTopLevelConfig) {
+  activeModalConfig.value = cfg;
+}
+
+function openModalEditorByName(configName: string) {
+  let cfg = getConfigByName(configName);
+  if (!cfg) {
+    cfg = addTopLevelConfig(configName);
+  }
+  if (cfg) {
+    activeModalConfig.value = cfg;
+  }
+}
+
+function closeModalEditor() {
+  activeModalConfig.value = null;
+}
+
+function handleModalKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && activeModalConfig.value) {
+    closeModalEditor();
+  }
+}
+
+function handleTextareaTab(e: KeyboardEvent) {
+  const target = e.target as HTMLTextAreaElement;
+  if (!target) return;
+  const start = target.selectionStart;
+  const end = target.selectionEnd;
+  const val = target.value;
+  target.value = val.substring(0, start) + '  ' + val.substring(end);
+  target.selectionStart = target.selectionEnd = start + 2;
+  target.dispatchEvent(new Event('input'));
+}
+
 function addTopLevelConfig(name?: string, content = ''): ComposeTopLevelConfig {
   if (!form.configs) {
     form.configs = [];
@@ -253,6 +291,9 @@ function removeTopLevelConfig(idx: number) {
   if (form.configs) {
     const removed = form.configs[idx];
     form.configs.splice(idx, 1);
+    if (activeModalConfig.value && activeModalConfig.value.id === removed?.id) {
+      activeModalConfig.value = null;
+    }
     if (removed) {
       for (const s of form.services) {
         for (const v of s.volumes) {
@@ -608,6 +649,11 @@ async function loadHostNetworks() {
 
 onMounted(() => {
   loadHostNetworks();
+  window.addEventListener('keydown', handleModalKeydown);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleModalKeydown);
 });
 
 const filteredHostNetworks = computed(() => {
@@ -1602,6 +1648,16 @@ function copyYaml() {
                       </span>
                       <button
                         type="button"
+                        class="btn btn-sm btn-secondary"
+                        style="padding: 2px 7px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px"
+                        title="Open bigger editor in a modal"
+                        @click="openModalEditorByName(v.source)"
+                      >
+                        <MdiIcon :path="mdiArrowExpand" size="12" />
+                        <span>Bigger Editor</span>
+                      </button>
+                      <button
+                        type="button"
                         class="btn btn-sm"
                         style="padding: 2px 6px; font-size: 11px"
                         title="Open dedicated Configs tab"
@@ -1615,9 +1671,10 @@ function copyYaml() {
                     v-if="getConfigByName(v.source)"
                     v-model="getConfigByName(v.source)!.content"
                     rows="6"
-                    class="form-input mono"
+                    class="form-input mono config-editor-textarea"
                     placeholder="Paste file content here (e.g. nginx.conf, config.json, settings.ini)..."
-                    style="font-size: 12px; width: 100%; line-height: 1.4; resize: vertical; tab-size: 2"
+                    style="font-family: var(--font-mono) !important; font-size: 12px; width: 100%; line-height: 1.4; resize: vertical; tab-size: 2"
+                    @keydown.tab.prevent="handleTextareaTab"
                   ></textarea>
                   <div v-else style="padding: 12px; font-size: 12px; color: var(--text-secondary); background: var(--bg-surface); border-radius: 6px; text-align: center">
                     Config "<strong>{{ v.source }}</strong>" not found in top-level configs.
@@ -2100,6 +2157,16 @@ function copyYaml() {
               <div style="display: flex; align-items: center; gap: 6px">
                 <button
                   type="button"
+                  class="btn btn-sm btn-secondary"
+                  style="padding: 3px 8px; font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px"
+                  title="Open bigger editor in a modal"
+                  @click="openModalEditor(cfg)"
+                >
+                  <MdiIcon :path="mdiArrowExpand" size="13" />
+                  <span>Bigger Editor</span>
+                </button>
+                <button
+                  type="button"
                   class="btn btn-sm"
                   style="padding: 3px 8px; font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px"
                   title="Copy content to clipboard"
@@ -2127,16 +2194,29 @@ function copyYaml() {
                 <label style="font-size: 11px; font-weight: 600; color: var(--text-secondary)">
                   FILE CONTENT (YAML / JSON / CONF / INI / SCRIPT)
                 </label>
-                <span style="font-size: 11px; color: var(--text-muted)">
-                  {{ cfg.content ? cfg.content.split('\n').length : 0 }} lines · {{ cfg.content ? cfg.content.length : 0 }} bytes
-                </span>
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <span style="font-size: 11px; color: var(--text-muted)">
+                    {{ cfg.content ? cfg.content.split('\n').length : 0 }} lines · {{ cfg.content ? cfg.content.length : 0 }} bytes
+                  </span>
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-ghost"
+                    style="padding: 1px 6px; font-size: 10.5px; display: inline-flex; align-items: center; gap: 3px"
+                    title="Open bigger editor in a modal"
+                    @click="openModalEditor(cfg)"
+                  >
+                    <MdiIcon :path="mdiArrowExpand" size="11" />
+                    <span>Expand</span>
+                  </button>
+                </div>
               </div>
               <textarea
                 v-model="cfg.content"
                 rows="10"
-                class="form-input mono"
+                class="form-input mono config-editor-textarea"
                 placeholder="Paste entire file contents here..."
-                style="font-size: 12px; width: 100%; line-height: 1.45; resize: vertical; tab-size: 2"
+                style="font-family: var(--font-mono) !important; font-size: 12px; width: 100%; line-height: 1.45; resize: vertical; tab-size: 2"
+                @keydown.tab.prevent="handleTextareaTab"
               ></textarea>
             </div>
           </div>
@@ -2212,11 +2292,92 @@ function copyYaml() {
           rows="10"
           class="form-input mono"
           placeholder="POSTGRES_DB=nextcloud&#10;POSTGRES_USER=nextcloud&#10;POSTGRES_PASSWORD=secret"
-          style="font-size: 12px; line-height: 1.4"
+          style="font-family: var(--font-mono) !important; font-size: 12px; line-height: 1.4"
+          @keydown.tab.prevent="handleTextareaTab"
         ></textarea>
         <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px">
           <button class="btn btn-sm" @click="showBulkEnv = false">Cancel</button>
           <button class="btn btn-sm btn-primary" @click="applyBulkEnv">Apply Variables</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bigger Config Editor Modal -->
+    <div v-if="activeModalConfig" class="modal-backdrop" @click.self="closeModalEditor">
+      <div class="modal-card modal-card-xlarge config-editor-modal" style="height: 88vh; max-height: 88vh; display: flex; flex-direction: column">
+        <div class="modal-header" style="margin-bottom: 12px; padding-bottom: 12px">
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+            <MdiIcon :path="mdiFileCodeOutline" size="20" style="color: var(--accent-primary)" />
+            <h3 class="modal-title" style="font-size: 16px; margin: 0">
+              Config Editor &mdash; <span class="mono" style="color: var(--accent-primary)">{{ activeModalConfig.name || 'unnamed' }}</span>
+            </h3>
+            <span class="badge badge-info" style="font-size: 11px">
+              {{ activeModalConfig.content ? activeModalConfig.content.split('\n').length : 0 }} lines &middot;
+              {{ activeModalConfig.content ? activeModalConfig.content.length : 0 }} bytes
+            </span>
+            <span
+              v-if="getServicesUsingConfig(activeModalConfig.name).length > 0"
+              class="badge badge-success"
+              style="font-size: 11px"
+              :title="`Mounted by: ${getServicesUsingConfig(activeModalConfig.name).join(', ')}`"
+            >
+              Mounted in {{ getServicesUsingConfig(activeModalConfig.name).length }} service{{ getServicesUsingConfig(activeModalConfig.name).length === 1 ? '' : 's' }}
+            </span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 8px">
+            <button
+              type="button"
+              class="btn btn-sm"
+              style="display: inline-flex; align-items: center; gap: 4px"
+              title="Copy content to clipboard"
+              @click="copyConfigContent(activeModalConfig.content)"
+            >
+              <MdiIcon :path="mdiContentCopy" size="14" />
+              <span>Copy</span>
+            </button>
+            <button
+              type="button"
+              class="modal-close-btn"
+              aria-label="Close modal editor"
+              title="Close editor (Esc)"
+              @click="closeModalEditor"
+            >
+              <MdiIcon :path="mdiClose" size="18" />
+            </button>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary)">Config Name:</label>
+            <input
+              v-model="activeModalConfig.name"
+              type="text"
+              class="form-input mono"
+              placeholder="e.g. nginx_conf, app_settings"
+              style="font-size: 12px; padding: 3px 8px; width: 220px"
+            />
+          </div>
+          <span style="font-size: 11.5px; color: var(--text-muted)">
+            Full-height monospace editor with line numbers and undo/redo support.
+          </span>
+        </div>
+
+        <div style="flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column">
+          <CodeMirrorEditor
+            v-model="activeModalConfig.content"
+            mode="generic"
+            height="100%"
+            min-height="350px"
+            placeholder="Paste or write file contents here..."
+          />
+        </div>
+
+        <div class="modal-footer" style="margin-top: 14px; padding-top: 12px">
+          <button type="button" class="btn btn-primary" @click="closeModalEditor">
+            Done Editing
+          </button>
         </div>
       </div>
     </div>

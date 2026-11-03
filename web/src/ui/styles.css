@@ -712,8 +712,14 @@ body {
   font-size: var(--fs-lg) !important;
 }
 
-code, pre, .mono {
-  font-family: var(--font-mono);
+code,
+pre,
+.mono,
+.form-input.mono,
+.textarea.mono,
+textarea.mono,
+input.mono {
+  font-family: var(--font-mono) !important;
 }
 
 /* ==========================================================================
@@ -1375,6 +1381,24 @@ textarea,
   width: 100%;
   box-sizing: border-box;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.form-input.mono,
+.textarea.mono,
+textarea.form-input.mono,
+textarea.mono,
+input.mono {
+  font-family: var(--font-mono) !important;
+}
+
+.config-editor-textarea {
+  font-family: var(--font-mono) !important;
+  font-size: 12.5px;
+  line-height: 1.45;
+  tab-size: 2;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
 }
 
 input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]):focus,

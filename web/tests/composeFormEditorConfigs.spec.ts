@@ -137,4 +137,111 @@ configs:
     const textarea = wrapper.find('textarea[placeholder="Paste entire file contents here..."]');
     expect((textarea.element as HTMLTextAreaElement).value).toContain('{"debug": true}');
   });
+
+  it('uses monospace font for config editor textarea and allows opening bigger editor modal', async () => {
+    const rawYaml = `services:
+  web:
+    image: nginx:alpine
+    configs:
+      - source: nginx_conf
+        target: /etc/nginx/nginx.conf
+
+configs:
+  nginx_conf:
+    content: |
+      events {}
+      http {
+        server {
+          listen 80;
+        }
+      }
+`;
+    const wrapper = mount(ComposeFormEditor, {
+      props: {
+        initialAppId: 'nginx-modal-test',
+        initialTitle: 'Nginx Modal Test',
+        initialComposeYaml: rawYaml,
+      },
+    });
+
+    // 1. Check monospace styling on the inline config in Configs tab
+    const configsTabBtn = wrapper.findAll('button').find((b) => b.text().includes('Configs & Files'));
+    await configsTabBtn!.trigger('click');
+
+    const textarea = wrapper.find('textarea[placeholder="Paste entire file contents here..."]');
+    expect(textarea.exists()).toBe(true);
+    expect(textarea.classes()).toContain('mono');
+    expect(textarea.classes()).toContain('config-editor-textarea');
+    expect(textarea.attributes('style')).toContain('font-family: var(--font-mono)');
+
+    // 2. Modal is initially closed
+    expect(wrapper.find('.config-editor-modal').exists()).toBe(false);
+
+    // 3. Find and click "Bigger Editor" button
+    const biggerEditorBtn = wrapper.findAll('button').find((b) => b.text().includes('Bigger Editor'));
+    expect(biggerEditorBtn).toBeDefined();
+    await biggerEditorBtn!.trigger('click');
+
+    // 4. Modal should now be open
+    const modal = wrapper.find('.config-editor-modal');
+    expect(modal.exists()).toBe(true);
+    expect(modal.text()).toContain('Config Editor');
+    expect(modal.text()).toContain('nginx_conf');
+
+    // 5. Close the modal via "Done Editing"
+    const doneBtn = modal.findAll('button').find((b) => b.text().includes('Done Editing'));
+    expect(doneBtn).toBeDefined();
+    await doneBtn!.trigger('click');
+
+    // 6. Modal should be closed
+    expect(wrapper.find('.config-editor-modal').exists()).toBe(false);
+  });
+
+  it('allows opening bigger editor modal directly from service volume mount row', async () => {
+    const rawYaml = `services:
+  web:
+    image: nginx:alpine
+    configs:
+      - source: custom_config
+        target: /app/config.ini
+
+configs:
+  custom_config:
+    content: "key=value"
+`;
+    const wrapper = mount(ComposeFormEditor, {
+      props: {
+        initialAppId: 'app-vol-modal',
+        initialTitle: 'App Vol Modal',
+        initialComposeYaml: rawYaml,
+      },
+    });
+
+    // Navigate to Storage & Volumes
+    const volumesSubTab = wrapper.findAll('button').find((b) => b.text().includes('Storage & Volumes'));
+    await volumesSubTab!.trigger('click');
+
+    // Find the inline textarea and verify mono styling
+    const inlineTextarea = wrapper.find('textarea.config-editor-textarea');
+    expect(inlineTextarea.exists()).toBe(true);
+    expect(inlineTextarea.classes()).toContain('mono');
+    expect(inlineTextarea.attributes('style')).toContain('font-family: var(--font-mono)');
+
+    // Click "Bigger Editor" from the volume row
+    const biggerBtn = wrapper.findAll('button').find((b) => b.text().includes('Bigger Editor'));
+    expect(biggerBtn).toBeDefined();
+    await biggerBtn!.trigger('click');
+
+    // Verify modal is open with custom_config
+    const modal = wrapper.find('.config-editor-modal');
+    expect(modal.exists()).toBe(true);
+    expect(modal.text()).toContain('custom_config');
+
+    // Close modal via close button
+    const closeBtn = modal.find('.modal-close-btn');
+    expect(closeBtn.exists()).toBe(true);
+    await closeBtn.trigger('click');
+
+    expect(wrapper.find('.config-editor-modal').exists()).toBe(false);
+  });
 });

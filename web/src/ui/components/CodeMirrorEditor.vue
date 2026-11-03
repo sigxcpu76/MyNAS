@@ -6,6 +6,7 @@ import { yaml } from '@codemirror/lang-yaml';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { autocompletion } from '@codemirror/autocomplete';
+import { placeholder as cmPlaceholder } from '@codemirror/view';
 import { lintGutter, linter } from '@codemirror/lint';
 import { dockerComposeCompletionSource, dockerComposeLinter } from './dockerComposeCompletions';
 import { isDarkMode } from '../theme';
@@ -17,12 +18,14 @@ const props = withDefaults(
     readOnly?: boolean;
     height?: string;
     minHeight?: string;
+    mode?: 'docker-compose' | 'generic';
   }>(),
   {
     placeholder: 'services:\n  app:\n    image: nginx:alpine\n    ports:\n      - "8080:80"\n',
     readOnly: false,
     height: '100%',
     minHeight: '480px',
+    mode: 'docker-compose',
   }
 );
 
@@ -119,29 +122,43 @@ function getHighlightExtension(dark: boolean) {
 onMounted(() => {
   if (!editorContainer.value) return;
 
-  const state = EditorState.create({
-    doc: props.modelValue || '',
-    extensions: [
-      basicSetup,
+  const extensions = [
+    basicSetup,
+    highlightCompartment.of(getHighlightExtension(isDarkMode.value)),
+    nasTheme,
+    EditorView.lineWrapping,
+    readOnlyCompartment.of(EditorState.readOnly.of(props.readOnly)),
+  ];
+
+  if (props.placeholder) {
+    extensions.push(cmPlaceholder(props.placeholder));
+  }
+
+  if (props.mode === 'docker-compose') {
+    extensions.push(
       yaml(),
-      highlightCompartment.of(getHighlightExtension(isDarkMode.value)),
-      nasTheme,
-      EditorView.lineWrapping,
-      readOnlyCompartment.of(EditorState.readOnly.of(props.readOnly)),
       autocompletion({
         override: [dockerComposeCompletionSource],
         defaultKeymap: true,
       }),
       linter(dockerComposeLinter),
-      lintGutter(),
-      EditorView.updateListener.of((update) => {
-        if (update.docChanged && !isUpdatingFromProp) {
-          const value = update.state.doc.toString();
-          emit('update:modelValue', value);
-          emit('change', value);
-        }
-      }),
-    ],
+      lintGutter()
+    );
+  }
+
+  extensions.push(
+    EditorView.updateListener.of((update) => {
+      if (update.docChanged && !isUpdatingFromProp) {
+        const value = update.state.doc.toString();
+        emit('update:modelValue', value);
+        emit('change', value);
+      }
+    })
+  );
+
+  const state = EditorState.create({
+    doc: props.modelValue || '',
+    extensions,
   });
 
   view = new EditorView({
