@@ -19,9 +19,12 @@ export interface ComposeEnvModel {
 }
 
 export interface ComposeVolumeMountModel {
-  source: string; // Host path (e.g. /tank/data) or named volume
+  type?: 'bind' | 'volume' | 'config';
+  source: string; // Host path (e.g. /tank/data), named volume, or config name
   target: string; // Container path (e.g. /var/www/html)
   mode: 'rw' | 'ro';
+  uid?: string;
+  gid?: string;
 }
 
 export interface ComposeServiceModel {
@@ -64,6 +67,15 @@ export interface ComposeTopLevelVolume {
   rawConfig?: Record<string, any>;
 }
 
+export interface ComposeTopLevelConfig {
+  id: string;
+  name: string;
+  content: string;
+  file?: string;
+  external?: boolean;
+  rawConfig?: Record<string, any>;
+}
+
 export interface ComposePortalModel {
   name: string;
   scheme: string;
@@ -78,6 +90,7 @@ export interface ComposeAppFormModel {
   services: ComposeServiceModel[];
   networks: ComposeTopLevelNetwork[];
   volumes: ComposeTopLevelVolume[];
+  configs: ComposeTopLevelConfig[];
   managementPort?: string; // Container internal port used for Open Web UI (e.g. "81")
   portals?: ComposePortalModel[];
   catalogId?: string;
@@ -167,6 +180,7 @@ export function createDefaultAppForm(appId = '', title = ''): ComposeAppFormMode
     services: [createDefaultService('app')],
     networks: [],
     volumes: [],
+    configs: [],
     managementPort: '',
     portals: [],
   };
@@ -267,6 +281,7 @@ export function composeYamlToForm(
     services: [],
     networks: [],
     volumes: [],
+    configs: [],
   };
 
   if (!yamlStr || !yamlStr.trim()) {
@@ -524,6 +539,32 @@ export function composeYamlToForm(
       }
     }
 
+    // Parse Configs (injected files / ConfigMaps)
+    if (Array.isArray(svc.configs)) {
+      for (const c of svc.configs) {
+        if (typeof c === 'string') {
+          const src = c.trim();
+          serviceModel.volumes.push({
+            type: 'config',
+            source: src,
+            target: `/${src}`,
+            mode: 'ro',
+          });
+        } else if (c && typeof c === 'object') {
+          const src = String(c.source || '').trim();
+          const tgt = String(c.target || (src ? `/${src}` : '')).trim();
+          serviceModel.volumes.push({
+            type: 'config',
+            source: src,
+            target: tgt,
+            mode: 'ro',
+            uid: c.uid !== undefined ? String(c.uid) : undefined,
+            gid: c.gid !== undefined ? String(c.gid) : undefined,
+          });
+        }
+      }
+    }
+
     // Parse depends_on
     if (Array.isArray(svc.depends_on)) {
       serviceModel.dependsOn = svc.depends_on.map(String);
@@ -541,7 +582,7 @@ export function composeYamlToForm(
     // Preserve custom or unrecognized service attributes (e.g. labels, healthcheck, cap_add, user, shm_size, etc.)
     const knownKeys = new Set([
       'container_name', 'image', 'restart', 'command', 'ports', 'expose',
-      'environment', 'volumes', 'depends_on', 'network_mode', 'networks',
+      'environment', 'volumes', 'configs', 'depends_on', 'network_mode', 'networks',
       'mem_limit', 'cpus', 'privileged', 'devices', 'deploy', 'runtime', 'labels'
     ]);
     const customFields: Record<string, any> = {};
@@ -639,7 +680,61 @@ export function composeYamlToForm(
     }
   }
 
-  // 4. Parse Portals (TrueNAS SCALE x-portals or standard portals)
+  // 4. Parse Top-Level Configs (inline files / ConfigMaps)
+  if (parsed.configs && typeof parsed.configs === 'object') {
+    for (const [cfgName, cfgConfig] of Object.entries(parsed.configs)) {
+      let content = '';
+      let file: string | undefined = undefined;
+      let external = false;
+      const rawConfig: Record<string, any> = {};
+
+      if (typeof cfgConfig === 'string') {
+        content = cfgConfig;
+      } else if (cfgConfig && typeof cfgConfig === 'object') {
+        const cObj = cfgConfig as any;
+        if (typeof cObj.content === 'string') {
+          content = cObj.content;
+        }
+        if (typeof cObj.file === 'string') {
+          file = cObj.file;
+        }
+        external = Boolean(cObj.external === true || (cObj.external && typeof cObj.external === 'object'));
+
+        for (const [k, v] of Object.entries(cObj)) {
+          if (!['content', 'file', 'external'].includes(k)) {
+            rawConfig[k] = v;
+          }
+        }
+      }
+
+      model.configs.push({
+        id: generateUid(),
+        name: cfgName,
+        content,
+        file,
+        external,
+        rawConfig: Object.keys(rawConfig).length > 0 ? rawConfig : undefined,
+      });
+    }
+  }
+
+  // Ensure any config referenced by services is present in model.configs
+  for (const s of model.services) {
+    for (const v of s.volumes) {
+      if (v.type === 'config' && v.source.trim()) {
+        const src = v.source.trim();
+        if (!model.configs.some((c) => c.name === src)) {
+          model.configs.push({
+            id: generateUid(),
+            name: src,
+            content: '',
+          });
+        }
+      }
+    }
+  }
+
+  // 5. Parse Portals (TrueNAS SCALE x-portals or standard portals)
   const portals: ComposePortalModel[] = [];
   const rawPortals = parsed['x-portals'] || parsed['portals'];
   if (Array.isArray(rawPortals)) {
@@ -820,10 +915,13 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
       svcObj.environment = activeEnv.map((e) => `${e.key.trim()}=${escapeComposeEnvValue(e.value)}`);
     }
 
-    // Volumes
+    // Volumes & Configs
     const activeVols = svc.volumes.filter((v) => v.target.trim());
-    if (activeVols.length > 0) {
-      svcObj.volumes = activeVols.map((v) => {
+    const regularVols = activeVols.filter((v) => v.type !== 'config');
+    const configMounts = activeVols.filter((v) => v.type === 'config' && v.source.trim());
+
+    if (regularVols.length > 0) {
+      svcObj.volumes = regularVols.map((v) => {
         const modeSuffix = v.mode === 'ro' ? ':ro' : '';
         const cleanSrc = v.source.replace(/^["']+|["']+$/g, '').trim();
         const cleanTgt = v.target.replace(/^["']+|["']+$/g, '').trim();
@@ -831,6 +929,18 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
           return `${cleanSrc}:${cleanTgt}${modeSuffix}`;
         }
         return `${cleanTgt}${modeSuffix}`;
+      });
+    }
+
+    if (configMounts.length > 0) {
+      svcObj.configs = configMounts.map((c) => {
+        const item: any = {
+          source: c.source.replace(/^["']+|["']+$/g, '').trim(),
+          target: c.target.replace(/^["']+|["']+$/g, '').trim(),
+        };
+        if (c.uid && c.uid.trim()) item.uid = c.uid.trim();
+        if (c.gid && c.gid.trim()) item.gid = c.gid.trim();
+        return item;
       });
     }
 
@@ -962,6 +1072,41 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
         }
       }
       rootObj.volumes[volKey] = Object.keys(volObj).length > 0 ? volObj : {};
+    }
+  }
+
+  // Top-Level Configs (Inline files / ConfigMaps)
+  const configMap = new Map<string, ComposeTopLevelConfig>();
+  for (const cfg of (form.configs || [])) {
+    if (cfg.name && cfg.name.trim()) {
+      configMap.set(cfg.name.trim(), cfg);
+    }
+  }
+  // Ensure configs referenced by services are also emitted
+  for (const s of form.services) {
+    for (const v of s.volumes) {
+      if (v.type === 'config' && v.source.trim() && !configMap.has(v.source.trim())) {
+        configMap.set(v.source.trim(), {
+          id: generateUid(),
+          name: v.source.trim(),
+          content: '',
+        });
+      }
+    }
+  }
+
+  if (configMap.size > 0) {
+    rootObj.configs = {};
+    for (const [cfgKey, cfg] of configMap.entries()) {
+      const cfgObj: any = cfg.rawConfig ? { ...cfg.rawConfig } : {};
+      if (cfg.external) {
+        cfgObj.external = true;
+      } else if (cfg.file) {
+        cfgObj.file = cfg.file;
+      } else {
+        cfgObj.content = cfg.content !== undefined && cfg.content !== null ? cfg.content : '';
+      }
+      rootObj.configs[cfgKey] = cfgObj;
     }
   }
 

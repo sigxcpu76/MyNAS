@@ -7,6 +7,7 @@ import {
   type ComposeServiceModel,
   type ComposeTopLevelNetwork,
   type ComposeTopLevelVolume,
+  type ComposeTopLevelConfig,
   type ComposeVolumeMountModel,
   composeYamlToForm,
   createDefaultService,
@@ -34,6 +35,7 @@ import {
   mdiContentSave,
   mdiDiceMultipleOutline,
   mdiDocker,
+  mdiFileCodeOutline,
   mdiHarddisk,
   mdiLanConnect,
   mdiLoading,
@@ -79,7 +81,7 @@ const rawYaml = ref(props.initialComposeYaml || formToComposeYaml(form));
 
 // Navigation within Form Editor
 const activeServiceId = ref(form.services[0]?.id || '');
-const currentTopTab = ref<'services' | 'networks' | 'volumes'>('services');
+const currentTopTab = ref<'services' | 'networks' | 'volumes' | 'configs'>('services');
 const serviceSubTab = ref<'general' | 'ports' | 'env' | 'volumes' | 'resources' | 'networks'>('general');
 
 // Bulk environment paste state
@@ -222,8 +224,78 @@ function isNamedVolumeMount(source: string): boolean {
   return !source.startsWith('/') && !source.startsWith('.');
 }
 
-function setMountType(mount: ComposeVolumeMountModel, type: 'bind' | 'volume') {
-  if (type === 'volume') {
+function getMountType(mount: ComposeVolumeMountModel): 'bind' | 'volume' | 'config' {
+  if (mount.type) return mount.type;
+  if (form.configs?.some((c) => c.name === mount.source)) return 'config';
+  if (isNamedVolumeMount(mount.source)) return 'volume';
+  return 'bind';
+}
+
+function getConfigByName(name: string): ComposeTopLevelConfig | undefined {
+  return form.configs?.find((c) => c.name === name);
+}
+
+function addTopLevelConfig(name?: string, content = ''): ComposeTopLevelConfig {
+  if (!form.configs) {
+    form.configs = [];
+  }
+  const defaultName = name || `config_${form.configs.length + 1}`;
+  const cfg: ComposeTopLevelConfig = {
+    id: generateUid(),
+    name: defaultName,
+    content,
+  };
+  form.configs.push(cfg);
+  return cfg;
+}
+
+function removeTopLevelConfig(idx: number) {
+  if (form.configs) {
+    const removed = form.configs[idx];
+    form.configs.splice(idx, 1);
+    if (removed) {
+      for (const s of form.services) {
+        for (const v of s.volumes) {
+          if (v.type === 'config' && v.source === removed.name) {
+            v.source = form.configs[0]?.name || '';
+          }
+        }
+      }
+    }
+  }
+}
+
+function getServicesUsingConfig(cfgName: string): string[] {
+  const usages: string[] = [];
+  for (const s of form.services) {
+    for (const v of s.volumes) {
+      if (getMountType(v) === 'config' && v.source === cfgName) {
+        usages.push(`${s.name} (${v.target || '/'})`);
+      }
+    }
+  }
+  return usages;
+}
+
+function copyConfigContent(text: string) {
+  if (navigator?.clipboard?.writeText) {
+    navigator.clipboard.writeText(text);
+    notify('info', 'Config content copied to clipboard');
+  }
+}
+
+function setMountType(mount: ComposeVolumeMountModel, type: 'bind' | 'volume' | 'config') {
+  mount.type = type;
+  if (type === 'config') {
+    if (!form.configs || form.configs.length === 0) {
+      addTopLevelConfig();
+    }
+    mount.source = form.configs[0]?.name || 'config_file';
+    mount.mode = 'ro';
+    if (!mount.target || mount.target.startsWith('/mnt') || mount.target === '/config' || mount.target === '/data') {
+      mount.target = `/etc/${mount.source}.conf`;
+    }
+  } else if (type === 'volume') {
     if (form.volumes.length === 0) {
       addTopLevelVolume();
     }
@@ -234,6 +306,18 @@ function setMountType(mount: ComposeVolumeMountModel, type: 'bind' | 'volume') {
       mount.target ? mount.target.split('/').filter(Boolean).pop() || 'data' : 'data'
     );
   }
+}
+
+function createAndAttachInlineConfig(mount: ComposeVolumeMountModel) {
+  const newName = `${form.appId || 'app'}_config_${(form.configs?.length || 0) + 1}`;
+  addTopLevelConfig(newName, '');
+  mount.type = 'config';
+  mount.source = newName;
+  mount.mode = 'ro';
+  if (!mount.target || mount.target.startsWith('/mnt')) {
+    mount.target = `/etc/${newName}.conf`;
+  }
+  notify('info', `Created inline config "${newName}". You can paste its content below.`);
 }
 
 function createAndAttachNamedVolume(mount: ComposeVolumeMountModel) {
@@ -258,6 +342,7 @@ watch(editorMode, (newMode) => {
       form.services = parsed.services;
       form.networks = parsed.networks;
       form.volumes = parsed.volumes;
+      form.configs = parsed.configs;
       form.catalogId = parsed.catalogId;
       form.catalogSource = parsed.catalogSource;
       form.catalogVersion = parsed.catalogVersion;
@@ -825,6 +910,15 @@ function copyYaml() {
             <MdiIcon :path="mdiHarddisk" size="14" />
             <span>Volumes ({{ form.volumes.length }})</span>
           </button>
+          <button
+            class="btn btn-sm"
+            :class="currentTopTab === 'configs' ? 'btn-primary' : ''"
+            style="display: inline-flex; align-items: center; gap: 6px"
+            @click="currentTopTab = 'configs'"
+          >
+            <MdiIcon :path="mdiFileCodeOutline" size="14" />
+            <span>Configs & Files ({{ form.configs?.length || 0 }})</span>
+          </button>
         </div>
 
         <button
@@ -850,6 +944,14 @@ function copyYaml() {
           @click="addTopLevelVolume"
         >
           + Add Named Volume
+        </button>
+        <button
+          v-else-if="currentTopTab === 'configs'"
+          class="btn btn-sm btn-success"
+          style="padding: 4px 10px; font-size: 12px"
+          @click="addTopLevelConfig()"
+        >
+          + Add Config File
         </button>
       </div>
 
@@ -1314,9 +1416,9 @@ function copyYaml() {
                           fontSize: '11.5px',
                           border: 'none',
                           cursor: 'pointer',
-                          background: !isNamedVolumeMount(v.source) ? 'var(--accent-primary)' : 'transparent',
-                          color: !isNamedVolumeMount(v.source) ? 'var(--accent-contrast)' : 'var(--text-secondary)',
-                          fontWeight: !isNamedVolumeMount(v.source) ? '600' : 'normal',
+                          background: getMountType(v) === 'bind' ? 'var(--accent-primary)' : 'transparent',
+                          color: getMountType(v) === 'bind' ? 'var(--accent-contrast)' : 'var(--text-secondary)',
+                          fontWeight: getMountType(v) === 'bind' ? '600' : 'normal',
                         }"
                         @click="setMountType(v, 'bind')"
                       >
@@ -1330,19 +1432,35 @@ function copyYaml() {
                           fontSize: '11.5px',
                           border: 'none',
                           cursor: 'pointer',
-                          background: isNamedVolumeMount(v.source) ? 'var(--accent-primary)' : 'transparent',
-                          color: isNamedVolumeMount(v.source) ? 'var(--accent-contrast)' : 'var(--text-secondary)',
-                          fontWeight: isNamedVolumeMount(v.source) ? '600' : 'normal',
+                          background: getMountType(v) === 'volume' ? 'var(--accent-primary)' : 'transparent',
+                          color: getMountType(v) === 'volume' ? 'var(--accent-contrast)' : 'var(--text-secondary)',
+                          fontWeight: getMountType(v) === 'volume' ? '600' : 'normal',
                         }"
                         @click="setMountType(v, 'volume')"
                       >
                         Named Volume
                       </button>
+                      <button
+                        type="button"
+                        class="btn-sm"
+                        :style="{
+                          padding: '3px 10px',
+                          fontSize: '11.5px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          background: getMountType(v) === 'config' ? 'var(--accent-primary)' : 'transparent',
+                          color: getMountType(v) === 'config' ? 'var(--accent-contrast)' : 'var(--text-secondary)',
+                          fontWeight: getMountType(v) === 'config' ? '600' : 'normal',
+                        }"
+                        @click="setMountType(v, 'config')"
+                      >
+                        Inline Config File
+                      </button>
                     </div>
                   </div>
 
                   <!-- Quick Presets Dropdown (for host bind) -->
-                  <div v-if="!isNamedVolumeMount(v.source)" style="display: flex; align-items: center; gap: 6px">
+                  <div v-if="getMountType(v) === 'bind'" style="display: flex; align-items: center; gap: 6px">
                     <label style="font-size: 11px; color: var(--text-secondary)">Preset:</label>
                     <select
                       class="input mono"
@@ -1387,11 +1505,29 @@ function copyYaml() {
                   <!-- Source Column -->
                   <div>
                     <label style="display: block; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px">
-                      {{ isNamedVolumeMount(v.source) ? 'NAMED VOLUME' : 'HOST PATH / ZFS DATASET' }}
+                      {{ getMountType(v) === 'config' ? 'INLINE CONFIG FILE' : (getMountType(v) === 'volume' ? 'NAMED VOLUME' : 'HOST PATH / ZFS DATASET') }}
                     </label>
 
-                    <!-- Case A: Named Volume Selector -->
-                    <div v-if="isNamedVolumeMount(v.source)" style="display: flex; gap: 6px; align-items: center">
+                    <!-- Case A: Config File Selector -->
+                    <div v-if="getMountType(v) === 'config'" style="display: flex; gap: 6px; align-items: center">
+                      <select v-model="v.source" class="form-input mono" style="font-size: 12px; flex: 1; padding: 4px 8px">
+                        <option v-for="cfg in form.configs" :key="cfg.id" :value="cfg.name">
+                          {{ cfg.name }}
+                        </option>
+                      </select>
+                      <button
+                        type="button"
+                        class="btn btn-sm"
+                        style="padding: 4px 8px; font-size: 11.5px; white-space: nowrap"
+                        title="Create new inline config file"
+                        @click="createAndAttachInlineConfig(v)"
+                      >
+                        + New File
+                      </button>
+                    </div>
+
+                    <!-- Case B: Named Volume Selector -->
+                    <div v-else-if="getMountType(v) === 'volume'" style="display: flex; gap: 6px; align-items: center">
                       <select v-model="v.source" class="form-input mono" style="font-size: 12px; flex: 1; padding: 4px 8px">
                         <option v-for="vol in form.volumes" :key="vol.id" :value="vol.name">
                           {{ vol.name }}
@@ -1408,7 +1544,7 @@ function copyYaml() {
                       </button>
                     </div>
 
-                    <!-- Case B: Host Path / ZFS Dataset Selector -->
+                    <!-- Case C: Host Path / ZFS Dataset Selector -->
                     <div v-else>
                       <PathSelector
                         v-model="v.source"
@@ -1427,7 +1563,7 @@ function copyYaml() {
                       v-model="v.target"
                       type="text"
                       class="form-input mono"
-                      placeholder="e.g. /config or /data"
+                      :placeholder="getMountType(v) === 'config' ? 'e.g. /etc/nginx/nginx.conf' : 'e.g. /config or /data'"
                       list="container-target-options"
                       style="font-size: 12px; padding: 4px 8px; width: 100%"
                     />
@@ -1438,10 +1574,54 @@ function copyYaml() {
                     <label style="display: block; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px">
                       ACCESS MODE
                     </label>
-                    <select v-model="v.mode" class="form-input" style="font-size: 12px; padding: 4px 8px; width: 100%">
+                    <div v-if="getMountType(v) === 'config'" style="font-size: 12px; padding: 5px 8px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 6px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px; height: 32px">
+                      <MdiIcon :path="mdiCheckCircle" size="13" style="color: var(--success)" />
+                      <span>Read-Only (File)</span>
+                    </div>
+                    <select v-else v-model="v.mode" class="form-input" style="font-size: 12px; padding: 4px 8px; width: 100%">
                       <option value="rw">Read-Write (rw)</option>
                       <option value="ro">Read-Only (ro)</option>
                     </select>
+                  </div>
+                </div>
+
+                <!-- Config Direct Content Editor in Volume Row -->
+                <div v-if="getMountType(v) === 'config'" style="margin-top: 4px; padding-top: 10px; border-top: 1px dashed var(--border-subtle)">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px">
+                    <div style="display: flex; align-items: center; gap: 6px">
+                      <MdiIcon :path="mdiFileCodeOutline" size="14" style="color: var(--accent-primary)" />
+                      <span style="font-size: 11.5px; font-weight: 600; color: var(--text-primary)">
+                        File Content for <code class="mono" style="color: var(--accent-primary)">{{ v.source || 'unnamed' }}</code>
+                      </span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px">
+                      <span style="font-size: 11px; color: var(--text-muted)">
+                        Injected as real file at <code class="mono" style="color: var(--accent-primary)">{{ v.target || '/path' }}</code>
+                      </span>
+                      <button
+                        type="button"
+                        class="btn btn-sm"
+                        style="padding: 2px 6px; font-size: 11px"
+                        title="Open dedicated Configs tab"
+                        @click="currentTopTab = 'configs'"
+                      >
+                        Open in Configs Tab &rarr;
+                      </button>
+                    </div>
+                  </div>
+                  <textarea
+                    v-if="getConfigByName(v.source)"
+                    v-model="getConfigByName(v.source)!.content"
+                    rows="6"
+                    class="form-input mono"
+                    placeholder="Paste file content here (e.g. nginx.conf, config.json, settings.ini)..."
+                    style="font-size: 12px; width: 100%; line-height: 1.4; resize: vertical; tab-size: 2"
+                  ></textarea>
+                  <div v-else style="padding: 12px; font-size: 12px; color: var(--text-secondary); background: var(--bg-surface); border-radius: 6px; text-align: center">
+                    Config "<strong>{{ v.source }}</strong>" not found in top-level configs.
+                    <button type="button" class="btn btn-sm btn-primary" style="margin-left: 8px; padding: 2px 8px" @click="addTopLevelConfig(v.source)">
+                      Create Config "{{ v.source }}"
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1857,6 +2037,108 @@ function copyYaml() {
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- TAB 4: Top-Level Configs Editor (Inline Files / ConfigMaps) -->
+      <div v-else-if="currentTopTab === 'configs'" class="card" style="padding: 16px">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; flex-wrap: wrap; gap: 8px">
+          <div>
+            <div style="font-size: 13.5px; font-weight: 600; color: var(--text-primary)">
+              Inline Configuration Files (Compose Configs)
+            </div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 3px">
+              Inject entire file contents (similar to Kubernetes ConfigMaps) directly into containers without touching host storage.
+            </div>
+          </div>
+          <button class="btn btn-sm btn-primary" style="display: inline-flex; align-items: center; gap: 4px" @click="addTopLevelConfig()">
+            <MdiIcon :path="mdiPlus" size="14" />
+            <span>Add Config File</span>
+          </button>
+        </div>
+
+        <div v-if="!form.configs || form.configs.length === 0" style="padding: 32px 16px; text-align: center; border: 1px dashed var(--border-subtle); border-radius: 8px; color: var(--text-secondary); font-size: 13px">
+          <div>No inline config files declared yet.</div>
+          <div style="font-size: 11.5px; margin-top: 4px; opacity: 0.8">
+            Click "Add Config File" above or create one under any service's "Storage & Volumes" tab.
+          </div>
+        </div>
+
+        <div v-else style="display: flex; flex-direction: column; gap: 16px">
+          <div
+            v-for="(cfg, idx) in form.configs"
+            :key="cfg.id"
+            style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px"
+          >
+            <!-- Config Header -->
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap">
+              <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 240px">
+                <MdiIcon :path="mdiFileCodeOutline" size="16" style="color: var(--accent-primary)" />
+                <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary); white-space: nowrap">Config Name:</label>
+                <input
+                  v-model="cfg.name"
+                  type="text"
+                  class="form-input mono"
+                  placeholder="e.g. nginx_conf, app_settings"
+                  style="font-size: 12px; padding: 4px 8px; max-width: 240px"
+                />
+                <!-- Usage Tag -->
+                <span
+                  v-if="getServicesUsingConfig(cfg.name).length > 0"
+                  class="badge badge-info"
+                  style="font-size: 11px; padding: 2px 6px"
+                  :title="`Mounted by:\n${getServicesUsingConfig(cfg.name).join('\n')}`"
+                >
+                  Mounted in {{ getServicesUsingConfig(cfg.name).length }} service{{ getServicesUsingConfig(cfg.name).length === 1 ? '' : 's' }}
+                </span>
+                <span v-else style="font-size: 11px; color: var(--text-muted); font-style: italic">
+                  Not mounted in any service yet
+                </span>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 6px">
+                <button
+                  type="button"
+                  class="btn btn-sm"
+                  style="padding: 3px 8px; font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px"
+                  title="Copy content to clipboard"
+                  @click="copyConfigContent(cfg.content)"
+                >
+                  <MdiIcon :path="mdiContentCopy" size="13" />
+                  <span>Copy</span>
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-icon btn-danger"
+                  style="padding: 3px 6px"
+                  title="Delete Config"
+                  aria-label="Delete Config"
+                  @click="removeTopLevelConfig(idx)"
+                >
+                  <MdiIcon :path="mdiClose" size="13" />
+                </button>
+              </div>
+            </div>
+
+            <!-- Content Area -->
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px">
+                <label style="font-size: 11px; font-weight: 600; color: var(--text-secondary)">
+                  FILE CONTENT (YAML / JSON / CONF / INI / SCRIPT)
+                </label>
+                <span style="font-size: 11px; color: var(--text-muted)">
+                  {{ cfg.content ? cfg.content.split('\n').length : 0 }} lines · {{ cfg.content ? cfg.content.length : 0 }} bytes
+                </span>
+              </div>
+              <textarea
+                v-model="cfg.content"
+                rows="10"
+                class="form-input mono"
+                placeholder="Paste entire file contents here..."
+                style="font-size: 12px; width: 100%; line-height: 1.45; resize: vertical; tab-size: 2"
+              ></textarea>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 

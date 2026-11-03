@@ -413,6 +413,51 @@ services:
     expect(generated).toContain('homepage.group=Media');
   });
 
+  it('parses inline configs (ConfigMaps) and maps them into service config mounts and top-level configs', () => {
+    const yaml = `services:
+  web:
+    image: nginx:alpine
+    configs:
+      - source: nginx_conf
+        target: /etc/nginx/conf.d/default.conf
+    volumes:
+      - /tank/html:/usr/share/nginx/html:ro
+
+configs:
+  nginx_conf:
+    content: |
+      server {
+        listen 80;
+        server_name example.com;
+      }
+`;
+    const form = composeYamlToForm(yaml, 'web-app', 'Web App');
+    expect(form.configs).toHaveLength(1);
+    expect(form.configs[0].name).toBe('nginx_conf');
+    expect(form.configs[0].content).toContain('listen 80;');
+    expect(form.configs[0].content).toContain('server_name example.com;');
+
+    expect(form.services[0].volumes).toHaveLength(2);
+    // Regular volume
+    const regVol = form.services[0].volumes.find((v) => v.type !== 'config')!;
+    expect(regVol.source).toBe('/tank/html');
+    expect(regVol.target).toBe('/usr/share/nginx/html');
+
+    // Config mount
+    const cfgVol = form.services[0].volumes.find((v) => v.type === 'config')!;
+    expect(cfgVol.source).toBe('nginx_conf');
+    expect(cfgVol.target).toBe('/etc/nginx/conf.d/default.conf');
+    expect(cfgVol.mode).toBe('ro');
+
+    // Bi-directional generation back to YAML
+    const regenerated = formToComposeYaml(form);
+    expect(regenerated).toContain('configs:');
+    expect(regenerated).toContain('source: nginx_conf');
+    expect(regenerated).toContain('target: /etc/nginx/conf.d/default.conf');
+    expect(regenerated).toContain('listen 80;');
+    expect(regenerated).toContain('/tank/html:/usr/share/nginx/html:ro');
+  });
+
   it('throws syntax error when parsing malformed YAML', () => {
     const badYaml = `services:
   app:
