@@ -1464,14 +1464,62 @@ function popoutHostTerminal() {
   color: var(--accent-primary);
   border-color: var(--accent-primary);
   font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .ribbon-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
   margin-left: auto;
+  padding: 2px 4px;
+}
+
+.ribbon-actions .btn {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  transition: all 0.12s ease;
+}
+
+.ribbon-actions .btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.ribbon-actions .btn-success {
+  background: var(--success);
+  color: #fff;
+  border-color: var(--success);
+}
+
+.ribbon-actions .btn-danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.ribbon-actions .btn-danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: #fff;
+}
+
+.ribbon-actions .btn-secondary {
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.ribbon-actions .btn-secondary:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-hover, var(--text-muted));
 }
 
 .font-xs {

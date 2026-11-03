@@ -258,11 +258,19 @@ go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@v2.32.0
 
+# (Optional) Build the companion Android APK (requires Java 17 / Android SDK / Android Studio):
+# If Android Studio / Android SDK is not installed, you can skip this step safely.
+# If built, the APK is placed in web/public/nan-nas.apk and served by the web UI for direct mobile download.
+make apk
+
 # Build frontend and compile the single embedded binary
 make build
 ```
 
 This generates the standalone binary at `bin/nasctl`.
+
+> [!NOTE]
+> Building the companion Android app via `make apk` is completely optional. If Android Studio or the Android SDK is not installed on your build machine, running `make build` will build the frontend and compile the `nasctl` binary without requiring any Android tools.
 
 ### Running the Server Daemon
 

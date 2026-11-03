@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
   mdiAlertCircle,
   mdiArrowLeft,
@@ -18,6 +18,7 @@ import {
   mdiInformationOutline,
   mdiLayers,
   mdiLogout,
+  mdiMagnify,
   mdiMenu,
   mdiMenuDown,
   mdiMonitor,
@@ -67,6 +68,7 @@ import OverviewSkeleton from './components/OverviewSkeleton.vue';
 import ResourceTree from './components/ResourceTree.vue';
 import ActionRibbon from './components/ActionRibbon.vue';
 import TaskConsoleDock from './components/TaskConsoleDock.vue';
+import CommandPalette from './components/CommandPalette.vue';
 
 import OverviewView from './views/OverviewView.vue';
 import PrerequisitesView from './views/PrerequisitesView.vue';
@@ -108,8 +110,28 @@ const showPrerequisitesModal = ref(false);
 const showSystemDetailsModal = ref(false);
 const showUpdateModal = ref(false);
 const showHostTerminalModal = ref(false);
+const showCommandPalette = ref(false);
 const isMobileDrawerOpen = ref(false);
 const isSidebarCollapsed = ref(false);
+
+function handleGlobalKeydown(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    showCommandPalette.value = !showCommandPalette.value;
+  }
+}
+
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.addEventListener('keydown', handleGlobalKeydown);
+  }
+});
+
+onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('keydown', handleGlobalKeydown);
+  }
+});
 
 // Register top overlay dismissal for mobile / Android back button
 if (typeof window !== 'undefined') {
@@ -453,6 +475,18 @@ onMounted(() => {
 
       <!-- Right: Quick Shell, Specs, Theme & User -->
       <div class="header-right">
+        <!-- Spotlight Command Palette Search Trigger Button -->
+        <button
+          class="btn btn-xs btn-secondary hide-mobile command-palette-trigger"
+          title="Search Resources and Actions (Ctrl+K / Cmd+K)"
+          style="display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; font-weight: 500"
+          @click="showCommandPalette = true"
+        >
+          <MdiIcon :path="mdiMagnify" size="13" style="color: var(--text-muted)" />
+          <span style="font-size: 11.5px; color: var(--text-secondary)">Search</span>
+          <kbd style="font-size: 9.5px; padding: 1px 4px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 3px; color: var(--text-muted)">Ctrl+K</kbd>
+        </button>
+
         <!-- Return to Mobile Shell if user forced Desktop mode on a mobile device -->
         <button
           v-if="viewMode === 'desktop'"
@@ -706,6 +740,14 @@ onMounted(() => {
     <!-- Docked Bottom Task & Audit Console (Proxmox-Style) -->
     <TaskConsoleDock />
   </div>
+
+  <!-- Global Quick Spotlight Command Palette (Ctrl+K) -->
+  <CommandPalette
+    v-model="showCommandPalette"
+    @open-host-terminal="showHostTerminalModal = true"
+    @open-system-details="showSystemDetailsModal = true"
+    @open-prerequisites="showPrerequisitesModal = true"
+  />
 
   <!-- Shared Global Modals & Utilities (Accessible across Desktop & Mobile) -->
   <LoginModal v-if="!nasState.authenticated" />
