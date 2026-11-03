@@ -15,8 +15,9 @@ import {
 export interface DashboardWidgetConfig {
   id: string;
   type: string;
-  colSpan: number; // 3, 4, 6, 8, 12
-  rowSpan?: number; // 1, 2, 3, 4
+  lane: number; // -1 for top full-width ribbon, 0 = Col 1, 1 = Col 2, 2 = Col 3
+  colSpan?: number; // legacy backward compatibility
+  rowSpan?: number; // legacy backward compatibility
 }
 
 export interface WidgetCatalogItem {
@@ -24,10 +25,7 @@ export interface WidgetCatalogItem {
   name: string;
   description: string;
   icon: string;
-  defaultColSpan: number;
-  allowedColSpans: number[];
-  defaultRowSpan: number;
-  allowedRowSpans: number[];
+  defaultLane: number; // -1 for top ribbon, 0, 1, 2 for columns
   category: 'system' | 'storage' | 'network' | 'workloads';
 }
 
@@ -37,10 +35,7 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     name: 'Overview KPIs',
     description: 'High-level summary cards for storage capacity, CPU load, RAM usage, and active workloads.',
     icon: mdiViewDashboard,
-    defaultColSpan: 12,
-    allowedColSpans: [3, 4, 6, 8, 12],
-    defaultRowSpan: 1,
-    allowedRowSpans: [1, 2],
+    defaultLane: -1,
     category: 'system',
   },
   {
@@ -48,87 +43,39 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     name: 'ZFS Storage Pools',
     description: 'Capacity usage, fragmentation, dedup ratio, and scrub health for all active ZFS storage pools.',
     icon: mdiDatabase,
-    defaultColSpan: 12,
-    allowedColSpans: [4, 6, 8, 12],
-    defaultRowSpan: 2,
-    allowedRowSpans: [2, 3, 4],
+    defaultLane: 0,
     category: 'storage',
-  },
-  {
-    type: 'cpu',
-    name: 'Processor Telemetry',
-    description: 'Real-time CPU utilization gauge, thermal temperature readout, clock speeds, and 1/5/15m load averages.',
-    icon: mdiCpu64Bit,
-    defaultColSpan: 6,
-    allowedColSpans: [3, 4, 6, 8, 12],
-    defaultRowSpan: 2,
-    allowedRowSpans: [1, 2, 3],
-    category: 'system',
-  },
-  {
-    type: 'memory',
-    name: 'Memory (RAM) & ZFS ARC',
-    description: 'RAM usage donut chart breakdown distinguishing container services, ZFS ARC cache, buffers, and free memory.',
-    icon: mdiMemory,
-    defaultColSpan: 6,
-    allowedColSpans: [3, 4, 6, 8, 12],
-    defaultRowSpan: 2,
-    allowedRowSpans: [1, 2, 3],
-    category: 'system',
-  },
-  {
-    type: 'network',
-    name: 'Network Throughput & Traffic',
-    description: 'Active network adapter status, IP/MAC addresses, live transfer rates, and rolling throughput history graph.',
-    icon: mdiLanConnect,
-    defaultColSpan: 12,
-    allowedColSpans: [4, 6, 8, 12],
-    defaultRowSpan: 2,
-    allowedRowSpans: [2, 3, 4],
-    category: 'network',
-  },
-  {
-    type: 'system',
-    name: 'Hardware & Platform Info',
-    description: 'Specification sheet displaying hostname, motherboard, BIOS version, OS kernel, GPU, and system uptime.',
-    icon: mdiServer,
-    defaultColSpan: 6,
-    allowedColSpans: [3, 4, 6, 8, 12],
-    defaultRowSpan: 2,
-    allowedRowSpans: [1, 2, 3],
-    category: 'system',
   },
   {
     type: 'disks',
     name: 'Physical Disks & Drives',
     description: 'Physical storage drive overview showing drive models, bus types (NVMe/SATA), capacity, and drive health.',
     icon: mdiHarddisk,
-    defaultColSpan: 6,
-    allowedColSpans: [3, 4, 6, 8, 12],
-    defaultRowSpan: 2,
-    allowedRowSpans: [1, 2, 3, 4],
+    defaultLane: 0,
     category: 'storage',
   },
   {
-    type: 'vms',
-    name: 'Virtual Machines',
-    description: 'KVM virtual machines with CPU allocation, RAM sizing, VNC display ports, and live running states.',
-    icon: mdiServerNetwork,
-    defaultColSpan: 4,
-    allowedColSpans: [3, 4, 6, 8, 12],
-    defaultRowSpan: 2,
-    allowedRowSpans: [1, 2, 3],
-    category: 'workloads',
+    type: 'network',
+    name: 'Network Throughput & Traffic',
+    description: 'Active network adapter status, IP/MAC addresses, live transfer rates, and rolling throughput history graph.',
+    icon: mdiLanConnect,
+    defaultLane: 1,
+    category: 'network',
   },
   {
     type: 'apps',
     name: 'Apps & Containers',
     description: 'Docker Compose application stacks and LXC containers with live container counts and status chips.',
     icon: mdiDocker,
-    defaultColSpan: 4,
-    allowedColSpans: [3, 4, 6, 8, 12],
-    defaultRowSpan: 2,
-    allowedRowSpans: [1, 2, 3],
+    defaultLane: 1,
+    category: 'workloads',
+  },
+  {
+    type: 'vms',
+    name: 'Virtual Machines',
+    description: 'KVM virtual machines with CPU allocation, RAM sizing, VNC display ports, and live running states.',
+    icon: mdiServerNetwork,
+    defaultLane: 1,
     category: 'workloads',
   },
   {
@@ -136,10 +83,7 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     name: 'Network Shares',
     description: 'Samba (SMB) and WebDAV network storage shares with mount paths, access modes (RW/RO), and quick management.',
     icon: mdiFolderNetworkOutline,
-    defaultColSpan: 4,
-    allowedColSpans: [3, 4, 6, 8, 12],
-    defaultRowSpan: 2,
-    allowedRowSpans: [1, 2, 3],
+    defaultLane: 1,
     category: 'workloads',
   },
   {
@@ -147,10 +91,7 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     name: 'Workloads (All-in-One)',
     description: 'Combined multi-panel card displaying Virtual Machines, Apps & Containers, and Network Shares together.',
     icon: mdiDocker,
-    defaultColSpan: 12,
-    allowedColSpans: [4, 6, 8, 12],
-    defaultRowSpan: 2,
-    allowedRowSpans: [2, 3, 4],
+    defaultLane: 1,
     category: 'workloads',
   },
   {
@@ -158,65 +99,108 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     name: 'Hardware Sensors & Power',
     description: 'System temperatures (CPU, GPU, PCI cards, storage), dedicated NVIDIA/AMD GPU metrics, fan speeds, and ACPI power meter.',
     icon: mdiThermometer,
-    defaultColSpan: 12,
-    allowedColSpans: [4, 6, 8, 12],
-    defaultRowSpan: 3,
-    allowedRowSpans: [2, 3, 4],
+    defaultLane: 2,
+    category: 'system',
+  },
+  {
+    type: 'system',
+    name: 'Hardware & Platform Info',
+    description: 'Specification sheet displaying hostname, motherboard, BIOS version, OS kernel, GPU, and system uptime.',
+    icon: mdiServer,
+    defaultLane: 2,
+    category: 'system',
+  },
+  {
+    type: 'cpu',
+    name: 'Processor Telemetry',
+    description: 'Real-time CPU utilization gauge, thermal temperature readout, clock speeds, and 1/5/15m load averages.',
+    icon: mdiCpu64Bit,
+    defaultLane: 2,
+    category: 'system',
+  },
+  {
+    type: 'memory',
+    name: 'Memory (RAM) & ZFS ARC',
+    description: 'RAM usage donut chart breakdown distinguishing container services, ZFS ARC cache, buffers, and free memory.',
+    icon: mdiMemory,
+    defaultLane: 2,
     category: 'system',
   },
 ];
 
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardWidgetConfig[] = [
-  { id: 'widget-kpis', type: 'kpis', colSpan: 12, rowSpan: 1 },
-  { id: 'widget-pools', type: 'pools', colSpan: 12, rowSpan: 2 },
-  { id: 'widget-network', type: 'network', colSpan: 12, rowSpan: 2 },
+  { id: 'widget-kpis', type: 'kpis', lane: -1 },
+  { id: 'widget-pools', type: 'pools', lane: 0 },
+  { id: 'widget-network', type: 'network', lane: 1 },
+  { id: 'widget-sensors', type: 'sensors', lane: 2 },
 ];
 
-export const PUZZLE_BENTO_LAYOUT: DashboardWidgetConfig[] = [
-  { id: 'widget-kpis', type: 'kpis', colSpan: 12, rowSpan: 1 },
-  { id: 'widget-pools', type: 'pools', colSpan: 8, rowSpan: 2 },
-  { id: 'widget-cpu', type: 'cpu', colSpan: 4, rowSpan: 1 },
-  { id: 'widget-memory', type: 'memory', colSpan: 4, rowSpan: 1 },
-  { id: 'widget-network', type: 'network', colSpan: 6, rowSpan: 2 },
-  { id: 'widget-system', type: 'system', colSpan: 6, rowSpan: 2 },
-  { id: 'widget-vms', type: 'vms', colSpan: 4, rowSpan: 2 },
-  { id: 'widget-apps', type: 'apps', colSpan: 4, rowSpan: 2 },
-  { id: 'widget-shares', type: 'shares', colSpan: 4, rowSpan: 2 },
+export const BALANCED_DASHBOARD_LAYOUT: DashboardWidgetConfig[] = [
+  { id: 'widget-kpis', type: 'kpis', lane: -1 },
+  { id: 'widget-pools', type: 'pools', lane: 0 },
+  { id: 'widget-disks', type: 'disks', lane: 0 },
+  { id: 'widget-network', type: 'network', lane: 1 },
+  { id: 'widget-apps', type: 'apps', lane: 1 },
+  { id: 'widget-sensors', type: 'sensors', lane: 2 },
+  { id: 'widget-system', type: 'system', lane: 2 },
 ];
 
-export const STORAGE_KEY = 'nas_dashboard_layout_v3';
+export const STORAGE_KEY = 'nas_dashboard_layout_v4';
 
 export function loadDashboardLayout(): DashboardWidgetConfig[] {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       let raw = window.localStorage.getItem(STORAGE_KEY);
-      // Migrate from v2 or v1 if v3 is not yet saved
+      // Migrate from v3, v2, or v1 if v4 is not yet saved
       if (!raw) {
-        const prevRaw = window.localStorage.getItem('nas_dashboard_layout_v2') || window.localStorage.getItem('nas_dashboard_layout_v1');
+        const prevRaw =
+          window.localStorage.getItem('nas_dashboard_layout_v3') ||
+          window.localStorage.getItem('nas_dashboard_layout_v2') ||
+          window.localStorage.getItem('nas_dashboard_layout_v1');
         if (prevRaw) {
           const prevParsed = JSON.parse(prevRaw);
-          if (Array.isArray(prevParsed)) {
-            // Filter out cpu, memory, and system from default dashboard
-            const migrated = prevParsed.filter((w: any) => w && w.type !== 'cpu' && w.type !== 'memory' && w.type !== 'system');
-            // Expand network to 12 if it was 6
-            migrated.forEach((w: any) => {
-              if (w.type === 'network' && w.colSpan === 6) {
-                w.colSpan = 12;
-              }
-              const cat = WIDGET_CATALOG.find((c) => c.type === w.type);
-              if (!w.rowSpan) {
-                w.rowSpan = cat?.defaultRowSpan || 2;
-              }
-            });
-            saveDashboardLayout(migrated);
-            return migrated;
+          if (Array.isArray(prevParsed) && prevParsed.length > 0) {
+            let colCounter = 0;
+            const migrated: DashboardWidgetConfig[] = prevParsed
+              .filter(
+                (item: any) =>
+                  item &&
+                  typeof item.id === 'string' &&
+                  typeof item.type === 'string' &&
+                  WIDGET_CATALOG.some((c) => c.type === item.type)
+              )
+              .map((w: any) => {
+                const cat = WIDGET_CATALOG.find((c) => c.type === w.type);
+                let assignedLane = typeof w.lane === 'number' ? w.lane : undefined;
+                if (assignedLane === undefined) {
+                  if (w.type === 'kpis') {
+                    assignedLane = -1;
+                  } else if (cat && typeof cat.defaultLane === 'number') {
+                    assignedLane = cat.defaultLane;
+                  } else {
+                    assignedLane = colCounter % 3;
+                    colCounter++;
+                  }
+                }
+                return {
+                  id: w.id,
+                  type: w.type,
+                  lane: assignedLane,
+                };
+              });
+
+            if (migrated.length > 0) {
+              saveDashboardLayout(migrated);
+              return migrated;
+            }
           }
         }
       }
+
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Sanitize items against known catalog types and ensure valid rowSpan
+          let colCounter = 0;
           const valid = parsed
             .filter(
               (item: any) =>
@@ -227,13 +211,21 @@ export function loadDashboardLayout(): DashboardWidgetConfig[] {
             )
             .map((item: any) => {
               const cat = WIDGET_CATALOG.find((c) => c.type === item.type);
-              const rowSpan =
-                typeof item.rowSpan === 'number' && item.rowSpan > 0
-                  ? item.rowSpan
-                  : cat?.defaultRowSpan || 2;
+              let lane = typeof item.lane === 'number' ? item.lane : undefined;
+              if (lane === undefined) {
+                if (item.type === 'kpis') {
+                  lane = -1;
+                } else if (cat && typeof cat.defaultLane === 'number') {
+                  lane = cat.defaultLane;
+                } else {
+                  lane = colCounter % 3;
+                  colCounter++;
+                }
+              }
               return {
-                ...item,
-                rowSpan,
+                id: item.id,
+                type: item.type,
+                lane,
               };
             });
           if (valid.length > 0) {

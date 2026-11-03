@@ -169,10 +169,9 @@ const ramChartOptions = computed<echarts.EChartsOption>(() => {
 
 <style scoped>
 .memory-widget-card {
-  height: 100%;
+  height: auto;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
 }
 
 .ram-summary-footer {

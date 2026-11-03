@@ -172,17 +172,18 @@ function getTempClass(temp: number): string {
 }
 
 .kpi-card {
-  padding: 16px;
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  gap: 5px;
+  height: auto;
 }
 
 .kpi-progress-track {
   height: 4px;
   border-radius: 2px;
   background: var(--border-subtle);
-  margin-top: 6px;
+  margin-top: 4px;
   overflow: hidden;
 }
 

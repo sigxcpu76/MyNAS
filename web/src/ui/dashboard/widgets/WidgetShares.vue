@@ -110,7 +110,7 @@ const activeCount = computed(() => {
 
 <style scoped>
 .workload-card {
-  height: 100%;
+  height: auto;
   display: flex;
   flex-direction: column;
 }
@@ -203,8 +203,7 @@ const activeCount = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  flex: 1 1 auto;
-  min-height: 0;
+  max-height: 380px;
   overflow-y: auto;
   padding-right: 2px;
 }

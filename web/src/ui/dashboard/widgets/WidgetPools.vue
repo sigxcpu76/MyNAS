@@ -329,9 +329,6 @@ function getPoolFragChartOptions(fragPercent: number): echarts.EChartsOption {
 <style scoped>
 .pools-widget {
   width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
 }
 
 .pools-header {
@@ -339,16 +336,12 @@ function getPoolFragChartOptions(fragPercent: number): echarts.EChartsOption {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
-  flex-shrink: 0;
 }
 
 .pool-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 14px;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
 }
 
 .pool-telemetry-card {

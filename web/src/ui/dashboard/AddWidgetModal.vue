@@ -30,25 +30,9 @@ function handleAdd(type: string) {
   emit('add', type);
 }
 
-function getColSpanLabel(span: number): string {
-  switch (span) {
-    case 3:
-      return '1/4 Width';
-    case 4:
-      return '1/3 Width';
-    case 6:
-      return 'Half Width';
-    case 8:
-      return '2/3 Width';
-    case 12:
-      return 'Full Width';
-    default:
-      return `${span} Cols`;
-  }
-}
-
-function getRowSpanLabel(span: number): string {
-  return `${span}x Height`;
+function getLaneLabel(lane: number): string {
+  if (lane === -1) return 'Top Ribbon';
+  return `Column ${lane + 1}`;
 }
 </script>
 
@@ -133,7 +117,7 @@ function getRowSpanLabel(span: number): string {
 
             <div class="catalog-card-footer">
               <span class="span-tag">
-                Default: {{ getColSpanLabel(item.defaultColSpan) }} × {{ getRowSpanLabel(item.defaultRowSpan) }}
+                Default: {{ getLaneLabel(item.defaultLane) }}
               </span>
 
               <button

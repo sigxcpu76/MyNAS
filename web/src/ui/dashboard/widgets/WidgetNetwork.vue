@@ -260,7 +260,7 @@ const networkTrafficChartOptions = computed<echarts.EChartsOption>(() => {
 
 <style scoped>
 .system-network-card {
-  height: 100%;
+  height: auto;
   display: flex;
   flex-direction: column;
 }

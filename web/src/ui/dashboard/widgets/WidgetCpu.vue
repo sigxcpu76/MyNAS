@@ -197,10 +197,9 @@ const cpuUsageChartOptions = computed<echarts.EChartsOption>(() => {
 
 <style scoped>
 .cpu-widget-card {
-  height: 100%;
+  height: auto;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
 }
 
 .cpu-metrics-bar {

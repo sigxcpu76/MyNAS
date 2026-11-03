@@ -259,7 +259,7 @@ describe('Overview Dashboard & Telemetry', () => {
     expect(formatUptime(90060)).toBe('1d 1h 1m');
   });
 
-  describe('Dashboard Customization, Drag-and-Drop, and Resizing', () => {
+  describe('Dashboard Customization, Fluid Waterfall Lanes, and Reordering', () => {
     it('enters and exits edit mode when clicking customize dashboard', async () => {
       const wrapper = mount(OverviewView);
       expect(wrapper.find('.dashboard-edit-banner').exists()).toBe(false);
@@ -271,7 +271,7 @@ describe('Overview Dashboard & Telemetry', () => {
 
       // Edit banner should be visible
       expect(wrapper.find('.dashboard-edit-banner').exists()).toBe(true);
-      expect(wrapper.find('.widget-edit-toolbar').exists()).toBe(true);
+      expect(wrapper.find('.widget-lane-toolbar').exists()).toBe(true);
 
       // Click Done Editing
       const doneBtn = wrapper.find('.done-edit-btn');
@@ -279,28 +279,61 @@ describe('Overview Dashboard & Telemetry', () => {
       await doneBtn.trigger('click');
 
       expect(wrapper.find('.dashboard-edit-banner').exists()).toBe(false);
-      expect(wrapper.find('.widget-edit-toolbar').exists()).toBe(false);
+      expect(wrapper.find('.widget-lane-toolbar').exists()).toBe(false);
     });
 
-    it('allows resizing a widget using column span pills in edit mode', async () => {
+    it('renders top ribbon for KPIs and fluid waterfall columns for cards', () => {
+      const wrapper = mount(OverviewView);
+      expect(wrapper.find('.dashboard-top-ribbon').exists()).toBe(true);
+      expect(wrapper.find('.dashboard-lanes').exists()).toBe(true);
+
+      const lanes = wrapper.findAll('.dashboard-lane');
+      expect(lanes.length).toBe(3);
+    });
+
+    it('allows shifting a widget to another column using move left/right buttons', async () => {
       const wrapper = mount(OverviewView);
       await wrapper.find('.edit-dashboard-btn').trigger('click');
 
-      const firstWidget = wrapper.find('.widget-wrapper');
-      expect(firstWidget.classes()).toContain('col-span-12');
+      const lanes = wrapper.findAll('.dashboard-lane');
+      const lane0Widgets = lanes[0].findAll('.lane-widget-card');
+      expect(lane0Widgets.length).toBeGreaterThanOrEqual(1);
 
-      // Find span buttons for the first widget (kpis allowed [6, 12])
-      const spanButtons = firstWidget.findAll('.span-btn');
-      expect(spanButtons.length).toBeGreaterThanOrEqual(2);
+      // Move widget from Column 1 to Column 2 (move-right-btn)
+      const moveRightBtn = lane0Widgets[0].find('.move-right-btn');
+      expect(moveRightBtn.exists()).toBe(true);
+      await moveRightBtn.trigger('click');
 
-      // Click the 1/2 span button
-      const halfBtn = spanButtons.find((btn) => btn.text().includes('1/2'));
-      expect(halfBtn).toBeDefined();
-      await halfBtn!.trigger('click');
+      // Check that layout persisted to localStorage with new lane
+      expect(store.get('nas_dashboard_layout_v4')).toContain('"lane":1');
+    });
 
-      // Should now have class col-span-6
-      expect(firstWidget.classes()).toContain('col-span-6');
-      expect(store.get('nas_dashboard_layout_v3')).toContain('"colSpan":6');
+    it('allows reordering a widget within its column using move up/down buttons', async () => {
+      const wrapper = mount(OverviewView);
+      await wrapper.find('.edit-dashboard-btn').trigger('click');
+
+      // Add a second widget to Column 1 (Disks)
+      await wrapper.find('.add-widget-btn').trigger('click');
+      const catalogCards = wrapper.findAll('.catalog-card');
+      const disksCard = catalogCards.find((c) => c.text().includes('Physical Disks'));
+      await disksCard!.find('button.btn').trigger('click');
+      await wrapper.find('.modal-footer button').trigger('click');
+
+      // Column 1 now has 2 widgets
+      const lanes = wrapper.findAll('.dashboard-lane');
+      const lane0Widgets = lanes[0].findAll('.lane-widget-card');
+      expect(lane0Widgets.length).toBe(2);
+
+      const firstLabel = lane0Widgets[0].find('.widget-type-name').text();
+      const secondLabel = lane0Widgets[1].find('.widget-type-name').text();
+
+      // Move the second widget up
+      const moveUpBtn = lane0Widgets[1].find('.move-up-btn');
+      await moveUpBtn.trigger('click');
+
+      const updatedWidgets = wrapper.findAll('.dashboard-lane')[0].findAll('.lane-widget-card');
+      expect(updatedWidgets[0].find('.widget-type-name').text()).toBe(secondLabel);
+      expect(updatedWidgets[1].find('.widget-type-name').text()).toBe(firstLabel);
     });
 
     it('allows removing a widget from the dashboard', async () => {
@@ -308,32 +341,14 @@ describe('Overview Dashboard & Telemetry', () => {
       await wrapper.find('.edit-dashboard-btn').trigger('click');
 
       const initialCount = wrapper.findAll('.widget-wrapper').length;
-      expect(initialCount).toBe(3);
+      expect(initialCount).toBe(4);
 
-      // Remove the first widget
+      // Remove the first lane widget
       const removeBtn = wrapper.find('.remove-btn');
       await removeBtn.trigger('click');
 
       expect(wrapper.findAll('.widget-wrapper').length).toBe(initialCount - 1);
-      expect(store.get('nas_dashboard_layout_v3')).toBeDefined();
-    });
-
-    it('allows reordering widgets using move left/right buttons', async () => {
-      const wrapper = mount(OverviewView);
-      await wrapper.find('.edit-dashboard-btn').trigger('click');
-
-      let widgets = wrapper.findAll('.widget-wrapper');
-      const firstLabel = widgets[0].find('.widget-type-label').text();
-      const secondLabel = widgets[1].find('.widget-type-label').text();
-      expect(firstLabel).not.toEqual(secondLabel);
-
-      // Move first widget right
-      const moveRightBtn = widgets[0].find('.move-right-btn');
-      await moveRightBtn.trigger('click');
-
-      widgets = wrapper.findAll('.widget-wrapper');
-      expect(widgets[1].find('.widget-type-label').text()).toEqual(firstLabel);
-      expect(widgets[0].find('.widget-type-label').text()).toEqual(secondLabel);
+      expect(store.get('nas_dashboard_layout_v4')).toBeDefined();
     });
 
     it('allows adding a new widget from the widget catalog modal', async () => {
@@ -371,118 +386,60 @@ describe('Overview Dashboard & Telemetry', () => {
 
       // Remove a widget
       await wrapper.find('.remove-btn').trigger('click');
-      expect(wrapper.findAll('.widget-wrapper').length).toBe(2);
+      expect(wrapper.findAll('.widget-wrapper').length).toBe(3);
 
       // Click Reset Default
       await wrapper.find('.reset-layout-btn').trigger('click');
-      expect(wrapper.findAll('.widget-wrapper').length).toBe(3);
+      expect(wrapper.findAll('.widget-wrapper').length).toBe(4);
     });
 
-    it('reorders widgets via drag and drop', async () => {
+    it('allows switching between 2 Columns and 3 Columns in edit mode', async () => {
       const wrapper = mount(OverviewView);
       await wrapper.find('.edit-dashboard-btn').trigger('click');
 
-      let widgets = wrapper.findAll('.widget-wrapper');
-      const firstLabel = widgets[0].find('.widget-type-label').text();
-      const secondLabel = widgets[1].find('.widget-type-label').text();
+      const toggleButtons = wrapper.findAll('.col-toggle-btn');
+      expect(toggleButtons.length).toBe(2);
 
-      // Drag first widget over second and drop
-      const dataTransfer = {
-        setData: vi.fn(),
-        getData: vi.fn(),
-        effectAllowed: '',
-      };
+      // Click 2 Columns
+      const twoColBtn = toggleButtons.find((b) => b.text().includes('2 Columns'));
+      expect(twoColBtn).toBeDefined();
+      await twoColBtn!.trigger('click');
 
-      await widgets[0].trigger('dragstart', { dataTransfer });
-      expect(widgets[0].classes()).toContain('is-dragging');
-
-      await widgets[1].trigger('dragover');
-      expect(widgets[1].classes()).toContain('is-drag-over');
-
-      await widgets[1].trigger('drop');
-      await widgets[0].trigger('dragend');
-
-      widgets = wrapper.findAll('.widget-wrapper');
-      expect(widgets[0].find('.widget-type-label').text()).toBe(secondLabel);
-      expect(widgets[1].find('.widget-type-label').text()).toBe(firstLabel);
+      expect(wrapper.find('.columns-2').exists()).toBe(true);
     });
 
-    it('allows resizing a widget vertically using row span pills in edit mode', async () => {
+    it('applies balanced layout setup when clicking balanced layout button', async () => {
       const wrapper = mount(OverviewView);
       await wrapper.find('.edit-dashboard-btn').trigger('click');
 
-      const firstWidget = wrapper.find('.widget-wrapper');
-      // KPIs defaults to row-span-1
-      expect(firstWidget.classes()).toContain('row-span-1');
-
-      // Find row span buttons (.row-span-btn)
-      const rowSpanButtons = firstWidget.findAll('.row-span-btn');
-      expect(rowSpanButtons.length).toBeGreaterThanOrEqual(2);
-
-      // Click the 2x row span button
-      const twoXBtn = rowSpanButtons.find((btn) => btn.text().includes('2x'));
-      expect(twoXBtn).toBeDefined();
-      await twoXBtn!.trigger('click');
-
-      // Should now have class row-span-2 and persisted to localStorage
-      expect(firstWidget.classes()).toContain('row-span-2');
-      expect(store.get('nas_dashboard_layout_v3')).toContain('"rowSpan":2');
-    });
-
-    it('displays 2D tile dimension badge in widget edit toolbar', async () => {
-      const wrapper = mount(OverviewView);
-      await wrapper.find('.edit-dashboard-btn').trigger('click');
-
-      const firstWidget = wrapper.find('.widget-wrapper');
-      const dimBadge = firstWidget.find('.tile-dim-badge');
-      expect(dimBadge.exists()).toBe(true);
-      expect(dimBadge.text()).toContain('Full × 1x');
-    });
-
-    it('applies interleaved puzzle layout preset when clicking puzzle layout button', async () => {
-      const wrapper = mount(OverviewView);
-      await wrapper.find('.edit-dashboard-btn').trigger('click');
-
-      const puzzleBtn = wrapper.find('.puzzle-preset-btn');
-      expect(puzzleBtn.exists()).toBe(true);
-      await puzzleBtn.trigger('click');
+      const balancedBtn = wrapper.find('.balanced-layout-btn');
+      expect(balancedBtn.exists()).toBe(true);
+      await balancedBtn.trigger('click');
 
       const widgets = wrapper.findAll('.widget-wrapper');
-      expect(widgets.length).toBe(9);
+      expect(widgets.length).toBe(7);
 
-      // Check puzzle elements: KPIs (12x1), Pools (8x2), CPU (4x1), Memory (4x1)
-      expect(widgets[0].classes()).toContain('col-span-12');
-      expect(widgets[0].classes()).toContain('row-span-1');
-
-      expect(widgets[1].classes()).toContain('col-span-8');
-      expect(widgets[1].classes()).toContain('row-span-2');
-
-      expect(widgets[2].classes()).toContain('col-span-4');
-      expect(widgets[2].classes()).toContain('row-span-1');
-
-      expect(widgets[3].classes()).toContain('col-span-4');
-      expect(widgets[3].classes()).toContain('row-span-1');
-
-      expect(store.get('nas_dashboard_layout_v3')).toContain('widget-cpu');
-      expect(store.get('nas_dashboard_layout_v3')).toContain('widget-memory');
+      expect(store.get('nas_dashboard_layout_v4')).toContain('widget-pools');
+      expect(store.get('nas_dashboard_layout_v4')).toContain('widget-disks');
+      expect(store.get('nas_dashboard_layout_v4')).toContain('widget-sensors');
     });
 
-    it('migrates legacy saved layout without rowSpan and applies catalog default rowSpan', () => {
-      // Simulate legacy layout saved without rowSpan field
+    it('migrates legacy saved layout (v3/v2/v1) and distributes widgets into lanes', () => {
       const legacyLayout = [
         { id: 'widget-kpis', type: 'kpis', colSpan: 12 },
         { id: 'widget-pools', type: 'pools', colSpan: 6 },
+        { id: 'widget-sensors', type: 'sensors', colSpan: 6 },
       ];
       store.set('nas_dashboard_layout_v3', JSON.stringify(legacyLayout));
 
       const wrapper = mount(OverviewView);
       const widgets = wrapper.findAll('.widget-wrapper');
-      expect(widgets.length).toBe(2);
+      expect(widgets.length).toBe(3);
 
-      // KPIs should receive default row-span-1
-      expect(widgets[0].classes()).toContain('row-span-1');
-      // Pools should receive default row-span-2
-      expect(widgets[1].classes()).toContain('row-span-2');
+      // KPIs in top ribbon
+      expect(wrapper.find('.dashboard-top-ribbon').text()).toContain('Storage');
+      // Pools in Column 1
+      expect(wrapper.findAll('.dashboard-lane')[0].text()).toContain('tank');
     });
   });
 

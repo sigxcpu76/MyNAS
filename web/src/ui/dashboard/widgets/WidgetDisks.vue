@@ -79,7 +79,7 @@ function getTempClass(temp?: number): string {
 
 <style scoped>
 .disks-widget-card {
-  height: 100%;
+  height: auto;
   display: flex;
   flex-direction: column;
 }
@@ -88,8 +88,7 @@ function getTempClass(temp?: number): string {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  flex: 1 1 auto;
-  min-height: 0;
+  max-height: 380px;
   overflow-y: auto;
 }
 

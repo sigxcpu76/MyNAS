@@ -347,7 +347,7 @@ async function copySystemSummary() {
             <div class="spec-row">
               <span class="spec-label">nasctl Daemon:</span>
               <span class="spec-val" style="display: flex; align-items: center; gap: 8px">
-                <span class="mono">{{ nasState.systemUpdate?.currentVersion || 'v1.6.11' }}</span>
+                <span class="mono">{{ nasState.systemUpdate?.currentVersion || 'v1.6.12' }}</span>
                 <button
                   class="btn btn-xs"
                   :class="nasState.systemUpdate?.updateAvailable ? 'btn-warning' : 'btn-ghost'"
