@@ -124,4 +124,45 @@ describe('SPA History Router', () => {
     expect(window.location.pathname).toBe('/vnc-console');
     expect(window.location.search).toBe('?vm=debian-server&token=secret-token');
   });
+
+  it('navigates directly to an app resource and updates URL and active state', () => {
+    initRouter();
+    navigateTo('docker', false, 'docker:clickhouse');
+
+    expect(nasState.activeTab).toBe('docker');
+    expect(nasState.selectedResourceId).toBe('docker:clickhouse');
+    expect(window.location.pathname).toBe('/apps/clickhouse');
+  });
+
+  it('preserves selected child resource if selectResource is called before navigateTo', () => {
+    initRouter();
+    selectResource('docker:clickhouse');
+    navigateTo('docker');
+
+    expect(nasState.activeTab).toBe('docker');
+    expect(nasState.selectedResourceId).toBe('docker:clickhouse');
+    expect(window.location.pathname).toBe('/apps/clickhouse');
+  });
+
+  it('clears previous mismatched child resource when navigating to a new module without target', () => {
+    initRouter();
+    selectResource('vm:win11');
+    expect(nasState.selectedResourceId).toBe('vm:win11');
+
+    navigateTo('docker');
+    expect(nasState.activeTab).toBe('docker');
+    expect(nasState.selectedResourceId).toBe('node:docker');
+    expect(window.location.pathname).toBe('/apps');
+  });
+
+  it('navigates back to top-level list view when explicitly requested with node resource', () => {
+    initRouter();
+    navigateTo('docker', false, 'docker:clickhouse');
+    expect(window.location.pathname).toBe('/apps/clickhouse');
+
+    navigateTo('docker', false, 'node:docker');
+    expect(nasState.activeTab).toBe('docker');
+    expect(nasState.selectedResourceId).toBe('node:docker');
+    expect(window.location.pathname).toBe('/apps');
+  });
 });

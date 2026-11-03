@@ -1,5 +1,5 @@
 import { watch } from 'vue';
-import { nasState, type NavTab } from './store';
+import { nasState, selectResource, type NavTab } from './store';
 
 export const TAB_ROUTES: Record<NavTab, string> = {
   overview: '/overview',
@@ -210,22 +210,26 @@ export function getTabFromPath(path: string): NavTab {
 
 let isNavigatingFromPopState = false;
 
-export function navigateTo(tab: NavTab, replace = false): void {
-  const currentTab = nasState.activeTab;
-  const targetPath = getPathFromTab(tab);
-
-  // If navigating to top-level tab, clear any child resource for that tab so list view opens
-  if (tab === 'kvm' && nasState.selectedResourceId?.startsWith('vm:')) {
-    nasState.selectedResourceId = 'node:vms';
-  } else if (tab === 'docker' && nasState.selectedResourceId?.startsWith('docker:')) {
-    nasState.selectedResourceId = 'node:docker';
-  } else if (tab === 'lxc' && nasState.selectedResourceId?.startsWith('lxc:')) {
-    nasState.selectedResourceId = 'node:lxc';
-  } else if ((tab === 'storage-pools' || tab === 'zfs') && nasState.selectedResourceId?.startsWith('pool:')) {
-    nasState.selectedResourceId = 'node:pools';
+export function navigateTo(tab: NavTab, replace = false, targetResourceId?: string): void {
+  if (targetResourceId !== undefined) {
+    selectResource(targetResourceId);
+  } else {
+    // If navigating to top-level tab without a specific target resource,
+    // only reset to list view if current selection does NOT match the destination tab.
+    // (If the caller already selected a child resource for this tab, preserve it.)
+    if (tab === 'kvm' && !nasState.selectedResourceId?.startsWith('vm:')) {
+      nasState.selectedResourceId = 'node:vms';
+    } else if (tab === 'docker' && !nasState.selectedResourceId?.startsWith('docker:')) {
+      nasState.selectedResourceId = 'node:docker';
+    } else if (tab === 'lxc' && !nasState.selectedResourceId?.startsWith('lxc:')) {
+      nasState.selectedResourceId = 'node:lxc';
+    } else if ((tab === 'storage-pools' || tab === 'zfs') && !nasState.selectedResourceId?.startsWith('pool:')) {
+      nasState.selectedResourceId = 'node:pools';
+    }
   }
 
   nasState.activeTab = tab;
+  const targetPath = getCurrentPathFromState();
 
   if (typeof window !== 'undefined' && window.history) {
     if (replace) {

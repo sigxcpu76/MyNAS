@@ -11,14 +11,12 @@ const lxcContainers = computed(() => nasState.lxcContainers || []);
 
 function openApp(app: DockerApp) {
   const clean = app.name.replace(/^dockerApps\//, '');
-  selectResource(`docker:${clean}`);
-  navigateTo('docker');
+  navigateTo('docker', false, `docker:${clean}`);
 }
 
 function openLxc(lx: LxcContainer) {
   const clean = lx.name.replace(/^lxcContainers\//, '');
-  selectResource(`lxc:${clean}`);
-  navigateTo('lxc');
+  navigateTo('lxc', false, `lxc:${clean}`);
 }
 
 const totalCount = computed(() => dockerApps.value.length + lxcContainers.value.length);

@@ -136,7 +136,7 @@ function handleSwitchToDesktop() {
                   {{ nasState.systemUpdate.latestVersion }}
                 </span>
                 <span v-else class="text-muted" style="margin-left: auto; font-size: 11px">
-                  {{ nasState.systemUpdate?.currentVersion || 'v1.6.9' }}
+                  {{ nasState.systemUpdate?.currentVersion || 'v1.6.10' }}
                 </span>
               </button>
               <div class="client-shell-tile" style="margin: 4px 0 6px 0; padding: 7px 10px; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border-subtle); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; font-size: 11.5px">

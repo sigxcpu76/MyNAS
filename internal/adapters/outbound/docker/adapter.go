@@ -170,7 +170,6 @@ func NewAdapterFull(socketPath string, unitsDir string) *Adapter {
 		deployCancel:    make(map[string]context.CancelFunc),
 	}
 
-	a.loadPersistedUnits()
 	a.seedRegistriesFromHome()
 	return a
 }
@@ -196,38 +195,6 @@ func NewAdapterWithClient(client *http.Client, baseEndpoint string) *Adapter {
 	}
 }
 
-
-// loadPersistedUnits scans the units filesystem directory and loads existing compose.yaml files.
-// It automatically purges legacy mock templates (e.g. jellyfin, nextcloud) that were pre-seeded in older builds
-// and do not correspond to any active containers on the Docker host.
-func (a *Adapter) loadPersistedUnits() {
-	if a.unitsDir == "" {
-		return
-	}
-	legacyMocks := []string{"jellyfin", "nextcloud"}
-	for _, mockID := range legacyMocks {
-		dir := filepath.Join(a.unitsDir, mockID)
-		if info, err := os.Stat(dir); err == nil && info.IsDir() {
-			hasActive := false
-			if a.hasSocket {
-				live := a.fetchLiveContainers(context.Background())
-				for _, c := range live {
-					if c.Labels["com.docker.compose.project"] == mockID ||
-						containsString(c.Names, "/"+mockID) ||
-						containsString(c.Names, "/"+mockID+"-app") ||
-						containsString(c.Names, "/"+mockID+"-media") {
-						hasActive = true
-						break
-					}
-				}
-			}
-			if !hasActive {
-				a.logger.Info("purging uninstalled legacy mock app directory", "app", mockID, "path", dir)
-				_ = os.RemoveAll(dir)
-			}
-		}
-	}
-}
 
 // runCompose executes a docker compose subcommand for a specific unit directory.
 func (a *Adapter) runCompose(ctx context.Context, unitDir string, projectName string, args ...string) error {
@@ -1303,22 +1270,6 @@ func (a *Adapter) ListApps(ctx context.Context) ([]domain.DockerApp, error) {
 	if entries, err := os.ReadDir(a.unitsDir); err == nil {
 		for _, e := range entries {
 			if e.IsDir() {
-				// Don't list legacy mock units unless they actually have live containers
-				if e.Name() == "jellyfin" || e.Name() == "nextcloud" {
-					hasLive := false
-					for _, c := range liveContainers {
-						if c.Labels["com.docker.compose.project"] == e.Name() ||
-							containsString(c.Names, "/"+e.Name()) ||
-							containsString(c.Names, "/"+e.Name()+"-app") ||
-							containsString(c.Names, "/"+e.Name()+"-media") {
-							hasLive = true
-							break
-						}
-					}
-					if !hasLive {
-						continue
-					}
-				}
 				composePath := filepath.Join(a.unitsDir, e.Name(), "compose.yaml")
 				if _, err := os.Stat(composePath); err == nil {
 					appIDs[e.Name()] = true

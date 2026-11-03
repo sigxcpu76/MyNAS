@@ -13,8 +13,7 @@ const poolChartModes = ref<Record<string, 'usage' | 'frag'>>({});
 
 function openPool(pool: ZfsPool) {
   const clean = pool.poolName || pool.name.replace(/^zfsPools\//, '');
-  selectResource(`pool:${clean}`);
-  navigateTo('storage-pools');
+  navigateTo('storage-pools', false, `pool:${clean}`);
 }
 
 function getPoolChartMode(poolName: string): 'usage' | 'frag' {

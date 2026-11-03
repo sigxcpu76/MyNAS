@@ -33,7 +33,7 @@ const telemetry = computed(() => nasState.systemTelemetry);
         <div class="fetch-row">
           <span class="fetch-key">Software:</span>
           <span class="fetch-val mono" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
-            <span>nasctl {{ nasState.systemUpdate?.currentVersion || 'v1.6.9' }}</span>
+            <span>nasctl {{ nasState.systemUpdate?.currentVersion || 'v1.6.10' }}</span>
             <button
               class="btn btn-xs"
               :class="nasState.systemUpdate?.updateAvailable ? 'btn-warning' : 'btn-secondary'"

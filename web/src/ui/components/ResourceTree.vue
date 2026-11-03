@@ -82,8 +82,7 @@ onUnmounted(() => {
 
 // Selection handlers
 function handleSelect(resourceId: string, tab: NavTab) {
-  selectResource(resourceId);
-  navigateTo(tab);
+  navigateTo(tab, false, resourceId);
 }
 
 function handleHeaderSelect(sec: string, resourceId: string, tab: NavTab) {

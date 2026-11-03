@@ -11,8 +11,7 @@ const runningCount = computed(() => vms.value.filter((v) => v.state === 'RUNNING
 
 function openVm(vm: VirtualMachine) {
   const clean = vm.name.replace(/^virtualMachines\//, '');
-  selectResource(`vm:${clean}`);
-  navigateTo('kvm');
+  navigateTo('kvm', false, `vm:${clean}`);
 }
 </script>
 
