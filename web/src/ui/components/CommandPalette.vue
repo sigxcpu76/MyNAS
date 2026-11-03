@@ -1,26 +1,32 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
+  mdiAccountMultiple,
   mdiClose,
+  mdiCogOutline,
   mdiConsole,
   mdiCubeOutline,
   mdiDatabase,
+  mdiFileDocumentOutline,
   mdiFolderNetwork,
   mdiInformationOutline,
   mdiLayers,
   mdiMagnify,
   mdiMonitor,
+  mdiOpenInNew,
   mdiPlay,
   mdiPower,
   mdiRefresh,
   mdiRestart,
   mdiServer,
+  mdiShieldAlertOutline,
   mdiStop,
   mdiUpdate,
 } from '@mdi/js';
 import MdiIcon from './MdiIcon.vue';
-import { nasState, refreshAllData, selectResource } from '../store';
+import { nasState, notify, refreshAllData, runTrackedTask, selectResource } from '../store';
 import { navigateTo } from '../router';
+import { services } from '../../container';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -39,38 +45,194 @@ const searchInput = ref<HTMLInputElement | null>(null);
 
 interface CommandItem {
   id: string;
-  category: 'Resources' | 'Navigation' | 'Actions' | 'System';
+  category: 'Resources' | 'Actions' | 'Navigation' | 'System';
   title: string;
   subtitle: string;
   icon: string;
   badge?: string;
-  action: () => void;
+  keywords?: string[];
+  action: () => void | Promise<void>;
+}
+
+function close() {
+  emit('update:modelValue', false);
+}
+
+async function runAsyncAction(title: string, fn: () => Promise<unknown>) {
+  close();
+  try {
+    await runTrackedTask(title, fn);
+    notify('success', `${title} completed`);
+    await refreshAllData();
+  } catch (err: any) {
+    notify('error', `${title} failed: ${err.message}`);
+  }
 }
 
 const allItems = computed<CommandItem[]>(() => {
   const items: CommandItem[] = [];
 
-  // 1. VMs
+  // =========================================================================
+  // 1. Virtual Machines (Resources & Contextual Actions)
+  // =========================================================================
   for (const vm of nasState.vms) {
+    const vmName = vm.vmName;
+    const cleanId = vm.name.replace(/^virtualMachines\//, '');
+    const isRunning = vm.state === 'RUNNING';
+
+    // VM Resource
     items.push({
-      id: `vm:${vm.vmName}`,
+      id: `vm:${vmName}`,
       category: 'Resources',
-      title: vm.vmName,
+      title: vmName,
       subtitle: `Virtual Machine · ${vm.state || 'STOPPED'} · ${vm.vcpus} vCPUs · ${vm.memoryMib} MiB`,
       icon: mdiMonitor,
       badge: vm.state,
+      keywords: ['vm', 'virtual', 'machine', 'kvm', 'qemu', vmName.toLowerCase()],
       action: () => {
-        selectResource(`vm:${vm.vmName}`);
+        selectResource(`vm:${vmName}`);
         nasState.activeTab = 'kvm';
         navigateTo('kvm');
         close();
       },
     });
+
+    // VM Action: Console / noVNC
+    items.push({
+      id: `vm:${vmName}:console`,
+      category: 'Actions',
+      title: `${vmName}: Console`,
+      subtitle: `Open noVNC graphical display and serial console for ${vmName}`,
+      icon: mdiConsole,
+      badge: 'Console',
+      keywords: [
+        vmName.toLowerCase(),
+        'console',
+        'con',
+        'term',
+        'terminal',
+        'vnc',
+        'novnc',
+        'screen',
+        'display',
+        'monitor',
+        'serial',
+      ],
+      action: () => {
+        selectResource(`vm:${vmName}`);
+        nasState.vmSubTab = 'console';
+        nasState.activeTab = 'kvm';
+        navigateTo('kvm');
+        close();
+      },
+    });
+
+    // VM Action: Pop-out Console
+    items.push({
+      id: `vm:${vmName}:popout`,
+      category: 'Actions',
+      title: `${vmName}: Pop-out Console`,
+      subtitle: `Open detached noVNC viewer in separate popup window`,
+      icon: mdiOpenInNew,
+      badge: 'Popout',
+      keywords: [
+        vmName.toLowerCase(),
+        'pop',
+        'popout',
+        'window',
+        'external',
+        'vnc',
+        'novnc',
+        'console',
+        'con',
+        'display',
+      ],
+      action: () => {
+        const url = `/vnc-console?vm=${encodeURIComponent(cleanId)}`;
+        window.open(
+          url,
+          `vnc_${cleanId}`,
+          'width=1024,height=768,location=no,toolbar=no,menubar=no,status=no,resizable=yes'
+        );
+        close();
+      },
+    });
+
+    // VM Action: Hardware Config
+    items.push({
+      id: `vm:${vmName}:hardware`,
+      category: 'Actions',
+      title: `${vmName}: Hardware Config`,
+      subtitle: `Configure vCPUs, memory, disks, and network interfaces for ${vmName}`,
+      icon: mdiCogOutline,
+      badge: 'Hardware',
+      keywords: [
+        vmName.toLowerCase(),
+        'hardware',
+        'config',
+        'conf',
+        'vcpu',
+        'ram',
+        'memory',
+        'disk',
+        'nic',
+        'net',
+        'network',
+      ],
+      action: () => {
+        selectResource(`vm:${vmName}`);
+        nasState.vmSubTab = 'hardware';
+        nasState.activeTab = 'kvm';
+        navigateTo('kvm');
+        close();
+      },
+    });
+
+    // VM Action: Lifecycle (Start / Shutdown / Reboot)
+    if (isRunning) {
+      items.push({
+        id: `vm:${vmName}:shutdown`,
+        category: 'Actions',
+        title: `${vmName}: ACPI Shutdown`,
+        subtitle: `Send graceful ACPI shutdown signal to ${vmName}`,
+        icon: mdiPower,
+        badge: 'Shutdown',
+        keywords: [vmName.toLowerCase(), 'shutdown', 'stop', 'halt', 'acpi', 'poweroff'],
+        action: () => runAsyncAction(`VM "${vmName}": ACPI Shutdown`, () => services.kvm.stopVirtualMachine(vm.name, false)),
+      });
+      items.push({
+        id: `vm:${vmName}:reboot`,
+        category: 'Actions',
+        title: `${vmName}: Reboot`,
+        subtitle: `Trigger graceful ACPI reboot of ${vmName}`,
+        icon: mdiRestart,
+        badge: 'Reboot',
+        keywords: [vmName.toLowerCase(), 'reboot', 'restart', 'reset'],
+        action: () => runAsyncAction(`VM "${vmName}": Reboot`, () => services.kvm.rebootVirtualMachine(vm.name, false)),
+      });
+    } else {
+      items.push({
+        id: `vm:${vmName}:start`,
+        category: 'Actions',
+        title: `${vmName}: Start`,
+        subtitle: `Power on virtual machine ${vmName}`,
+        icon: mdiPlay,
+        badge: 'Start',
+        keywords: [vmName.toLowerCase(), 'start', 'run', 'up', 'launch', 'power', 'on', 'boot'],
+        action: () => runAsyncAction(`VM "${vmName}": Start`, () => services.kvm.startVirtualMachine(vm.name)),
+      });
+    }
   }
 
-  // 2. LXC Containers
+  // =========================================================================
+  // 2. LXC Containers (Resources & Contextual Actions)
+  // =========================================================================
   for (const ct of nasState.lxcContainers) {
     const name = ct.containerName || ct.name.replace(/^lxcContainers\//, '');
+    const cleanId = ct.name.replace(/^lxcContainers\//, '');
+    const isRunning = ct.state === 'RUNNING';
+
+    // LXC Resource
     items.push({
       id: `lxc:${name}`,
       category: 'Resources',
@@ -78,6 +240,7 @@ const allItems = computed<CommandItem[]>(() => {
       subtitle: `LXC Container · ${ct.state || 'STOPPED'} · IP: ${ct.ipv4Address || 'None'}`,
       icon: mdiCubeOutline,
       badge: ct.state,
+      keywords: ['lxc', 'ct', 'container', 'linux', name.toLowerCase()],
       action: () => {
         selectResource(`lxc:${name}`);
         nasState.activeTab = 'lxc';
@@ -85,28 +248,297 @@ const allItems = computed<CommandItem[]>(() => {
         close();
       },
     });
+
+    // LXC Action: Terminal / Console
+    items.push({
+      id: `lxc:${name}:console`,
+      category: 'Actions',
+      title: `${name}: Terminal / Console`,
+      subtitle: `Open interactive root shell inside container ${name}`,
+      icon: mdiConsole,
+      badge: 'Terminal',
+      keywords: [
+        name.toLowerCase(),
+        'console',
+        'con',
+        'term',
+        'terminal',
+        'sh',
+        'bash',
+        'shell',
+        'cli',
+        'root',
+        'exec',
+      ],
+      action: () => {
+        selectResource(`lxc:${name}`);
+        nasState.lxcSubTab = 'console';
+        nasState.activeTab = 'lxc';
+        navigateTo('lxc');
+        close();
+      },
+    });
+
+    // LXC Action: Pop-out Terminal
+    items.push({
+      id: `lxc:${name}:popout`,
+      category: 'Actions',
+      title: `${name}: Pop-out Terminal`,
+      subtitle: `Launch detached LXC terminal in separate window`,
+      icon: mdiOpenInNew,
+      badge: 'Popout',
+      keywords: [
+        name.toLowerCase(),
+        'pop',
+        'popout',
+        'window',
+        'external',
+        'terminal',
+        'shell',
+        'term',
+        'con',
+      ],
+      action: () => {
+        const url = `/terminal?lxc=${encodeURIComponent(cleanId)}`;
+        window.open(
+          url,
+          `lxc_terminal_${cleanId}`,
+          'width=1000,height=650,location=no,toolbar=no,menubar=no,status=no,resizable=yes'
+        );
+        close();
+      },
+    });
+
+    // LXC Action: Configuration & Mounts
+    items.push({
+      id: `lxc:${name}:config`,
+      category: 'Actions',
+      title: `${name}: Configuration`,
+      subtitle: `Configure CPU, memory, mounts, and network for ${name}`,
+      icon: mdiCogOutline,
+      badge: 'Config',
+      keywords: [name.toLowerCase(), 'config', 'conf', 'mounts', 'network', 'rootfs', 'settings'],
+      action: () => {
+        selectResource(`lxc:${name}`);
+        nasState.lxcSubTab = 'configuration';
+        nasState.activeTab = 'lxc';
+        navigateTo('lxc');
+        close();
+      },
+    });
+
+    // LXC Lifecycle (Start / Shutdown / Reboot)
+    if (isRunning) {
+      items.push({
+        id: `lxc:${name}:shutdown`,
+        category: 'Actions',
+        title: `${name}: Shutdown`,
+        subtitle: `Gracefully stop LXC container ${name}`,
+        icon: mdiPower,
+        badge: 'Shutdown',
+        keywords: [name.toLowerCase(), 'stop', 'shutdown', 'halt', 'poweroff'],
+        action: () => runAsyncAction(`LXC "${name}": Shutdown`, () => services.lxc.stopContainer(ct.name)),
+      });
+      items.push({
+        id: `lxc:${name}:reboot`,
+        category: 'Actions',
+        title: `${name}: Reboot`,
+        subtitle: `Reboot LXC container ${name}`,
+        icon: mdiRestart,
+        badge: 'Reboot',
+        keywords: [name.toLowerCase(), 'reboot', 'restart', 'reset'],
+        action: () => runAsyncAction(`LXC "${name}": Reboot`, () => services.lxc.restartContainer(ct.name)),
+      });
+    } else {
+      items.push({
+        id: `lxc:${name}:start`,
+        category: 'Actions',
+        title: `${name}: Start`,
+        subtitle: `Start LXC container ${name}`,
+        icon: mdiPlay,
+        badge: 'Start',
+        keywords: [name.toLowerCase(), 'start', 'run', 'up', 'launch', 'boot'],
+        action: () => runAsyncAction(`LXC "${name}": Start`, () => services.lxc.startContainer(ct.name)),
+      });
+    }
   }
 
-  // 3. Docker Apps
+  // =========================================================================
+  // 3. Docker Applications (Resources & Contextual Actions)
+  // =========================================================================
   for (const app of nasState.dockerApps) {
     const title = app.title || app.appId || app.name.replace(/^dockerApps\//, '');
+    const rawId = app.appId || title;
+    const isRunning = app.state === 'RUNNING';
+
+    // Docker Resource
     items.push({
-      id: `docker:${app.appId || title}`,
+      id: `docker:${rawId}`,
       category: 'Resources',
       title,
       subtitle: `Docker Application · ${app.state || 'STOPPED'} · ${app.containers?.length || 0} containers`,
       icon: mdiLayers,
       badge: app.state,
+      keywords: ['docker', 'app', 'application', 'compose', 'stack', title.toLowerCase(), rawId.toLowerCase()],
       action: () => {
-        selectResource(`docker:${app.appId || title}`);
+        selectResource(`docker:${rawId}`);
         nasState.activeTab = 'docker';
         navigateTo('docker');
         close();
       },
     });
+
+    // Docker Action: Terminal / Console
+    items.push({
+      id: `docker:${rawId}:console`,
+      category: 'Actions',
+      title: `${title}: Terminal / Console`,
+      subtitle: `Open interactive container terminal for ${title}`,
+      icon: mdiConsole,
+      badge: 'Console',
+      keywords: [
+        title.toLowerCase(),
+        rawId.toLowerCase(),
+        'console',
+        'con',
+        'term',
+        'terminal',
+        'sh',
+        'bash',
+        'shell',
+        'cli',
+        'exec',
+      ],
+      action: () => {
+        selectResource(`docker:${rawId}`);
+        nasState.dockerSubTab = 'console';
+        nasState.activeTab = 'docker';
+        navigateTo('docker');
+        close();
+      },
+    });
+
+    // Docker Action: Logs
+    items.push({
+      id: `docker:${rawId}:logs`,
+      category: 'Actions',
+      title: `${title}: Logs`,
+      subtitle: `View stdout and stderr log stream for ${title}`,
+      icon: mdiFileDocumentOutline,
+      badge: 'Logs',
+      keywords: [
+        title.toLowerCase(),
+        rawId.toLowerCase(),
+        'log',
+        'logs',
+        'output',
+        'stdout',
+        'stderr',
+        'tail',
+      ],
+      action: () => {
+        selectResource(`docker:${rawId}`);
+        nasState.dockerSubTab = 'logs';
+        nasState.activeTab = 'docker';
+        navigateTo('docker');
+        close();
+      },
+    });
+
+    // Docker Action: Configuration / Compose
+    items.push({
+      id: `docker:${rawId}:config`,
+      category: 'Actions',
+      title: `${title}: Configuration`,
+      subtitle: `Edit Docker Compose specification and environment variables for ${title}`,
+      icon: mdiCogOutline,
+      badge: 'Config',
+      keywords: [
+        title.toLowerCase(),
+        rawId.toLowerCase(),
+        'config',
+        'conf',
+        'configuration',
+        'compose',
+        'yaml',
+        'env',
+        'edit',
+        'settings',
+      ],
+      action: () => {
+        selectResource(`docker:${rawId}`);
+        nasState.dockerSubTab = 'configuration';
+        nasState.activeTab = 'docker';
+        navigateTo('docker');
+        close();
+      },
+    });
+
+    // Docker Action: Containers List
+    items.push({
+      id: `docker:${rawId}:containers`,
+      category: 'Actions',
+      title: `${title}: Containers`,
+      subtitle: `Inspect individual containers and port bindings for ${title}`,
+      icon: mdiLayers,
+      badge: 'Containers',
+      keywords: [
+        title.toLowerCase(),
+        rawId.toLowerCase(),
+        'container',
+        'containers',
+        'ports',
+        'ps',
+        'inspect',
+      ],
+      action: () => {
+        selectResource(`docker:${rawId}`);
+        nasState.dockerSubTab = 'containers';
+        nasState.activeTab = 'docker';
+        navigateTo('docker');
+        close();
+      },
+    });
+
+    // Docker Lifecycle (Start / Stop / Restart)
+    if (isRunning) {
+      items.push({
+        id: `docker:${rawId}:restart`,
+        category: 'Actions',
+        title: `${title}: Restart`,
+        subtitle: `Restart all containers in stack ${title}`,
+        icon: mdiRestart,
+        badge: 'Restart',
+        keywords: [title.toLowerCase(), rawId.toLowerCase(), 'restart', 'reboot', 'reload'],
+        action: () => runAsyncAction(`App "${title}": Restart`, () => services.apps.restartApp(app.name)),
+      });
+      items.push({
+        id: `docker:${rawId}:stop`,
+        category: 'Actions',
+        title: `${title}: Stop`,
+        subtitle: `Stop all containers in stack ${title}`,
+        icon: mdiStop,
+        badge: 'Stop',
+        keywords: [title.toLowerCase(), rawId.toLowerCase(), 'stop', 'halt', 'down'],
+        action: () => runAsyncAction(`App "${title}": Stop`, () => services.apps.stopApp(app.name)),
+      });
+    } else {
+      items.push({
+        id: `docker:${rawId}:start`,
+        category: 'Actions',
+        title: `${title}: Start`,
+        subtitle: `Start all containers in stack ${title}`,
+        icon: mdiPlay,
+        badge: 'Start',
+        keywords: [title.toLowerCase(), rawId.toLowerCase(), 'start', 'run', 'up', 'launch'],
+        action: () => runAsyncAction(`App "${title}": Start`, () => services.apps.startApp(app.name)),
+      });
+    }
   }
 
-  // 4. Storage Pools
+  // =========================================================================
+  // 4. Storage Pools (Resources & Actions)
+  // =========================================================================
   for (const pool of nasState.pools) {
     const name = pool.poolName || pool.name.replace(/^zfsPools\//, '');
     items.push({
@@ -116,6 +548,7 @@ const allItems = computed<CommandItem[]>(() => {
       subtitle: `ZFS Pool · ${pool.state || 'ONLINE'} · Capacity: ${pool.capacityPercent ?? 0}%`,
       icon: mdiDatabase,
       badge: pool.state,
+      keywords: ['pool', 'zfs', 'storage', 'vdev', name.toLowerCase()],
       action: () => {
         selectResource(`pool:${name}`);
         nasState.activeTab = 'storage-pools';
@@ -123,9 +556,41 @@ const allItems = computed<CommandItem[]>(() => {
         close();
       },
     });
+
+    // Pool Action: Scrub
+    items.push({
+      id: `pool:${name}:scrub`,
+      category: 'Actions',
+      title: `${name}: Scrub Pool`,
+      subtitle: `Run OpenZFS data integrity verification scrub on ${name}`,
+      icon: mdiRefresh,
+      badge: 'Scrub',
+      keywords: [name.toLowerCase(), 'scrub', 'verify', 'repair', 'check', 'zfs'],
+      action: () => runAsyncAction(`ZFS Pool "${name}": Start Scrub`, () => services.zfs.scrubPool(pool.name)),
+    });
+
+    // Pool Action: Datasets & Volumes
+    items.push({
+      id: `pool:${name}:datasets`,
+      category: 'Actions',
+      title: `${name}: Datasets & Volumes`,
+      subtitle: `Browse datasets, snapshots, and filesystem volumes in ${name}`,
+      icon: mdiDatabase,
+      badge: 'Datasets',
+      keywords: [name.toLowerCase(), 'dataset', 'datasets', 'volumes', 'fs', 'snapshots'],
+      action: () => {
+        selectResource(`pool:${name}`);
+        nasState.poolSubTab = 'datasets';
+        nasState.activeTab = 'storage-pools';
+        navigateTo('storage-pools');
+        close();
+      },
+    });
   }
 
-  // 5. Navigation Sections
+  // =========================================================================
+  // 5. System Navigation Sections
+  // =========================================================================
   items.push(
     {
       id: 'nav:overview',
@@ -133,6 +598,7 @@ const allItems = computed<CommandItem[]>(() => {
       title: 'Dashboard Overview',
       subtitle: 'System telemetry, KPI gauges, CPU/RAM/Network meters',
       icon: mdiServer,
+      keywords: ['dashboard', 'overview', 'telemetry', 'kpi', 'cpu', 'ram', 'memory', 'meters', 'stats'],
       action: () => {
         nasState.activeTab = 'overview';
         selectResource('node:local');
@@ -146,6 +612,7 @@ const allItems = computed<CommandItem[]>(() => {
       title: 'Virtual Machines',
       subtitle: 'KVM hypervisor, noVNC consoles, and guest disks',
       icon: mdiMonitor,
+      keywords: ['vms', 'virtual', 'machines', 'kvm', 'qemu', 'hypervisor'],
       action: () => {
         nasState.activeTab = 'kvm';
         selectResource('node:vms');
@@ -159,6 +626,7 @@ const allItems = computed<CommandItem[]>(() => {
       title: 'LXC Containers',
       subtitle: 'System containers, OS templates, and mount points',
       icon: mdiCubeOutline,
+      keywords: ['lxc', 'containers', 'linux', 'templates', 'mounts'],
       action: () => {
         nasState.activeTab = 'lxc';
         selectResource('node:lxc');
@@ -172,6 +640,7 @@ const allItems = computed<CommandItem[]>(() => {
       title: 'Docker Applications',
       subtitle: 'Compose stacks, App Store catalog, container logs',
       icon: mdiLayers,
+      keywords: ['docker', 'apps', 'applications', 'compose', 'catalog', 'stacks'],
       action: () => {
         nasState.activeTab = 'docker';
         selectResource('node:docker');
@@ -185,6 +654,7 @@ const allItems = computed<CommandItem[]>(() => {
       title: 'Storage Pools',
       subtitle: 'OpenZFS pool health, VDEV topologies, and scrub status',
       icon: mdiDatabase,
+      keywords: ['storage', 'pools', 'zfs', 'vdev', 'scrub'],
       action: () => {
         nasState.activeTab = 'storage-pools';
         selectResource('node:pools');
@@ -198,6 +668,7 @@ const allItems = computed<CommandItem[]>(() => {
       title: 'Physical Disks',
       subtitle: 'NVMe, SATA drives, S.M.A.R.T. health, and temperature',
       icon: mdiDatabase,
+      keywords: ['disks', 'physical', 'smart', 'nvme', 'sata', 'drives', 'hdd', 'ssd'],
       action: () => {
         nasState.activeTab = 'storage-disks';
         selectResource('node:disks');
@@ -206,21 +677,66 @@ const allItems = computed<CommandItem[]>(() => {
       },
     },
     {
-      id: 'nav:shares',
+      id: 'nav:shares-cifs',
       category: 'Navigation',
-      title: 'Network File Shares',
-      subtitle: 'Samba / CIFS shares and built-in WebDAV server',
+      title: 'Samba / CIFS Shares',
+      subtitle: 'Windows file shares and network access control',
       icon: mdiFolderNetwork,
+      keywords: ['samba', 'smb', 'cifs', 'shares', 'network', 'windows'],
       action: () => {
         nasState.activeTab = 'shares-cifs';
         selectResource('node:shares');
         navigateTo('shares-cifs');
         close();
       },
+    },
+    {
+      id: 'nav:shares-webdav',
+      category: 'Navigation',
+      title: 'WebDAV Shares',
+      subtitle: 'HTTP-based file shares and remote storage',
+      icon: mdiFolderNetwork,
+      keywords: ['webdav', 'dav', 'http', 'shares', 'remote'],
+      action: () => {
+        nasState.activeTab = 'shares-webdav';
+        selectResource('node:shares');
+        navigateTo('shares-webdav');
+        close();
+      },
+    },
+    {
+      id: 'nav:identity',
+      category: 'Navigation',
+      title: 'Users & Identity',
+      subtitle: 'POSIX user accounts, groups, and SSH keys',
+      icon: mdiAccountMultiple,
+      keywords: ['users', 'groups', 'identity', 'auth', 'accounts', 'ssh'],
+      action: () => {
+        nasState.activeTab = 'identity';
+        selectResource('node:identity');
+        navigateTo('identity');
+        close();
+      },
+    },
+    {
+      id: 'nav:cron',
+      category: 'Navigation',
+      title: 'Scheduled Tasks & Cron Jobs',
+      subtitle: 'Periodic maintenance, automation scripts, and timers',
+      icon: mdiShieldAlertOutline,
+      keywords: ['cron', 'jobs', 'scheduled', 'tasks', 'automation', 'timers'],
+      action: () => {
+        nasState.activeTab = 'cron';
+        selectResource('node:local');
+        navigateTo('cron');
+        close();
+      },
     }
   );
 
+  // =========================================================================
   // 6. Global System Actions
+  // =========================================================================
   items.push(
     {
       id: 'act:terminal',
@@ -228,6 +744,8 @@ const allItems = computed<CommandItem[]>(() => {
       title: 'Open Host Web Terminal',
       subtitle: 'Launch detached interactive root bash terminal',
       icon: mdiConsole,
+      badge: 'Terminal',
+      keywords: ['host', 'terminal', 'term', 'con', 'console', 'bash', 'root', 'shell', 'ssh'],
       action: () => {
         emit('open-host-terminal');
         close();
@@ -239,6 +757,7 @@ const allItems = computed<CommandItem[]>(() => {
       title: 'Refresh All System Telemetry',
       subtitle: 'Re-fetch pools, containers, VMs, and system metrics',
       icon: mdiRefresh,
+      keywords: ['refresh', 'reload', 'sync', 'update', 'telemetry'],
       action: () => {
         refreshAllData();
         close();
@@ -250,8 +769,21 @@ const allItems = computed<CommandItem[]>(() => {
       title: 'System Prerequisites & Health Status',
       subtitle: 'Audit kernel modules, OpenZFS, Docker, and QEMU-KVM',
       icon: mdiInformationOutline,
+      keywords: ['prereq', 'prerequisites', 'health', 'audit', 'check', 'kernel', 'modules'],
       action: () => {
         emit('open-prerequisites');
+        close();
+      },
+    },
+    {
+      id: 'act:system-details',
+      category: 'System',
+      title: 'System Hardware Specs & Host Details',
+      subtitle: 'View host CPU architecture, motherboard, and OS version',
+      icon: mdiServer,
+      keywords: ['system', 'specs', 'hardware', 'motherboard', 'cpu', 'details', 'host', 'os'],
+      action: () => {
+        emit('open-system-details');
         close();
       },
     }
@@ -260,24 +792,93 @@ const allItems = computed<CommandItem[]>(() => {
   return items;
 });
 
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 const filteredItems = computed<CommandItem[]>(() => {
-  const q = searchQuery.value.trim().toLowerCase();
-  if (!q) return allItems.value;
-  return allItems.value.filter(
-    (item) =>
-      item.title.toLowerCase().includes(q) ||
-      item.subtitle.toLowerCase().includes(q) ||
-      item.category.toLowerCase().includes(q)
-  );
+  const query = searchQuery.value.trim().toLowerCase();
+  if (!query) {
+    return allItems.value;
+  }
+
+  // Tokenize multi-word queries by whitespace
+  // (e.g. "qua term" -> ["qua", "term"])
+  const tokens = query.split(/\s+/).filter(Boolean);
+
+  const matched: { item: CommandItem; score: number }[] = [];
+
+  for (const item of allItems.value) {
+    const title = item.title.toLowerCase();
+    const subtitle = item.subtitle.toLowerCase();
+    const category = item.category.toLowerCase();
+    const badge = (item.badge || '').toLowerCase();
+    const keywords = (item.keywords || []).map((k) => k.toLowerCase()).join(' ');
+
+    const haystack = `${title} ${subtitle} ${category} ${badge} ${keywords}`;
+
+    // Contextual compound check: Every token must match somewhere in the haystack!
+    const allTokensMatch = tokens.every((token) => haystack.includes(token));
+    if (!allTokensMatch) continue;
+
+    // Calculate ranking score
+    let score = 0;
+
+    for (const token of tokens) {
+      // 1. Exact match on title
+      if (title === token) {
+        score += 100;
+      } else if (title.startsWith(token)) {
+        // Starts with token (e.g. "qua" in "quasar: Console")
+        score += 65;
+      } else if (new RegExp(`\\b${escapeRegex(token)}`).test(title)) {
+        // Word boundary match in title (e.g. "term" in "Quasar: Terminal / Console")
+        score += 50;
+      } else if (title.includes(token)) {
+        score += 30;
+      }
+
+      // 2. Keyword exact / prefix match
+      if ((item.keywords || []).some((k) => k.toLowerCase() === token)) {
+        score += 40;
+      } else if ((item.keywords || []).some((k) => k.toLowerCase().startsWith(token))) {
+        score += 25;
+      }
+
+      // 3. Badge match (e.g. badge is "Console" and token is "con")
+      if (badge && (badge === token || badge.startsWith(token))) {
+        score += 30;
+      }
+
+      // 4. Subtitle match
+      if (subtitle.includes(token)) {
+        score += 15;
+      }
+
+      // 5. Category match
+      if (category.startsWith(token)) {
+        score += 10;
+      }
+    }
+
+    // Single-word query boost for base Resources:
+    // If the user only typed "qua", show the Quasar main resource first
+    if (tokens.length === 1 && item.category === 'Resources') {
+      score += 25;
+    }
+
+    matched.push({ item, score });
+  }
+
+  // Sort descending by score
+  matched.sort((a, b) => b.score - a.score);
+
+  return matched.map((m) => m.item);
 });
 
 watch(filteredItems, () => {
   selectedIndex.value = 0;
 });
-
-function close() {
-  emit('update:modelValue', false);
-}
 
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'ArrowDown') {
@@ -339,7 +940,7 @@ watch(
           v-model="searchQuery"
           type="text"
           class="palette-input"
-          placeholder="Search resources, apps, VMs, pools, or system actions..."
+          placeholder="Search resources & actions (e.g. 'qua term', 'qua con', 'win vnc', 'pool scrub')..."
           spellcheck="false"
         />
         <kbd class="palette-kbd">ESC</kbd>
@@ -348,7 +949,7 @@ watch(
       <!-- Results List -->
       <div class="palette-results">
         <div v-if="filteredItems.length === 0" class="palette-empty">
-          <span>No resources or commands matching "{{ searchQuery }}"</span>
+          <span>No resources or actions matching "{{ searchQuery }}"</span>
         </div>
         <div
           v-for="(item, idx) in filteredItems"
@@ -364,11 +965,17 @@ watch(
           <div class="item-text">
             <div class="item-title-row">
               <span class="item-title">{{ item.title }}</span>
-              <span v-if="item.badge" class="badge badge-sm" :class="{
-                'badge-success': item.badge === 'RUNNING' || item.badge === 'ONLINE',
-                'badge-warning': item.badge === 'PAUSED' || item.badge === 'PARTIALLY_RUNNING',
-                'badge-secondary': item.badge === 'STOPPED'
-              }">
+              <span
+                v-if="item.badge"
+                class="badge badge-sm"
+                :class="{
+                  'badge-success': item.badge === 'RUNNING' || item.badge === 'ONLINE' || item.badge === 'Start',
+                  'badge-warning': item.badge === 'PAUSED' || item.badge === 'PARTIALLY_RUNNING' || item.badge === 'Reboot',
+                  'badge-danger': item.badge === 'Shutdown' || item.badge === 'Stop',
+                  'badge-secondary': item.badge === 'STOPPED',
+                  'badge-info': item.badge === 'Console' || item.badge === 'Terminal' || item.badge === 'Logs' || item.badge === 'Config' || item.badge === 'Popout' || item.badge === 'Hardware' || item.badge === 'Datasets' || item.badge === 'Scrub'
+                }"
+              >
                 {{ item.badge }}
               </span>
             </div>
@@ -384,10 +991,13 @@ watch(
           <kbd>↑</kbd><kbd>↓</kbd> <span>Navigate</span>
         </div>
         <div class="footer-tip">
-          <kbd>↵</kbd> <span>Select</span>
+          <kbd>↵</kbd> <span>Select & Run</span>
         </div>
         <div class="footer-tip">
           <kbd>ESC</kbd> <span>Close</span>
+        </div>
+        <div class="footer-tip hide-mobile" style="margin-left: auto; color: var(--text-muted)">
+          <span>Try: <code style="color: var(--accent-primary)">qua term</code> · <code style="color: var(--accent-primary)">qua con</code> · <code style="color: var(--accent-primary)">win con</code></span>
         </div>
       </div>
     </div>
@@ -409,7 +1019,7 @@ watch(
 
 .palette-container {
   width: 100%;
-  max-width: 620px;
+  max-width: 650px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
@@ -465,13 +1075,13 @@ watch(
 }
 
 .palette-results {
-  max-height: 380px;
+  max-height: 400px;
   overflow-y: auto;
   padding: 6px 0;
 }
 
 .palette-empty {
-  padding: 28px;
+  padding: 32px;
   text-align: center;
   color: var(--text-muted);
   font-size: 13px;
@@ -543,7 +1153,7 @@ watch(
 }
 
 .item-category {
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -551,10 +1161,16 @@ watch(
   flex-shrink: 0;
 }
 
+.badge-info {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
 .palette-footer {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 16px;
   padding: 8px 18px;
   background: var(--bg-base);
   border-top: 1px solid var(--border-subtle);
@@ -575,5 +1191,21 @@ watch(
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
+}
+
+@media (max-width: 600px) {
+  .palette-overlay {
+    padding: 0;
+    align-items: stretch;
+  }
+  .palette-container {
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+  .palette-results {
+    max-height: none;
+    flex: 1;
+  }
 }
 </style>
