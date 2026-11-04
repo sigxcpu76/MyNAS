@@ -28,10 +28,16 @@ import (
 type ptyConn struct {
 	file    *os.File
 	cmd     *exec.Cmd
+	prefix  []byte
 	onClose func()
 }
 
 func (c *ptyConn) Read(p []byte) (n int, err error) {
+	if len(c.prefix) > 0 {
+		n := copy(p, c.prefix)
+		c.prefix = c.prefix[n:]
+		return n, nil
+	}
 	return c.file.Read(p)
 }
 
@@ -717,6 +723,18 @@ func hasInitBinary(rootfsPath string) bool {
 		"bin/busybox",
 	} {
 		if _, err := os.Stat(filepath.Join(rootfsPath, initCandidate)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func lxcHasBash(rootfsPath string) bool {
+	if rootfsPath == "" {
+		return false
+	}
+	for _, p := range []string{"bin/bash", "usr/bin/bash"} {
+		if fi, err := os.Stat(filepath.Join(rootfsPath, p)); err == nil && !fi.IsDir() {
 			return true
 		}
 	}
@@ -1911,22 +1929,53 @@ func (a *Adapter) ExecAttach(ctx context.Context, id string, cmd []string) (net.
 	execID := fmt.Sprintf("lxc-exec-%s-%d", id, time.Now().UnixNano())
 
 	// If lxc-attach is installed on the host, attempt real PTY attachment
-	if _, err := exec.LookPath("lxc-attach"); err == nil {
-		shell := "/bin/bash"
-		if len(cmd) > 0 && cmd[0] != "" {
-			shell = cmd[0]
+	shell := "/bin/bash"
+	if len(cmd) > 0 && cmd[0] != "" {
+		shell = cmd[0]
+	}
+
+	isBash := shell == "/bin/bash" || shell == "bash" || shell == "/usr/bin/bash"
+	var fallbackNotice string
+
+	// If bash is requested and container has an accessible rootfs, check if bash is available
+	if isBash && c.RootfsPath != "" {
+		if fi, statErr := os.Stat(c.RootfsPath); statErr == nil && fi.IsDir() {
+			if !lxcHasBash(c.RootfsPath) {
+				shell = "/bin/sh"
+				fallbackNotice = "\x1b[33m[bash not found, falling back to /bin/sh]\x1b[0m\r\n"
+			}
 		}
+	}
+
+	if _, err := exec.LookPath("lxc-attach"); err == nil {
 		attachCmd := exec.CommandContext(ctx, "lxc-attach", "-n", id, "--", shell)
 		attachCmd.Env = append(os.Environ(), "TERM=xterm-256color", "LANG=C.UTF-8")
 		ptmx, err := pty.Start(attachCmd)
 		if err == nil {
+			// If bash was requested and rootfs check didn't already trigger fallback,
+			// verify that lxc-attach didn't fail immediately due to missing shell binary
+			if isBash && fallbackNotice == "" {
+				time.Sleep(25 * time.Millisecond)
+				if attachCmd.ProcessState != nil && attachCmd.ProcessState.Exited() {
+					_ = ptmx.Close()
+					fallbackNotice = "\x1b[33m[bash not found, falling back to /bin/sh]\x1b[0m\r\n"
+					attachCmd = exec.CommandContext(ctx, "lxc-attach", "-n", id, "--", "/bin/sh")
+					attachCmd.Env = append(os.Environ(), "TERM=xterm-256color", "LANG=C.UTF-8")
+					ptmx, err = pty.Start(attachCmd)
+					if err != nil {
+						return nil, "", fmt.Errorf("failed to attach fallback /bin/sh: %w", err)
+					}
+				}
+			}
+
 			a.mu.Lock()
 			a.execPTYs[execID] = ptmx
 			a.mu.Unlock()
 
 			conn := &ptyConn{
-				file: ptmx,
-				cmd:  attachCmd,
+				file:   ptmx,
+				cmd:    attachCmd,
+				prefix: []byte(fallbackNotice),
 				onClose: func() {
 					a.mu.Lock()
 					delete(a.execPTYs, execID)
@@ -1941,6 +1990,9 @@ func (a *Adapter) ExecAttach(ctx context.Context, id string, cmd []string) (net.
 	c1, c2 := net.Pipe()
 	go func() {
 		defer c2.Close()
+		if fallbackNotice != "" {
+			_, _ = c2.Write([]byte(fallbackNotice))
+		}
 		_, _ = fmt.Fprintf(c2, "Connected to LXC container %s (%s %s)\r\nLinux %s 6.8.0 #1 SMP PREEMPT_DYNAMIC\r\nroot@%s:~# ", id, c.Distribution, c.Release, id, id)
 		buf := make([]byte, 256)
 		for {

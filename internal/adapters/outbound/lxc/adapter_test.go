@@ -191,6 +191,16 @@ func TestLxcAdapter_ParityFeatures(t *testing.T) {
 		t.Fatalf("ExecAttach returned nil conn or empty execID")
 	}
 	_ = conn.Close()
+
+	// 4b. ExecAttach with bash (verifies fallback when rootfs has no bash)
+	conn2, execID2, err2 := adapter.ExecAttach(ctx, created.ID, []string{"/bin/bash"})
+	if err2 != nil {
+		t.Fatalf("ExecAttach with bash failed: %v", err2)
+	}
+	if execID2 == "" || conn2 == nil {
+		t.Fatalf("ExecAttach with bash returned nil conn or empty execID")
+	}
+	_ = conn2.Close()
 }
 
 type mockZfsEngine struct {

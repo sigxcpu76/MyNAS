@@ -555,6 +555,27 @@ func TestGoogleAIPGatewayEndToEnd(t *testing.T) {
 		t.Fatalf("expected resolved lxc container alpine-linux in output, got: %s", string(lxcWsBuf[:lxcWsN]))
 	}
 
+	// 8c. Test default shell when ?shell is omitted (defaults to bash first / fallback)
+	defaultShellWsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws/docker/terminal/c1?access_token=" + token
+	defWsConfig, defWsErr := websocket.NewConfig(defaultShellWsURL, srv.URL)
+	if defWsErr != nil {
+		t.Fatalf("failed to create default shell ws config: %v", defWsErr)
+	}
+	defWsConn, defWsErr := websocket.DialConfig(defWsConfig)
+	if defWsErr != nil {
+		t.Fatalf("failed to connect to docker terminal ws without shell param: %v", defWsErr)
+	}
+	defer defWsConn.Close()
+	defBuf := make([]byte, 256)
+	_ = defWsConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	defN, err := defWsConn.Read(defBuf)
+	if err != nil {
+		t.Fatalf("failed to read from default shell docker terminal ws: %v", err)
+	}
+	if !strings.Contains(string(defBuf[:defN]), "stub container shell") {
+		t.Fatalf("expected stub shell prompt with default shell, got: %s", string(defBuf[:defN]))
+	}
+
 	// 8. Docker storage config & filesystem directories API
 	cfgResp, err := client.Get(srv.URL + "/v1/dockerConfig")
 	if err != nil || cfgResp.StatusCode != http.StatusOK {

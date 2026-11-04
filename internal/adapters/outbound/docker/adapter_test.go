@@ -878,3 +878,36 @@ services:
 		t.Errorf("unexpected upgraded app ID: %+v", upgraded)
 	}
 }
+
+func TestDockerExecAttachMock(t *testing.T) {
+	ctx := context.Background()
+	adapter := docker.NewAdapterFull("/nonexistent/docker.sock", t.TempDir())
+
+	// 1. With empty cmd (defaults to bash / fallback to sh)
+	conn, execID, err := adapter.ExecAttach(ctx, "c1", nil)
+	if err != nil {
+		t.Fatalf("ExecAttach with nil cmd failed: %v", err)
+	}
+	if execID != "mock-exec-c1" {
+		t.Errorf("expected execID mock-exec-c1, got %q", execID)
+	}
+	buf := make([]byte, 128)
+	n, err := conn.Read(buf)
+	if err != nil {
+		t.Fatalf("failed to read from mock conn: %v", err)
+	}
+	if !strings.Contains(string(buf[:n]), "Connected to simulated container c1") {
+		t.Errorf("unexpected mock output: %s", string(buf[:n]))
+	}
+	_ = conn.Close()
+
+	// 2. With /bin/bash
+	conn2, execID2, err2 := adapter.ExecAttach(ctx, "c2", []string{"/bin/bash"})
+	if err2 != nil {
+		t.Fatalf("ExecAttach with /bin/bash failed: %v", err2)
+	}
+	if execID2 != "mock-exec-c2" {
+		t.Errorf("expected execID mock-exec-c2, got %q", execID2)
+	}
+	_ = conn2.Close()
+}

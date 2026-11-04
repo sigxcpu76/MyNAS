@@ -919,36 +919,20 @@ func (a *Adapter) GetContainerLogs(ctx context.Context, id string, tail int) (st
 
 type dockerHijackedConn struct {
 	net.Conn
-	r *bufio.Reader
+	prefix []byte
+	r      *bufio.Reader
 }
 
 func (c *dockerHijackedConn) Read(p []byte) (int, error) {
+	if len(c.prefix) > 0 {
+		n := copy(p, c.prefix)
+		c.prefix = c.prefix[n:]
+		return n, nil
+	}
 	return c.r.Read(p)
 }
 
-// ExecAttach creates an interactive exec instance in the specified container and connects raw I/O to it.
-func (a *Adapter) ExecAttach(ctx context.Context, id string, cmd []string) (net.Conn, string, error) {
-	if !a.hasSocket {
-		c1, c2 := net.Pipe()
-		go func() {
-			defer c2.Close()
-			_, _ = fmt.Fprintf(c2, "Connected to simulated container %s (docker socket not connected)\r\n$ ", id)
-			buf := make([]byte, 256)
-			for {
-				n, err := c2.Read(buf)
-				if err != nil {
-					break
-				}
-				_, _ = c2.Write(buf[:n])
-			}
-		}()
-		return c1, "mock-exec-" + id, nil
-	}
-
-	if len(cmd) == 0 {
-		cmd = []string{"/bin/sh"}
-	}
-
+func (a *Adapter) execAttachSingle(ctx context.Context, id string, cmd []string) (net.Conn, string, error) {
 	createPayload := map[string]any{
 		"AttachStdin":  true,
 		"AttachStdout": true,
@@ -1015,7 +999,72 @@ func (a *Adapter) ExecAttach(ctx context.Context, id string, cmd []string) (net.
 		return nil, "", fmt.Errorf("docker exec start returned status %d", startResp.StatusCode)
 	}
 
-	return &dockerHijackedConn{Conn: rawConn, r: br}, execResp.ID, nil
+	// Probe for immediate exec failure (e.g. OCI runtime exec failed: executable file not found)
+	_ = rawConn.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
+	peekBuf := make([]byte, 128)
+	n, readErr := br.Read(peekBuf)
+	_ = rawConn.SetReadDeadline(time.Time{})
+
+	if n > 0 && bytes.Contains(peekBuf[:n], []byte("OCI runtime exec failed")) {
+		_ = rawConn.Close()
+		return nil, "", fmt.Errorf("exec binary failed: %s", strings.TrimSpace(string(peekBuf[:n])))
+	}
+	if readErr == io.EOF && n == 0 {
+		_ = rawConn.Close()
+		return nil, "", fmt.Errorf("exec process terminated immediately with EOF")
+	}
+
+	conn := &dockerHijackedConn{Conn: rawConn, r: br}
+	if n > 0 {
+		conn.prefix = peekBuf[:n]
+	}
+
+	return conn, execResp.ID, nil
+}
+
+// ExecAttach creates an interactive exec instance in the specified container and connects raw I/O to it.
+// When bash or default shell is requested, it tries bash first (/bin/bash), falling back to /bin/sh if bash fails.
+func (a *Adapter) ExecAttach(ctx context.Context, id string, cmd []string) (net.Conn, string, error) {
+	if !a.hasSocket {
+		c1, c2 := net.Pipe()
+		go func() {
+			defer c2.Close()
+			_, _ = fmt.Fprintf(c2, "Connected to simulated container %s (docker socket not connected)\r\n$ ", id)
+			buf := make([]byte, 256)
+			for {
+				n, err := c2.Read(buf)
+				if err != nil {
+					break
+				}
+				_, _ = c2.Write(buf[:n])
+			}
+		}()
+		return c1, "mock-exec-" + id, nil
+	}
+
+	targetCmd := cmd
+	shouldFallback := false
+	if len(targetCmd) == 0 {
+		targetCmd = []string{"/bin/bash"}
+		shouldFallback = true
+	} else if len(targetCmd) == 1 && (targetCmd[0] == "/bin/bash" || targetCmd[0] == "bash" || targetCmd[0] == "/usr/bin/bash") {
+		shouldFallback = true
+	}
+
+	conn, execID, err := a.execAttachSingle(ctx, id, targetCmd)
+	if err != nil && shouldFallback {
+		// Bash failed to start (e.g. Alpine or minimal image without bash); fallback to /bin/sh
+		fallbackCmd := []string{"/bin/sh"}
+		if fbConn, fbExecID, fbErr := a.execAttachSingle(ctx, id, fallbackCmd); fbErr == nil {
+			if hc, ok := fbConn.(*dockerHijackedConn); ok {
+				notice := "\x1b[33m[bash not found, falling back to /bin/sh]\x1b[0m\r\n"
+				hc.prefix = append([]byte(notice), hc.prefix...)
+			}
+			return fbConn, fbExecID, nil
+		}
+	}
+
+	return conn, execID, err
 }
 
 // ResizeExec resizes the TTY session for a running exec instance.

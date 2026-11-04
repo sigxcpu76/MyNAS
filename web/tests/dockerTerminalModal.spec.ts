@@ -62,9 +62,12 @@ describe('DockerTerminalModal Component', () => {
     expect(wrapper.text()).toContain('Nginx Proxy Manager');
     expect(wrapper.text()).toContain('nginx-proxy-manager');
 
-    // Shell selector should be present with options
-    const shellSelect = wrapper.find('select');
+    // Shell selector should be present with options and default to /bin/bash
+    const selects = wrapper.findAll('select');
+    expect(selects.length).toBeGreaterThanOrEqual(2);
+    const shellSelect = selects[1];
     expect(shellSelect.exists()).toBe(true);
+    expect(shellSelect.element.value).toBe('/bin/bash');
 
     wrapper.unmount();
   });

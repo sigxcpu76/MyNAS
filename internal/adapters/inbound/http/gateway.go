@@ -475,7 +475,7 @@ func (g *Gateway) handleDockerTerminalWebSocket(ws *websocket.Conn) {
 
 	shell := req.URL.Query().Get("shell")
 	if shell == "" {
-		shell = "/bin/sh"
+		shell = "/bin/bash"
 	}
 	if !shellPathRegex.MatchString(shell) {
 		_, _ = ws.Write([]byte("Invalid shell path\r\n"))
@@ -569,7 +569,7 @@ func (g *Gateway) handleLxcTerminalWebSocket(ws *websocket.Conn) {
 
 	shell := req.URL.Query().Get("shell")
 	if shell == "" {
-		shell = "/bin/sh"
+		shell = "/bin/bash"
 	}
 	if !shellPathRegex.MatchString(shell) {
 		_, _ = ws.Write([]byte("Invalid shell path\r\n"))

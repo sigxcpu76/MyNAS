@@ -66,6 +66,7 @@ describe('TerminalStandalone Component', () => {
 
     expect(wrapper.text()).toContain('LXC Terminal — 100');
     expect(lastCreatedWsUrl).toContain('/ws/lxc/terminal/100');
+    expect(lastCreatedWsUrl).toContain('shell=%2Fbin%2Fbash');
     expect(lastCreatedWsUrl).not.toContain('/ws/host/terminal');
   });
 
@@ -77,6 +78,7 @@ describe('TerminalStandalone Component', () => {
 
     expect(wrapper.text()).toContain('Docker Terminal — web');
     expect(lastCreatedWsUrl).toContain('/ws/docker/terminal/web');
+    expect(lastCreatedWsUrl).toContain('shell=%2Fbin%2Fbash');
     expect(lastCreatedWsUrl).not.toContain('/ws/host/terminal');
   });
 });

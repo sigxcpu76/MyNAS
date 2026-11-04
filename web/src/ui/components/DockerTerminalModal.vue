@@ -37,7 +37,7 @@ const emit = defineEmits<{
 const selectedContainerId = ref(
   props.initialContainerId || props.containers[0]?.id || props.containers[0]?.name || ''
 );
-const selectedShell = ref('/bin/sh');
+const selectedShell = ref('/bin/bash');
 const status = ref<'CONNECTING' | 'CONNECTED' | 'DISCONNECTED' | 'ERROR'>('CONNECTING');
 const isFullscreen = ref(false);
 const terminalContainer = ref<HTMLDivElement | null>(null);
@@ -338,10 +338,9 @@ onBeforeUnmount(() => {
               class="input mono"
               style="padding: 3px 8px; font-size: 11.5px; height: 28px"
             >
-              <option value="/bin/sh">/bin/sh (POSIX)</option>
               <option value="/bin/bash">/bin/bash</option>
+              <option value="/bin/sh">/bin/sh (POSIX)</option>
               <option value="/bin/ash">/bin/ash</option>
-              <option value="sh">sh</option>
             </select>
           </div>
 

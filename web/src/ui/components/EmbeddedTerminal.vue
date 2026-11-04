@@ -21,7 +21,7 @@ const props = withDefaults(
   }>(),
   {
     endpointType: 'lxc',
-    initialShell: '/bin/sh',
+    initialShell: '/bin/bash',
   }
 );
 
@@ -255,8 +255,8 @@ onBeforeUnmount(() => {
       <div class="toolbar-right">
         <!-- Shell Selector -->
         <select v-model="selectedShell" class="form-select font-xs shell-select">
-          <option value="/bin/sh">/bin/sh</option>
           <option value="/bin/bash">/bin/bash</option>
+          <option value="/bin/sh">/bin/sh</option>
           <option value="/bin/ash">/bin/ash</option>
         </select>
 

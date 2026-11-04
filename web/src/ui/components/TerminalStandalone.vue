@@ -12,7 +12,7 @@ const statusMessage = ref('');
 const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
 const lxcId = params.get('lxc') || '';
 const containerId = params.get('container') || '';
-const initialShell = params.get('shell') || '/bin/sh';
+const initialShell = params.get('shell') || '/bin/bash';
 const selectedShell = ref(initialShell);
 
 const terminalType = ref<'lxc' | 'docker' | 'host'>(
@@ -261,8 +261,8 @@ onBeforeUnmount(() => {
           title="Shell environment"
           @change="handleShellChange"
         >
-          <option value="/bin/sh">/bin/sh</option>
           <option value="/bin/bash">/bin/bash</option>
+          <option value="/bin/sh">/bin/sh</option>
           <option value="/bin/ash">/bin/ash</option>
           <option value="/bin/zsh">/bin/zsh</option>
         </select>

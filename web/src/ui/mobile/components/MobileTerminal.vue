@@ -70,16 +70,22 @@ function getWebSocketUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.host;
   const token = services.auth.getToken() ?? '';
+  const tokenParam = token ? `access_token=${encodeURIComponent(token)}` : '';
+  const shellParam = 'shell=' + encodeURIComponent('/bin/bash');
+  const params = [shellParam];
+  if (tokenParam) params.push(tokenParam);
+  const q = params.join('&');
+
   if (props.lxcId) {
-    return `${protocol}//${host}/ws/lxc/${encodeURIComponent(props.lxcId)}/terminal?access_token=${encodeURIComponent(token)}`;
+    return `${protocol}//${host}/ws/lxc/terminal/${encodeURIComponent(props.lxcId)}?${q}`;
   }
   if (props.containerId) {
-    return `${protocol}//${host}/ws/docker/terminal?container=${encodeURIComponent(props.containerId)}&access_token=${encodeURIComponent(token)}`;
+    return `${protocol}//${host}/ws/docker/terminal/${encodeURIComponent(props.containerId)}?${q}`;
   }
   if (props.endpoint) {
-    return `${protocol}//${host}${props.endpoint}?access_token=${encodeURIComponent(token)}`;
+    return `${protocol}//${host}${props.endpoint}${props.endpoint.includes('?') ? '&' : '?'}${tokenParam}`;
   }
-  return `${protocol}//${host}/ws/host/terminal?access_token=${encodeURIComponent(token)}`;
+  return `${protocol}//${host}/ws/host/terminal${tokenParam ? '?' + tokenParam : ''}`;
 }
 
 function sendResize() {
