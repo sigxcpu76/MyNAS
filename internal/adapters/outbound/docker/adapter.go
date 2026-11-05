@@ -1648,7 +1648,7 @@ func (a *Adapter) UpgradeApp(ctx context.Context, id string, takeSnapshot bool) 
 		content = []byte(normalized)
 	}
 
-	_, _, vols, _, _, _, _, _, _, _ := parseComposeYAML(string(content))
+	_, _, vols, _, _, _, _, _, _, _, _ := parseComposeYAML(string(content))
 
 	if takeSnapshot {
 		a.snapshotAppVolumes(ctx, id, vols)
@@ -1719,6 +1719,7 @@ type composeDescriptor struct {
 	CatalogID      string `yaml:"x-nas-catalog-id"`
 	CatalogSource  string `yaml:"x-nas-catalog-source"`
 	CatalogVersion string `yaml:"x-nas-catalog-version"`
+	IconURL        string `yaml:"x-nas-icon-url"`
 	XPortals       any    `yaml:"x-portals"`
 	Portals        any    `yaml:"portals"`
 	Services       map[string]struct {
@@ -1957,10 +1958,10 @@ func parsePortMapping(p string) (hostPort, containerPort string) {
 	return "", ""
 }
 
-func parseComposeYAML(content string) (services []string, ports []string, volumes []string, managementPort string, rawPortals []rawPortalEntry, autoStart bool, catalogID, catalogSource, catalogVersion string, err error) {
+func parseComposeYAML(content string) (services []string, ports []string, volumes []string, managementPort string, rawPortals []rawPortalEntry, autoStart bool, catalogID, catalogSource, catalogVersion, iconURL string, err error) {
 	var c composeDescriptor
 	if err := yaml.Unmarshal([]byte(content), &c); err != nil {
-		return nil, nil, nil, "", nil, false, "", "", "", err
+		return nil, nil, nil, "", nil, false, "", "", "", "", err
 	}
 	var mgmtPort string
 	if c.ManagementPort != nil {
@@ -1969,6 +1970,7 @@ func parseComposeYAML(content string) (services []string, ports []string, volume
 	catalogID = strings.TrimSpace(c.CatalogID)
 	catalogSource = strings.TrimSpace(c.CatalogSource)
 	catalogVersion = strings.TrimSpace(c.CatalogVersion)
+	iconURL = strings.TrimSpace(c.IconURL)
 	rawPortals = parseRawPortals(c.XPortals)
 	if len(rawPortals) == 0 {
 		rawPortals = parseRawPortals(c.Portals)
@@ -1992,11 +1994,20 @@ func parseComposeYAML(content string) (services []string, ports []string, volume
 							mgmtPort = strings.TrimSpace(parts[1])
 						}
 					}
+					if iconURL == "" && strings.HasPrefix(ls, "nas.icon.url=") {
+						parts := strings.SplitN(ls, "=", 2)
+						if len(parts) == 2 {
+							iconURL = strings.TrimSpace(parts[1])
+						}
+					}
 				}
 			case map[string]any:
 				for k, v := range lv {
 					if k == "nas.management.port" || k == "nas.webui.port" {
 						mgmtPort = strings.TrimSpace(fmt.Sprintf("%v", v))
+					}
+					if iconURL == "" && (k == "nas.icon.url" || k == "nas.icon") {
+						iconURL = strings.TrimSpace(fmt.Sprintf("%v", v))
 					}
 				}
 			}
@@ -2019,7 +2030,7 @@ func parseComposeYAML(content string) (services []string, ports []string, volume
 	sort.Strings(services)
 	sort.Strings(ports)
 	sort.Strings(volumes)
-	return services, ports, volumes, mgmtPort, rawPortals, autoStart, catalogID, catalogSource, catalogVersion, nil
+	return services, ports, volumes, mgmtPort, rawPortals, autoStart, catalogID, catalogSource, catalogVersion, iconURL, nil
 }
 
 func deriveWebUIURL(ports []string, preferredContainerPort string) string {
@@ -2057,7 +2068,7 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 		composeYAML = prettifyComposeYAML(string(data))
 	}
 
-	services, parsedPorts, parsedVols, mgmtPort, rawPortals, autoStart, catID, catSrc, catVer, _ := parseComposeYAML(composeYAML)
+	services, parsedPorts, parsedVols, mgmtPort, rawPortals, autoStart, catID, catSrc, catVer, iconURL, _ := parseComposeYAML(composeYAML)
 
 	var appContainers []domain.DockerAppContainer
 	var totalCPU float64
@@ -2325,6 +2336,7 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 		CatalogAppID:    catID,
 		CatalogSource:   catSrc,
 		CatalogVersion:  catVer,
+		IconURL:         iconURL,
 		ComposeYAML:     composeYAML,
 		ComposeFilePath: composePath,
 		Services:        services,

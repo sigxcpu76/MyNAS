@@ -82,6 +82,7 @@ type LxcContainer struct {
 	InstallRecipe   string
 	InstallScriptURL string
 	TemplateDownloadURL string
+	IconURL         string
 }
 
 func (c *LxcContainer) Validate() error {

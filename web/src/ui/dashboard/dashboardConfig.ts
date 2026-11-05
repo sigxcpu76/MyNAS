@@ -6,6 +6,7 @@ import {
   mdiHarddisk,
   mdiLanConnect,
   mdiMemory,
+  mdiOpenInNew,
   mdiServer,
   mdiServerNetwork,
   mdiThermometer,
@@ -61,6 +62,14 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     icon: mdiLanConnect,
     defaultLane: 1,
     category: 'network',
+  },
+  {
+    type: 'webapps',
+    name: 'Web Applications',
+    description: 'Quick-launch shortcuts for installed applications exposing Web UI ports with live status and one-click access.',
+    icon: mdiOpenInNew,
+    defaultLane: 0,
+    category: 'workloads',
   },
   {
     type: 'apps',

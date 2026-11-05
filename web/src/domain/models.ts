@@ -574,6 +574,7 @@ export interface DockerApp {
   volumes: string[];
   webUiUrl: string;
   portals?: DockerAppPortal[];
+  iconUrl?: string;
   catalogAppId?: string;
   catalogSource?: string;
   catalogVersion?: string;
@@ -720,6 +721,7 @@ export interface LxcContainer {
   installRecipe?: string;
   installScriptUrl?: string;
   templateDownloadUrl?: string;
+  iconUrl?: string;
 }
 
 export interface LxcCatalogItem {

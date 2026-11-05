@@ -44,6 +44,9 @@ import {
   runTrackedTask,
 } from '../store';
 import { confirmDelete } from '../modal';
+import { getDockerAppIcon } from '../utils/appIcons';
+
+const failedIcon = ref(false);
 
 const props = withDefaults(
   defineProps<{
@@ -501,8 +504,25 @@ onUnmounted(() => {
       <div class="grid-2">
         <!-- Live Real-Time Telemetry Card -->
         <div class="card detail-card">
-          <div class="card-header">
-            <h3 class="card-title">Application Status & Telemetry</h3>
+          <div class="card-header" style="display: flex; align-items: center; gap: 12px">
+            <div
+              v-if="app && getDockerAppIcon(app) && !failedIcon"
+              class="app-detail-header-icon-box"
+            >
+              <img
+                :src="getDockerAppIcon(app)"
+                :alt="app.title || cleanAppName"
+                class="app-detail-header-img"
+                @error="failedIcon = true"
+              />
+            </div>
+            <div v-else class="app-detail-header-icon-box">
+              <MdiIcon :path="mdiDocker" size="24" style="color: var(--accent-primary, #38bdf8)" />
+            </div>
+            <div>
+              <h3 class="card-title">{{ app?.title || cleanAppName }}</h3>
+              <span class="font-xs" style="color: var(--text-secondary)">Application Status & Telemetry</span>
+            </div>
           </div>
           <div class="card-body">
             <div class="metrics-grid">
@@ -1022,6 +1042,25 @@ onUnmounted(() => {
 
 .font-sm {
   font-size: 13px;
+}
+
+.app-detail-header-icon-box {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: var(--bg-surface-elevated, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.app-detail-header-img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
 }
 
 .font-xs {

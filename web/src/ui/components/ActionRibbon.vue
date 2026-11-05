@@ -13,6 +13,7 @@ import {
   mdiDatabase,
   mdiDatabaseCheck,
   mdiDatabaseSync,
+  mdiDocker,
   mdiExport,
   mdiFileDocumentOutline,
   mdiFolderNetwork,
@@ -49,6 +50,10 @@ import { confirmDelete, confirmModal } from '../modal';
 import { computeStorageBlastRadius } from '../utils/storageBlastRadius';
 import { toZfsSafeSlug } from '../../domain/id';
 import type { VirtualMachine, LxcContainer, ZfsPool, DockerApp } from '../../domain/models';
+import { getDockerAppIcon, getLxcContainerIcon } from '../utils/appIcons';
+
+const failedDockerIcons = ref<Record<string, boolean>>({});
+const failedLxcIcons = ref<Record<string, boolean>>({});
 
 const emit = defineEmits<{
   (e: 'open-host-terminal'): void;
@@ -703,7 +708,16 @@ function popoutHostTerminal() {
         >
           <MdiIcon :path="mdiArrowLeft" size="15" />
         </button>
-        <MdiIcon :path="mdiCubeOutline" size="16" style="color: var(--accent-secondary)" />
+        <div class="ribbon-icon-avatar">
+          <img
+            v-if="getLxcContainerIcon(currentLxc) && !failedLxcIcons[currentLxc.name]"
+            :src="getLxcContainerIcon(currentLxc)"
+            :alt="currentLxc.containerName"
+            class="ribbon-avatar-img"
+            @error="failedLxcIcons[currentLxc.name] = true"
+          />
+          <MdiIcon v-else :path="mdiCubeOutline" size="16" style="color: var(--accent-secondary)" />
+        </div>
         <MdiIcon
           v-if="currentLxc.state === 'FROZEN'"
           :path="mdiSnowflake"
@@ -765,7 +779,16 @@ function popoutHostTerminal() {
         >
           <MdiIcon :path="mdiArrowLeft" size="15" />
         </button>
-        <MdiIcon :path="mdiLayers" size="16" style="color: var(--info-text)" />
+        <div class="ribbon-icon-avatar">
+          <img
+            v-if="getDockerAppIcon(currentDocker) && !failedDockerIcons[currentDocker.name]"
+            :src="getDockerAppIcon(currentDocker)"
+            :alt="currentDocker.title || currentDocker.appId"
+            class="ribbon-avatar-img"
+            @error="failedDockerIcons[currentDocker.name] = true"
+          />
+          <MdiIcon v-else :path="mdiDocker" size="16" style="color: var(--accent-primary, #38bdf8)" />
+        </div>
         <MdiIcon
           :path="mdiCircle"
           size="9"
@@ -1524,5 +1547,24 @@ function popoutHostTerminal() {
 
 .font-xs {
   font-size: 11.5px;
+}
+
+.ribbon-icon-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 1px solid var(--border-subtle);
+}
+
+.ribbon-avatar-img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
 }
 </style>

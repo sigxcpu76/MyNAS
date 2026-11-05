@@ -891,6 +891,7 @@ type DockerApp struct {
 	UpdateAvailable bool                   `protobuf:"varint,26,opt,name=update_available,json=updateAvailable,proto3" json:"update_available,omitempty"`
 	LatestVersion   string                 `protobuf:"bytes,27,opt,name=latest_version,json=latestVersion,proto3" json:"latest_version,omitempty"`
 	LatestImage     string                 `protobuf:"bytes,28,opt,name=latest_image,json=latestImage,proto3" json:"latest_image,omitempty"`
+	IconUrl         string                 `protobuf:"bytes,29,opt,name=icon_url,json=iconUrl,proto3" json:"icon_url,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1117,6 +1118,13 @@ func (x *DockerApp) GetLatestVersion() string {
 func (x *DockerApp) GetLatestImage() string {
 	if x != nil {
 		return x.LatestImage
+	}
+	return ""
+}
+
+func (x *DockerApp) GetIconUrl() string {
+	if x != nil {
+		return x.IconUrl
 	}
 	return ""
 }
@@ -3273,7 +3281,8 @@ const file_nas_v1_docker_proto_rawDesc = "" +
 	"\x1enas.sigxcpu.io/DockerContainerR\x04name\"\\\n" +
 	"\x1dRestartDockerContainerRequest\x12;\n" +
 	"\x04name\x18\x01 \x01(\tB'\xe2A\x01\x02\xfaA \n" +
-	"\x1enas.sigxcpu.io/DockerContainerR\x04name\"\xf3\t\n" +
+	"\x1enas.sigxcpu.io/DockerContainerR\x04name\"\x94\n" +
+	"\n" +
 	"\tDockerApp\x12\x18\n" +
 	"\x04name\x18\x01 \x01(\tB\x04\xe2A\x01\bR\x04name\x12\x1b\n" +
 	"\x06app_id\x18\x02 \x01(\tB\x04\xe2A\x01\x03R\x05appId\x12\x14\n" +
@@ -3310,7 +3319,8 @@ const file_nas_v1_docker_proto_rawDesc = "" +
 	"\x0fcatalog_version\x18\x19 \x01(\tB\x04\xe2A\x01\x03R\x0ecatalogVersion\x12/\n" +
 	"\x10update_available\x18\x1a \x01(\bB\x04\xe2A\x01\x03R\x0fupdateAvailable\x12+\n" +
 	"\x0elatest_version\x18\x1b \x01(\tB\x04\xe2A\x01\x03R\rlatestVersion\x12'\n" +
-	"\flatest_image\x18\x1c \x01(\tB\x04\xe2A\x01\x03R\vlatestImage:M\xeaAJ\n" +
+	"\flatest_image\x18\x1c \x01(\tB\x04\xe2A\x01\x03R\vlatestImage\x12\x1f\n" +
+	"\bicon_url\x18\x1d \x01(\tB\x04\xe2A\x01\x03R\aiconUrl:M\xeaAJ\n" +
 	"\x18nas.sigxcpu.io/DockerApp\x12\x17dockerApps/{docker_app}*\n" +
 	"dockerApps2\tdockerApp\"{\n" +
 	"\x0fDockerAppPortal\x12\x12\n" +

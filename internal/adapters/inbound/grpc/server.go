@@ -1700,6 +1700,7 @@ func dockerAppToProto(a *domain.DockerApp) *nasv1.DockerApp {
 		UpdateAvailable: a.UpdateAvailable,
 		LatestVersion:   a.LatestVersion,
 		LatestImage:     a.LatestImage,
+		IconUrl:         a.IconURL,
 	}
 }
 
@@ -2174,6 +2175,9 @@ func (s *Server) enrichSingleDockerApp(pa *nasv1.DockerApp, da *domain.DockerApp
 	if ca.ContainerImage != "" {
 		pa.LatestImage = ca.ContainerImage
 	}
+	if pa.IconUrl == "" && ca.IconURL != "" {
+		pa.IconUrl = ca.IconURL
+	}
 
 	if da != nil {
 		var candidateImages []string
@@ -2440,6 +2444,7 @@ func (s *Server) ListLxcContainers(ctx context.Context, req *nasv1.ListLxcContai
 	for _, c := range paged {
 		out = append(out, toProtoLxc(c))
 	}
+	s.enrichLxcContainersWithCatalog(ctx, out)
 	return &nasv1.ListLxcContainersResponse{
 		LxcContainers: out,
 		NextPageToken: nextToken,
@@ -2459,7 +2464,9 @@ func (s *Server) GetLxcContainer(ctx context.Context, req *nasv1.GetLxcContainer
 	if err != nil {
 		return nil, ToGRPCError(err)
 	}
-	return toProtoLxc(*c), nil
+	protoC := toProtoLxc(*c)
+	s.enrichLxcContainersWithCatalog(ctx, []*nasv1.LxcContainer{protoC})
+	return protoC, nil
 }
 
 func (s *Server) CreateLxcContainer(ctx context.Context, req *nasv1.CreateLxcContainerRequest) (*nasv1.LxcContainer, error) {
@@ -2677,6 +2684,71 @@ func (s *Server) GetLxcContainerLogs(ctx context.Context, req *nasv1.GetLxcConta
 		Logs:      strings.ToValidUTF8(logs, ""),
 		LineCount: lineCount,
 	}, nil
+}
+
+func (s *Server) enrichLxcContainersWithCatalog(ctx context.Context, protoContainers []*nasv1.LxcContainer) {
+	if len(protoContainers) == 0 {
+		return
+	}
+	var catItems []domain.LxcCatalogItem
+	if s.lxcCatalog != nil {
+		if items, err := s.lxcCatalog.ListItems(ctx, "", "", ""); err == nil {
+			catItems = items
+		}
+	}
+	byID := make(map[string]string)
+	byTitle := make(map[string]string)
+	for _, it := range catItems {
+		if it.IconURL != "" {
+			if it.ID != "" {
+				byID[strings.ToLower(it.ID)] = it.IconURL
+			}
+			if it.Title != "" {
+				byTitle[strings.ToLower(it.Title)] = it.IconURL
+			}
+		}
+	}
+
+	distroIcons := map[string]string{
+		"debian":    "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/debian.png",
+		"ubuntu":    "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/ubuntu.png",
+		"alpine":    "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/alpine-linux.png",
+		"arch":      "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/arch-linux.png",
+		"archlinux": "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/arch-linux.png",
+		"fedora":    "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/fedora.png",
+		"rocky":     "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/rocky-linux.png",
+		"almalinux": "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/almalinux.png",
+	}
+
+	for _, pc := range protoContainers {
+		if pc == nil || pc.IconUrl != "" {
+			continue
+		}
+		cName := strings.ToLower(pc.ContainerName)
+		cleanID := strings.ToLower(strings.TrimPrefix(pc.Name, "lxcContainers/"))
+		if icon, ok := byID[cName]; ok {
+			pc.IconUrl = icon
+			continue
+		}
+		if icon, ok := byID[cleanID]; ok {
+			pc.IconUrl = icon
+			continue
+		}
+		if icon, ok := byTitle[cName]; ok {
+			pc.IconUrl = icon
+			continue
+		}
+		if pc.InstallRecipe != "" {
+			rKey := strings.ToLower(pc.InstallRecipe)
+			if icon, ok := byID[rKey]; ok {
+				pc.IconUrl = icon
+				continue
+			}
+		}
+		if dIcon, ok := distroIcons[strings.ToLower(pc.Distribution)]; ok {
+			pc.IconUrl = dIcon
+		}
+	}
 }
 
 // =============================================================================
@@ -3778,6 +3850,7 @@ func toProtoLxc(c domain.LxcContainer) *nasv1.LxcContainer {
 		InstallRecipe:       c.InstallRecipe,
 		InstallScriptUrl:    c.InstallScriptURL,
 		TemplateDownloadUrl: c.TemplateDownloadURL,
+		IconUrl:             c.IconURL,
 	}
 }
 

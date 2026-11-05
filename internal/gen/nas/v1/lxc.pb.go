@@ -166,6 +166,7 @@ type LxcContainer struct {
 	NetTxRate           int64                  `protobuf:"varint,24,opt,name=net_tx_rate,json=netTxRate,proto3" json:"net_tx_rate,omitempty"`
 	NetRxBytes          int64                  `protobuf:"varint,25,opt,name=net_rx_bytes,json=netRxBytes,proto3" json:"net_rx_bytes,omitempty"`
 	NetTxBytes          int64                  `protobuf:"varint,26,opt,name=net_tx_bytes,json=netTxBytes,proto3" json:"net_tx_bytes,omitempty"`
+	IconUrl             string                 `protobuf:"bytes,27,opt,name=icon_url,json=iconUrl,proto3" json:"icon_url,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -380,6 +381,13 @@ func (x *LxcContainer) GetNetTxBytes() int64 {
 		return x.NetTxBytes
 	}
 	return 0
+}
+
+func (x *LxcContainer) GetIconUrl() string {
+	if x != nil {
+		return x.IconUrl
+	}
+	return ""
 }
 
 type ListLxcContainersRequest struct {
@@ -1582,7 +1590,7 @@ const file_nas_v1_lxc_proto_rawDesc = "" +
 	"\rLxcMountPoint\x12\x1b\n" +
 	"\thost_path\x18\x01 \x01(\tR\bhostPath\x12%\n" +
 	"\x0econtainer_path\x18\x02 \x01(\tR\rcontainerPath\x12\x1b\n" +
-	"\tread_only\x18\x03 \x01(\bR\breadOnly\"\xcd\b\n" +
+	"\tread_only\x18\x03 \x01(\bR\breadOnly\"\xee\b\n" +
 	"\fLxcContainer\x12\x18\n" +
 	"\x04name\x18\x01 \x01(\tB\x04\xe2A\x01\bR\x04name\x12+\n" +
 	"\x0econtainer_name\x18\x02 \x01(\tB\x04\xe2A\x01\x03R\rcontainerName\x12\x1a\n" +
@@ -1615,7 +1623,8 @@ const file_nas_v1_lxc_proto_rawDesc = "" +
 	"\fnet_rx_bytes\x18\x19 \x01(\x03B\x04\xe2A\x01\x03R\n" +
 	"netRxBytes\x12&\n" +
 	"\fnet_tx_bytes\x18\x1a \x01(\x03B\x04\xe2A\x01\x03R\n" +
-	"netTxBytes:\\\xeaAY\n" +
+	"netTxBytes\x12\x1f\n" +
+	"\bicon_url\x18\x1b \x01(\tB\x04\xe2A\x01\x03R\aiconUrl:\\\xeaAY\n" +
 	"\x1bnas.sigxcpu.io/LxcContainer\x12\x1dlxcContainers/{lxc_container}*\rlxcContainers2\flxcContainer\"n\n" +
 	"\x18ListLxcContainersRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +

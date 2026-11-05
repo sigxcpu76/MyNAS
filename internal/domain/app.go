@@ -58,6 +58,7 @@ type DockerApp struct {
 	Volumes         []string             `json:"volumes"`
 	WebUIURL        string               `json:"webUiUrl"`
 	Portals         []DockerAppPortal    `json:"portals"`
+	IconURL         string               `json:"iconUrl,omitempty"`
 	CatalogAppID    string               `json:"catalogAppId,omitempty"`
 	CatalogSource   string               `json:"catalogSource,omitempty"`
 	CatalogVersion  string               `json:"catalogVersion,omitempty"`

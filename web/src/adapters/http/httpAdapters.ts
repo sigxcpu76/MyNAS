@@ -729,6 +729,7 @@ export function mapDockerApp(raw: any): DockerApp {
       protocol: p?.protocol || 'http',
       path: p?.path || '/',
     })),
+    iconUrl: raw?.iconUrl ?? raw?.icon_url ?? '',
     catalogAppId: raw?.catalogAppId ?? raw?.catalog_app_id ?? '',
     catalogSource: raw?.catalogSource ?? raw?.catalog_source ?? '',
     catalogVersion: raw?.catalogVersion ?? raw?.catalog_version ?? '',
@@ -781,6 +782,7 @@ export function mapLxcContainer(raw: any): LxcContainer {
     installRecipe: raw?.installRecipe ?? raw?.install_recipe ?? undefined,
     installScriptUrl: raw?.installScriptUrl ?? raw?.install_script_url ?? undefined,
     templateDownloadUrl: raw?.templateDownloadUrl ?? raw?.template_download_url ?? undefined,
+    iconUrl: raw?.iconUrl ?? raw?.icon_url ?? undefined,
   };
 }
 

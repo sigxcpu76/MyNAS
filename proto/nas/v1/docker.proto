@@ -150,6 +150,7 @@ message DockerApp {
   bool update_available = 26 [(google.api.field_behavior) = OUTPUT_ONLY];
   string latest_version = 27 [(google.api.field_behavior) = OUTPUT_ONLY];
   string latest_image = 28 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string icon_url = 29 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message DockerAppPortal {

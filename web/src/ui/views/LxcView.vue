@@ -8,6 +8,7 @@ import {
   mdiChevronDoubleDown,
   mdiConsole,
   mdiContentCopy,
+  mdiCubeOutline,
   mdiDownload,
   mdiFileDocumentOutline,
   mdiFilterVariant,
@@ -41,6 +42,9 @@ import { nasState, notify, refreshLxcTemplates as storeRefreshTemplates, selectR
 import { confirmDelete } from '../modal';
 import { toZfsSafeSlug } from '../../domain/id';
 import { formatBytes, type LxcCatalogItem, type LxcContainer, type LxcMountPoint, type StorageImage } from '../../domain/models';
+import { getLxcContainerIcon } from '../utils/appIcons';
+
+const failedLxcIcons = ref<Record<string, boolean>>({});
 
 /** Converts a dotted IPv4 address into a sortable integer (null when absent/invalid). */
 function ipv4ToNumber(ip: string | undefined): number | null {
@@ -987,42 +991,66 @@ function copyTemplatePath(path: string) {
               title="Click to open container details"
               @click="openLxcDetail(lx)"
             >
-              <!-- Name & Status Bullet -->
+              <!-- Name & Status Bullet with Icon -->
               <td>
-                <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text-primary); flex-wrap: wrap">
-                  <MdiIcon
-                    :path="transitioningContainers[lx.name] ? mdiLoading : mdiCircle"
-                    :size="transitioningContainers[lx.name] ? 12 : 9"
-                    :class="{ 'spin-icon': Boolean(transitioningContainers[lx.name]) }"
-                    :style="{
-                      color: transitioningContainers[lx.name]
-                        ? 'var(--warning)'
-                        : lx.state === 'RUNNING'
-                        ? 'var(--success)'
-                        : lx.state === 'FROZEN'
-                        ? 'var(--warning)'
-                        : 'var(--text-muted)',
-                      flexShrink: 0,
-                    }"
-                  />
-                  <span>{{ lx.containerName }}</span>
-                  <span
-                    v-if="transitioningContainers[lx.name]"
-                    class="badge badge-warning pulse-anim"
-                    style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 1px 6px"
-                  >
-                    <MdiIcon :path="mdiLoading" size="10" class="spin-icon" />
-                    {{ transitioningContainers[lx.name].toUpperCase() }}...
-                  </span>
-                  <span v-if="lx.unprivileged" class="badge badge-info" style="font-size: 11px; padding: 1px 6px" title="Unprivileged user namespace">
-                    Unpriv
-                  </span>
-                  <span v-if="lx.gpuEnabled" class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11px; padding: 1px 6px" title="GPU Acceleration Enabled">
-                    GPU
-                  </span>
-                </div>
-                <div v-if="lx.description" style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; padding-left: 17px">
-                  {{ lx.description }}
+                <div style="display: flex; align-items: center; gap: 10px">
+                  <div class="lxc-row-icon-wrap" :title="`Status: ${lx.state}`">
+                    <div class="lxc-row-icon-box">
+                      <img
+                        v-if="getLxcContainerIcon(lx) && !failedLxcIcons[lx.name]"
+                        :src="getLxcContainerIcon(lx)"
+                        :alt="lx.containerName"
+                        class="lxc-row-img"
+                        loading="lazy"
+                        @error="failedLxcIcons[lx.name] = true"
+                      />
+                      <MdiIcon
+                        v-else
+                        :path="mdiCubeOutline"
+                        size="18"
+                        style="color: var(--accent-secondary, #c084fc)"
+                      />
+                    </div>
+                    <!-- Status dot badge pinned to bottom-right of icon -->
+                    <span
+                      class="status-dot-badge"
+                      :class="{ 'spin-icon': Boolean(transitioningContainers[lx.name]) }"
+                      :style="{
+                        background: transitioningContainers[lx.name]
+                          ? 'var(--warning)'
+                          : lx.state === 'RUNNING'
+                          ? 'var(--success)'
+                          : lx.state === 'FROZEN'
+                          ? 'var(--warning)'
+                          : 'var(--text-muted)'
+                      }"
+                    />
+                  </div>
+
+                  <div style="min-width: 0; flex: 1">
+                    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
+                      <span style="font-weight: 600; font-size: 13.5px; color: var(--text-primary)">
+                        {{ lx.containerName }}
+                      </span>
+                      <span
+                        v-if="transitioningContainers[lx.name]"
+                        class="badge badge-warning pulse-anim"
+                        style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 1px 6px"
+                      >
+                        <MdiIcon :path="mdiLoading" size="10" class="spin-icon" />
+                        {{ transitioningContainers[lx.name].toUpperCase() }}...
+                      </span>
+                      <span v-if="lx.unprivileged" class="badge badge-info" style="font-size: 11px; padding: 1px 6px" title="Unprivileged user namespace">
+                        Unpriv
+                      </span>
+                      <span v-if="lx.gpuEnabled" class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11px; padding: 1px 6px" title="GPU Acceleration Enabled">
+                        GPU
+                      </span>
+                    </div>
+                    <div v-if="lx.description" style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px">
+                      {{ lx.description }}
+                    </div>
+                  </div>
                 </div>
               </td>
 
@@ -1484,3 +1512,42 @@ function copyTemplatePath(path: string) {
   </div>
 
 </template>
+
+<style scoped>
+.lxc-row-icon-wrap {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.lxc-row-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--bg-surface-elevated, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.lxc-row-img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  border-radius: 3px;
+}
+
+.status-dot-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--bg-surface, #1e293b);
+  box-sizing: content-box;
+}
+</style>

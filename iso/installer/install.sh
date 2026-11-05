@@ -465,18 +465,32 @@ EOF
     cat << 'EOF' > "$TARGET/etc/systemd/system/zfs-import-cache.service.d/altroot.conf"
 [Service]
 ExecStart=
-ExecStart=/usr/sbin/zpool import -c /etc/zfs/zpool.cache -aN -R /mnt $ZPOOL_IMPORT_OPTS
+ExecStart=/usr/sbin/zpool import -c /etc/zfs/zpool.cache -aN -R /mnt
 EOF
 
     mkdir -p "$TARGET/etc/systemd/system/zfs-import-scan.service.d"
     cat << 'EOF' > "$TARGET/etc/systemd/system/zfs-import-scan.service.d/altroot.conf"
 [Service]
 ExecStart=
-ExecStart=/usr/sbin/zpool import -aN -d /dev/disk/by-id -o cachefile=none -R /mnt $ZPOOL_IMPORT_OPTS
+ExecStart=/usr/sbin/zpool import -aN -d /dev/disk/by-id -o cachefile=none -R /mnt
 EOF
 
     if [ -f "$TARGET/etc/default/zfs" ]; then
-        sed -i 's/^ZPOOL_IMPORT_OPTS=.*/ZPOOL_IMPORT_OPTS="-R \/mnt"/' "$TARGET/etc/default/zfs" 2>/dev/null || true
+        sed -i 's/^ZPOOL_IMPORT_OPTS=.*/ZPOOL_IMPORT_OPTS=""/' "$TARGET/etc/default/zfs" 2>/dev/null || true
+    fi
+
+    # Blacklist nouveau / nvidiafb to prevent GPU kernel conflicts and shutdown hangs
+    cat << 'EOF' > "$TARGET/etc/modprobe.d/blacklist-nouveau.conf"
+blacklist nouveau
+blacklist nvidiafb
+options nouveau modeset=0
+EOF
+
+    # Configure libvirt-guests shutdown timeout
+    if [ -f "$TARGET/etc/default/libvirt-guests" ]; then
+        sed -i 's/^#*ON_SHUTDOWN=.*/ON_SHUTDOWN=shutdown/' "$TARGET/etc/default/libvirt-guests" 2>/dev/null || true
+        sed -i 's/^#*PARALLEL_SHUTDOWN=.*/PARALLEL_SHUTDOWN=1/' "$TARGET/etc/default/libvirt-guests" 2>/dev/null || true
+        sed -i 's/^#*SHUTDOWN_TIMEOUT=.*/SHUTDOWN_TIMEOUT=15/' "$TARGET/etc/default/libvirt-guests" 2>/dev/null || true
     fi
 
     # Create zpool.cache for appliance boot
@@ -487,16 +501,15 @@ EOF
     fi
 
     run_step 90 "Installing UEFI & Legacy BIOS bootloaders..."
-    # 0. Generate /etc/default/grub with ZFS boot parameters and serial console
+    # 0. Generate /etc/default/grub with ZFS boot parameters
     cat << 'EOF' > "$TARGET/etc/default/grub"
 # GRUB configuration for mynas appliance
 GRUB_DEFAULT=0
 GRUB_TIMEOUT=5
 GRUB_DISTRIBUTOR="mynas"
-GRUB_CMDLINE_LINUX_DEFAULT="quiet console=tty0 console=ttyS0,115200"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet console=tty0"
 GRUB_CMDLINE_LINUX="root=ZFS=rpool/ROOT/debian boot=zfs"
-GRUB_TERMINAL="console serial"
-GRUB_SERIAL_COMMAND="serial --unit=0 --speed=115200"
+GRUB_TERMINAL="console"
 EOF
 
     # 1. GRUB UEFI on primary EFI System Partition & Removable Fallback (/EFI/BOOT/BOOTX64.EFI)

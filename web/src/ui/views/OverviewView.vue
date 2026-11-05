@@ -41,6 +41,7 @@ import WidgetDisks from '../dashboard/widgets/WidgetDisks.vue';
 import WidgetWorkloads from '../dashboard/widgets/WidgetWorkloads.vue';
 import WidgetVms from '../dashboard/widgets/WidgetVms.vue';
 import WidgetApps from '../dashboard/widgets/WidgetApps.vue';
+import WidgetWebApps from '../dashboard/widgets/WidgetWebApps.vue';
 import WidgetShares from '../dashboard/widgets/WidgetShares.vue';
 import WidgetSensors from '../dashboard/widgets/WidgetSensors.vue';
 
@@ -171,6 +172,8 @@ function getWidgetComponent(type: string) {
       return WidgetVms;
     case 'apps':
       return WidgetApps;
+    case 'webapps':
+      return WidgetWebApps;
     case 'shares':
       return WidgetShares;
     case 'sensors':

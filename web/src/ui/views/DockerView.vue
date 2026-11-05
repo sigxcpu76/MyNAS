@@ -48,6 +48,7 @@ import CatalogQuestionWizard from '../components/CatalogQuestionWizard.vue';
 import DockerRegistriesModal from '../components/DockerRegistriesModal.vue';
 import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
+import { getDockerAppIcon } from '../utils/appIcons';
 import SortableTh from '../components/SortableTh.vue';
 import { useTableSort } from '../composables/useTableSort';
 import { checkAndPollDeployingApps, nasState, notify, selectResource } from '../store';
@@ -59,6 +60,7 @@ import { confirmDelete } from '../modal';
 const searchQuery = ref('');
 const stateFilter = ref<'ALL' | 'RUNNING' | 'STOPPED' | 'PARTIALLY_RUNNING'>('ALL');
 const isRefreshing = ref(false);
+const failedAppIcons = ref<Record<string, boolean>>({});
 const transitioningApps = reactive<Record<string, 'starting' | 'stopping' | 'restarting'>>({});
 
 const runningCount = computed(
@@ -1086,39 +1088,51 @@ onUnmounted(() => {
             :title="`Application: ${app.title || app.appId}\nServices: ${(app.services || []).join(', ') || 'none'}\nStatus: ${app.statusText || app.state}`"
             @click="openDockerDetail(app)"
           >
-            <!-- Application (Status Indicator Icon + Title + AppId with Services Tooltip) -->
+            <!-- Application (App Icon + Status Indicator Dot + Title + AppId with Services Tooltip) -->
             <td style="padding: 8px 10px; width: 280px; min-width: 220px; max-width: 340px">
               <div style="display: flex; align-items: center; gap: 10px">
-                <!-- Status indicator dot -->
-                <div
-                  :title="`Status: ${app.state} (${app.statusText})`"
-                  style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 16px; height: 16px"
-                >
+                <!-- App Icon Container with Status Dot -->
+                <div class="app-row-icon-wrap" :title="`Status: ${app.state} (${app.statusText})`">
+                  <div class="app-row-icon-box">
+                    <img
+                      v-if="getDockerAppIcon(app) && !failedAppIcons[app.appId || app.name]"
+                      :src="getDockerAppIcon(app)"
+                      :alt="app.title || app.appId"
+                      class="app-row-img"
+                      loading="lazy"
+                      @error="failedAppIcons[app.appId || app.name] = true"
+                    />
+                    <MdiIcon
+                      v-else
+                      :path="mdiDocker"
+                      size="18"
+                      style="color: var(--accent-primary, #38bdf8)"
+                    />
+                  </div>
+                  <!-- Status indicator dot pinned to bottom-right of icon -->
                   <span
                     v-if="app.state === 'DEPLOYING'"
-                    class="spinner-sm"
-                    style="width: 12px; height: 12px; border-width: 2px; border-color: var(--accent-primary); border-top-color: transparent"
+                    class="spinner-sm status-dot-badge"
+                    style="width: 8px; height: 8px; border-width: 1.5px; border-color: var(--accent-primary); border-top-color: transparent"
                     title="Deploying stack in background..."
                   ></span>
                   <span
-                    v-else-if="app.state === 'RUNNING'"
-                    style="display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--success)"
-                  ></span>
-                  <span
-                    v-else-if="app.state === 'PARTIALLY_RUNNING'"
-                    style="display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--warning)"
-                  ></span>
-                  <span
-                    v-else-if="app.state === 'ERROR'"
-                    style="display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--danger)"
-                  ></span>
-                  <span
                     v-else
-                    style="display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--text-muted)"
+                    class="status-dot-badge"
+                    :style="{
+                      background:
+                        app.state === 'RUNNING'
+                          ? 'var(--success)'
+                          : app.state === 'PARTIALLY_RUNNING'
+                          ? 'var(--warning)'
+                          : app.state === 'ERROR'
+                          ? 'var(--danger)'
+                          : 'var(--text-muted)'
+                    }"
                   ></span>
                 </div>
 
-                <div>
+                <div style="min-width: 0; flex: 1">
                   <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
                     <span
                       style="font-weight: 600; font-size: 13.5px; color: var(--text-primary)"
@@ -2003,3 +2017,42 @@ onUnmounted(() => {
 
   </div>
 </template>
+
+<style scoped>
+.app-row-icon-wrap {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.app-row-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--bg-surface-elevated, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.app-row-img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  border-radius: 3px;
+}
+
+.status-dot-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--bg-surface, #1e293b);
+  box-sizing: content-box;
+}
+</style>

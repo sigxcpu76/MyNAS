@@ -44,6 +44,9 @@ import {
   runTrackedTask,
 } from '../store';
 import { confirmDelete } from '../modal';
+import { getLxcContainerIcon } from '../utils/appIcons';
+
+const failedIcon = ref(false);
 
 const props = withDefaults(
   defineProps<{
@@ -450,8 +453,25 @@ onBeforeUnmount(() => {
       <div class="grid-2">
         <!-- Live Real-Time Telemetry Card -->
         <div class="card detail-card">
-          <div class="card-header">
-            <h3 class="card-title">Real-Time Container Telemetry</h3>
+          <div class="card-header" style="display: flex; align-items: center; gap: 12px">
+            <div
+              v-if="container && getLxcContainerIcon(container) && !failedIcon"
+              class="lxc-detail-header-icon-box"
+            >
+              <img
+                :src="getLxcContainerIcon(container)"
+                :alt="container.containerName"
+                class="lxc-detail-header-img"
+                @error="failedIcon = true"
+              />
+            </div>
+            <div v-else class="lxc-detail-header-icon-box">
+              <MdiIcon :path="mdiCubeOutline" size="24" style="color: var(--accent-secondary, #c084fc)" />
+            </div>
+            <div>
+              <h3 class="card-title">{{ container?.containerName || cleanContainerName }}</h3>
+              <span class="font-xs" style="color: var(--text-secondary)">Container Status & Real-Time Telemetry</span>
+            </div>
           </div>
           <div class="card-body">
             <div class="metrics-grid">
@@ -1009,5 +1029,24 @@ onBeforeUnmount(() => {
 
 .font-xs {
   font-size: 11.5px;
+}
+
+.lxc-detail-header-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: var(--bg-surface-elevated, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.lxc-detail-header-img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
 }
 </style>

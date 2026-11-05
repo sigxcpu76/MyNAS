@@ -156,6 +156,8 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	// 0. Ensure /etc/zfs exists and configure systemd ZFS boot-import services to use altroot /mnt
 	_ = os.MkdirAll("/etc/zfs", 0755)
 	ensureZfsBootAltrootConfig(logger)
+	ensureLibvirtGuestsConfig(logger)
+	ensureNouveauBlacklist(logger)
 
 	// Step A: Auto-Import Configured Main Pool on Boot / Reboot
 	if cfg.System.MainPool != "" {
@@ -600,11 +602,11 @@ func ensureZfsBootAltrootConfig(logger *slog.Logger) {
 
 	cacheContent := `[Service]
 ExecStart=
-ExecStart=/usr/sbin/zpool import -c /etc/zfs/zpool.cache -aN -R /mnt $ZPOOL_IMPORT_OPTS
+ExecStart=/usr/sbin/zpool import -c /etc/zfs/zpool.cache -aN -R /mnt
 `
 	scanContent := `[Service]
 ExecStart=
-ExecStart=/usr/sbin/zpool import -aN -d /dev/disk/by-id -o cachefile=none -R /mnt $ZPOOL_IMPORT_OPTS
+ExecStart=/usr/sbin/zpool import -aN -d /dev/disk/by-id -o cachefile=none -R /mnt
 `
 
 	modified := false
@@ -622,18 +624,76 @@ ExecStart=/usr/sbin/zpool import -aN -d /dev/disk/by-id -o cachefile=none -R /mn
 	defaultZfsPath := "/etc/default/zfs"
 	if data, err := os.ReadFile(defaultZfsPath); err == nil {
 		content := string(data)
-		if !strings.Contains(content, `ZPOOL_IMPORT_OPTS="-R /mnt"`) &&
-			!strings.Contains(content, `ZPOOL_IMPORT_OPTS='-R /mnt'`) {
-			if strings.Contains(content, `ZPOOL_IMPORT_OPTS=`) {
-				re := regexp.MustCompile(`(?m)^ZPOOL_IMPORT_OPTS=.*$`)
-				newContent := re.ReplaceAllString(content, `ZPOOL_IMPORT_OPTS="-R /mnt"`)
-				_ = os.WriteFile(defaultZfsPath, []byte(newContent), 0644)
-			}
+		if strings.Contains(content, `ZPOOL_IMPORT_OPTS="-R /mnt"`) ||
+			strings.Contains(content, `ZPOOL_IMPORT_OPTS='-R /mnt'`) {
+			re := regexp.MustCompile(`(?m)^ZPOOL_IMPORT_OPTS=.*$`)
+			newContent := re.ReplaceAllString(content, `ZPOOL_IMPORT_OPTS=""`)
+			_ = os.WriteFile(defaultZfsPath, []byte(newContent), 0644)
 		}
 	}
 
 	if modified {
 		logger.Info("configured systemd ZFS import services with altroot (-R /mnt) for boot-time persistence")
 		_ = exec.Command("systemctl", "daemon-reload").Run()
+	}
+}
+
+// ensureLibvirtGuestsConfig configures libvirt-guests service shutdown parameters
+// to prevent hangs on host poweroff/reboot when VMs ignore ACPI shutdown.
+func ensureLibvirtGuestsConfig(logger *slog.Logger) {
+	if os.Geteuid() != 0 {
+		return
+	}
+	libvirtGuestsPath := "/etc/default/libvirt-guests"
+	data, err := os.ReadFile(libvirtGuestsPath)
+	if err != nil {
+		return
+	}
+	content := string(data)
+	modified := false
+
+	// Ensure ON_SHUTDOWN=shutdown
+	if strings.Contains(content, "#ON_SHUTDOWN=shutdown") || strings.Contains(content, "ON_SHUTDOWN=suspend") {
+		re := regexp.MustCompile(`(?m)^#?ON_SHUTDOWN=.*$`)
+		content = re.ReplaceAllString(content, `ON_SHUTDOWN=shutdown`)
+		modified = true
+	}
+	// Ensure PARALLEL_SHUTDOWN=1
+	if strings.Contains(content, "#PARALLEL_SHUTDOWN=0") || strings.Contains(content, "PARALLEL_SHUTDOWN=0") {
+		re := regexp.MustCompile(`(?m)^#?PARALLEL_SHUTDOWN=.*$`)
+		content = re.ReplaceAllString(content, `PARALLEL_SHUTDOWN=1`)
+		modified = true
+	}
+	// Ensure SHUTDOWN_TIMEOUT=15 (instead of 300 seconds default)
+	if strings.Contains(content, "#SHUTDOWN_TIMEOUT=300") || strings.Contains(content, "SHUTDOWN_TIMEOUT=300") {
+		re := regexp.MustCompile(`(?m)^#?SHUTDOWN_TIMEOUT=.*$`)
+		content = re.ReplaceAllString(content, `SHUTDOWN_TIMEOUT=15`)
+		modified = true
+	}
+
+	if modified {
+		if err := os.WriteFile(libvirtGuestsPath, []byte(content), 0644); err == nil {
+			logger.Info("configured libvirt-guests with reduced shutdown timeout (15s, parallel)", "path", libvirtGuestsPath)
+		}
+	}
+}
+
+// ensureNouveauBlacklist ensures nouveau and nvidiafb are blacklisted when NVIDIA GPUs are present
+// to prevent dual-driver conflicts that freeze host display or lock up kernel power-off.
+func ensureNouveauBlacklist(logger *slog.Logger) {
+	if os.Geteuid() != 0 {
+		return
+	}
+	modprobeDir := "/etc/modprobe.d"
+	if fi, err := os.Stat(modprobeDir); err != nil || !fi.IsDir() {
+		return
+	}
+	blacklistPath := filepath.Join(modprobeDir, "blacklist-nouveau.conf")
+	expectedContent := "blacklist nouveau\nblacklist nvidiafb\noptions nouveau modeset=0\n"
+	current, err := os.ReadFile(blacklistPath)
+	if err != nil || string(current) != expectedContent {
+		if err := os.WriteFile(blacklistPath, []byte(expectedContent), 0644); err == nil {
+			logger.Info("configured GPU blacklist for nouveau and nvidiafb", "path", blacklistPath)
+		}
 	}
 }
