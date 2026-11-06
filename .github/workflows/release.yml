@@ -118,12 +118,20 @@ jobs:
           tar -czf "${OUTPUT_NAME}.tar.gz" "${OUTPUT_NAME}"
           sha256sum "${OUTPUT_NAME}.tar.gz" > "${OUTPUT_NAME}.tar.gz.sha256"
 
-      - name: Upload Binary Artifact
+      - name: Generate Debian Package
+        run: |
+          TAG_NAME="${{ inputs.tag || github.ref_name }}"
+          OUTPUT_NAME="nasctl-${TAG_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          chmod +x packaging/deb/build.sh
+          ./packaging/deb/build.sh "dist/${OUTPUT_NAME}" "${TAG_NAME}" "${{ matrix.goarch }}" dist
+
+      - name: Upload Binary and Package Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
             dist/*.tar.gz
+            dist/*.deb
             dist/*.sha256
             dist/nasctl-*
           retention-days: 1

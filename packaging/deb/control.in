@@ -1,0 +1,15 @@
+Package: nasctl
+Version: ${DEB_VERSION}
+Section: admin
+Priority: optional
+Architecture: ${DEB_ARCH}
+Installed-Size: ${INSTALLED_SIZE}
+Maintainer: sigxcpu <sigxcpu@users.noreply.github.com>
+Homepage: https://github.com/sigxcpu/nas
+Depends: libc6 (>= 2.34), libpam0g, systemd | systemd-sysv | init-system-helpers, ca-certificates, procps, util-linux
+Recommends: zfsutils-linux, smartmontools, nvme-cli, lm-sensors, samba, samba-vfs-modules, wsdd | wsdd2, avahi-daemon, openssh-server, docker.io | docker-ce, docker-compose-v2 | docker-compose-plugin | docker-compose, ${QEMU_PKG}, libvirt-daemon-system, libvirt-clients
+Suggests: qemu-utils, ovmf, swtpm, swtpm-tools, lxc, lxc-templates | lxc
+Description: Single-binary unified storage, virtualization and container daemon
+ NaN (Not Another NAS) is a modern storage appliance daemon and CLI (nasctl)
+ providing ZFS storage management, Docker Compose apps, KVM virtual machines
+ with noVNC console, LXC containers, CIFS/WebDAV sharing, and Linux PAM identity.

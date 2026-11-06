@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        if [ -d /run/systemd/system ]; then
+            systemctl --system daemon-reload >/dev/null || true
+            if ! systemctl is-enabled --quiet nasctl.service 2>/dev/null; then
+                systemctl enable nasctl.service >/dev/null || true
+            fi
+            if systemctl is-active --quiet nasctl.service 2>/dev/null; then
+                systemctl restart nasctl.service >/dev/null || true
+            fi
+        fi
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+    *)
+        ;;
+esac
+
+exit 0

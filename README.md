@@ -25,6 +25,7 @@
 - [Architecture & Design Principles](#architecture--design-principles)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
+  - [Debian & Ubuntu Installation (.deb)](#debian--ubuntu-installation-deb)
   - [Building from Source](#building-from-source)
   - [Running the Server Daemon](#running-the-server-daemon)
   - [CLI Client Usage](#cli-client-usage)
@@ -243,6 +244,28 @@ For a full-featured deployment on Linux, the following packages are recommended:
 
 > [!NOTE]
 > NaN starts cleanly even if some binaries are missing. Missing components will simply mark their respective modules as disabled on the Prerequisites status page.
+
+### Debian & Ubuntu Installation (.deb)
+
+Pre-built `.deb` packages for **amd64** and **arm64** are published on each GitHub Release. The package declares host runtime essentials as required dependencies (`Depends`), while NAS features (OpenZFS, SMART, NVMe, Samba, WSDD, Avahi, OpenSSH, Docker) are configured as recommended dependencies (`Recommends`), fully accommodating differences between Debian (11, 12, 13/Trixie, Sid) and Ubuntu (20.04, 22.04, 24.04). Heavy hypervisor stacks (KVM, QEMU, libvirt, LXC) are declared under `Suggests`.
+
+```bash
+# 1. Download the release package for your architecture
+# (amd64 or arm64)
+wget https://github.com/sigxcpu/nas/releases/latest/download/nasctl_<version>_<arch>.deb
+
+# 2. Install via apt (automatically resolves recommended NAS tools)
+sudo apt update
+sudo apt install ./nasctl_<version>_<arch>.deb
+
+# Or for a minimal installation without recommended packages:
+# sudo apt install --no-install-recommends ./nasctl_<version>_<arch>.deb
+
+# 3. Enable and start the systemd service
+sudo systemctl enable --now nasctl.service
+```
+
+You can customize service options and port flags in `/etc/default/nasctl`.
 
 ### Building from Source
 

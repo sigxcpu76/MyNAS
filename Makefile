@@ -1,4 +1,4 @@
-.PHONY: all generate proto web test build run clean iso deploy apk
+.PHONY: all generate proto web test build run clean iso deploy apk deb
 
 apk:
 	export JAVA_HOME=$$(test -d /usr/lib/jvm/java-17-openjdk && echo "/usr/lib/jvm/java-17-openjdk" || echo "$$JAVA_HOME"); cd android && ./gradlew assembleDebug
@@ -60,6 +60,9 @@ deploy-all: apk build
 	ssh root@192.168.27.25 "mv /usr/local/bin/nasctl.new /usr/local/bin/nasctl && systemctl restart nasctl"
 	@echo "Deployment complete on all appliances."
 
+deb: build
+	./packaging/deb/build.sh bin/nasctl $(VERSION) amd64 dist
+
 clean:
-	rm -rf bin/ web/dist
+	rm -rf bin/ web/dist dist/
 
