@@ -15,6 +15,7 @@ import {
 import MdiIcon from '../../components/MdiIcon.vue';
 import { nasState, notify, refreshAllData } from '../../store';
 import { services } from '../../../container';
+import { getLxcContainerIcon } from '../../utils/appIcons';
 import type { VirtualMachine, LxcContainer } from '../../../domain/models';
 
 const emit = defineEmits<{
@@ -24,6 +25,7 @@ const emit = defineEmits<{
 
 const activeTab = ref<'vms' | 'lxc'>(nasState.activeTab === 'lxc' ? 'lxc' : 'vms');
 const actionLoading = ref(false);
+const failedLxcIcons = ref<Record<string, boolean>>({});
 
 watch(
   () => nasState.activeTab,
@@ -142,8 +144,20 @@ async function handleStopLxc(c: LxcContainer) {
       <div v-for="vm in vms" :key="vm.vmName" class="item-card">
         <div class="item-card-top">
           <div class="item-identity">
-            <span class="status-dot" :class="isVmRunning(vm) ? 'dot-running' : 'dot-stopped'" />
-            <span class="item-name">{{ vm.vmName }}</span>
+            <div class="lxc-icon-wrap">
+              <div class="lxc-icon-box">
+                <MdiIcon
+                  :path="mdiMonitor"
+                  size="18"
+                  style="color: var(--accent-primary, #38bdf8)"
+                />
+              </div>
+              <span class="status-dot-badge" :class="isVmRunning(vm) ? 'dot-running' : 'dot-stopped'" />
+            </div>
+            <div class="item-name-group">
+              <span class="item-name">{{ vm.vmName }}</span>
+              <span v-if="vm.osVariant" class="item-sub-text font-xs">{{ vm.osVariant }}</span>
+            </div>
           </div>
 
           <span
@@ -216,8 +230,29 @@ async function handleStopLxc(c: LxcContainer) {
       <div v-for="c in lxcContainers" :key="c.name" class="item-card">
         <div class="item-card-top">
           <div class="item-identity">
-            <span class="status-dot" :class="isLxcRunning(c) ? 'dot-running' : 'dot-stopped'" />
-            <span class="item-name">{{ c.containerName || c.name.replace('lxcContainers/', '') }}</span>
+            <div class="lxc-icon-wrap">
+              <div class="lxc-icon-box">
+                <img
+                  v-if="getLxcContainerIcon(c) && !failedLxcIcons[c.name]"
+                  :src="getLxcContainerIcon(c)"
+                  :alt="c.containerName || c.name"
+                  class="lxc-icon-img"
+                  loading="lazy"
+                  @error="failedLxcIcons[c.name] = true"
+                />
+                <MdiIcon
+                  v-else
+                  :path="mdiServer"
+                  size="18"
+                  style="color: var(--accent-secondary, #818cf8)"
+                />
+              </div>
+              <span class="status-dot-badge" :class="isLxcRunning(c) ? 'dot-running' : 'dot-stopped'" />
+            </div>
+            <div class="item-name-group">
+              <span class="item-name">{{ c.containerName || c.name.replace('lxcContainers/', '') }}</span>
+              <span v-if="c.distribution" class="item-sub-text font-xs">{{ c.distribution }}</span>
+            </div>
           </div>
 
           <span
@@ -338,7 +373,57 @@ async function handleStopLxc(c: LxcContainer) {
 .item-identity {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  min-width: 0;
+}
+
+.lxc-icon-wrap {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+}
+
+.lxc-icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: var(--bg-surface-elevated, #243248);
+  border: 1px solid var(--border-color, #334155);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 4px;
+}
+
+.lxc-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.status-dot-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-surface, #1e293b);
+}
+
+.item-name-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.item-sub-text {
+  color: var(--text-secondary, #94a3b8);
+  text-transform: capitalize;
+  font-size: 11px;
 }
 
 .status-dot {
@@ -350,7 +435,7 @@ async function handleStopLxc(c: LxcContainer) {
 
 .dot-running {
   background: #4ade80;
-  box-shadow: 0 0 8px #4ade80;
+  box-shadow: 0 0 6px #4ade80;
 }
 
 .dot-stopped {

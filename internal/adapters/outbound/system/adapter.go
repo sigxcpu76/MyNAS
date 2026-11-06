@@ -232,6 +232,7 @@ func (a *Adapter) SelectMainPool(ctx context.Context, poolName string, autoImpor
 	_ = config.Save(cfg, localPath)
 	_ = config.Save(cfg, poolConfigFile)
 	_ = a.zfsPort.SyncCacheFile(ctx)
+	_, _ = EnsureDockerMountDependencies(nil, cleanPool)
 
 	a.mu.Lock()
 	a.cachedTime = time.Time{}

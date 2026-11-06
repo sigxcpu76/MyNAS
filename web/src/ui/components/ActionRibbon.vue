@@ -1271,7 +1271,7 @@ function popoutHostTerminal() {
         </button>
 
         <button
-          v-if="!isMainPool"
+          v-if="!isMainPool && !nasState.systemConfig?.mainPool"
           class="btn btn-sm btn-icon btn-secondary"
           :disabled="isBusy"
           title="Set as Main Pool"

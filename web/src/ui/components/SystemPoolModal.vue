@@ -75,15 +75,9 @@ async function handleSelectPool(poolName: string) {
   if (!clean) return;
 
   const current = mainPool.value;
-  if (current && current !== clean) {
-    const confirmed = await confirmModal({
-      title: 'Switch Main Storage Pool',
-      tone: 'warning',
-      message: `Switch Main Storage Pool from "${current}" to "${clean}"?`,
-      details: `System configuration, Docker appdata root, and LXC container root will now reside on "${clean}".`,
-      confirmText: 'Switch Main Pool',
-    });
-    if (!confirmed) return;
+  if (current) {
+    notify('warning', 'Main storage pool is already configured and cannot be changed.');
+    return;
   }
 
   selecting.value = true;
@@ -189,7 +183,7 @@ onMounted(() => {
                 Active
               </span>
               <button
-                v-else
+                v-else-if="!mainPool"
                 class="btn btn-sm btn-primary"
                 :disabled="selecting"
                 style="display: inline-flex; align-items: center; gap: 6px"
@@ -202,8 +196,8 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- Manual Pool Name Input -->
-        <div style="margin-top: 16px; padding: 12px 14px; background: var(--bg-hover); border: 1px dashed var(--border-subtle); border-radius: 8px">
+        <!-- Manual Pool Name Input (only if no main pool configured) -->
+        <div v-if="!mainPool" style="margin-top: 16px; padding: 12px 14px; background: var(--bg-hover); border: 1px dashed var(--border-subtle); border-radius: 8px">
           <div style="font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px">
             Or specify pool name directly:
           </div>

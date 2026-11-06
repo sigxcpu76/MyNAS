@@ -475,6 +475,15 @@ ExecStart=
 ExecStart=/usr/sbin/zpool import -aN -d /dev/disk/by-id -o cachefile=none -R /mnt
 EOF
 
+    # Configure systemd docker.service to depend on ZFS mount and import targets
+    mkdir -p "$TARGET/etc/systemd/system/docker.service.d"
+    cat << 'EOF' > "$TARGET/etc/systemd/system/docker.service.d/nas-mounts.conf"
+# Managed by nasctl: Ensures ZFS pool and datasets are mounted before starting Docker daemon
+[Unit]
+After=zfs-mount.service zfs-import.target zfs-import-cache.service
+Wants=zfs-mount.service
+EOF
+
     if [ -f "$TARGET/etc/default/zfs" ]; then
         sed -i 's/^ZPOOL_IMPORT_OPTS=.*/ZPOOL_IMPORT_OPTS=""/' "$TARGET/etc/default/zfs" 2>/dev/null || true
     fi

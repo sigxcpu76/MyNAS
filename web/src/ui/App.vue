@@ -452,16 +452,14 @@ onMounted(() => {
         </span>
 
         <!-- Main Pool Badge Indicator -->
-        <button
+        <div
           v-if="nasState.systemConfig?.mainPool"
-          class="badge badge-main-pool interactive hide-mobile"
-          title="Designated Main Storage Pool. Click to switch main pool."
-          @click="showPoolModal = true"
+          class="badge badge-main-pool hide-mobile"
+          :title="`Designated Main Storage Pool: ${nasState.systemConfig.mainPool.replace(/^zfsPools\//, '')}`"
         >
           <MdiIcon :path="mdiDatabaseCheck" size="13" style="color: var(--accent-primary)" />
           <span>Main Pool: {{ nasState.systemConfig.mainPool.replace(/^zfsPools\//, '') }}</span>
-          <MdiIcon :path="mdiMenuDown" size="12" style="opacity: 0.75" />
-        </button>
+        </div>
         <button
           v-else-if="nasState.initialLoaded && !nasState.systemConfig?.mainPool"
           class="badge badge-warning interactive hide-mobile"

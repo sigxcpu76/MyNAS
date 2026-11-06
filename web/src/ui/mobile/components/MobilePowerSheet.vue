@@ -98,13 +98,20 @@ function selectMode(mode: DeviceViewMode) {
           <span class="tile-sub">Terminal</span>
         </button>
 
-        <button class="action-tile" @click="handlePool">
+        <button v-if="!nasState.systemConfig?.mainPool" class="action-tile" @click="handlePool">
           <div class="tile-icon" style="background: rgba(168, 85, 247, 0.15); color: #c084fc">
             <MdiIcon :path="mdiDatabaseCheck" size="22" />
           </div>
           <span class="tile-label">Main Pool</span>
-          <span class="tile-sub">{{ nasState.systemConfig?.mainPool?.replace(/^zfsPools\//, '') || 'Configure' }}</span>
+          <span class="tile-sub">Configure</span>
         </button>
+        <div v-else class="action-tile" style="opacity: 0.9; cursor: default">
+          <div class="tile-icon" style="background: rgba(168, 85, 247, 0.15); color: #c084fc">
+            <MdiIcon :path="mdiDatabaseCheck" size="22" />
+          </div>
+          <span class="tile-label">Main Pool</span>
+          <span class="tile-sub">{{ nasState.systemConfig?.mainPool?.replace(/^zfsPools\//, '') }}</span>
+        </div>
 
         <button class="action-tile" @click="handleDetails">
           <div class="tile-icon" style="background: rgba(74, 222, 128, 0.15); color: #4ade80">

@@ -1194,7 +1194,7 @@ function viewPoolDatasets(poolName: string) {
 
           <div style="display: flex; align-items: center; gap: 6px">
             <button
-              v-if="(p.poolName || p.name.replace(/^zfsPools\//, '')) !== nasState.systemConfig?.mainPool"
+              v-if="!nasState.systemConfig?.mainPool"
               class="btn btn-sm btn-ghost"
               title="Designate as Main Storage Pool"
               style="padding: 4px 8px; font-size: 11px"

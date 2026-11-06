@@ -158,6 +158,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	ensureZfsBootAltrootConfig(logger)
 	ensureLibvirtGuestsConfig(logger)
 	ensureNouveauBlacklist(logger)
+	_, _ = system.EnsureDockerMountDependencies(logger, cfg.System.MainPool)
 
 	// Step A: Auto-Import Configured Main Pool on Boot / Reboot
 	if cfg.System.MainPool != "" {
@@ -236,6 +237,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 				break
 			}
 		}
+		_, _ = system.EnsureDockerMountDependencies(logger, activeMainPool)
 	}
 
 	zfsEnabled, zfsReason := prereqAdapter.IsModuleEnabled("zfs")

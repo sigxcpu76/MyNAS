@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sigxcpu/nas/internal/adapters/outbound/system"
 	"github.com/sigxcpu/nas/internal/config"
 	"github.com/sigxcpu/nas/internal/domain"
 	"github.com/sigxcpu/nas/internal/ports"
@@ -2746,6 +2747,8 @@ func (a *Adapter) UpdateConfig(ctx context.Context, cfg domain.DockerConfig) (*d
 	if err := os.WriteFile(configFile, data, 0644); err != nil {
 		return nil, fmt.Errorf("failed to write docker config file: %w", err)
 	}
+
+	_, _ = system.EnsureDockerMountDependencies(a.logger, pool)
 
 	// Populate available options for return
 	var availablePools []string

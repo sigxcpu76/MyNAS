@@ -12,10 +12,12 @@ import {
   mdiMagnify,
   mdiServer,
   mdiTune,
+  mdiDocker,
 } from '@mdi/js';
 import MdiIcon from '../../components/MdiIcon.vue';
 import BottomSheet from '../../components/BottomSheet.vue';
 import { ansiToHtml } from '../../utils/ansi';
+import { getDockerAppIcon, getDockerContainerIcon } from '../../utils/appIcons';
 import { nasState, notify, refreshAllData } from '../../store';
 import { services } from '../../../container';
 import type { DockerApp } from '../../../domain/models';
@@ -24,6 +26,8 @@ const searchQuery = ref('');
 const statusFilter = ref<'ALL' | 'RUNNING' | 'STOPPED'>('ALL');
 const selectedApp = ref<DockerApp | null>(null);
 const isSheetOpen = ref(false);
+const failedAppIcons = ref<Record<string, boolean>>({});
+const failedContainerIcons = ref<Record<string, boolean>>({});
 
 const actionLoading = ref(false);
 const logsLoading = ref(false);
@@ -193,7 +197,28 @@ function switchDetailTab(tab: 'details' | 'logs') {
         @click="openAppSheet(app)"
       >
         <div class="app-card-left">
-          <div class="app-status-dot" :class="isAppRunning(app) ? 'dot-running' : 'dot-stopped'" />
+          <div class="app-icon-wrap">
+            <div class="app-icon-box">
+              <img
+                v-if="getDockerAppIcon(app) && !failedAppIcons[app.appId || app.name]"
+                :src="getDockerAppIcon(app)"
+                :alt="app.title || app.appId"
+                class="app-icon-img"
+                loading="lazy"
+                @error="failedAppIcons[app.appId || app.name] = true"
+              />
+              <MdiIcon
+                v-else
+                :path="mdiDocker"
+                size="20"
+                style="color: var(--accent-primary, #38bdf8)"
+              />
+            </div>
+            <span
+              class="app-status-badge-dot"
+              :class="isAppRunning(app) ? 'dot-running' : 'dot-stopped'"
+            />
+          </div>
           <div class="app-name-wrap">
             <div class="app-title">{{ app.title || app.appId }}</div>
             <div class="app-meta">
@@ -235,6 +260,33 @@ function switchDetailTab(tab: 'details' | 'logs') {
       :title="selectedApp.title || selectedApp.appId"
       :subtitle="`App ID: ${selectedApp.appId}`"
     >
+      <!-- App Identity Hero Header -->
+      <div class="sheet-app-hero">
+        <div class="sheet-app-icon-wrap">
+          <img
+            v-if="getDockerAppIcon(selectedApp) && !failedAppIcons[selectedApp.appId || selectedApp.name]"
+            :src="getDockerAppIcon(selectedApp)"
+            :alt="selectedApp.title || selectedApp.appId"
+            class="sheet-app-icon-img"
+            @error="failedAppIcons[selectedApp.appId || selectedApp.name] = true"
+          />
+          <MdiIcon
+            v-else
+            :path="mdiDocker"
+            size="24"
+            style="color: var(--accent-primary, #38bdf8)"
+          />
+        </div>
+        <div class="sheet-app-titles">
+          <div class="sheet-app-name">{{ selectedApp.title || selectedApp.appId }}</div>
+          <div class="sheet-app-sub">
+            <span class="sheet-status-dot" :class="isAppRunning(selectedApp) ? 'dot-running' : 'dot-stopped'" />
+            <span>{{ isAppRunning(selectedApp) ? 'RUNNING' : 'STOPPED' }}</span>
+            <span v-if="selectedApp.containers?.length"> • {{ selectedApp.containers.length }} containers</span>
+          </div>
+        </div>
+      </div>
+
       <div class="sheet-tabs">
         <button
           class="sheet-tab"
@@ -303,9 +355,27 @@ function switchDetailTab(tab: 'details' | 'logs') {
         <div class="spec-card">
           <div class="spec-title">Containers ({{ selectedApp.containers?.length || 0 }})</div>
           <div v-for="c in selectedApp.containers" :key="c.containerId" class="container-row">
-            <div class="c-info">
-              <span class="c-name">{{ c.name || c.serviceName }}</span>
-              <span class="c-image mono font-xs">{{ c.image }}</span>
+            <div class="c-left">
+              <div class="container-icon-box">
+                <img
+                  v-if="getDockerContainerIcon(c) && !failedContainerIcons[c.containerId || c.name]"
+                  :src="getDockerContainerIcon(c)"
+                  :alt="c.name || c.serviceName"
+                  class="container-icon-img"
+                  loading="lazy"
+                  @error="failedContainerIcons[c.containerId || c.name] = true"
+                />
+                <MdiIcon
+                  v-else
+                  :path="mdiDocker"
+                  size="18"
+                  style="color: var(--accent-primary, #38bdf8)"
+                />
+              </div>
+              <div class="c-info">
+                <span class="c-name">{{ c.name || c.serviceName }}</span>
+                <span class="c-image mono font-xs">{{ c.image }}</span>
+              </div>
             </div>
             <span
               class="app-badge"
@@ -428,18 +498,49 @@ function switchDetailTab(tab: 'details' | 'logs') {
   align-items: center;
   gap: 12px;
   min-width: 0;
+  flex: 1;
 }
 
-.app-status-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
+.app-icon-wrap {
+  position: relative;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
+}
+
+.app-icon-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--bg-surface-elevated, #243248);
+  border: 1px solid var(--border-color, #334155);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 4px;
+}
+
+.app-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.app-status-badge-dot {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-surface, #1e293b);
 }
 
 .dot-running {
   background: #4ade80;
-  box-shadow: 0 0 8px #4ade80;
+  box-shadow: 0 0 6px #4ade80;
 }
 
 .dot-stopped {
@@ -588,31 +689,131 @@ function switchDetailTab(tab: 'details' | 'logs') {
   color: var(--text-secondary, #94a3b8);
 }
 
+.sheet-app-hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-surface-elevated, #243248);
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+
+.sheet-app-icon-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--bg-base, #0f172a);
+  border: 1px solid var(--border-color, #334155);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  padding: 4px;
+}
+
+.sheet-app-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.sheet-app-titles {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.sheet-app-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary, #f8fafc);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sheet-app-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.sheet-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 .container-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 0;
+  padding: 8px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 10px;
 }
 
 .container-row:last-child {
   border-bottom: none;
 }
 
+.c-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.container-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--bg-base, #0f172a);
+  border: 1px solid var(--border-color, #334155);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  padding: 3px;
+}
+
+.container-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .c-info {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  flex: 1;
 }
 
 .c-name {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary, #f8fafc);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .c-image {
   color: var(--text-secondary, #94a3b8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .mount-row {

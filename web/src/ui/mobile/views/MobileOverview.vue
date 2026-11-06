@@ -23,6 +23,8 @@ import { nasState, refreshAllData } from '../../store';
 import { navigateTo } from '../../router';
 import { usePwaInstall } from '../../composables/usePwaInstall';
 import { useClientApp } from '../../composables/useClientApp';
+import { getDockerAppIcon } from '../../utils/appIcons';
+import type { DockerApp } from '../../../domain/models';
 
 const emit = defineEmits<{
   (e: 'open-terminal'): void;
@@ -33,6 +35,36 @@ const emit = defineEmits<{
 const { isStandalone, promptInstall } = usePwaInstall();
 const { clientApp } = useClientApp();
 const bannerDismissed = ref(false);
+const failedOverviewIcons = ref<Record<string, boolean>>({});
+
+function isAppRunning(app: DockerApp): boolean {
+  return app.state === 'RUNNING' || app.state === 'running';
+}
+
+const activeOverviewApps = computed(() => {
+  const all = nasState.dockerApps || [];
+  return [...all]
+    .sort((a, b) => {
+      const aRun = isAppRunning(a) ? 1 : 0;
+      const bRun = isAppRunning(b) ? 1 : 0;
+      return bRun - aRun;
+    })
+    .slice(0, 8);
+});
+
+function handleAppClick(app: DockerApp) {
+  let target = app.webUiUrl || (app.portals && app.portals[0]?.url) || '';
+  if (target) {
+    if (typeof window !== 'undefined' && window.location?.hostname) {
+      target = target.replace(/:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::|\/|$)/, (m) =>
+        m.replace(/localhost|127\.0\.0\.1|0\.0\.0\.0/, window.location.hostname)
+      );
+    }
+    window.open(target, '_blank');
+  } else {
+    navigateTo('docker');
+  }
+}
 
 const telem = computed(() => nasState.systemTelemetry);
 const powerMeter = computed(() => telem.value?.sensors?.powerMeter);
@@ -289,6 +321,50 @@ const healthStatusText = computed(() => {
       </div>
     </div>
 
+    <!-- Applications Quick Launcher -->
+    <div v-if="dockerTotalCount > 0" class="apps-quick-section">
+      <div class="section-title-row">
+        <span class="section-heading">Applications</span>
+        <button class="section-action-btn" @click="navigateTo('docker')">
+          <span>View All ({{ dockerTotalCount }})</span>
+          <MdiIcon :path="mdiArrowRight" size="14" />
+        </button>
+      </div>
+
+      <div class="apps-quick-grid">
+        <button
+          v-for="app in activeOverviewApps"
+          :key="app.appId"
+          class="app-quick-tile"
+          @click="handleAppClick(app)"
+        >
+          <div class="app-quick-icon-wrap">
+            <div class="app-quick-icon-box">
+              <img
+                v-if="getDockerAppIcon(app) && !failedOverviewIcons[app.appId || app.name]"
+                :src="getDockerAppIcon(app)"
+                :alt="app.title || app.appId"
+                class="app-quick-img"
+                loading="lazy"
+                @error="failedOverviewIcons[app.appId || app.name] = true"
+              />
+              <MdiIcon
+                v-else
+                :path="mdiDocker"
+                size="20"
+                style="color: var(--accent-primary, #38bdf8)"
+              />
+            </div>
+            <span
+              class="app-quick-dot"
+              :class="isAppRunning(app) ? 'dot-running' : 'dot-stopped'"
+            />
+          </div>
+          <span class="app-quick-title">{{ app.title || app.appId }}</span>
+        </button>
+      </div>
+    </div>
+
     <!-- Workloads & Components Quick Grid -->
     <div class="section-heading">Workloads & Status</div>
     <div class="workloads-grid">
@@ -349,6 +425,113 @@ const healthStatusText = computed(() => {
   flex-direction: column;
   gap: 14px;
   padding: 12px 12px calc(40px + env(safe-area-inset-bottom, 0px)) 12px;
+}
+
+.apps-quick-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: var(--accent-primary, #38bdf8);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.apps-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.app-quick-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 4px;
+  background: var(--bg-surface, #1e293b);
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 12px;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.1s ease, background 0.1s ease;
+  min-width: 0;
+}
+
+.app-quick-tile:active {
+  transform: scale(0.96);
+  background: var(--bg-hover, #334155);
+}
+
+.app-quick-icon-wrap {
+  position: relative;
+  width: 38px;
+  height: 38px;
+}
+
+.app-quick-icon-box {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  background: var(--bg-surface-elevated, #243248);
+  border: 1px solid var(--border-color, #334155);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 4px;
+}
+
+.app-quick-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.app-quick-dot {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-surface, #1e293b);
+}
+
+.app-quick-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary, #f8fafc);
+  text-align: center;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+.dot-running {
+  background: #4ade80;
+  box-shadow: 0 0 6px #4ade80;
+}
+
+.dot-stopped {
+  background: #64748b;
 }
 
 .pwa-quick-banner {
