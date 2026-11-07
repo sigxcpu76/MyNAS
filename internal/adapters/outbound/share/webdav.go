@@ -229,7 +229,7 @@ func (a *WebdavAdapter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		subPath = parts[1]
 	}
 
-	// Root access on WebDAV port -> show available shares index
+	// Root access on WebDAV port -> show available shares index (only for authenticated users with access to at least one share)
 	if shareID == "" {
 		a.mu.RLock()
 		sharesList := make([]domain.WebdavShare, 0, len(a.shares))
@@ -238,7 +238,41 @@ func (a *WebdavAdapter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				sharesList = append(sharesList, s)
 			}
 		}
+		authenticator := a.authenticator
 		a.mu.RUnlock()
+
+		username, password, hasAuth := r.BasicAuth()
+		if !hasAuth {
+			w.Header().Set("WWW-Authenticate", `Basic realm="NAS WebDAV"`)
+			http.Error(w, "Unauthorized: authentication required", http.StatusUnauthorized)
+			return
+		}
+
+		var user *domain.User
+		if authenticator != nil {
+			var err error
+			user, err = authenticator(r.Context(), username, password)
+			if err != nil {
+				w.Header().Set("WWW-Authenticate", `Basic realm="NAS WebDAV"`)
+				http.Error(w, "Unauthorized: invalid username or password", http.StatusUnauthorized)
+				return
+			}
+		} else {
+			user = &domain.User{Username: username}
+		}
+
+		authorized := false
+		for _, s := range sharesList {
+			if a.isUserAuthorized(user, s) {
+				authorized = true
+				break
+			}
+		}
+		if !authorized {
+			http.Error(w, fmt.Sprintf("Forbidden: user %q not permitted to access any WebDAV share", username), http.StatusForbidden)
+			return
+		}
+
 		serveSharesIndex(w, r, sharesList)
 		return
 	}

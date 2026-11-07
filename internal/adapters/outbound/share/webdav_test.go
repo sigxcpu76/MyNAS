@@ -144,6 +144,47 @@ func TestWebdavAdapter_AuthenticationAndAuthorization(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for alice, got %d: %s", w.Code, w.Body.String())
 	}
+
+	// 5. Root shares index without auth -> 401 Unauthorized
+	req = httptest.NewRequest(http.MethodGet, "/dav/", nil)
+	w = httptest.NewRecorder()
+	adapter.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized on root index without credentials, got %d", w.Code)
+	}
+	if !strings.Contains(w.Header().Get("WWW-Authenticate"), "Basic") {
+		t.Fatalf("missing WWW-Authenticate header on root index: %v", w.Header())
+	}
+
+	// 6. Root shares index with invalid credentials -> 401 Unauthorized
+	req = httptest.NewRequest(http.MethodGet, "/dav/", nil)
+	req.SetBasicAuth("alice", "wrongpass")
+	w = httptest.NewRecorder()
+	adapter.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized on root index with bad credentials, got %d", w.Code)
+	}
+
+	// 7. Root shares index with valid user bob who has no access to any share -> 403 Forbidden
+	req = httptest.NewRequest(http.MethodGet, "/dav/", nil)
+	req.SetBasicAuth("bob", "secret456")
+	w = httptest.NewRecorder()
+	adapter.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden on root index for bob with no accessible shares, got %d", w.Code)
+	}
+
+	// 8. Root shares index with valid user alice who has access to 'finance' -> 200 OK
+	req = httptest.NewRequest(http.MethodGet, "/dav/", nil)
+	req.SetBasicAuth("alice", "secret123")
+	w = httptest.NewRecorder()
+	adapter.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK on root index for alice, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "Available WebDAV Shares") {
+		t.Fatalf("expected shares index HTML for alice, got: %s", w.Body.String())
+	}
 }
 
 func TestWebdavAdapter_ReadOnlyEnforcement(t *testing.T) {
@@ -278,12 +319,20 @@ func TestWebdavAdapter_AutoIndexAndFileServing(t *testing.T) {
 	}
 	_ = os.Remove(indexPath)
 
-	// 5. Root access on WebDAV port shows shares index
+	// 5. Root access on WebDAV port requires auth and shows shares index when authenticated
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	w = httptest.NewRecorder()
 	adapter.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized on unauthenticated root shares index, got %d", w.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req.SetBasicAuth("alice", "secret123")
+	w = httptest.NewRecorder()
+	adapter.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK on root shares index, got %d", w.Code)
+		t.Fatalf("expected 200 OK on authenticated root shares index, got %d", w.Code)
 	}
 	if !strings.Contains(w.Body.String(), "Available WebDAV Shares") || !strings.Contains(w.Body.String(), "media") {
 		t.Fatalf("expected root shares index to list 'media', got: %s", w.Body.String())
