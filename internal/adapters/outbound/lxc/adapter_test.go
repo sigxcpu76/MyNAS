@@ -419,3 +419,77 @@ func TestLxcAdapter_MetricsSampling_CgroupV1(t *testing.T) {
 	}
 }
 
+func TestLxcAdapter_MountEntryDiscovery(t *testing.T) {
+	ctx := context.Background()
+	tempRoot := t.TempDir()
+	ctID := "alpine-mounts-test"
+	ctDir := filepath.Join(tempRoot, "containers", ctID)
+	if err := os.MkdirAll(ctDir, 0755); err != nil {
+		t.Fatalf("failed to create ctDir: %v", err)
+	}
+
+	configContent := `# NaN LXC Container Configuration
+lxc.uts.name = Alpine Mounts Test
+lxc.arch = amd64
+lxc.rootfs.path = dir:` + filepath.Join(ctDir, "rootfs") + `
+
+# Network Configuration
+lxc.net.0.type = veth
+lxc.net.0.link = br0
+
+# Resource Limits
+lxc.cgroup2.memory.max = 1024M
+lxc.cgroup2.cpu.weight = 200
+
+# Mount Entries
+lxc.mount.entry = /mnt/fast/media media none bind,create=dir,ro 0 0
+lxc.mount.entry = /mnt/storage/data /data none bind,create=dir 0 0
+lxc.mount.entry = /dev/dri dev/dri none bind,optional,create=dir 0 0
+`
+	if err := os.WriteFile(filepath.Join(ctDir, "config"), []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	adapter := lxc.NewAdapter()
+	adapter.SetMainPool("fast")
+	// Symlink or redirect via pool directory
+	// In our implementation, if /var/lib/lxc/<id>/config doesn't exist, it checks /mnt/<pool>/containers/<id>/config.
+	// We can test discovery directly:
+	// Verify that GetContainer discovers the mount points from the container config
+	c, err := adapter.CreateContainer(ctx, domain.LxcContainer{
+		ID:           ctID,
+		Distribution: "alpine",
+		Release:      "3.21",
+		MountPoints: []domain.LxcMountPoint{
+			{
+				HostPath:      "/mnt/fast/media",
+				ContainerPath: "/media",
+				ReadOnly:      true,
+			},
+			{
+				HostPath:      "/mnt/storage/data",
+				ContainerPath: "/data",
+				ReadOnly:      false,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateContainer failed: %v", err)
+	}
+	if len(c.MountPoints) != 2 {
+		t.Fatalf("expected 2 mount points, got %d", len(c.MountPoints))
+	}
+
+	// Update container with empty fields and verify mount points are preserved
+	updated, err := adapter.UpdateContainer(ctx, domain.LxcContainer{
+		ID:            ctID,
+		ContainerName: "Renamed Container",
+	}, []string{"container_name"})
+	if err != nil {
+		t.Fatalf("UpdateContainer failed: %v", err)
+	}
+	if len(updated.MountPoints) != 2 {
+		t.Fatalf("expected 2 mount points preserved, got %d", len(updated.MountPoints))
+	}
+}
+

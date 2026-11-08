@@ -500,12 +500,70 @@ func (a *Adapter) fetchSingleContainerStatus(ctx context.Context, id string) *lx
 	return nil
 }
 
-// discoverContainerLocked parses a container configuration from /var/lib/lxc/<id>/config.
+func parseLxcMountEntry(v string) (hostPath, targetPath string, ro bool, ok bool) {
+	// Skip internal GPU device bind mounts
+	if strings.HasPrefix(v, "/dev/dri") || strings.HasPrefix(v, "/dev/nvidia") {
+		return "", "", false, false
+	}
+	var fields []string
+	var cur strings.Builder
+	inQuote := false
+	var quoteChar rune
+	for _, r := range v {
+		switch {
+		case (r == '"' || r == '\'') && !inQuote:
+			inQuote = true
+			quoteChar = r
+		case inQuote && r == quoteChar:
+			inQuote = false
+		case !inQuote && (r == ' ' || r == '\t'):
+			if cur.Len() > 0 {
+				fields = append(fields, cur.String())
+				cur.Reset()
+			}
+		default:
+			cur.WriteRune(r)
+		}
+	}
+	if cur.Len() > 0 {
+		fields = append(fields, cur.String())
+	}
+	if len(fields) < 2 {
+		return "", "", false, false
+	}
+	hostPath = fields[0]
+	targetPath = fields[1]
+	if !strings.HasPrefix(targetPath, "/") {
+		targetPath = "/" + targetPath
+	}
+	if len(fields) >= 4 {
+		for _, opt := range strings.Split(fields[3], ",") {
+			if strings.TrimSpace(opt) == "ro" {
+				ro = true
+				break
+			}
+		}
+	}
+	return hostPath, targetPath, ro, true
+}
+
+// discoverContainerLocked parses a container configuration from /var/lib/lxc/<id>/config or pool container config.
 func (a *Adapter) discoverContainerLocked(id string) *domain.LxcContainer {
 	configPath := fmt.Sprintf("/var/lib/lxc/%s/config", id)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil
+		mainPool := a.mainPool
+		if mainPool == "" {
+			mainPool = config.GetGlobal().System.MainPool
+		}
+		cleanMainPool := strings.TrimPrefix(strings.TrimSpace(mainPool), "zfsPools/")
+		if cleanMainPool != "" {
+			configPath = fmt.Sprintf("/mnt/%s/containers/%s/config", cleanMainPool, id)
+			data, err = os.ReadFile(configPath)
+		}
+		if err != nil {
+			return nil
+		}
 	}
 
 	c := &domain.LxcContainer{
@@ -563,6 +621,29 @@ func (a *Adapter) discoverContainerLocked(id string) *domain.LxcContainer {
 					c.CPUCores = 1
 				}
 			}
+		case "lxc.mount.entry":
+			if hp, tp, ro, ok := parseLxcMountEntry(v); ok {
+				duplicate := false
+				for _, existing := range c.MountPoints {
+					if existing.HostPath == hp && existing.ContainerPath == tp {
+						duplicate = true
+						break
+					}
+				}
+				if !duplicate {
+					c.MountPoints = append(c.MountPoints, domain.LxcMountPoint{
+						HostPath:      hp,
+						ContainerPath: tp,
+						ReadOnly:      ro,
+					})
+				}
+			}
+		case "lxc.cgroup2.devices.allow":
+			if strings.Contains(v, "226:*") || strings.Contains(v, "195:*") {
+				c.GpuEnabled = true
+			}
+		case "lxc.idmap":
+			c.Unprivileged = true
 		}
 	}
 
@@ -592,6 +673,21 @@ func (a *Adapter) discoverContainerLocked(id string) *domain.LxcContainer {
 // or attempts to discover it from disk (/var/lib/lxc/<id>/config) under the adapter lock.
 func (a *Adapter) getOrDiscoverContainerLocked(id string) (*domain.LxcContainer, bool) {
 	if c, ok := a.containers[id]; ok {
+		if disc := a.discoverContainerLocked(id); disc != nil {
+			c.MountPoints = disc.MountPoints
+			c.GpuEnabled = disc.GpuEnabled
+			if disc.Unprivileged {
+				c.Unprivileged = true
+			}
+			if disc.Description != "" && c.Description == "" {
+				c.Description = disc.Description
+			}
+			if disc.Distribution != "" && disc.Distribution != "linux" {
+				c.Distribution = disc.Distribution
+				c.Release = disc.Release
+			}
+			a.containers[id] = c
+		}
 		if c.RootfsPath != "" {
 			if detectedDistro, detectedRelease := detectRootfsOS(c.RootfsPath); detectedDistro != "" {
 				c.Distribution = detectedDistro
@@ -651,6 +747,18 @@ func (a *Adapter) ListContainers(ctx context.Context) ([]domain.LxcContainer, er
 
 	out := make([]domain.LxcContainer, 0, len(a.containers))
 	for id, c := range a.containers {
+		if disc := a.discoverContainerLocked(id); disc != nil {
+			c.MountPoints = disc.MountPoints
+			c.GpuEnabled = disc.GpuEnabled
+			if disc.Unprivileged {
+				c.Unprivileged = true
+			}
+			if disc.Distribution != "" && disc.Distribution != "linux" {
+				c.Distribution = disc.Distribution
+				c.Release = disc.Release
+			}
+			a.containers[id] = c
+		}
 		if c.RootfsPath != "" {
 			if detectedDistro, detectedRelease := detectRootfsOS(c.RootfsPath); detectedDistro != "" {
 				c.Distribution = detectedDistro
