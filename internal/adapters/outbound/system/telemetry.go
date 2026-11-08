@@ -38,6 +38,9 @@ type TelemetryCollector struct {
 	lastNet     map[string]netSample
 	cachedGpus  []string
 	gpuScanTime time.Time
+
+	powerIntervalSet bool
+	powerIntervalTry time.Time
 }
 
 func NewTelemetryCollector() *TelemetryCollector {
@@ -638,6 +641,9 @@ func (c *TelemetryCollector) collectSensors(ctx context.Context) domain.Hardware
 		}
 	}
 
+	// Cap ACPI power meter averaging window (firmware default is often 300s).
+	c.ensurePowerMeterInterval()
+
 	if sensorsBin != "" {
 		res.LmSensorsInstalled = true
 		c.parseLmSensorsOutput(ctx, sensorsBin, &res)
@@ -651,12 +657,12 @@ func (c *TelemetryCollector) collectSensors(ctx context.Context) domain.Hardware
 		for _, g := range gpus {
 			if g.TemperatureCelsius > 0 {
 				res.Temperatures = append(res.Temperatures, domain.HardwareSensorItem{
-					Chip:          fmt.Sprintf("gpu-%d", g.Index),
-					Adapter:       "PCI adapter",
-					Label:         fmt.Sprintf("%s (GPU %d)", g.Name, g.Index),
-					Category:      "GPU",
-					CurrentValue:  g.TemperatureCelsius,
-					Unit:          "°C",
+					Chip:         fmt.Sprintf("gpu-%d", g.Index),
+					Adapter:      "PCI adapter",
+					Label:        fmt.Sprintf("%s (GPU %d)", g.Name, g.Index),
+					Category:     "GPU",
+					CurrentValue: g.TemperatureCelsius,
+					Unit:         "°C",
 				})
 			}
 		}
