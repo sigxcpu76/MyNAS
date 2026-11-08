@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1538,6 +1539,68 @@ func (a *Adapter) configureContainerDHCP(rootfsPath string) {
 	}
 }
 
+func getNvidiaGpuPassthroughEntries() []string {
+	var lines []string
+	lines = append(lines, "# GPU Passthrough (DRM & NVIDIA)")
+	lines = append(lines, "lxc.cgroup2.devices.allow = c 226:* rwm")
+
+	majors := make(map[string]bool)
+	majors["195"] = true // nvidia core, modeset, ctl
+	majors["234"] = true // nvidia-caps
+	majors["235"] = true // nvidia-caps-imex-channels
+
+	if data, err := os.ReadFile("/proc/devices"); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 && strings.Contains(strings.ToLower(fields[1]), "nvidia") {
+				majors[fields[0]] = true
+			}
+		}
+	}
+
+	var majorList []string
+	for m := range majors {
+		majorList = append(majorList, m)
+	}
+	sort.Strings(majorList)
+	for _, m := range majorList {
+		lines = append(lines, fmt.Sprintf("lxc.cgroup2.devices.allow = c %s:* rwm", m))
+	}
+
+	if _, err := os.Stat("/dev/dri"); err == nil {
+		lines = append(lines, "lxc.mount.entry = /dev/dri dev/dri none bind,optional,create=dir 0 0")
+	}
+
+	nvidiaDevs := []string{
+		"/dev/nvidiactl",
+		"/dev/nvidia-modeset",
+		"/dev/nvidia-uvm",
+		"/dev/nvidia-uvm-tools",
+	}
+
+	if matches, err := filepath.Glob("/dev/nvidia[0-9]*"); err == nil && len(matches) > 0 {
+		nvidiaDevs = append(nvidiaDevs, matches...)
+	} else {
+		nvidiaDevs = append(nvidiaDevs, "/dev/nvidia0")
+	}
+
+	seenDevs := make(map[string]bool)
+	for _, dev := range nvidiaDevs {
+		if seenDevs[dev] {
+			continue
+		}
+		seenDevs[dev] = true
+		rel := strings.TrimPrefix(dev, "/")
+		lines = append(lines, fmt.Sprintf("lxc.mount.entry = %s %s none bind,optional,create=file 0 0", dev, rel))
+	}
+
+	if fi, err := os.Stat("/dev/nvidia-caps"); err == nil && fi.IsDir() {
+		lines = append(lines, "lxc.mount.entry = /dev/nvidia-caps dev/nvidia-caps none bind,optional,create=dir 0 0")
+	}
+
+	return lines
+}
+
 func (a *Adapter) writeLxcConfig(c domain.LxcContainer) {
 	bridge := c.NetworkBridge
 	if bridge == "" {
@@ -1632,13 +1695,10 @@ func (a *Adapter) writeLxcConfig(c domain.LxcContainer) {
 
 	// GPU passthrough
 	if c.GpuEnabled {
-		sb.WriteString("# GPU Passthrough\n")
-		sb.WriteString("lxc.cgroup2.devices.allow = c 226:* rwm\n")
-		sb.WriteString("lxc.cgroup2.devices.allow = c 195:* rwm\n")
-		sb.WriteString("lxc.mount.entry = /dev/dri dev/dri none bind,optional,create=dir 0 0\n")
-		sb.WriteString("lxc.mount.entry = /dev/nvidia0 dev/nvidia0 none bind,optional,create=file 0 0\n")
-		sb.WriteString("lxc.mount.entry = /dev/nvidiactl dev/nvidiactl none bind,optional,create=file 0 0\n")
-		sb.WriteString("lxc.mount.entry = /dev/nvidia-uvm dev/nvidia-uvm none bind,optional,create=file 0 0\n\n")
+		for _, entry := range getNvidiaGpuPassthroughEntries() {
+			sb.WriteString(entry + "\n")
+		}
+		sb.WriteString("\n")
 	}
 
 	configData := []byte(sb.String())
