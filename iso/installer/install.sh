@@ -349,6 +349,7 @@ run_step() {
     zfs create -o canmount=off -o mountpoint=none rpool/ROOT
     zfs create -o mountpoint=/ rpool/ROOT/debian
     zpool set bootfs=rpool/ROOT/debian rpool
+    zfs set org.debian:periodic-scrub=disable rpool 2>/dev/null || true
 
     run_step 50 "Extracting appliance root filesystem into /target..."
     # Copy from live rootfs to target
@@ -486,6 +487,11 @@ EOF
 
     if [ -f "$TARGET/etc/default/zfs" ]; then
         sed -i 's/^ZPOOL_IMPORT_OPTS=.*/ZPOOL_IMPORT_OPTS=""/' "$TARGET/etc/default/zfs" 2>/dev/null || true
+    fi
+
+    # Disable host ZFS periodic auto-scrubbing cron schedule (managed via nasctl)
+    if [ -f "$TARGET/etc/cron.d/zfsutils-linux" ]; then
+        sed -i 's|^\([^#].*/usr/lib/zfs-linux/scrub.*\)|# Disabled by nasctl: \1|' "$TARGET/etc/cron.d/zfsutils-linux" 2>/dev/null || true
     fi
 
     # Blacklist nouveau / nvidiafb to prevent GPU kernel conflicts and shutdown hangs

@@ -148,6 +148,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	// 1. Outbound Prerequisite Checker & ZFS Engine
 	prereqAdapter := prereq.NewSystemChecker()
 	zfsAdapter := zfs.NewAdapter()
+	zfsAdapter.SetLogger(logger.With("subsystem", "zfs"))
 
 	// 1b. Outbound System Adapter for Main Pool & Dataset Configuration
 	systemAdapter := system.NewAdapter(zfsAdapter, prereqAdapter)

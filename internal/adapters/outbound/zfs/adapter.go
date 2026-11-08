@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"sort"
@@ -22,7 +23,8 @@ type snapshotCacheEntry struct {
 }
 
 type Adapter struct {
-	mu sync.RWMutex
+	mu     sync.RWMutex
+	logger *slog.Logger
 
 	// snapshot statistics cache (whole-pool snapshot enumeration is slow on large pools)
 	snapMu     sync.Mutex
@@ -419,6 +421,7 @@ func (a *Adapter) CreatePool(ctx context.Context, pool domain.ZfsPool) (*domain.
 	}
 
 	_ = exec.CommandContext(ctx, "zpool", "set", "cachefile=/etc/zfs/zpool.cache", pool.ID).Run()
+	a.disablePoolAutoScrub(ctx, pool.ID)
 
 	return a.GetPool(ctx, pool.ID)
 }
@@ -487,6 +490,7 @@ func (a *Adapter) ImportPool(ctx context.Context, poolName string, force bool, a
 
 	// Guarantee cachefile is set and persistent for systemd zfs-import-cache across host reboots
 	_ = exec.CommandContext(ctx, "zpool", "set", "cachefile=/etc/zfs/zpool.cache", cleanID).Run()
+	a.disablePoolAutoScrub(ctx, cleanID)
 	_ = exec.CommandContext(ctx, "zfs", "mount", "-a").Run()
 
 	return a.GetPool(ctx, cleanID)
@@ -499,6 +503,7 @@ func (a *Adapter) SyncCacheFile(ctx context.Context) error {
 		return nil
 	}
 	_ = os.MkdirAll("/etc/zfs", 0755)
+	a.disableHostAutoScrubGlobals(ctx)
 	pools, err := a.listHostPools(ctx)
 	if err != nil {
 		return err
@@ -509,6 +514,7 @@ func (a *Adapter) SyncCacheFile(ctx context.Context) error {
 			continue
 		}
 		_ = exec.CommandContext(ctx, "zpool", "set", "cachefile=/etc/zfs/zpool.cache", cleanID).Run()
+		a.disablePoolAutoScrub(ctx, cleanID)
 	}
 	return nil
 }
