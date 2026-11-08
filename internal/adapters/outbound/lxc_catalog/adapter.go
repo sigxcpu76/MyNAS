@@ -177,27 +177,165 @@ func (a *Adapter) SyncCatalog(ctx context.Context, force bool) (int, time.Time, 
 	return len(a.items), a.lastSync, nil
 }
 
+type pbInstallMethod struct {
+	Type      string   `json:"type"`
+	Script    string   `json:"script"`
+	ExecuteIn []string `json:"execute_in"`
+	Resources struct {
+		CPU     any    `json:"cpu"`
+		RAM     any    `json:"ram"`
+		HDD     any    `json:"hdd"`
+		OS      string `json:"os"`
+		Version any    `json:"version"`
+	} `json:"resources"`
+}
+
 type pbScriptItem struct {
-	ID             string   `json:"id"`
-	Name           string   `json:"name"`
-	Slug           string   `json:"slug"`
-	Description    string   `json:"description"`
-	Logo           string   `json:"logo"`
-	Categories     []string `json:"categories"`
-	Port           int      `json:"port"`
-	Privileged     bool     `json:"privileged"`
-	Website        string   `json:"website"`
-	Documentation  string   `json:"documentation"`
-	InstallMethods []struct {
-		Type      string `json:"type"`
-		Resources struct {
-			CPU     any    `json:"cpu"`
-			RAM     any    `json:"ram"`
-			HDD     any    `json:"hdd"`
-			OS      string `json:"os"`
-			Version any    `json:"version"`
-		} `json:"resources"`
-	} `json:"install_methods"`
+	ID             string            `json:"id"`
+	Name           string            `json:"name"`
+	Slug           string            `json:"slug"`
+	Description    string            `json:"description"`
+	Logo           string            `json:"logo"`
+	Categories     []string          `json:"categories"`
+	Port           int               `json:"port"`
+	Privileged     bool              `json:"privileged"`
+	Website        string            `json:"website"`
+	Documentation  string            `json:"documentation"`
+	InstallMethods []pbInstallMethod `json:"install_methods"`
+}
+
+func normalizeCatalogDistro(distro string) string {
+	d := strings.ToLower(strings.TrimSpace(distro))
+	switch d {
+	case "arch", "archlinux", "arch linux", "arch-linux":
+		return "archlinux"
+	case "alpine", "alpinelinux", "alpine linux", "alpine-linux":
+		return "alpine"
+	case "alma", "almalinux", "alma linux", "alma-linux":
+		return "almalinux"
+	case "rocky", "rockylinux", "rocky linux", "rocky-linux":
+		return "rockylinux"
+	case "centos", "centos-stream", "centos stream":
+		return "centos"
+	case "void", "voidlinux", "void linux", "void-linux":
+		return "voidlinux"
+	case "kali", "kalilinux", "kali linux", "kali-linux":
+		return "kali"
+	case "oracle", "oraclelinux", "oracle linux", "oracle-linux":
+		return "oracle"
+	case "amazon", "amzn", "amazonlinux", "amazon linux", "amazon-linux":
+		return "amazonlinux"
+	case "opensuse", "opensuse-leap", "opensuse-tumbleweed", "suse":
+		return "opensuse"
+	case "openeuler", "open-euler", "open euler":
+		return "openeuler"
+	case "linuxmint", "mint":
+		return "mint"
+	default:
+		return strings.ReplaceAll(d, " ", "")
+	}
+}
+
+func normalizeCatalogRelease(distro, release string) string {
+	d := normalizeCatalogDistro(distro)
+	r := strings.ToLower(strings.TrimSpace(release))
+	switch d {
+	case "archlinux":
+		return "current"
+	case "debian":
+		switch r {
+		case "", "12", "stable", "default":
+			return "bookworm"
+		case "13", "testing":
+			return "trixie"
+		case "11":
+			return "bullseye"
+		default:
+			return r
+		}
+	case "ubuntu":
+		switch r {
+		case "", "24.04", "lts", "latest", "default":
+			return "noble"
+		case "22.04":
+			return "jammy"
+		case "20.04":
+			return "focal"
+		case "24.10":
+			return "oracular"
+		case "25.04":
+			return "plucky"
+		case "26.04":
+			return "resolute"
+		default:
+			return r
+		}
+	case "alpine":
+		if r == "" || r == "latest" || r == "stable" || r == "default" {
+			return "3.21"
+		}
+		return r
+	case "almalinux", "rockylinux":
+		if r == "" || r == "latest" || r == "default" {
+			return "10"
+		}
+		if idx := strings.IndexByte(r, '.'); idx > 0 {
+			return r[:idx]
+		}
+		return r
+	case "fedora":
+		if r == "" || r == "latest" || r == "default" {
+			return "41"
+		}
+		return r
+	case "centos":
+		switch r {
+		case "", "9", "stream", "9-stream", "default":
+			return "9-Stream"
+		case "10", "10-stream":
+			return "10-Stream"
+		default:
+			return release
+		}
+	default:
+		if r == "" || r == "base" || r == "rolling" {
+			return "current"
+		}
+		return r
+	}
+}
+
+func isUnsupportedCommunityScript(slug string, methods []pbInstallMethod) bool {
+	s := strings.ToLower(strings.TrimSpace(slug))
+	if s == "" || strings.HasSuffix(s, "-vm") || strings.HasPrefix(s, "vm-") {
+		return true
+	}
+	if len(methods) > 0 {
+		hasContainerMethod := false
+		for _, m := range methods {
+			sc := strings.ToLower(strings.TrimSpace(m.Script))
+			if sc == "" || strings.HasPrefix(sc, "ct/") || strings.HasPrefix(sc, "tools/addon/") {
+				hasContainerMethod = true
+				break
+			}
+		}
+		if !hasContainerMethod {
+			return true
+		}
+	}
+	return false
+}
+
+func sanitizeCatalogItem(item domain.LxcCatalogItem) (domain.LxcCatalogItem, bool) {
+	lowerID := strings.ToLower(strings.TrimSpace(item.ID))
+	if strings.HasSuffix(lowerID, "-vm") || strings.HasSuffix(strings.ToLower(item.InstallScriptURL), "-vm.sh") {
+		return item, false
+	}
+	if item.BaseDistribution != "" {
+		item.BaseDistribution = normalizeCatalogDistro(item.BaseDistribution)
+		item.BaseRelease = normalizeCatalogRelease(item.BaseDistribution, item.BaseRelease)
+	}
+	return item, true
 }
 
 type pbScriptResponse struct {
@@ -255,7 +393,8 @@ func (a *Adapter) syncCommunityScripts(ctx context.Context) {
 		resp.Body.Close()
 
 		for _, it := range pResp.Items {
-			if it.Slug == "" {
+			if isUnsupportedCommunityScript(it.Slug, it.InstallMethods) {
+				delete(a.items, "community-"+it.Slug)
 				continue
 			}
 			category := "General"
@@ -285,10 +424,12 @@ func (a *Adapter) syncCommunityScripts(ctx context.Context) {
 					ram = int64(v)
 				}
 				if res.OS != "" {
-					distro = strings.ToLower(res.OS)
+					distro = normalizeCatalogDistro(res.OS)
 				}
 				if res.Version != nil {
-					release = strings.ToLower(fmt.Sprintf("%v", res.Version))
+					release = normalizeCatalogRelease(distro, fmt.Sprintf("%v", res.Version))
+				} else {
+					release = normalizeCatalogRelease(distro, "")
 				}
 			}
 
@@ -574,7 +715,11 @@ func (a *Adapter) loadCacheFromDisk() {
 	defer a.mu.Unlock()
 
 	for _, item := range cachedItems {
-		a.items[item.ID] = item
+		if sanitized, ok := sanitizeCatalogItem(item); ok {
+			a.items[sanitized.ID] = sanitized
+		} else {
+			delete(a.items, item.ID)
+		}
 	}
 
 	metaFile := filepath.Join(a.cacheDir, "lxc_catalog_meta.json")
@@ -632,7 +777,9 @@ func (a *Adapter) seedDefaultItems() {
 		var seeds []domain.LxcCatalogItem
 		if err := json.Unmarshal(embeddedCatalogSeeds, &seeds); err == nil && len(seeds) > 0 {
 			for _, item := range seeds {
-				a.items[item.ID] = item
+				if sanitized, ok := sanitizeCatalogItem(item); ok {
+					a.items[sanitized.ID] = sanitized
+				}
 			}
 			return
 		}

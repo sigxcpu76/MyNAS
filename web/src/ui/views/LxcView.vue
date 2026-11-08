@@ -110,6 +110,66 @@ const mainPool = computed(() => {
 });
 const lxcTemplatesDir = computed(() => `/mnt/${mainPool.value}/lxc-templates`);
 
+function normalizeDistroName(raw?: string): string {
+  const d = (raw || '').toLowerCase().trim();
+  if (d === 'arch' || d === 'arch linux' || d === 'arch-linux' || d === 'archlinux') return 'archlinux';
+  if (d === 'alpine' || d === 'alpine linux' || d === 'alpine-linux' || d === 'alpinelinux') return 'alpine';
+  if (d === 'alma' || d === 'alma linux' || d === 'alma-linux' || d === 'almalinux') return 'almalinux';
+  if (d === 'rocky' || d === 'rocky linux' || d === 'rocky-linux' || d === 'rockylinux') return 'rockylinux';
+  if (d === 'centos' || d === 'centos stream' || d === 'centos-stream') return 'centos';
+  if (d === 'void' || d === 'void linux' || d === 'void-linux' || d === 'voidlinux') return 'voidlinux';
+  if (d === 'kali' || d === 'kali linux' || d === 'kali-linux' || d === 'kalilinux') return 'kali';
+  if (d === 'oracle' || d === 'oracle linux' || d === 'oracle-linux' || d === 'oraclelinux') return 'oracle';
+  if (d === 'amazon' || d === 'amazon linux' || d === 'amazon-linux' || d === 'amazonlinux') return 'amazonlinux';
+  if (d === 'opensuse' || d === 'suse') return 'opensuse';
+  return d.replace(/\s+/g, '');
+}
+
+function defaultReleaseForDistro(distro: string): string {
+  switch (normalizeDistroName(distro)) {
+    case 'debian': return 'bookworm';
+    case 'ubuntu': return 'noble';
+    case 'alpine': return '3.21';
+    case 'archlinux': return 'current';
+    case 'almalinux':
+    case 'rockylinux': return '10';
+    case 'fedora': return '41';
+    case 'centos': return '9-Stream';
+    case 'opensuse': return '15.6';
+    case 'devuan': return 'daedalus';
+    case 'openeuler': return '24.03';
+    case 'oracle': return '9';
+    case 'amazonlinux': return '2023';
+    default: return 'current';
+  }
+}
+
+function inferDistroFromTemplatePath(pathOrName: string): { distro: string; release: string; label: string } | null {
+  const base = (pathOrName.split('/').pop() || '').toLowerCase();
+  const candidates: Array<{ match: string; distro: string; label: string }> = [
+    { match: 'arch', distro: 'archlinux', label: 'Arch Linux' },
+    { match: 'almalinux', distro: 'almalinux', label: 'AlmaLinux' },
+    { match: 'alma', distro: 'almalinux', label: 'AlmaLinux' },
+    { match: 'rocky', distro: 'rockylinux', label: 'Rocky Linux' },
+    { match: 'alpine', distro: 'alpine', label: 'Alpine' },
+    { match: 'ubuntu', distro: 'ubuntu', label: 'Ubuntu' },
+    { match: 'fedora', distro: 'fedora', label: 'Fedora' },
+    { match: 'centos', distro: 'centos', label: 'CentOS' },
+    { match: 'opensuse', distro: 'opensuse', label: 'openSUSE' },
+    { match: 'gentoo', distro: 'gentoo', label: 'Gentoo' },
+    { match: 'devuan', distro: 'devuan', label: 'Devuan' },
+    { match: 'kali', distro: 'kali', label: 'Kali' },
+    { match: 'void', distro: 'voidlinux', label: 'Void Linux' },
+    { match: 'debian', distro: 'debian', label: 'Debian' },
+  ];
+  for (const c of candidates) {
+    if (base.includes(c.match)) {
+      return { distro: c.distro, release: defaultReleaseForDistro(c.distro), label: c.label };
+    }
+  }
+  return null;
+}
+
 /**
  * Computes a unique, collision-free, ZFS-safe template archive filename for catalog items.
  * If upstream has generic names like "rootfs.tar.xz", names it after the template (e.g. debian-bookworm-amd64-rootfs.tar.xz).
@@ -133,6 +193,15 @@ function computeSafeTemplateFilename(item: LxcCatalogItem, overrideUrl?: string)
   const isGeneric = genericNames.has(nameWithoutExt.toLowerCase().trim());
 
   if (isGeneric) {
+    if (item.source === 'community-scripts' && !item.downloadUrl) {
+      const lcMatch = cleanUrl.match(/linuxcontainers\.org\/images\/([^/]+)\/([^/]+)\/([^/]+)/i);
+      if (lcMatch) {
+        const d = normalizeDistroName(lcMatch[1]);
+        const r = toZfsSafeSlug(lcMatch[2]);
+        const a = toZfsSafeSlug(lcMatch[3] || item.architecture || 'amd64');
+        return `${d}-${r}-${a}-rootfs${ext}`;
+      }
+    }
     const baseSlug = toZfsSafeSlug(item.title || item.id || 'template');
     const arch = item.architecture ? toZfsSafeSlug(item.architecture) : '';
     const fullSlug = arch && !baseSlug.includes(arch) ? `${baseSlug}-${arch}` : baseSlug;
@@ -350,8 +419,26 @@ function onContainerNameInput() {
 }
 
 function onDistributionChange() {
-  if (!form.containerName) {
-    form.containerId = toZfsSafeSlug(`${form.distribution}-${form.release}`);
+  form.release = defaultReleaseForDistro(form.distribution);
+  if (!form.containerName || / Container$/i.test(form.containerName)) {
+    const title = form.distribution.charAt(0).toUpperCase() + form.distribution.slice(1);
+    form.containerName = `${title} Container`;
+    form.containerId = toZfsSafeSlug(form.containerName);
+  }
+}
+
+function onTemplateArchiveSelect(path: string) {
+  form.templateArchive = path;
+  if (!path) return;
+  form.templateDownloadUrl = '';
+  const inferred = inferDistroFromTemplatePath(path);
+  if (inferred) {
+    form.distribution = inferred.distro;
+    form.release = inferred.release;
+    if (!deployingCatalogItem.value && (!form.containerName || / Container$/i.test(form.containerName))) {
+      form.containerName = `${inferred.label} Container`;
+      form.containerId = toZfsSafeSlug(form.containerName);
+    }
   }
 }
 
@@ -396,8 +483,11 @@ function openDeployModal(item: LxcCatalogItem) {
   deployingCatalogItem.value = item;
   form.containerName = item.title;
   form.containerId = toZfsSafeSlug(item.title) || toZfsSafeSlug(item.id.replace(/^(community|turnkey|lxc)-/, ''));
-  form.distribution = item.baseDistribution || 'debian';
-  form.release = item.baseRelease || 'bookworm';
+  const normDistro = normalizeDistroName(item.baseDistribution || 'debian') || 'debian';
+  form.distribution = normDistro;
+  form.release = (item.baseRelease && !(normDistro !== 'debian' && item.baseRelease === 'bookworm'))
+    ? item.baseRelease
+    : defaultReleaseForDistro(normDistro);
   form.architecture = item.architecture || 'amd64';
   form.cpuCores = item.defaultCpuCores || 2;
   form.memoryLimitMib = item.defaultMemoryLimitMib || 1024;
@@ -413,18 +503,18 @@ function openDeployModal(item: LxcCatalogItem) {
   // resolve the base OS template image from the linuxcontainers catalog items
   let effectiveDownloadUrl = item.downloadUrl || '';
   if (!effectiveDownloadUrl) {
-    const distroName = (item.baseDistribution || 'debian').toLowerCase();
-    const releaseName = (item.baseRelease || '').toLowerCase();
+    const distroName = normDistro;
+    const releaseName = (form.release || '').toLowerCase();
     const baseMatch = catalogItems.value.find((c) => {
       if (c.source !== 'linuxcontainers') return false;
-      const cDistro = (c.baseDistribution || '').toLowerCase();
+      const cDistro = normalizeDistroName(c.baseDistribution || '');
       if (cDistro !== distroName) return false;
       const cRel = (c.baseRelease || '').toLowerCase();
-      if (releaseName && (cRel === releaseName || (releaseName === '12' && cRel === 'bookworm') || (releaseName === '13' && cRel === 'trixie'))) {
+      if (releaseName && (cRel === releaseName || (releaseName === '12' && cRel === 'bookworm') || (releaseName === '13' && cRel === 'trixie') || (releaseName === 'base' && cRel === 'current'))) {
         return true;
       }
       return false;
-    }) || catalogItems.value.find((c) => c.source === 'linuxcontainers' && (c.baseDistribution || '').toLowerCase() === distroName);
+    }) || catalogItems.value.find((c) => c.source === 'linuxcontainers' && normalizeDistroName(c.baseDistribution || '') === distroName);
 
     if (baseMatch && baseMatch.downloadUrl) {
       effectiveDownloadUrl = baseMatch.downloadUrl;
@@ -435,12 +525,17 @@ function openDeployModal(item: LxcCatalogItem) {
 
   // Look up matching template if already downloaded
   if (nasState.lxcTemplates.length > 0) {
-    const matched = nasState.lxcTemplates.find(
-      (t) =>
-        t.name.toLowerCase().includes(item.id.toLowerCase()) ||
-        (item.baseDistribution && t.name.toLowerCase().includes(item.baseDistribution.toLowerCase())) ||
-        (item.title && t.name.toLowerCase().includes(toZfsSafeSlug(item.title).toLowerCase()))
-    );
+    const expectedFname = effectiveDownloadUrl ? computeSafeTemplateFilename(item, effectiveDownloadUrl).toLowerCase() : '';
+    const matched = nasState.lxcTemplates.find((t) => {
+      const tName = t.name.toLowerCase();
+      if (expectedFname && tName === expectedFname) return true;
+      if (tName.includes(item.id.toLowerCase())) return true;
+      if (item.source !== 'turnkey') {
+        const inferred = inferDistroFromTemplatePath(t.name);
+        if (inferred && inferred.distro === normDistro && !tName.includes('turnkey')) return true;
+      }
+      return false;
+    });
     if (matched) {
       form.templateArchive = matched.path;
     }
@@ -679,16 +774,7 @@ function useTemplateForContainer(tmpl: StorageImage) {
   if (!showCreate.value) {
     toggleCreate();
   }
-  form.templateArchive = tmpl.path;
-  const baseName = tmpl.name.toLowerCase();
-  for (const distro of ['alpine', 'debian', 'ubuntu', 'fedora', 'rocky', 'alma', 'arch', 'centos']) {
-    if (baseName.includes(distro)) {
-      form.distribution = distro === 'rocky' ? 'rockylinux' : distro === 'alma' ? 'almalinux' : distro;
-      form.containerName = `${distro.charAt(0).toUpperCase() + distro.slice(1)} Container`;
-      form.containerId = toZfsSafeSlug(form.containerName);
-      break;
-    }
-  }
+  onTemplateArchiveSelect(tmpl.path);
   showCreate.value = true;
   switchTab('containers');
   notify('info', `Selected template: ${tmpl.name}`);
@@ -808,6 +894,18 @@ function copyTemplatePath(path: string) {
               <option value="ubuntu">ubuntu</option>
               <option value="alpine">alpine</option>
               <option value="archlinux">archlinux</option>
+              <option value="almalinux">almalinux</option>
+              <option value="rockylinux">rockylinux</option>
+              <option value="fedora">fedora</option>
+              <option value="centos">centos</option>
+              <option value="opensuse">opensuse</option>
+              <option value="devuan">devuan</option>
+              <option value="gentoo">gentoo</option>
+              <option value="kali">kali</option>
+              <option value="voidlinux">voidlinux</option>
+              <option value="openeuler">openeuler</option>
+              <option value="oracle">oracle</option>
+              <option value="amazonlinux">amazonlinux</option>
             </select>
           </div>
           <div class="form-group">
@@ -847,7 +945,7 @@ function copyTemplatePath(path: string) {
               <select
                 class="select mono"
                 :value="form.templateArchive"
-                @change="(e) => form.templateArchive = (e.target as HTMLSelectElement).value"
+                @change="(e) => onTemplateArchiveSelect((e.target as HTMLSelectElement).value)"
               >
                 <option value="">-- Select a local template or leave empty for base distro --</option>
                 <option v-for="tmpl in nasState.lxcTemplates" :key="tmpl.path" :value="tmpl.path">
@@ -861,6 +959,7 @@ function copyTemplatePath(path: string) {
               :root-hint="lxcTemplatesDir"
               :select-files="true"
               modal-title="Select LXC Template Archive"
+              @update:model-value="onTemplateArchiveSelect"
             />
           </div>
         </div>
@@ -889,14 +988,16 @@ function copyTemplatePath(path: string) {
             <div
               v-for="(mp, idx) in form.mountPoints"
               :key="idx"
-              style="display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 8px; align-items: center"
+              style="display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto auto; gap: 8px; align-items: center"
             >
-              <input
+              <PathSelector
                 v-model="mp.hostPath"
-                class="input mono"
-                style="font-size: 12px"
-                placeholder="Host Path, e.g. /mnt/tank/media"
-                required
+                :placeholder="`/mnt/${mainPool}/media`"
+                :root-hint="`/mnt/${mainPool}`"
+                :select-files="true"
+                button-label="Browse"
+                modal-title="Select Host Directory or File for Bind Mount"
+                :required="true"
               />
               <input
                 v-model="mp.containerPath"

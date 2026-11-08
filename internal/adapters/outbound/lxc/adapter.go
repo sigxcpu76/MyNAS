@@ -568,13 +568,10 @@ func (a *Adapter) discoverContainerLocked(id string) *domain.LxcContainer {
 
 	// Try reading OS release from rootfs if present
 	if c.RootfsPath != "" {
-		if osReleaseBytes, err := os.ReadFile(filepath.Join(c.RootfsPath, "etc/os-release")); err == nil {
-			for _, osLine := range strings.Split(string(osReleaseBytes), "\n") {
-				if strings.HasPrefix(osLine, "ID=") {
-					c.Distribution = strings.Trim(strings.TrimPrefix(osLine, "ID="), `"`)
-				} else if strings.HasPrefix(osLine, "VERSION_ID=") {
-					c.Release = strings.Trim(strings.TrimPrefix(osLine, "VERSION_ID="), `"`)
-				}
+		if detectedDistro, detectedRelease := detectRootfsOS(c.RootfsPath); detectedDistro != "" {
+			c.Distribution = detectedDistro
+			if detectedRelease != "" {
+				c.Release = detectedRelease
 			}
 		}
 	}
@@ -595,6 +592,15 @@ func (a *Adapter) discoverContainerLocked(id string) *domain.LxcContainer {
 // or attempts to discover it from disk (/var/lib/lxc/<id>/config) under the adapter lock.
 func (a *Adapter) getOrDiscoverContainerLocked(id string) (*domain.LxcContainer, bool) {
 	if c, ok := a.containers[id]; ok {
+		if c.RootfsPath != "" {
+			if detectedDistro, detectedRelease := detectRootfsOS(c.RootfsPath); detectedDistro != "" {
+				c.Distribution = detectedDistro
+				if detectedRelease != "" {
+					c.Release = detectedRelease
+				}
+				a.containers[id] = c
+			}
+		}
 		return &c, true
 	}
 	if disc := a.discoverContainerLocked(id); disc != nil {
@@ -644,7 +650,16 @@ func (a *Adapter) ListContainers(ctx context.Context) ([]domain.LxcContainer, er
 	}
 
 	out := make([]domain.LxcContainer, 0, len(a.containers))
-	for _, c := range a.containers {
+	for id, c := range a.containers {
+		if c.RootfsPath != "" {
+			if detectedDistro, detectedRelease := detectRootfsOS(c.RootfsPath); detectedDistro != "" {
+				c.Distribution = detectedDistro
+				if detectedRelease != "" {
+					c.Release = detectedRelease
+				}
+				a.containers[id] = c
+			}
+		}
 		if c.State == "RUNNING" {
 			c.CPUPercent, c.MemoryUsedMiB, c.NetRxRate, c.NetTxRate, c.NetRxBytes, c.NetTxBytes = a.sampleContainerMetrics(c.ID)
 		} else {
@@ -741,12 +756,329 @@ func lxcHasBash(rootfsPath string) bool {
 	return false
 }
 
+func normalizeLxcDistro(distro string) string {
+	d := strings.ToLower(strings.TrimSpace(distro))
+	switch d {
+	case "arch", "archlinux", "arch linux", "arch-linux":
+		return "archlinux"
+	case "alpine", "alpinelinux", "alpine linux", "alpine-linux":
+		return "alpine"
+	case "alma", "almalinux", "alma linux", "alma-linux":
+		return "almalinux"
+	case "rocky", "rockylinux", "rocky linux", "rocky-linux":
+		return "rockylinux"
+	case "centos", "centos-stream", "centos stream":
+		return "centos"
+	case "void", "voidlinux", "void linux", "void-linux":
+		return "voidlinux"
+	case "kali", "kalilinux", "kali linux", "kali-linux":
+		return "kali"
+	case "oracle", "oraclelinux", "oracle linux", "oracle-linux", "ol":
+		return "oracle"
+	case "amazon", "amzn", "amazonlinux", "amazon linux", "amazon-linux":
+		return "amazonlinux"
+	case "opensuse", "opensuse-leap", "opensuse-tumbleweed", "suse":
+		return "opensuse"
+	case "openeuler", "open-euler", "open euler":
+		return "openeuler"
+	case "linuxmint", "mint":
+		return "mint"
+	default:
+		return strings.ReplaceAll(d, " ", "")
+	}
+}
+
+func isDebianReleaseName(rel string) bool {
+	switch strings.ToLower(strings.TrimSpace(rel)) {
+	case "bookworm", "trixie", "bullseye", "buster", "sid", "forky":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeLxcRelease(distro, release string) string {
+	d := normalizeLxcDistro(distro)
+	r := strings.ToLower(strings.TrimSpace(release))
+	if d != "" && d != "debian" && isDebianReleaseName(r) {
+		r = ""
+	}
+	switch d {
+	case "debian":
+		switch r {
+		case "", "12", "stable", "default":
+			return "bookworm"
+		case "13", "testing":
+			return "trixie"
+		case "11":
+			return "bullseye"
+		default:
+			return r
+		}
+	case "ubuntu":
+		switch r {
+		case "", "24.04", "lts", "latest", "default":
+			return "noble"
+		case "22.04":
+			return "jammy"
+		case "20.04":
+			return "focal"
+		case "24.10":
+			return "oracular"
+		case "25.04":
+			return "plucky"
+		case "26.04":
+			return "resolute"
+		default:
+			return r
+		}
+	case "alpine":
+		switch r {
+		case "", "latest", "stable", "default":
+			return "3.21"
+		default:
+			return r
+		}
+	case "archlinux":
+		return "current"
+	case "almalinux", "rockylinux":
+		if r == "" || r == "latest" || r == "default" {
+			return "10"
+		}
+		if idx := strings.IndexByte(r, '.'); idx > 0 {
+			return r[:idx]
+		}
+		return r
+	case "fedora":
+		if r == "" || r == "latest" || r == "default" {
+			return "41"
+		}
+		return r
+	case "centos":
+		switch r {
+		case "", "9", "stream", "9-stream", "default":
+			return "9-Stream"
+		case "10", "10-stream":
+			return "10-Stream"
+		default:
+			return release
+		}
+	case "opensuse":
+		switch r {
+		case "", "leap", "default":
+			return "15.6"
+		case "tumbleweed":
+			return "tumbleweed"
+		default:
+			return r
+		}
+	case "gentoo", "kali", "voidlinux", "slackware", "alt", "plamo":
+		if r == "" || r == "rolling" || r == "base" || r == "default" {
+			return "current"
+		}
+		return r
+	case "devuan":
+		if r == "" || r == "default" {
+			return "daedalus"
+		}
+		return r
+	case "openeuler":
+		if r == "" || r == "default" {
+			return "24.03"
+		}
+		return r
+	case "oracle":
+		if r == "" || r == "default" {
+			return "9"
+		}
+		if idx := strings.IndexByte(r, '.'); idx > 0 {
+			return r[:idx]
+		}
+		return r
+	case "amazonlinux":
+		if r == "" || r == "default" {
+			return "2023"
+		}
+		return r
+	case "busybox":
+		if r == "" || r == "default" {
+			return "1.36.1"
+		}
+		return r
+	default:
+		if r == "" {
+			return "current"
+		}
+		return r
+	}
+}
+
+func readRootfsFileSafe(rootfsPath, relPath string) ([]byte, error) {
+	fullPath := filepath.Join(rootfsPath, relPath)
+	fi, err := os.Lstat(fullPath)
+	if err != nil {
+		return nil, err
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		target, err := os.Readlink(fullPath)
+		if err != nil {
+			return nil, err
+		}
+		if filepath.IsAbs(target) {
+			fullPath = filepath.Join(rootfsPath, strings.TrimPrefix(target, "/"))
+		} else {
+			fullPath = filepath.Join(filepath.Dir(fullPath), target)
+		}
+	}
+	return os.ReadFile(fullPath)
+}
+
+func detectRootfsOS(rootfsPath string) (distro, release string) {
+	if rootfsPath == "" {
+		return "", ""
+	}
+	for _, relPath := range []string{"usr/lib/os-release", "etc/os-release"} {
+		osReleaseBytes, err := readRootfsFileSafe(rootfsPath, relPath)
+		if err != nil || len(osReleaseBytes) == 0 {
+			continue
+		}
+		var id, versionID, versionCodename, buildID string
+		for _, osLine := range strings.Split(string(osReleaseBytes), "\n") {
+			osLine = strings.TrimSpace(osLine)
+			switch {
+			case strings.HasPrefix(osLine, "ID="):
+				id = strings.Trim(strings.TrimPrefix(osLine, "ID="), `"'`)
+			case strings.HasPrefix(osLine, "VERSION_ID="):
+				versionID = strings.Trim(strings.TrimPrefix(osLine, "VERSION_ID="), `"'`)
+			case strings.HasPrefix(osLine, "VERSION_CODENAME="):
+				versionCodename = strings.Trim(strings.TrimPrefix(osLine, "VERSION_CODENAME="), `"'`)
+			case strings.HasPrefix(osLine, "BUILD_ID="):
+				buildID = strings.Trim(strings.TrimPrefix(osLine, "BUILD_ID="), `"'`)
+			}
+		}
+		if id != "" {
+			distro = normalizeLxcDistro(id)
+			if (distro == "debian" || distro == "ubuntu" || distro == "devuan") && versionCodename != "" {
+				release = versionCodename
+			} else if versionID != "" {
+				release = versionID
+			} else if buildID != "" {
+				release = buildID
+			} else if versionCodename != "" {
+				release = versionCodename
+			} else if distro == "archlinux" {
+				release = "rolling"
+			}
+			return distro, release
+		}
+	}
+	if _, err := readRootfsFileSafe(rootfsPath, "etc/arch-release"); err == nil {
+		return "archlinux", "rolling"
+	}
+	if data, err := readRootfsFileSafe(rootfsPath, "etc/alpine-release"); err == nil {
+		return "alpine", strings.TrimSpace(string(data))
+	}
+	return "", ""
+}
+
+func inferDistroReleaseFromTemplateFilename(filename string) (distro, release string) {
+	base := strings.ToLower(filepath.Base(filename))
+	for _, ext := range []string{".tar.xz", ".tar.gz", ".tar.zst", ".tgz", ".tar"} {
+		base = strings.TrimSuffix(base, ext)
+	}
+	switch {
+	case strings.HasPrefix(base, "archlinux") || strings.HasPrefix(base, "arch-linux") || base == "arch" || strings.HasPrefix(base, "arch-"):
+		return "archlinux", "current"
+	case strings.HasPrefix(base, "almalinux"):
+		parts := strings.Split(base, "-")
+		if len(parts) > 1 && len(parts[1]) > 0 && parts[1][0] >= '0' && parts[1][0] <= '9' {
+			return "almalinux", parts[1]
+		}
+		return "almalinux", "10"
+	case strings.HasPrefix(base, "rockylinux") || strings.HasPrefix(base, "rocky-linux"):
+		parts := strings.Split(strings.TrimPrefix(strings.TrimPrefix(base, "rockylinux"), "rocky-linux"), "-")
+		for _, p := range parts {
+			if len(p) > 0 && p[0] >= '0' && p[0] <= '9' {
+				return "rockylinux", p
+			}
+		}
+		return "rockylinux", "10"
+	case strings.HasPrefix(base, "alpine"):
+		parts := strings.Split(strings.TrimPrefix(strings.TrimPrefix(base, "alpine-linux"), "alpine"), "-")
+		for _, p := range parts {
+			if len(p) > 0 && p[0] >= '0' && p[0] <= '9' {
+				return "alpine", p
+			}
+		}
+		return "alpine", "3.21"
+	case strings.HasPrefix(base, "ubuntu"):
+		parts := strings.Split(base, "-")
+		if len(parts) > 1 && parts[1] != "official" && parts[1] != "amd64" && parts[1] != "arm64" && parts[1] != "rootfs" {
+			return "ubuntu", parts[1]
+		}
+		return "ubuntu", "noble"
+	case strings.HasPrefix(base, "debian"):
+		parts := strings.Split(base, "-")
+		if len(parts) > 1 && parts[1] != "official" && parts[1] != "amd64" && parts[1] != "arm64" && parts[1] != "rootfs" {
+			return "debian", normalizeLxcRelease("debian", parts[1])
+		}
+		return "debian", "bookworm"
+	case strings.HasPrefix(base, "fedora"):
+		parts := strings.Split(base, "-")
+		if len(parts) > 1 && len(parts[1]) > 0 && parts[1][0] >= '0' && parts[1][0] <= '9' {
+			return "fedora", parts[1]
+		}
+		return "fedora", "41"
+	case strings.HasPrefix(base, "centos"):
+		return "centos", "9-Stream"
+	case strings.HasPrefix(base, "opensuse"):
+		if strings.Contains(base, "tumbleweed") {
+			return "opensuse", "tumbleweed"
+		}
+		return "opensuse", "15.6"
+	case strings.HasPrefix(base, "gentoo"):
+		return "gentoo", "current"
+	case strings.HasPrefix(base, "devuan"):
+		return "devuan", "daedalus"
+	case strings.HasPrefix(base, "kali"):
+		return "kali", "current"
+	case strings.HasPrefix(base, "voidlinux") || strings.HasPrefix(base, "void-linux"):
+		return "voidlinux", "current"
+	case strings.HasPrefix(base, "openeuler"):
+		return "openeuler", "24.03"
+	case strings.HasPrefix(base, "oracle"):
+		return "oracle", "9"
+	case strings.HasPrefix(base, "amazonlinux"):
+		return "amazonlinux", "2023"
+	}
+	return "", ""
+}
+
+func parseLinuxContainersImageURL(rawURL string) (distro, release, arch string) {
+	idx := strings.Index(rawURL, "linuxcontainers.org/images/")
+	if idx == -1 {
+		return "", "", ""
+	}
+	rest := rawURL[idx+len("linuxcontainers.org/images/"):]
+	parts := strings.Split(rest, "/")
+	if len(parts) >= 3 {
+		return normalizeLxcDistro(parts[0]), parts[1], parts[2]
+	}
+	if len(parts) >= 2 {
+		return normalizeLxcDistro(parts[0]), parts[1], "amd64"
+	}
+	if len(parts) >= 1 {
+		return normalizeLxcDistro(parts[0]), "", "amd64"
+	}
+	return "", "", ""
+}
+
 func findMatchingLocalTemplate(tmplDir, distro, containerID string) string {
 	entries, err := os.ReadDir(tmplDir)
 	if err != nil || len(entries) == 0 {
 		return ""
 	}
-	lowerDistro := strings.ToLower(strings.TrimSpace(distro))
+	normDistro := normalizeLxcDistro(distro)
 	lowerID := strings.ToLower(strings.TrimSpace(containerID))
 	lowerID = strings.TrimPrefix(lowerID, "ct-")
 	for _, entry := range entries {
@@ -757,7 +1089,16 @@ func findMatchingLocalTemplate(tmplDir, distro, containerID string) string {
 		if !strings.HasSuffix(name, ".tar.xz") && !strings.HasSuffix(name, ".tar.gz") && !strings.HasSuffix(name, ".tar.zst") && !strings.HasSuffix(name, ".tar") && !strings.HasSuffix(name, ".tgz") {
 			continue
 		}
-		if (lowerDistro != "" && strings.Contains(name, lowerDistro)) || (lowerID != "" && strings.Contains(name, lowerID)) {
+		fileDistro, _ := inferDistroReleaseFromTemplateFilename(name)
+		matched := false
+		if normDistro != "" && fileDistro != "" {
+			matched = (fileDistro == normDistro)
+		} else if normDistro != "" && fileDistro == "" && !strings.Contains(name, "turnkey") {
+			matched = strings.Contains(name, normDistro)
+		} else if normDistro == "" && lowerID != "" {
+			matched = strings.Contains(name, lowerID)
+		}
+		if matched {
 			fullPath := filepath.Join(tmplDir, entry.Name())
 			if fi, err := os.Stat(fullPath); err == nil && fi.Size() > 0 {
 				return fullPath
@@ -767,11 +1108,27 @@ func findMatchingLocalTemplate(tmplDir, distro, containerID string) string {
 	return ""
 }
 
-func (a *Adapter) resolveLatestLinuxContainersURL(ctx context.Context, distro string) string {
-	d := strings.ToLower(strings.TrimSpace(distro))
+func (a *Adapter) resolveLatestLinuxContainersURL(ctx context.Context, sourceURL, distro, release string) string {
+	urlDistro, urlRelease, urlArch := parseLinuxContainersImageURL(sourceURL)
+	d := normalizeLxcDistro(distro)
+	if urlDistro != "" {
+		d = urlDistro
+	}
 	if d == "" {
 		d = "debian"
 	}
+	r := strings.ToLower(strings.TrimSpace(release))
+	if urlRelease != "" {
+		r = strings.ToLower(strings.TrimSpace(urlRelease))
+	}
+	if d != "debian" && isDebianReleaseName(r) {
+		r = ""
+	}
+	arch := urlArch
+	if arch == "" {
+		arch = "amd64"
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://images.linuxcontainers.org/meta/1.0/index-system", nil)
 	if err != nil {
 		return ""
@@ -785,19 +1142,29 @@ func (a *Adapter) resolveLatestLinuxContainersURL(ctx context.Context, distro st
 		return ""
 	}
 	scanner := bufio.NewScanner(resp.Body)
-	var latestPath string
+	var exactReleasePath string
+	var fallbackDistroPath string
 	for scanner.Scan() {
 		line := scanner.Text()
 		parts := strings.Split(line, ";")
 		if len(parts) < 6 {
 			continue
 		}
-		if strings.ToLower(parts[0]) == d && parts[2] == "amd64" && parts[3] == "default" {
-			latestPath = parts[5]
+		partDistro := normalizeLxcDistro(parts[0])
+		partRelease := strings.ToLower(strings.TrimSpace(parts[1]))
+		if partDistro == d && parts[2] == arch && parts[3] == "default" {
+			fallbackDistroPath = parts[5]
+			if r != "" && partRelease == r {
+				exactReleasePath = parts[5]
+			}
 		}
 	}
-	if latestPath != "" {
-		return fmt.Sprintf("https://images.linuxcontainers.org%srootfs.tar.xz", latestPath)
+	chosenPath := exactReleasePath
+	if chosenPath == "" {
+		chosenPath = fallbackDistroPath
+	}
+	if chosenPath != "" {
+		return fmt.Sprintf("https://images.linuxcontainers.org%srootfs.tar.xz", chosenPath)
 	}
 	return ""
 }
@@ -827,7 +1194,16 @@ func (a *Adapter) ensureTemplateArchive(ctx context.Context, sourceURL, targetPa
 	tmplDir := fmt.Sprintf("/mnt/%s/lxc-templates", cleanPool)
 	_ = os.MkdirAll(tmplDir, 0755)
 
+	urlDistro, urlRelease, urlArch := parseLinuxContainersImageURL(sourceURL)
+	effectiveDistro := normalizeLxcDistro(distro)
+	if urlDistro != "" {
+		effectiveDistro = urlDistro
+	}
+
 	destPath := targetPath
+	if destPath != "" && !filepath.IsAbs(destPath) {
+		destPath = filepath.Join(tmplDir, filepath.Base(destPath))
+	}
 	if destPath == "" {
 		parts := strings.Split(sourceURL, "/")
 		rawFilename := parts[len(parts)-1]
@@ -857,9 +1233,21 @@ func (a *Adapter) ensureTemplateArchive(ctx context.Context, sourceURL, targetPa
 		}
 
 		if genericNames[strings.ToLower(strings.TrimSpace(baseNoExt))] {
-			slug := domain.ToZfsSafeSlug(containerID)
+			var slug string
+			if urlDistro != "" {
+				if urlRelease != "" && urlArch != "" {
+					slug = domain.ToZfsSafeSlug(fmt.Sprintf("%s-%s-%s", urlDistro, urlRelease, urlArch))
+				} else if urlRelease != "" {
+					slug = domain.ToZfsSafeSlug(fmt.Sprintf("%s-%s", urlDistro, urlRelease))
+				} else {
+					slug = domain.ToZfsSafeSlug(urlDistro)
+				}
+			}
 			if slug == "" {
-				slug = domain.ToZfsSafeSlug(distro)
+				slug = domain.ToZfsSafeSlug(containerID)
+			}
+			if slug == "" {
+				slug = domain.ToZfsSafeSlug(effectiveDistro)
 			}
 			if slug == "" {
 				slug = "lxc-template"
@@ -879,11 +1267,6 @@ func (a *Adapter) ensureTemplateArchive(ctx context.Context, sourceURL, targetPa
 		return destPath, nil
 	}
 
-	// If destPath doesn't exist, check whether another template matching distro/containerID is already available
-	if localMatched := findMatchingLocalTemplate(tmplDir, distro, containerID); localMatched != "" {
-		return localMatched, nil
-	}
-
 	_ = os.MkdirAll(filepath.Dir(destPath), 0755)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
@@ -899,9 +1282,9 @@ func (a *Adapter) ensureTemplateArchive(ctx context.Context, sourceURL, targetPa
 	if resp.StatusCode != http.StatusOK {
 		// If 404 on linuxcontainers, attempt to resolve latest index
 		if resp.StatusCode == http.StatusNotFound && strings.Contains(sourceURL, "linuxcontainers.org") {
-			if resolved := a.resolveLatestLinuxContainersURL(ctx, distro); resolved != "" && resolved != sourceURL {
+			if resolved := a.resolveLatestLinuxContainersURL(ctx, sourceURL, effectiveDistro, urlRelease); resolved != "" && resolved != sourceURL {
 				slog.Info("[lxc] retrying download with resolved linuxcontainers URL", "old", sourceURL, "new", resolved)
-				return a.ensureTemplateArchive(ctx, resolved, targetPath, mainPool, containerID, distro)
+				return a.ensureTemplateArchive(ctx, resolved, targetPath, mainPool, containerID, effectiveDistro)
 			}
 		}
 		return "", fmt.Errorf("download template from %s failed with HTTP status %d", sourceURL, resp.StatusCode)
@@ -1209,6 +1592,10 @@ elif command -v apk >/dev/null 2>&1; then
   apk add --no-cache curl ca-certificates bash gnupg sudo
 elif command -v dnf >/dev/null 2>&1; then
   dnf install -y curl ca-certificates gnupg2 sudo
+elif command -v pacman >/dev/null 2>&1; then
+  pacman -Sy --noconfirm curl ca-certificates gnupg sudo bash
+elif command -v zypper >/dev/null 2>&1; then
+  zypper --non-interactive install curl ca-certificates gpg2 sudo bash
 fi
 export FUNCTIONS_FILE_PATH="$(curl -fsSL https://raw.githubusercontent.com/community-scripts/core/main/lxc/install.func)"
 curl -fsSL %q | bash
@@ -1261,29 +1648,55 @@ curl -fsSL %q | bash
 }
 
 func resolveDefaultLinuxContainersURL(distro, release string) string {
-	d := strings.ToLower(distro)
-	r := strings.ToLower(release)
+	d := normalizeLxcDistro(distro)
+	if d == "" {
+		d = "debian"
+	}
+	r := normalizeLxcRelease(d, release)
 	switch d {
 	case "debian":
+		if r == "trixie" {
+			return "https://images.linuxcontainers.org/images/debian/trixie/amd64/default/rootfs.tar.xz"
+		}
+		if r == "bullseye" {
+			return "https://images.linuxcontainers.org/images/debian/bullseye/amd64/default/rootfs.tar.xz"
+		}
 		return "https://images.linuxcontainers.org/images/debian/bookworm/amd64/default/20261028_05:24/rootfs.tar.xz"
 	case "ubuntu":
-		if r == "jammy" || r == "22.04" {
+		if r == "jammy" {
 			return "https://images.linuxcontainers.org/images/ubuntu/jammy/amd64/default/20261018_07:42/rootfs.tar.xz"
 		}
-		if r == "resolute" || r == "26.04" {
+		if r == "resolute" {
 			return "https://images.linuxcontainers.org/images/ubuntu/resolute/amd64/default/20261018_07:42/rootfs.tar.xz"
+		}
+		if r != "" && r != "noble" {
+			return fmt.Sprintf("https://images.linuxcontainers.org/images/ubuntu/%s/amd64/default/rootfs.tar.xz", r)
 		}
 		return "https://images.linuxcontainers.org/images/ubuntu/noble/amd64/default/20261018_07:42/rootfs.tar.xz"
 	case "alpine":
+		if r != "" && r != "3.21" {
+			return fmt.Sprintf("https://images.linuxcontainers.org/images/alpine/%s/amd64/default/rootfs.tar.xz", r)
+		}
 		return "https://images.linuxcontainers.org/images/alpine/3.21/amd64/default/20261016_13:00/rootfs.tar.xz"
 	case "almalinux":
+		if r != "" && r != "10" {
+			return fmt.Sprintf("https://images.linuxcontainers.org/images/almalinux/%s/amd64/default/rootfs.tar.xz", r)
+		}
 		return "https://images.linuxcontainers.org/images/almalinux/10/amd64/default/20261027_23:08/rootfs.tar.xz"
 	case "rockylinux":
+		if r != "" && r != "10" {
+			return fmt.Sprintf("https://images.linuxcontainers.org/images/rockylinux/%s/amd64/default/rootfs.tar.xz", r)
+		}
 		return "https://images.linuxcontainers.org/images/rockylinux/10/amd64/default/20261027_23:08/rootfs.tar.xz"
 	case "fedora":
+		if r != "" && r != "41" {
+			return fmt.Sprintf("https://images.linuxcontainers.org/images/fedora/%s/amd64/default/rootfs.tar.xz", r)
+		}
 		return "https://images.linuxcontainers.org/images/fedora/41/amd64/default/20261027_20:34/rootfs.tar.xz"
+	case "archlinux":
+		return "https://images.linuxcontainers.org/images/archlinux/current/amd64/default/rootfs.tar.xz"
 	default:
-		return "https://images.linuxcontainers.org/images/debian/bookworm/amd64/default/20261028_05:24/rootfs.tar.xz"
+		return fmt.Sprintf("https://images.linuxcontainers.org/images/%s/%s/amd64/default/rootfs.tar.xz", d, r)
 	}
 }
 
@@ -1305,6 +1718,29 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 
 	if _, exists := a.containers[c.ID]; exists {
 		return nil, fmt.Errorf("%w: lxc container %q", domain.ErrAlreadyExists, c.ID)
+	}
+
+	if c.Distribution != "" {
+		c.Distribution = normalizeLxcDistro(c.Distribution)
+		c.Release = normalizeLxcRelease(c.Distribution, c.Release)
+	}
+	if c.TemplateDownloadURL != "" && (c.Distribution == "" || c.Distribution == "debian") {
+		if urlDistro, urlRelease, _ := parseLinuxContainersImageURL(c.TemplateDownloadURL); urlDistro != "" {
+			c.Distribution = urlDistro
+			if urlRelease != "" {
+				c.Release = urlRelease
+			}
+		}
+	}
+	if c.TemplateArchive != "" && !strings.HasPrefix(c.TemplateArchive, "http://") && !strings.HasPrefix(c.TemplateArchive, "https://") {
+		if inferredDistro, inferredRelease := inferDistroReleaseFromTemplateFilename(c.TemplateArchive); inferredDistro != "" {
+			if c.Distribution == "" || c.Distribution == "debian" {
+				c.Distribution = inferredDistro
+				if inferredRelease != "" {
+					c.Release = inferredRelease
+				}
+			}
+		}
 	}
 
 	mainPool := a.mainPool
@@ -1359,15 +1795,21 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 	_ = os.MkdirAll(filepath.Dir(c.RootfsPath), 0755)
 
 	// Unpack template archive if present or download remote image
+	tmplDir := fmt.Sprintf("/mnt/%s/lxc-templates", cleanMainPool)
 	tmplToUnpack := ""
-	if c.TemplateArchive != "" {
+	if c.TemplateArchive != "" && !strings.HasPrefix(c.TemplateArchive, "http://") && !strings.HasPrefix(c.TemplateArchive, "https://") {
 		if fi, err := os.Stat(c.TemplateArchive); err == nil && fi.Size() > 0 {
 			tmplToUnpack = c.TemplateArchive
+		} else if cleanMainPool != "" {
+			altPath := filepath.Join(tmplDir, filepath.Base(c.TemplateArchive))
+			if fi, err := os.Stat(altPath); err == nil && fi.Size() > 0 {
+				tmplToUnpack = altPath
+				c.TemplateArchive = altPath
+			}
 		}
 	}
 
-	tmplDir := fmt.Sprintf("/mnt/%s/lxc-templates", cleanMainPool)
-	if tmplToUnpack == "" && cleanMainPool != "" {
+	if tmplToUnpack == "" && cleanMainPool != "" && c.TemplateDownloadURL == "" && c.TemplateArchive == "" {
 		if localMatched := findMatchingLocalTemplate(tmplDir, c.Distribution, c.ID); localMatched != "" {
 			tmplToUnpack = localMatched
 			c.TemplateArchive = localMatched
@@ -1390,6 +1832,14 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 				downloadTarget = ""
 			}
 			downloadedPath, err := a.ensureTemplateArchive(ctx, sourceURL, downloadTarget, cleanMainPool, c.ID, c.Distribution)
+			if err != nil {
+				if cleanMainPool != "" {
+					if localMatched := findMatchingLocalTemplate(tmplDir, c.Distribution, c.ID); localMatched != "" {
+						downloadedPath = localMatched
+						err = nil
+					}
+				}
+			}
 			if err != nil {
 				slog.Error("[lxc] template download failed", "source_url", sourceURL, "err", err)
 				// If download failed and rootfs does not have an existing init binary, fail immediately
@@ -1417,6 +1867,29 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 		}
 	}
 
+	// Detect actual OS distribution and release from the unpacked rootfs (or template filename)
+	if detectedDistro, detectedRelease := detectRootfsOS(c.RootfsPath); detectedDistro != "" {
+		c.Distribution = detectedDistro
+		if detectedRelease != "" {
+			c.Release = detectedRelease
+		} else {
+			c.Release = normalizeLxcRelease(c.Distribution, "")
+		}
+	} else if tmplToUnpack != "" {
+		if inferredDistro, inferredRelease := inferDistroReleaseFromTemplateFilename(tmplToUnpack); inferredDistro != "" {
+			c.Distribution = inferredDistro
+			if inferredRelease != "" {
+				c.Release = inferredRelease
+			}
+		}
+	}
+	if c.Distribution == "" {
+		c.Distribution = "debian"
+	}
+	if c.Release == "" {
+		c.Release = normalizeLxcRelease(c.Distribution, "")
+	}
+
 	// Verify rootfs has valid init or shell binary when running on host with lxc-start as root
 	if _, err := exec.LookPath("lxc-start"); err == nil && os.Geteuid() == 0 {
 		if !hasInitBinary(c.RootfsPath) {
@@ -1427,6 +1900,16 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 
 	// Configure DHCP across all networking subsystems in container rootfs
 	a.configureContainerDHCP(c.RootfsPath)
+
+	// Arch Linux: pacman 7+ enables Landlock and seccomp syscall filtering sandbox by default,
+	// which fails in LXC container namespaces. Disable those sandboxes in /etc/pacman.conf.
+	pacmanConfPath := filepath.Join(c.RootfsPath, "etc/pacman.conf")
+	if data, err := os.ReadFile(pacmanConfPath); err == nil {
+		content := string(data)
+		content = strings.ReplaceAll(content, "#DisableSandboxFilesystem", "DisableSandboxFilesystem")
+		content = strings.ReplaceAll(content, "#DisableSandboxSyscalls", "DisableSandboxSyscalls")
+		_ = os.WriteFile(pacmanConfPath, []byte(content), 0644)
+	}
 
 	// Ensure minimal os-release and hostname if rootfs is newly created
 	etcDir := filepath.Join(c.RootfsPath, "etc")

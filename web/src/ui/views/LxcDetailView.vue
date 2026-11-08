@@ -27,6 +27,7 @@ import {
   mdiTrashCanOutline,
 } from '@mdi/js';
 import MdiIcon from '../components/MdiIcon.vue';
+import PathSelector from '../components/PathSelector.vue';
 import EmbeddedTerminal from '../components/EmbeddedTerminal.vue';
 import DockerTerminalModal, { type TerminalContainerOption } from '../components/DockerTerminalModal.vue';
 import LogViewer from '../components/LogViewer.vue';
@@ -239,6 +240,21 @@ function popoutTerminal() {
     'width=1000,height=650,location=no,toolbar=no,menubar=no,status=no,resizable=yes'
   );
 }
+
+function cleanPoolName(name: string | undefined | null): string {
+  if (!name) return '';
+  return name.replace(/^zfsPools\//, '').trim();
+}
+
+const mainPool = computed(() => {
+  const p =
+    cleanPoolName(nasState.systemConfig?.mainPool) ||
+    cleanPoolName(nasState.selectedPoolName) ||
+    cleanPoolName(nasState.pools?.[0]?.poolName) ||
+    cleanPoolName(nasState.pools?.[0]?.name) ||
+    'tank';
+  return p || 'tank';
+});
 
 // -----------------------------------------------------------------------------
 // Mount Points Management
@@ -787,12 +803,15 @@ onBeforeUnmount(() => {
           <form style="display: flex; flex-direction: column; gap: 14px" @submit.prevent="handleAddMount">
             <div class="form-group">
               <label class="form-label">Host Path</label>
-              <input
+              <PathSelector
                 v-model="newMount.hostPath"
-                type="text"
-                class="form-input mono"
-                placeholder="e.g. /mnt/tank/media"
-                required
+                :placeholder="`/mnt/${mainPool}/media`"
+                :root-hint="`/mnt/${mainPool}`"
+                :select-files="true"
+                button-label="Browse"
+                input-class="form-input mono"
+                modal-title="Select Host Directory or File for Bind Mount"
+                :required="true"
               />
             </div>
 
