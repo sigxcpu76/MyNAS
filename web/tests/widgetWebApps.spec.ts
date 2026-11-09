@@ -250,4 +250,53 @@ describe('WidgetWebApps - Dashboard Web UI Widget', () => {
     // Now icon-fallback svg should be visible
     expect(wrapper.find('.icon-fallback').exists()).toBe(true);
   });
+
+  it('preserves fallback icon across reactive dockerApps refreshes (e.g. WatchResources 3s poll)', async () => {
+    nasState.dockerApps = [
+      {
+        name: 'dockerApps/clickhouse',
+        appId: 'clickhouse',
+        title: 'ClickHouse',
+        state: 'RUNNING',
+        statusText: '1/1 running',
+        composeYaml: '',
+        composeFilePath: '',
+        services: ['clickhouse'],
+        containers: [],
+        portMappings: ['8123:8123/tcp'],
+        volumes: [],
+        webUiUrl: 'http://localhost:8123',
+        iconUrl: 'https://broken.invalid/clickhouse_logo.png',
+        totalCpuPercent: 1.5,
+        totalMemoryMib: 512,
+        createdAt: '2026-01-01',
+        updatedAt: '2026-01-01',
+      } as DockerApp,
+    ];
+
+    const wrapper = mount(WidgetWebApps);
+    const img = wrapper.find('.app-img');
+    expect(img.exists()).toBe(true);
+    expect(img.attributes('src')).toBe('https://broken.invalid/clickhouse_logo.png');
+
+    // Primary icon fails -> must reactively switch DOM src to fallbackIconUrl
+    await img.trigger('error');
+    expect(wrapper.find('.app-img').attributes('src')).toBe(
+      'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/clickhouse.png'
+    );
+
+    // Simulate WatchResources 3s snapshot updating nasState.dockerApps with a fresh object
+    nasState.dockerApps = [
+      {
+        ...nasState.dockerApps[0],
+        totalCpuPercent: 2.8,
+      },
+    ];
+    await wrapper.vm.$nextTick();
+
+    // Must still keep the working fallbackIconUrl and NOT revert to broken primary iconUrl
+    expect(wrapper.find('.app-img').attributes('src')).toBe(
+      'https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/clickhouse.png'
+    );
+  });
 });

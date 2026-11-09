@@ -355,7 +355,8 @@ func TestCatalogAdapter_MultiCatalogSync(t *testing.T) {
 			"id": "dokploy-app",
 			"name": "Dokploy Test App",
 			"description": "Dokploy description",
-			"version": "2.0.0"
+			"version": "2.0.0",
+			"logo": "dokploy_logo.png"
 		}
 	]`
 
@@ -408,6 +409,9 @@ func TestCatalogAdapter_MultiCatalogSync(t *testing.T) {
 	if err != nil || dpApp.Title != "Dokploy Test App" {
 		t.Errorf("failed getting Dokploy app: %v, %v", dpApp, err)
 	}
+	if dpApp.IconURL != "https://raw.githubusercontent.com/Dokploy/templates/main/blueprints/dokploy-app/dokploy_logo.png" {
+		t.Errorf("expected resolved Dokploy icon URL, got %q", dpApp.IconURL)
+	}
 
 	// Verify filter by train
 	casaosApps, _ := adapter.ListApps(ctx, "casaos", "", "")
@@ -433,5 +437,8 @@ func TestCatalogAdapter_MultiCatalogSync(t *testing.T) {
 	dpApp2, err := adapter2.GetApp(ctx, "dokploy", "dokploy-app")
 	if err != nil || dpApp2.Title != "Dokploy Test App" {
 		t.Errorf("failed reloading Dokploy app from disk cache: %v, %v", dpApp2, err)
+	}
+	if dpApp2.IconURL != "https://raw.githubusercontent.com/Dokploy/templates/main/blueprints/dokploy-app/dokploy_logo.png" {
+		t.Errorf("expected resolved Dokploy icon URL from disk cache, got %q", dpApp2.IconURL)
 	}
 }

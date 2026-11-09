@@ -39,8 +39,11 @@ type TelemetryCollector struct {
 	cachedGpus  []string
 	gpuScanTime time.Time
 
-	powerIntervalSet bool
-	powerIntervalTry time.Time
+	powerIntervalSet  bool
+	powerIntervalTry  time.Time
+	lastDcmiPower     *domain.PowerMeterTelemetry
+	lastDcmiPowerTime time.Time
+	dcmiUnavailableAt time.Time
 }
 
 func NewTelemetryCollector() *TelemetryCollector {
@@ -649,6 +652,13 @@ func (c *TelemetryCollector) collectSensors(ctx context.Context) domain.Hardware
 	if sensorsBin != "" {
 		res.LmSensorsInstalled = true
 		c.parseLmSensorsOutput(ctx, sensorsBin, &res)
+	}
+
+	// If no power meter was found or the ACPI power meter is locked by firmware
+	// to a slow averaging window (> 5s, e.g. 300s on HP servers), prefer the
+	// instantaneous reading from `ipmitool dcmi power reading` (sampled every 5s).
+	if res.PowerMeter == nil || res.PowerMeter.IntervalSeconds > float64(maxPowerAverageIntervalMs)/1000.0 {
+		c.collectDcmiPowerMeter(ctx, &res)
 	}
 
 	// Always collect GPU telemetry (via nvidia-smi if available, plus amdgpu from sensors/sysfs)

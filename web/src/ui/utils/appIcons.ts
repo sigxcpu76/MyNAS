@@ -1,6 +1,6 @@
 import type { DockerApp, LxcContainer, CatalogApp, LxcCatalogItem } from '../../domain/models';
 import { nasState } from '../store';
-import { getAppSlug } from '../dashboard/webAppsHelper';
+import { getAppSlug, normalizeAppIconUrl } from '../dashboard/webAppsHelper';
 
 export const LXC_DISTRO_ICONS: Record<string, string> = {
   debian: 'https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/debian.png',
@@ -28,16 +28,17 @@ export function getDockerContainerIcon(
   container: DockerContainerIconSource,
   catalogApps?: CatalogApp[]
 ): string {
-  if (container.iconUrl?.trim()) {
-    return container.iconUrl.trim();
-  }
-
-  const catalog = catalogApps || nasState.catalogApps || [];
-
   const serviceName = (container.serviceName || '').toLowerCase().trim();
   const rawName = (container.name || container.containerName || '').toLowerCase().trim();
   const containerName = rawName.replace(/^dockercontainers\//, '');
   const nameParts = containerName.split(/[-_.]/).filter(Boolean);
+
+  const normalizedExplicit = normalizeAppIconUrl(container.iconUrl, serviceName || containerName);
+  if (normalizedExplicit) {
+    return normalizedExplicit;
+  }
+
+  const catalog = catalogApps || nasState.catalogApps || [];
 
   // 1. Try matching against catalog (by service name, full container name, or individual name parts)
   const matched = catalog.find((c) => {
@@ -51,8 +52,9 @@ export function getDockerContainerIcon(
     );
   });
 
-  if (matched?.iconUrl?.trim()) {
-    return matched.iconUrl.trim();
+  const matchedIcon = normalizeAppIconUrl(matched?.iconUrl, matched?.appId);
+  if (matchedIcon) {
+    return matchedIcon;
   }
 
   // 2. Extract identity from container image
@@ -74,8 +76,9 @@ export function getDockerContainerIcon(
         (secondLastPart && !secondLastPart.includes('.') && (id === secondLastPart || title === secondLastPart))
       );
     });
-    if (matchedImageCatalog?.iconUrl?.trim()) {
-      return matchedImageCatalog.iconUrl.trim();
+    const matchedImgIcon = normalizeAppIconUrl(matchedImageCatalog?.iconUrl, matchedImageCatalog?.appId);
+    if (matchedImgIcon) {
+      return matchedImgIcon;
     }
 
     // Identify candidate slug
@@ -116,8 +119,10 @@ export function getDockerContainerIcon(
  * Returns the best available icon URL for a Docker application.
  */
 export function getDockerAppIcon(app: DockerApp, catalogApps?: CatalogApp[]): string {
-  if (app.iconUrl?.trim()) {
-    return app.iconUrl.trim();
+  const cleanAppId = app.appId || (app.name ? app.name.replace(/^dockerApps\//, '') : '');
+  const normalizedAppIcon = normalizeAppIconUrl(app.iconUrl, app.catalogAppId || cleanAppId);
+  if (normalizedAppIcon) {
+    return normalizedAppIcon;
   }
 
   const catalog = catalogApps || nasState.catalogApps || [];
@@ -128,8 +133,9 @@ export function getDockerAppIcon(app: DockerApp, catalogApps?: CatalogApp[]): st
       (app.title && c.title.toLowerCase() === app.title.toLowerCase())
   );
 
-  if (matched?.iconUrl?.trim()) {
-    return matched.iconUrl.trim();
+  const normalizedCatIcon = normalizeAppIconUrl(matched?.iconUrl, matched?.appId || cleanAppId);
+  if (normalizedCatIcon) {
+    return normalizedCatIcon;
   }
 
   const slug = getAppSlug(app.appId || app.title || '');

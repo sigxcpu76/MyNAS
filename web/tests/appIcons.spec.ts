@@ -97,6 +97,18 @@ describe('appIcons utility', () => {
       expect(getDockerAppIcon(app)).toBe('https://test.com/app.png');
     });
 
+    it('resolves bare Dokploy logo filenames on app iconUrl', () => {
+      const app = {
+        name: 'dockerApps/clickhouse',
+        appId: 'clickhouse',
+        title: 'Clickhouse',
+        iconUrl: 'clickhouse_logo.png',
+      } as DockerApp;
+      expect(getDockerAppIcon(app)).toBe(
+        'https://raw.githubusercontent.com/Dokploy/templates/main/blueprints/clickhouse/clickhouse_logo.png'
+      );
+    });
+
     it('matches catalog iconUrl by appId or title', () => {
       const app = {
         name: 'dockerApps/nextcloud',

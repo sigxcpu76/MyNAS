@@ -237,4 +237,32 @@ describe('webAppsHelper', () => {
     expect(collected[0].title).toBe('Nextcloud');
     expect(collected[1].title).toBe('Vaultwarden');
   });
+
+  it('normalizes relative Dokploy logo filenames into full blueprint URLs', () => {
+    const app: DockerApp = {
+      name: 'dockerApps/clickhouse',
+      appId: 'clickhouse',
+      title: 'Clickhouse',
+      state: 'RUNNING',
+      statusText: '1/1 running',
+      composeYaml: '',
+      composeFilePath: '',
+      services: ['clickhouse'],
+      containers: [],
+      portMappings: ['8123:8123/tcp'],
+      volumes: [],
+      webUiUrl: 'http://localhost:8123',
+      iconUrl: 'clickhouse_logo.png',
+      totalCpuPercent: 1.0,
+      totalMemoryMib: 512,
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+    };
+
+    const result = extractAppWebUis(app);
+    expect(result).not.toBeNull();
+    expect(result?.iconUrl).toBe(
+      'https://raw.githubusercontent.com/Dokploy/templates/main/blueprints/clickhouse/clickhouse_logo.png'
+    );
+  });
 });

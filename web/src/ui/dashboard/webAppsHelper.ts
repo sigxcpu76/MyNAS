@@ -178,6 +178,29 @@ export function getAppSlug(titleOrId: string): string {
 }
 
 /**
+ * Normalizes an icon URL. If the URL is a bare relative filename (e.g. from Dokploy
+ * meta.json like "clickhouse_logo.png"), resolves it against the Dokploy blueprints
+ * repository when an appId is known, or returns empty string otherwise.
+ */
+export function normalizeAppIconUrl(rawUrl?: string, appId?: string): string {
+  const clean = (rawUrl || '').trim();
+  if (!clean) return '';
+  if (
+    clean.startsWith('http://') ||
+    clean.startsWith('https://') ||
+    clean.startsWith('/') ||
+    clean.startsWith('data:')
+  ) {
+    return clean;
+  }
+  const cleanAppId = (appId || '').trim().replace(/^dockerApps\//, '');
+  if (cleanAppId) {
+    return `https://raw.githubusercontent.com/Dokploy/templates/main/blueprints/${cleanAppId}/${clean.replace(/^\.\//, '')}`;
+  }
+  return '';
+}
+
+/**
  * Collects Web UI ports and portal links for a single DockerApp.
  */
 export function extractAppWebUis(
@@ -293,16 +316,17 @@ export function extractAppWebUis(
     primaryPortal = portals[0];
   }
 
+  const cleanAppId = app.appId || app.name.replace(/^dockerApps\//, '');
+
   // Icon resolution
-  let iconUrl = app.iconUrl?.trim() || '';
+  let iconUrl = normalizeAppIconUrl(app.iconUrl, app.catalogAppId || cleanAppId);
   if (!iconUrl && matchingCat?.iconUrl) {
-    iconUrl = matchingCat.iconUrl.trim();
+    iconUrl = normalizeAppIconUrl(matchingCat.iconUrl, matchingCat.appId || cleanAppId);
   }
 
   const slug = getAppSlug(app.appId || app.title);
   const fallbackIconUrl = `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${slug}.png`;
 
-  const cleanAppId = app.appId || app.name.replace(/^dockerApps\//, '');
   const title = app.title || cleanAppId;
   const isRunning = app.state === 'RUNNING' || app.state === 'running';
 
