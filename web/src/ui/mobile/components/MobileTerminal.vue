@@ -16,6 +16,7 @@ import {
 import MdiIcon from '../../components/MdiIcon.vue';
 import { services } from '../../../container';
 import { nasState } from '../../store';
+import { TERMINAL_FONT_FAMILY, ensureTerminalFontsLoaded } from '../../utils/terminalFont';
 
 const props = withDefaults(
   defineProps<{
@@ -115,8 +116,10 @@ function initTerminal() {
   term = new Terminal({
     cursorBlink: true,
     cursorStyle: 'block',
+    customGlyphs: true,
     fontSize: 12,
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+    fontFamily: TERMINAL_FONT_FAMILY,
+    lineHeight: 1.0,
     theme: {
       background: '#090d16',
       foreground: '#e2e8f0',
@@ -144,6 +147,16 @@ function initTerminal() {
     try {
       fitAddon?.fit();
     } catch {}
+  });
+
+  ensureTerminalFontsLoaded(() => {
+    if (term && fitAddon) {
+      try {
+        term.options.fontFamily = TERMINAL_FONT_FAMILY;
+        fitAddon.fit();
+        sendResize();
+      } catch {}
+    }
   });
 
   term.onData((data) => {

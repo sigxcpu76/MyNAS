@@ -1,6 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import DockerTerminalModal from '../src/ui/components/DockerTerminalModal.vue';
+import EmbeddedTerminal from '../src/ui/components/EmbeddedTerminal.vue';
+import { TERMINAL_FONT_FAMILY, ensureTerminalFontsLoaded } from '../src/ui/utils/terminalFont';
 
 class MockWebSocket {
   static OPEN = 1;
@@ -90,6 +92,30 @@ describe('DockerTerminalModal Component', () => {
 
     await closeBtn.trigger('click');
     expect(wrapper.emitted('close')).toHaveLength(1);
+
+    wrapper.unmount();
+  });
+
+  it('configures Powerline and Nerd Font families for LXC and Docker terminals', async () => {
+    expect(TERMINAL_FONT_FAMILY).toContain('JetBrainsMono Nerd Font Mono');
+    expect(TERMINAL_FONT_FAMILY).toContain('MesloLGS NF');
+    expect(TERMINAL_FONT_FAMILY).toContain('DejaVu Sans Mono for Powerline');
+    expect(TERMINAL_FONT_FAMILY).toContain('Symbols Nerd Font Mono');
+
+    const readyCb = vi.fn();
+    ensureTerminalFontsLoaded(readyCb);
+
+    const wrapper = mount(EmbeddedTerminal, {
+      props: {
+        containerId: 'ct-101',
+        containerName: 'debian-powerline',
+        endpointType: 'lxc',
+      },
+    });
+
+    const shellOptions = wrapper.findAll('select.shell-select option').map((o) => (o.element as HTMLOptionElement).value);
+    expect(shellOptions).toContain('/bin/bash');
+    expect(shellOptions).toContain('/bin/zsh');
 
     wrapper.unmount();
   });

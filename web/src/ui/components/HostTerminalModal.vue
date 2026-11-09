@@ -5,6 +5,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import MdiIcon from './MdiIcon.vue';
 import { services } from '../../container';
+import { TERMINAL_FONT_FAMILY, ensureTerminalFontsLoaded } from '../utils/terminalFont';
 import {
   mdiConsole,
   mdiClose,
@@ -66,9 +67,10 @@ function initTerminal() {
   term = new Terminal({
     cursorBlink: true,
     cursorStyle: 'block',
+    customGlyphs: true,
     fontSize: 13,
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-    lineHeight: 1.25,
+    fontFamily: TERMINAL_FONT_FAMILY,
+    lineHeight: 1.0,
     theme: {
       background: '#0a0f1d',
       foreground: '#e2e8f0',
@@ -112,6 +114,18 @@ function initTerminal() {
   } catch {
     // Ignore initial fit race
   }
+
+  ensureTerminalFontsLoaded(() => {
+    if (term && fitAddon) {
+      try {
+        term.options.fontFamily = TERMINAL_FONT_FAMILY;
+        fitAddon.fit();
+        sendResize();
+      } catch {
+        // Ignore
+      }
+    }
+  });
 
   // Setup ResizeObserver for responsive resizing
   if (typeof window !== 'undefined' && window.ResizeObserver) {

@@ -192,12 +192,14 @@ func (g *Gateway) handleHostTerminalWebSocket(ws *websocket.Conn) {
 
 	cmd.Env = []string{
 		"TERM=xterm-256color",
+		"COLORTERM=truecolor",
 		"HOME=" + homeDir,
 		"USER=" + passwdUser.Username,
 		"LOGNAME=" + passwdUser.Username,
 		"SHELL=" + shell,
 		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 		"LANG=C.UTF-8",
+		"LC_CTYPE=C.UTF-8",
 	}
 
 	// Drop privileges to the authenticated Linux user

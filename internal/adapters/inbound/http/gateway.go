@@ -640,7 +640,7 @@ func (g *Gateway) handleSPA(w http.ResponseWriter, r *http.Request) {
 		info, statErr := f.Stat()
 		_ = f.Close()
 		if statErr == nil && !info.IsDir() {
-			if strings.HasPrefix(cleanPath, "assets/") {
+			if strings.HasPrefix(cleanPath, "assets/") || strings.HasPrefix(cleanPath, "fonts/") {
 				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 			}
 			http.FileServer(http.FS(g.uiFS)).ServeHTTP(w, r)

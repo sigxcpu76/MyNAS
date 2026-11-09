@@ -939,7 +939,13 @@ func (a *Adapter) execAttachSingle(ctx context.Context, id string, cmd []string)
 		"AttachStdout": true,
 		"AttachStderr": true,
 		"Tty":          true,
-		"Cmd":          cmd,
+		"Env": []string{
+			"TERM=xterm-256color",
+			"COLORTERM=truecolor",
+			"LANG=C.UTF-8",
+			"LC_CTYPE=C.UTF-8",
+		},
+		"Cmd": cmd,
 	}
 	bodyBytes, err := json.Marshal(createPayload)
 	if err != nil {

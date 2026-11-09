@@ -2794,8 +2794,22 @@ func (a *Adapter) ExecAttach(ctx context.Context, id string, cmd []string) (net.
 	}
 
 	if _, err := exec.LookPath("lxc-attach"); err == nil {
-		attachCmd := exec.CommandContext(ctx, "lxc-attach", "-n", id, "--", shell)
-		attachCmd.Env = append(os.Environ(), "TERM=xterm-256color", "LANG=C.UTF-8")
+		termEnv := []string{
+			"TERM=xterm-256color",
+			"COLORTERM=truecolor",
+			"LANG=C.UTF-8",
+			"LC_CTYPE=C.UTF-8",
+		}
+		attachArgs := []string{
+			"-n", id,
+			"-v", "TERM=xterm-256color",
+			"-v", "COLORTERM=truecolor",
+			"-v", "LANG=C.UTF-8",
+			"-v", "LC_CTYPE=C.UTF-8",
+			"--", shell,
+		}
+		attachCmd := exec.CommandContext(ctx, "lxc-attach", attachArgs...)
+		attachCmd.Env = append(os.Environ(), termEnv...)
 		ptmx, err := pty.Start(attachCmd)
 		if err == nil {
 			// If bash was requested and rootfs check didn't already trigger fallback,
@@ -2805,8 +2819,16 @@ func (a *Adapter) ExecAttach(ctx context.Context, id string, cmd []string) (net.
 				if attachCmd.ProcessState != nil && attachCmd.ProcessState.Exited() {
 					_ = ptmx.Close()
 					fallbackNotice = "\x1b[33m[bash not found, falling back to /bin/sh]\x1b[0m\r\n"
-					attachCmd = exec.CommandContext(ctx, "lxc-attach", "-n", id, "--", "/bin/sh")
-					attachCmd.Env = append(os.Environ(), "TERM=xterm-256color", "LANG=C.UTF-8")
+					fbArgs := []string{
+						"-n", id,
+						"-v", "TERM=xterm-256color",
+						"-v", "COLORTERM=truecolor",
+						"-v", "LANG=C.UTF-8",
+						"-v", "LC_CTYPE=C.UTF-8",
+						"--", "/bin/sh",
+					}
+					attachCmd = exec.CommandContext(ctx, "lxc-attach", fbArgs...)
+					attachCmd.Env = append(os.Environ(), termEnv...)
 					ptmx, err = pty.Start(attachCmd)
 					if err != nil {
 						return nil, "", fmt.Errorf("failed to attach fallback /bin/sh: %w", err)
