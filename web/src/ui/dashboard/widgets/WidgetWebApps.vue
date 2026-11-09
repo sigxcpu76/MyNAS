@@ -26,11 +26,25 @@ const totalCount = computed(() => webApps.value.length);
 const runningCount = computed(() => webApps.value.filter((a) => a.isRunning).length);
 
 const failedIcons = ref<Record<string, boolean>>({});
+const fallbackIcons = ref<Record<string, boolean>>({});
 const activePortalMenu = ref<string | null>(null);
 
+function getEffectiveIconUrl(app: WebAppLauncherItem): string {
+  if (fallbackIcons.value[app.appId] && app.fallbackIconUrl) {
+    return app.fallbackIconUrl;
+  }
+  return app.iconUrl || app.fallbackIconUrl || '';
+}
+
 function handleImageError(app: WebAppLauncherItem) {
+  const currentUrl = getEffectiveIconUrl(app);
   // If original icon failed, try fallback icon once
-  if (app.iconUrl !== app.fallbackIconUrl && app.fallbackIconUrl) {
+  if (
+    !fallbackIcons.value[app.appId] &&
+    app.fallbackIconUrl &&
+    currentUrl !== app.fallbackIconUrl
+  ) {
+    fallbackIcons.value[app.appId] = true;
     app.iconUrl = app.fallbackIconUrl;
   } else {
     failedIcons.value[app.appId] = true;
@@ -131,8 +145,8 @@ onUnmounted(() => {
         <div class="icon-wrapper" :title="app.tooltip">
           <div class="icon-box">
             <img
-              v-if="app.iconUrl && !failedIcons[app.appId]"
-              :src="app.iconUrl"
+              v-if="getEffectiveIconUrl(app) && !failedIcons[app.appId]"
+              :src="getEffectiveIconUrl(app)"
               :alt="app.title"
               class="app-img"
               loading="lazy"

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/sigxcpu/nas/internal/domain"
 )
 
 func writeHwmon(t *testing.T, dir string, files map[string]string) {
@@ -91,5 +93,69 @@ func TestConfigurePowerMeterIntervals_AlreadyShort(t *testing.T) {
 func TestConfigurePowerMeterIntervals_NoMeter(t *testing.T) {
 	if configurePowerMeterIntervals(t.TempDir(), 5000) {
 		t.Fatal("expected false with no power meter present")
+	}
+}
+
+func TestParseDcmiPowerReading(t *testing.T) {
+	raw := `
+    Instantaneous power reading:                   174 Watts
+    Minimum during sampling period:                174 Watts
+    Maximum during sampling period:                236 Watts
+    Average power reading over sample period:      181 Watts
+    IPMI timestamp:                           11/08/2026 11:48:36 PM EET    Sampling period:                          00000300 Seconds.
+    Power reading state is:                   activated
+`
+	pm, ok := parseDcmiPowerReading(raw)
+	if !ok || pm == nil {
+		t.Fatal("expected DCMI power reading to parse")
+	}
+	if pm.PowerWatts != 174 {
+		t.Errorf("PowerWatts = %v, want 174", pm.PowerWatts)
+	}
+	if pm.DeviceName != "ipmi-dcmi" {
+		t.Errorf("DeviceName = %q, want ipmi-dcmi", pm.DeviceName)
+	}
+	if pm.Adapter != "IPMI DCMI" {
+		t.Errorf("Adapter = %q, want IPMI DCMI", pm.Adapter)
+	}
+	if pm.IntervalSeconds != 5 {
+		t.Errorf("IntervalSeconds = %v, want 5", pm.IntervalSeconds)
+	}
+
+	// Verify applyPowerMeterReading overrides slow 300s ACPI reading
+	sensors := domain.HardwareSensorsTelemetry{
+		PowerMeter: &domain.PowerMeterTelemetry{
+			DeviceName:      "power_meter-acpi-0",
+			Adapter:         "ACPI interface",
+			PowerWatts:      181,
+			IntervalSeconds: 300,
+		},
+		Temperatures: []domain.HardwareSensorItem{
+			{
+				Chip:         "power_meter-acpi-0",
+				Adapter:      "ACPI interface",
+				Label:        "power1 (power_meter-acpi-0)",
+				Category:     "POWER",
+				CurrentValue: 181,
+				Unit:         "W",
+			},
+		},
+	}
+	applyPowerMeterReading(&sensors, *pm)
+	if sensors.PowerMeter.PowerWatts != 174 || sensors.PowerMeter.DeviceName != "ipmi-dcmi" {
+		t.Errorf("expected PowerMeter to be overridden by IPMI DCMI, got %+v", sensors.PowerMeter)
+	}
+	if len(sensors.Temperatures) != 1 || sensors.Temperatures[0].CurrentValue != 174 {
+		t.Errorf("expected POWER sensor item to be updated to 174W, got %+v", sensors.Temperatures)
+	}
+}
+
+func TestParseDcmiPowerReading_Deactivated(t *testing.T) {
+	raw := `
+    Instantaneous power reading:                   174 Watts
+    Power reading state is:                   deactivated
+`
+	if _, ok := parseDcmiPowerReading(raw); ok {
+		t.Fatal("expected deactivated DCMI power reading to be ignored")
 	}
 }

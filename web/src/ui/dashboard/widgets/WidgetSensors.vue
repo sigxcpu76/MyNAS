@@ -166,7 +166,13 @@ function formatCoreShort(label: string): string {
         <div class="power-meta">
           Device: <code class="mono">{{ powerMeter.deviceName }}</code>
           <span
-            v-if="powerMeter.intervalSeconds > 0"
+            v-if="powerMeter.adapter && powerMeter.adapter.toUpperCase().includes('IPMI')"
+            :title="`Instantaneous hardware power reading via ${powerMeter.adapter} (sampled every ${powerMeter.intervalSeconds || 5}s).`"
+          >
+            • Instantaneous ({{ powerMeter.intervalSeconds || 5 }}s)
+          </span>
+          <span
+            v-else-if="powerMeter.intervalSeconds > 0"
             :title="`Hardware moving-average window configured in ${powerMeter.adapter}. Telemetry updates continuously.`"
           >
             • {{ powerMeter.intervalSeconds }}s avg

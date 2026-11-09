@@ -32,6 +32,23 @@ func SetDokployBlueprintURLForTest(url string) {
 	defaultDokployBlueprintURL = url
 }
 
+// resolveDokployLogoURL resolves relative logo filenames in Dokploy's meta.json
+// against the Dokploy blueprints repository URL.
+func resolveDokployLogoURL(appID, logo string) string {
+	logo = strings.TrimSpace(logo)
+	if logo == "" {
+		return ""
+	}
+	if strings.HasPrefix(logo, "http://") || strings.HasPrefix(logo, "https://") || strings.HasPrefix(logo, "data:") || strings.HasPrefix(logo, "/") {
+		return logo
+	}
+	if appID == "" {
+		return ""
+	}
+	base := strings.TrimRight(defaultDokployBlueprintURL, "/")
+	return fmt.Sprintf("%s/%s/%s", base, appID, strings.TrimPrefix(logo, "./"))
+}
+
 
 type dokployMetaEntry struct {
 	ID          string            `json:"id"`
