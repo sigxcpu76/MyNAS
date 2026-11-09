@@ -3319,6 +3319,7 @@ func toProtoSystemTelemetry(t *domain.SystemTelemetry) *nasv1.SystemTelemetry {
 			RxRateBytesPerSec: n.RxRateBytesPerSec,
 			TxRateBytesPerSec: n.TxRateBytesPerSec,
 			IsDefault:         n.IsDefault,
+			IsBridge:          n.IsBridge,
 		})
 	}
 
@@ -4710,10 +4711,11 @@ func (s *Server) WatchResources(req *nasv1.WatchResourcesRequest, stream nasv1.N
 		return len(filter) == 0 || filter[rt]
 	}
 
+	protoMarshaler := protojson.MarshalOptions{EmitUnpopulated: true}
 	sendChange := func(rt string, evtType nasv1.WatchResourceChange_EventType, name string, entity any) error {
 		var payloadStr string
 		if pm, ok := entity.(proto.Message); ok {
-			b, err := protojson.Marshal(pm)
+			b, err := protoMarshaler.Marshal(pm)
 			if err != nil {
 				return err
 			}
@@ -4723,7 +4725,7 @@ func (s *Server) WatchResources(req *nasv1.WatchResourcesRequest, stream nasv1.N
 			case []*nasv1.DockerApp:
 				var parts []string
 				for _, it := range items {
-					b, err := protojson.Marshal(it)
+					b, err := protoMarshaler.Marshal(it)
 					if err == nil {
 						parts = append(parts, string(b))
 					}
@@ -4732,7 +4734,7 @@ func (s *Server) WatchResources(req *nasv1.WatchResourcesRequest, stream nasv1.N
 			case []*nasv1.DockerContainer:
 				var parts []string
 				for _, it := range items {
-					b, err := protojson.Marshal(it)
+					b, err := protoMarshaler.Marshal(it)
 					if err == nil {
 						parts = append(parts, string(b))
 					}
@@ -4741,7 +4743,7 @@ func (s *Server) WatchResources(req *nasv1.WatchResourcesRequest, stream nasv1.N
 			case []*nasv1.VirtualMachine:
 				var parts []string
 				for _, it := range items {
-					b, err := protojson.Marshal(it)
+					b, err := protoMarshaler.Marshal(it)
 					if err == nil {
 						parts = append(parts, string(b))
 					}
@@ -4750,7 +4752,7 @@ func (s *Server) WatchResources(req *nasv1.WatchResourcesRequest, stream nasv1.N
 			case []*nasv1.LxcContainer:
 				var parts []string
 				for _, it := range items {
-					b, err := protojson.Marshal(it)
+					b, err := protoMarshaler.Marshal(it)
 					if err == nil {
 						parts = append(parts, string(b))
 					}

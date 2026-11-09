@@ -46,6 +46,9 @@ import {
 } from '../store';
 import { confirmDelete } from '../modal';
 import { getLxcContainerIcon } from '../utils/appIcons';
+import { useNetworkBridges } from '../utils/networkBridges';
+
+const { defaultBridge, bridgeOptionsFor } = useNetworkBridges();
 
 const failedIcon = ref(false);
 
@@ -257,13 +260,12 @@ const mainPool = computed(() => {
 });
 
 // -----------------------------------------------------------------------------
-// Mount Points Management
+// Mount Points Management & Configuration Editor
 // -----------------------------------------------------------------------------
 const mountsList = computed<LxcMountPoint[]>(() => {
   return container.value?.mountPoints || [];
 });
 
-const isSavingMounts = ref(false);
 const showAddMountModal = ref(false);
 const newMount = reactive<LxcMountPoint>({
   hostPath: '',
@@ -278,61 +280,20 @@ function openAddMountModal() {
   showAddMountModal.value = true;
 }
 
-async function handleAddMount() {
-  if (!container.value || !newMount.hostPath.trim() || !newMount.containerPath.trim()) return;
-  const updated = [
-    ...mountsList.value,
-    {
-      hostPath: newMount.hostPath.trim(),
-      containerPath: newMount.containerPath.trim(),
-      readOnly: Boolean(newMount.readOnly),
-    },
-  ];
-
-  isSavingMounts.value = true;
-  try {
-    await runTrackedTask(`LXC "${cleanContainerName.value}": Add Mount`, async () => {
-      await services.lxc.updateContainer(container.value!.name, {
-        mountPoints: updated,
-      });
-    });
-    notify('success', `Added mount point ${newMount.containerPath}`);
-    showAddMountModal.value = false;
-    await refreshAllData();
-  } catch (err: any) {
-    notify('error', `Failed to add mount: ${err.message}`);
-  } finally {
-    isSavingMounts.value = false;
-  }
+function handleAddMount() {
+  if (!newMount.hostPath.trim() || !newMount.containerPath.trim()) return;
+  configForm.mountPoints.push({
+    hostPath: newMount.hostPath.trim(),
+    containerPath: newMount.containerPath.trim(),
+    readOnly: Boolean(newMount.readOnly),
+  });
+  showAddMountModal.value = false;
 }
 
-async function handleRemoveMount(index: number) {
-  if (!container.value) return;
-  const target = mountsList.value[index];
-  if (!target) return;
-  const ok = window.confirm(`Remove bind mount "${target.containerPath}"?`);
-  if (!ok) return;
-
-  const updated = mountsList.value.filter((_, idx) => idx !== index);
-  isSavingMounts.value = true;
-  try {
-    await runTrackedTask(`LXC "${cleanContainerName.value}": Remove Mount`, async () => {
-      await services.lxc.updateContainer(container.value!.name, {
-        mountPoints: updated,
-      });
-    });
-    notify('info', `Removed mount point ${target.containerPath}`);
-    await refreshAllData();
-  } catch (err: any) {
-    notify('error', `Failed to remove mount: ${err.message}`);
-  } finally {
-    isSavingMounts.value = false;
-  }
+function handleRemoveMount(index: number) {
+  configForm.mountPoints.splice(index, 1);
 }
 
-// -----------------------------------------------------------------------------
-// Configuration Editor
-// -----------------------------------------------------------------------------
 const isSavingConfig = ref(false);
 const configForm = reactive({
   containerName: '',
@@ -343,6 +304,7 @@ const configForm = reactive({
   autostart: false,
   unprivileged: true,
   gpuEnabled: false,
+  mountPoints: [] as LxcMountPoint[],
 });
 
 watch(
@@ -353,10 +315,15 @@ watch(
       configForm.description = ct.description || '';
       configForm.cpuCores = ct.cpuCores || 2;
       configForm.memoryLimitMib = ct.memoryLimitMib || 2048;
-      configForm.networkBridge = ct.networkBridge || 'br0';
+      configForm.networkBridge = ct.networkBridge || defaultBridge.value || 'br0';
       configForm.autostart = Boolean(ct.autostart);
       configForm.unprivileged = Boolean(ct.unprivileged);
       configForm.gpuEnabled = Boolean(ct.gpuEnabled);
+      configForm.mountPoints = (ct.mountPoints || []).map((m) => ({
+        hostPath: m.hostPath,
+        containerPath: m.containerPath,
+        readOnly: Boolean(m.readOnly),
+      }));
     }
   },
   { immediate: true }
@@ -372,10 +339,15 @@ async function handleSaveConfig() {
         description: configForm.description.trim(),
         cpuCores: Number(configForm.cpuCores) || 2,
         memoryLimitMib: Number(configForm.memoryLimitMib) || 2048,
-        networkBridge: configForm.networkBridge.trim() || 'br0',
+        networkBridge: configForm.networkBridge.trim() || defaultBridge.value || 'br0',
         autostart: configForm.autostart,
         unprivileged: configForm.unprivileged,
         gpuEnabled: configForm.gpuEnabled,
+        mountPoints: configForm.mountPoints.map((m) => ({
+          hostPath: m.hostPath.trim(),
+          containerPath: m.containerPath.trim(),
+          readOnly: Boolean(m.readOnly),
+        })),
       });
     });
     notify('success', `Saved configuration for ${cleanContainerName.value}`);
@@ -636,16 +608,18 @@ onBeforeUnmount(() => {
 
     <!-- Subtab 3: Configuration (Settings, Resources & Storage Mounts) -->
     <div v-else-if="props.activeSubTab === 'configuration' || props.activeSubTab === 'mounts'" class="lxc-tab-content">
-      <div class="grid-2">
-        <!-- Container Settings & Resource Limits -->
-        <div class="card detail-card">
-          <div class="card-header">
-            <h3 class="card-title">Container Settings & Resources</h3>
-            <p class="card-subtitle">Manage runtime limits, networking and security profiles</p>
-          </div>
-          <div class="card-body">
-            <form style="display: flex; flex-direction: column; gap: 14px" @submit.prevent="handleSaveConfig">
-              <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 12px">
+      <div class="card detail-card">
+        <form class="lxc-config-form" @submit.prevent="handleSaveConfig">
+          <!-- Top Zone: Container Settings & Resource Limits -->
+          <div class="lxc-config-zone">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Container Settings & Resources</h3>
+                <p class="card-subtitle">Manage runtime limits, networking and security profiles</p>
+              </div>
+            </div>
+            <div class="card-body" style="display: flex; flex-direction: column; gap: 14px">
+              <div class="grid-2" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px">
                 <div class="form-group">
                   <label class="form-label">Container Name</label>
                   <input v-model="configForm.containerName" type="text" class="form-input" required />
@@ -653,7 +627,11 @@ onBeforeUnmount(() => {
 
                 <div class="form-group">
                   <label class="form-label">Network Bridge</label>
-                  <input v-model="configForm.networkBridge" type="text" class="form-input mono" placeholder="e.g. br0" />
+                  <select v-model="configForm.networkBridge" class="form-select mono">
+                    <option v-for="b in bridgeOptionsFor(configForm.networkBridge)" :key="b.name" :value="b.name">
+                      {{ b.label }}
+                    </option>
+                  </select>
                 </div>
 
                 <div class="form-group">
@@ -688,67 +666,69 @@ onBeforeUnmount(() => {
                   <span>GPU Acceleration Passthrough (/dev/dri, nvidia)</span>
                 </label>
               </div>
-
-              <div style="margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: flex-end">
-                <button type="submit" class="btn btn-sm btn-primary" :disabled="isSavingConfig">
-                  {{ isSavingConfig ? 'Saving Changes...' : 'Save Configuration' }}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-
-        <!-- Storage Bind Mounts -->
-        <div class="card detail-card">
-          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center">
-            <div>
-              <h3 class="card-title">Storage Bind Mounts</h3>
-              <p class="card-subtitle">ZFS datasets and host directories mapped into the container</p>
             </div>
-            <button class="btn btn-sm btn-secondary" @click="openAddMountModal">
-              <MdiIcon :path="mdiPlus" size="14" />
-              <span>Add Mount Point</span>
+          </div>
+
+          <!-- Bottom Zone: Storage Bind Mounts -->
+          <div class="lxc-config-zone lxc-config-zone-divider">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
+              <div>
+                <h3 class="card-title">Storage Bind Mounts</h3>
+                <p class="card-subtitle">ZFS datasets and host directories mapped into the container</p>
+              </div>
+              <button type="button" class="btn btn-sm btn-secondary" @click="openAddMountModal">
+                <MdiIcon :path="mdiPlus" size="14" />
+                <span>Add Mount Point</span>
+              </button>
+            </div>
+            <div class="card-body">
+              <div v-if="configForm.mountPoints.length === 0" class="empty-state">
+                No bind mounts configured. Click "Add Mount Point" to map host storage.
+              </div>
+              <div v-else class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Host Path</th>
+                      <th>Container Mount Path</th>
+                      <th style="width: 130px">Mode</th>
+                      <th style="width: 80px; text-align: right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(m, idx) in configForm.mountPoints" :key="idx">
+                      <td class="mono font-sm" style="font-weight: 600; word-break: break-all">{{ m.hostPath }}</td>
+                      <td class="mono font-sm" style="color: var(--accent-primary); word-break: break-all">{{ m.containerPath }}</td>
+                      <td>
+                        <span class="badge font-xs" :class="m.readOnly ? 'badge-warning' : 'badge-success'">
+                          {{ m.readOnly ? 'Read Only' : 'Read / Write' }}
+                        </span>
+                      </td>
+                      <td style="text-align: right">
+                        <button
+                          type="button"
+                          class="btn btn-xs btn-danger"
+                          title="Remove bind mount"
+                          :disabled="isSavingConfig"
+                          @click="handleRemoveMount(idx)"
+                        >
+                          <MdiIcon :path="mdiTrashCanOutline" size="13" />
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Unified Save Configuration Footer -->
+          <div class="lxc-config-footer">
+            <button type="submit" class="btn btn-sm btn-primary" :disabled="isSavingConfig">
+              {{ isSavingConfig ? 'Saving Changes...' : 'Save Configuration' }}
             </button>
           </div>
-          <div class="card-body">
-            <div v-if="mountsList.length === 0" class="empty-state">
-              No bind mounts configured. Click "Add Mount Point" to map host storage.
-            </div>
-            <div v-else class="table-wrap">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Host Path</th>
-                    <th>Container Mount Path</th>
-                    <th>Mode</th>
-                    <th style="text-align: right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(m, idx) in mountsList" :key="idx">
-                    <td class="mono font-sm" style="font-weight: 600">{{ m.hostPath }}</td>
-                    <td class="mono font-sm" style="color: var(--accent-primary)">{{ m.containerPath }}</td>
-                    <td>
-                      <span class="badge font-xs" :class="m.readOnly ? 'badge-warning' : 'badge-success'">
-                        {{ m.readOnly ? 'Read Only' : 'Read / Write' }}
-                      </span>
-                    </td>
-                    <td style="text-align: right">
-                      <button
-                        class="btn btn-xs btn-danger"
-                        title="Remove bind mount"
-                        :disabled="isSavingMounts"
-                        @click="handleRemoveMount(idx)"
-                      >
-                        <MdiIcon :path="mdiTrashCanOutline" size="13" />
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+        </form>
       </div>
     </div>
 
@@ -835,8 +815,8 @@ onBeforeUnmount(() => {
               <button type="button" class="btn btn-secondary" @click="showAddMountModal = false">
                 Cancel
               </button>
-              <button type="submit" class="btn btn-primary" :disabled="isSavingMounts">
-                {{ isSavingMounts ? 'Adding...' : 'Add Mount' }}
+              <button type="submit" class="btn btn-primary">
+                Add Mount
               </button>
             </div>
           </form>
@@ -852,6 +832,29 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 16px;
   width: 100%;
+}
+
+.lxc-config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.lxc-config-zone {
+  display: flex;
+  flex-direction: column;
+}
+
+.lxc-config-zone-divider {
+  padding-top: 20px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.lxc-config-footer {
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  justify-content: flex-end;
 }
 
 .lxc-detail-view.is-console-tab {

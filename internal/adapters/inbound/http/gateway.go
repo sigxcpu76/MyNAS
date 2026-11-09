@@ -741,7 +741,7 @@ func (s *httpServerStream[T]) Send(msg T) error {
 	var data []byte
 	var err error
 	if pm, ok := any(msg).(proto.Message); ok {
-		data, err = protojson.Marshal(pm)
+		data, err = (protojson.MarshalOptions{EmitUnpopulated: true}).Marshal(pm)
 	} else {
 		data, err = json.Marshal(msg)
 	}

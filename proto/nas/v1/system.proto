@@ -106,6 +106,7 @@ message NetworkInterfaceTelemetry {
   int64 rx_rate_bytes_per_sec = 8;
   int64 tx_rate_bytes_per_sec = 9;
   bool is_default = 10;
+  bool is_bridge = 11;
 }
 
 message GpuTelemetry {

@@ -285,6 +285,7 @@ export function mapSystemTelemetry(raw: any): SystemTelemetry {
       rxRateBytesPerSec: normalizeInt64(n.rxRateBytesPerSec ?? n.rx_rate_bytes_per_sec),
       txRateBytesPerSec: normalizeInt64(n.txRateBytesPerSec ?? n.tx_rate_bytes_per_sec),
       isDefault: Boolean(n.isDefault ?? n.is_default),
+      isBridge: Boolean(n.isBridge ?? n.is_bridge),
     })),
     sensors: raw?.sensors ? {
       lmSensorsInstalled: Boolean(raw.sensors.lmSensorsInstalled ?? raw.sensors.lm_sensors_installed),
@@ -758,7 +759,7 @@ export function mapLxcContainer(raw: any): LxcContainer {
     architecture: raw?.architecture ?? 'amd64',
     ipv4Address: raw?.ipv4Address ?? raw?.ipv4_address ?? '',
     autostart: Boolean(raw?.autostart ?? false),
-    unprivileged: Boolean(raw?.unprivileged ?? true),
+    unprivileged: Boolean(raw?.unprivileged ?? false),
     rootfsPath: raw?.rootfsPath ?? raw?.rootfs_path ?? '',
     memoryLimitMib: normalizeInt64(raw?.memoryLimitMib ?? raw?.memory_limit_mib),
     cpuCores: Number(raw?.cpuCores ?? raw?.cpu_cores ?? 1),

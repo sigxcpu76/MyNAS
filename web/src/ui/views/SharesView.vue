@@ -567,32 +567,6 @@ async function handleDeleteWebdav(share: WebdavShare) {
 
 <template>
   <div class="shares-view-container">
-    <!-- Sub-navigation Pill Bar -->
-    <div class="shares-subnav">
-      <div class="subnav-pill-group">
-        <button
-          type="button"
-          class="subnav-pill"
-          :class="{ active: currentSubtab === 'cifs' || (currentSubtab === 'all' && nasState.activeTab !== 'shares-webdav') }"
-          @click="navigateTo('shares-cifs')"
-        >
-          <MdiIcon :path="mdiFolderNetwork" size="16" />
-          <span>Windows (SMB / CIFS)</span>
-          <span class="subnav-badge">{{ visibleCifsShares.length }}</span>
-        </button>
-        <button
-          type="button"
-          class="subnav-pill"
-          :class="{ active: currentSubtab === 'webdav' }"
-          @click="navigateTo('shares-webdav')"
-        >
-          <MdiIcon :path="mdiWeb" size="16" />
-          <span>WebDAV</span>
-          <span class="subnav-badge">{{ nasState.webdavShares.length }}</span>
-        </button>
-      </div>
-    </div>
-
     <!-- CIFS / Samba Shares Card (Wide Table) -->
     <div v-if="currentSubtab === 'cifs' || currentSubtab === 'all'" class="card shares-wide-card">
       <div class="card-header">

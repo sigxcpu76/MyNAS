@@ -41,6 +41,9 @@ import {
   runTrackedTask,
 } from '../store';
 import { confirmDelete } from '../modal';
+import { useNetworkBridges } from '../utils/networkBridges';
+
+const { defaultBridge, bridgeOptionsFor } = useNetworkBridges();
 
 const props = withDefaults(
   defineProps<{
@@ -505,15 +508,22 @@ async function submitEditDisk() {
 const showAddNicModal = ref(false);
 const newNic = reactive({
   model: 'virtio',
-  bridge: 'br0',
+  bridge: defaultBridge.value || 'br0',
   vlanTag: 0,
 });
+
+function openAddNic() {
+  newNic.model = 'virtio';
+  newNic.bridge = defaultBridge.value || 'br0';
+  newNic.vlanTag = 0;
+  showAddNicModal.value = true;
+}
 
 const showEditNicModal = ref(false);
 const editingNicIndex = ref(-1);
 const editNicForm = reactive({
   model: 'virtio',
-  bridge: 'br0',
+  bridge: defaultBridge.value || 'br0',
   vlanTag: 0,
 });
 
@@ -522,7 +532,7 @@ function openEditNic(idx: number) {
   if (!nic) return;
   editingNicIndex.value = idx;
   editNicForm.model = nic.model || 'virtio';
-  editNicForm.bridge = nic.bridge || 'br0';
+  editNicForm.bridge = nic.bridge || defaultBridge.value || 'br0';
   editNicForm.vlanTag = nic.vlanTag || 0;
   showEditNicModal.value = true;
 }
@@ -1010,7 +1020,7 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
               <MdiIcon :path="mdiPlus" size="14" />
               <span>Add Disk</span>
             </button>
-            <button class="btn btn-sm btn-secondary" @click="showAddNicModal = true">
+            <button class="btn btn-sm btn-secondary" @click="openAddNic">
               <MdiIcon :path="mdiPlus" size="14" />
               <span>Add NIC</span>
             </button>
@@ -1258,7 +1268,11 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
         <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; padding: 16px 20px">
           <div class="form-group">
             <label class="form-label">Host Network Bridge</label>
-            <input v-model="newNic.bridge" type="text" class="form-input mono" placeholder="br0" />
+            <select v-model="newNic.bridge" class="form-input mono">
+              <option v-for="b in bridgeOptionsFor(newNic.bridge)" :key="b.name" :value="b.name">
+                {{ b.label }}
+              </option>
+            </select>
           </div>
           <div class="form-group">
             <label class="form-label">Adapter Model</label>
@@ -1372,7 +1386,11 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
         <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; padding: 16px 20px">
           <div class="form-group">
             <label class="form-label">Host Network Bridge</label>
-            <input v-model="editNicForm.bridge" type="text" class="form-input mono" placeholder="br0" />
+            <select v-model="editNicForm.bridge" class="form-input mono">
+              <option v-for="b in bridgeOptionsFor(editNicForm.bridge)" :key="b.name" :value="b.name">
+                {{ b.label }}
+              </option>
+            </select>
           </div>
           <div class="form-group">
             <label class="form-label">Adapter Model</label>

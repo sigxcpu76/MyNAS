@@ -43,6 +43,7 @@ import { confirmDelete } from '../modal';
 import { toZfsSafeSlug } from '../../domain/id';
 import { formatBytes, type LxcCatalogItem, type LxcContainer, type LxcMountPoint, type StorageImage } from '../../domain/models';
 import { getLxcContainerIcon } from '../utils/appIcons';
+import { useNetworkBridges } from '../utils/networkBridges';
 
 const failedLxcIcons = ref<Record<string, boolean>>({});
 
@@ -212,70 +213,7 @@ function computeSafeTemplateFilename(item: LxcCatalogItem, overrideUrl?: string)
   return `${safeSlug}${ext}`;
 }
 
-interface BridgeOption {
-  name: string;
-  label: string;
-}
-
-const defaultBridge = computed<string>(() => {
-  const net = nasState.systemTelemetry?.network;
-  if (!net || !Array.isArray(net)) return 'br0';
-  const br = net.find((n: any) => n.name === 'br0' || n.name === 'vmbr0');
-  if (br) return br.name;
-  const def = net.find((n: any) => n.isDefault);
-  if (def) return def.name;
-  const firstEth = net.find(
-    (n: any) =>
-      !n.name.startsWith('lo') &&
-      !n.name.startsWith('docker') &&
-      !n.name.startsWith('br-') &&
-      !n.name.startsWith('veth') &&
-      !n.name.startsWith('vnet') &&
-      !n.name.startsWith('tap') &&
-      !n.name.startsWith('lxc')
-  );
-  if (firstEth) return firstEth.name;
-  return 'br0';
-});
-
-const hostBridgeInterfaces = computed<BridgeOption[]>(() => {
-  const net = nasState.systemTelemetry?.network;
-  if (!net || !Array.isArray(net)) {
-    return [
-      { name: 'br0', label: 'br0 (main bridge)' },
-      { name: 'lxcbr0', label: 'lxcbr0' },
-    ];
-  }
-  const list = net
-    .filter(
-      (n: any) =>
-        !n.name.startsWith('lo') &&
-        !n.name.startsWith('docker') &&
-        !n.name.startsWith('br-') &&
-        !n.name.startsWith('veth') &&
-        !n.name.startsWith('vnet') &&
-        !n.name.startsWith('tap')
-    )
-    .map((n: any) => {
-      const ip = n.ipAddresses?.find((a: string) => !a.includes(':')) || n.ipAddresses?.[0];
-      const parts = [n.isUp ? 'up' : 'down'];
-      if (ip) parts.push(ip);
-      if (n.isDefault) parts.push('default route');
-      return { name: n.name, label: `${n.name} (${parts.join(', ')})` };
-    });
-  if (!list.some((b) => b.name === 'br0')) {
-    list.unshift({ name: 'br0', label: 'br0 (main bridge)' });
-  }
-  return list;
-});
-
-function bridgeOptionsFor(current: string): BridgeOption[] {
-  const opts = [...hostBridgeInterfaces.value];
-  if (current && !opts.some((o) => o.name === current)) {
-    opts.unshift({ name: current, label: `${current} (custom)` });
-  }
-  return opts;
-}
+const { defaultBridge, bridgeOptionsFor } = useNetworkBridges();
 
 const lxcSort = useTableSort(() => nasState.lxcContainers, {
   name: (lx) => lx.containerName,

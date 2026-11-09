@@ -73,6 +73,7 @@ type NetworkInterfaceTelemetry struct {
 	RxRateBytesPerSec  int64    `json:"rxRateBytesPerSec"`
 	TxRateBytesPerSec  int64    `json:"txRateBytesPerSec"`
 	IsDefault          bool     `json:"isDefault"`
+	IsBridge           bool     `json:"isBridge"`
 }
 
 type GpuTelemetry struct {

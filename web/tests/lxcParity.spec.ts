@@ -200,7 +200,8 @@ describe('LXC Feature Parity with VMs and Apps', () => {
       expect(nasState.selectedResourceId).toBe('lxc:ct-media');
     });
 
-    it('renders unified Configuration tab in LxcDetailView with CPU, RAM, GPU, and Bind Mounts', async () => {
+    it('renders unified Configuration tab in LxcDetailView with CPU, RAM, GPU, and Bind Mounts in a single card', async () => {
+      const updateSpy = vi.spyOn(services.lxc, 'updateContainer').mockResolvedValue(nasState.lxcContainers[0]);
       nasState.selectedResourceId = 'lxc:ct-media';
       const wrapper = mount(LxcDetailView, {
         props: {
@@ -210,6 +211,8 @@ describe('LXC Feature Parity with VMs and Apps', () => {
       });
       await nextTick();
 
+      expect(wrapper.findAll('.detail-card').length).toBe(1);
+      expect(wrapper.findAll('.lxc-config-zone').length).toBe(2);
       expect(wrapper.text()).toContain('Container Settings & Resources');
       expect(wrapper.text()).toContain('CPU Cores');
       expect(wrapper.text()).toContain('Memory Limit (MiB)');
@@ -217,6 +220,20 @@ describe('LXC Feature Parity with VMs and Apps', () => {
       expect(wrapper.text()).toContain('Storage Bind Mounts');
       expect(wrapper.text()).toContain('/mnt/tank/media');
       expect(wrapper.text()).toContain('/media');
+
+      await wrapper.find('form.lxc-config-form').trigger('submit.prevent');
+      expect(updateSpy).toHaveBeenCalledWith(
+        'lxcContainers/ct-media',
+        expect.objectContaining({
+          mountPoints: [
+            {
+              hostPath: '/mnt/tank/media',
+              containerPath: '/media',
+              readOnly: true,
+            },
+          ],
+        })
+      );
     });
 
     it('renders unified ActionRibbon and Logs tab in LxcDetailView', async () => {

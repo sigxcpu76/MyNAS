@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/creack/pty"
@@ -532,8 +533,8 @@ func parseLxcMountEntry(v string) (hostPath, targetPath string, ro bool, ok bool
 	if len(fields) < 2 {
 		return "", "", false, false
 	}
-	hostPath = fields[0]
-	targetPath = fields[1]
+	hostPath = strings.ReplaceAll(fields[0], "\\040", " ")
+	targetPath = strings.ReplaceAll(fields[1], "\\040", " ")
 	if !strings.HasPrefix(targetPath, "/") {
 		targetPath = "/" + targetPath
 	}
@@ -546,6 +547,49 @@ func parseLxcMountEntry(v string) (hostPath, targetPath string, ro bool, ok bool
 		}
 	}
 	return hostPath, targetPath, ro, true
+}
+
+func parseLxcMemoryLimitMiB(v string) (int64, bool) {
+	v = strings.TrimSpace(v)
+	if v == "" || v == "max" {
+		return 0, false
+	}
+	upper := strings.ToUpper(v)
+	var mult int64 = 1
+	var numStr string
+	switch {
+	case strings.HasSuffix(upper, "G"):
+		mult = 1024
+		numStr = strings.TrimSpace(upper[:len(upper)-1])
+	case strings.HasSuffix(upper, "M"):
+		mult = 1
+		numStr = strings.TrimSpace(upper[:len(upper)-1])
+	case strings.HasSuffix(upper, "K"):
+		numStr = strings.TrimSpace(upper[:len(upper)-1])
+		val, err := strconv.ParseInt(numStr, 10, 64)
+		if err != nil || val <= 0 {
+			return 0, false
+		}
+		mib := val / 1024
+		if mib < 1 {
+			mib = 1
+		}
+		return mib, true
+	default:
+		val, err := strconv.ParseInt(upper, 10, 64)
+		if err != nil || val <= 0 {
+			return 0, false
+		}
+		if val >= 1024*1024 {
+			return val / (1024 * 1024), true
+		}
+		return val, true
+	}
+	val, err := strconv.ParseInt(numStr, 10, 64)
+	if err != nil || val <= 0 {
+		return 0, false
+	}
+	return val * mult, true
 }
 
 // discoverContainerLocked parses a container configuration from /var/lib/lxc/<id>/config or pool container config.
@@ -579,6 +623,7 @@ func (a *Adapter) discoverContainerLocked(id string) *domain.LxcContainer {
 		CPUCores:       1,
 	}
 
+	var explicitCores int32
 	lines := strings.Split(string(data), "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -588,6 +633,12 @@ func (a *Adapter) discoverContainerLocked(id string) *domain.LxcContainer {
 		}
 		if strings.HasPrefix(line, "# aegis.description =") {
 			c.Description = strings.TrimSpace(strings.TrimPrefix(line, "# aegis.description ="))
+			continue
+		}
+		if strings.HasPrefix(line, "# nan.cpu_cores =") {
+			if n, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "# nan.cpu_cores ="))); err == nil && n > 0 {
+				explicitCores = int32(n)
+			}
 			continue
 		}
 		if strings.HasPrefix(line, "#") || !strings.Contains(line, "=") {
@@ -603,20 +654,35 @@ func (a *Adapter) discoverContainerLocked(id string) *domain.LxcContainer {
 		case "lxc.arch":
 			c.Architecture = v
 		case "lxc.rootfs.path":
-			c.RootfsPath = strings.TrimPrefix(v, "dir:")
+			if idx := strings.Index(v, ":"); idx >= 0 && !strings.HasPrefix(v, "/") {
+				c.RootfsPath = v[idx+1:]
+			} else {
+				c.RootfsPath = v
+			}
 		case "lxc.net.0.link":
 			c.NetworkBridge = v
 		case "lxc.start.auto":
 			c.Autostart = (v == "1")
-		case "lxc.cgroup2.memory.max":
-			v = strings.TrimSuffix(v, "M")
-			var mem int64
-			if _, err := fmt.Sscanf(v, "%d", &mem); err == nil {
+		case "lxc.cgroup2.memory.max", "lxc.cgroup.memory.limit_in_bytes":
+			if mem, ok := parseLxcMemoryLimitMiB(v); ok {
 				c.MemoryLimitMiB = mem
+			}
+		case "lxc.cgroup2.cpu.max":
+			fields := strings.Fields(v)
+			if len(fields) >= 2 && fields[0] != "max" {
+				quota, err1 := strconv.ParseInt(fields[0], 10, 64)
+				period, err2 := strconv.ParseInt(fields[1], 10, 64)
+				if err1 == nil && err2 == nil && quota > 0 && period > 0 {
+					cores := int32(quota / period)
+					if cores < 1 {
+						cores = 1
+					}
+					c.CPUCores = cores
+				}
 			}
 		case "lxc.cgroup2.cpu.weight":
 			var weight int32
-			if _, err := fmt.Sscanf(v, "%d", &weight); err == nil && weight > 0 {
+			if _, err := fmt.Sscanf(v, "%d", &weight); err == nil && weight > 0 && explicitCores == 0 {
 				c.CPUCores = weight / 100
 				if c.CPUCores < 1 {
 					c.CPUCores = 1
@@ -639,13 +705,20 @@ func (a *Adapter) discoverContainerLocked(id string) *domain.LxcContainer {
 					})
 				}
 			}
-		case "lxc.cgroup2.devices.allow":
+		case "lxc.cgroup2.devices.allow", "lxc.cgroup.devices.allow":
 			if strings.Contains(v, "226:*") || strings.Contains(v, "195:*") {
 				c.GpuEnabled = true
 			}
-		case "lxc.idmap":
+		case "lxc.idmap", "lxc.id_map":
 			c.Unprivileged = true
+		case "lxc.include":
+			if strings.HasSuffix(v, "userns.conf") {
+				c.Unprivileged = true
+			}
 		}
+	}
+	if explicitCores > 0 {
+		c.CPUCores = explicitCores
 	}
 
 	// Try reading OS release from rootfs if present
@@ -670,23 +743,45 @@ func (a *Adapter) discoverContainerLocked(id string) *domain.LxcContainer {
 	return c
 }
 
+func syncContainerFromDiscovered(c *domain.LxcContainer, disc *domain.LxcContainer) {
+	if disc == nil {
+		return
+	}
+	if disc.ContainerName != "" {
+		c.ContainerName = disc.ContainerName
+	}
+	if disc.Architecture != "" {
+		c.Architecture = disc.Architecture
+	}
+	if disc.RootfsPath != "" {
+		c.RootfsPath = disc.RootfsPath
+	}
+	if disc.NetworkBridge != "" {
+		c.NetworkBridge = disc.NetworkBridge
+	}
+	c.Autostart = disc.Autostart
+	if disc.MemoryLimitMiB > 0 {
+		c.MemoryLimitMiB = disc.MemoryLimitMiB
+	}
+	if disc.CPUCores > 0 {
+		c.CPUCores = disc.CPUCores
+	}
+	c.MountPoints = disc.MountPoints
+	c.GpuEnabled = disc.GpuEnabled
+	c.Unprivileged = disc.Unprivileged
+	c.Description = disc.Description
+	if disc.Distribution != "" && disc.Distribution != "linux" {
+		c.Distribution = disc.Distribution
+		c.Release = disc.Release
+	}
+}
+
 // getOrDiscoverContainerLocked returns the container from memory if present,
 // or attempts to discover it from disk (/var/lib/lxc/<id>/config) under the adapter lock.
 func (a *Adapter) getOrDiscoverContainerLocked(id string) (*domain.LxcContainer, bool) {
 	if c, ok := a.containers[id]; ok {
 		if disc := a.discoverContainerLocked(id); disc != nil {
-			c.MountPoints = disc.MountPoints
-			c.GpuEnabled = disc.GpuEnabled
-			if disc.Unprivileged {
-				c.Unprivileged = true
-			}
-			if disc.Description != "" && c.Description == "" {
-				c.Description = disc.Description
-			}
-			if disc.Distribution != "" && disc.Distribution != "linux" {
-				c.Distribution = disc.Distribution
-				c.Release = disc.Release
-			}
+			syncContainerFromDiscovered(&c, disc)
 			a.containers[id] = c
 		}
 		if c.RootfsPath != "" {
@@ -749,15 +844,7 @@ func (a *Adapter) ListContainers(ctx context.Context) ([]domain.LxcContainer, er
 	out := make([]domain.LxcContainer, 0, len(a.containers))
 	for id, c := range a.containers {
 		if disc := a.discoverContainerLocked(id); disc != nil {
-			c.MountPoints = disc.MountPoints
-			c.GpuEnabled = disc.GpuEnabled
-			if disc.Unprivileged {
-				c.Unprivileged = true
-			}
-			if disc.Distribution != "" && disc.Distribution != "linux" {
-				c.Distribution = disc.Distribution
-				c.Release = disc.Release
-			}
+			syncContainerFromDiscovered(&c, disc)
 			a.containers[id] = c
 		}
 		if c.RootfsPath != "" {
@@ -1601,14 +1688,92 @@ func getNvidiaGpuPassthroughEntries() []string {
 	return lines
 }
 
+func ensureSubuidSubgid() {
+	for _, path := range []string{"/etc/subuid", "/etc/subgid"} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		if !strings.Contains(string(data), "root:") {
+			f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0644)
+			if err == nil {
+				_, _ = f.WriteString("root:100000:65536\n")
+				_ = f.Close()
+			}
+		}
+	}
+}
+
+func shiftRootfsOwnership(rootfsPath string, toUnprivileged bool) {
+	if rootfsPath == "" || os.Geteuid() != 0 {
+		return
+	}
+	fi, err := os.Lstat(rootfsPath)
+	if err != nil {
+		return
+	}
+	stat, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok {
+		return
+	}
+	const offset = 100000
+	const span = 65536
+	isCurrentlyShifted := stat.Uid >= offset && stat.Uid < offset+span
+	if toUnprivileged && isCurrentlyShifted {
+		return
+	}
+	if !toUnprivileged && !isCurrentlyShifted {
+		return
+	}
+
+	if toUnprivileged {
+		ensureSubuidSubgid()
+		_ = os.Chmod(filepath.Dir(rootfsPath), 0755)
+	}
+
+	_ = filepath.Walk(rootfsPath, func(p string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil || info == nil {
+			return nil
+		}
+		st, ok := info.Sys().(*syscall.Stat_t)
+		if !ok {
+			return nil
+		}
+		uid := int(st.Uid)
+		gid := int(st.Gid)
+		newUID := uid
+		newGID := gid
+		if toUnprivileged {
+			if uid >= 0 && uid < span {
+				newUID = uid + offset
+			}
+			if gid >= 0 && gid < span {
+				newGID = gid + offset
+			}
+		} else {
+			if uid >= offset && uid < offset+span {
+				newUID = uid - offset
+			}
+			if gid >= offset && gid < offset+span {
+				newGID = gid - offset
+			}
+		}
+		if newUID != uid || newGID != gid {
+			_ = os.Lchown(p, newUID, newGID)
+		}
+		return nil
+	})
+}
+
 func (a *Adapter) writeLxcConfig(c domain.LxcContainer) {
 	bridge := c.NetworkBridge
 	if bridge == "" {
 		bridge = "br0"
 	}
 
-	// Preserve existing MAC if config exists, otherwise generate a new one
+	// Preserve existing MAC and custom idmap lines if config exists
 	mac := ""
+	var existingIdmaps []string
 	configPath := fmt.Sprintf("/var/lib/lxc/%s/config", c.ID)
 	if data, err := os.ReadFile(configPath); err == nil {
 		for _, line := range strings.Split(string(data), "\n") {
@@ -1616,7 +1781,8 @@ func (a *Adapter) writeLxcConfig(c domain.LxcContainer) {
 			if strings.HasPrefix(line, "lxc.net.0.hwaddr") && strings.Contains(line, "=") {
 				parts := strings.SplitN(line, "=", 2)
 				mac = strings.TrimSpace(parts[1])
-				break
+			} else if (strings.HasPrefix(line, "lxc.idmap") || strings.HasPrefix(line, "lxc.id_map")) && strings.Contains(line, "=") {
+				existingIdmaps = append(existingIdmaps, line)
 			}
 		}
 	}
@@ -1635,6 +1801,9 @@ func (a *Adapter) writeLxcConfig(c domain.LxcContainer) {
 	if c.Description != "" {
 		sb.WriteString(fmt.Sprintf("# nan.description = %s\n", strings.ReplaceAll(c.Description, "\n", " ")))
 	}
+	if c.CPUCores > 0 {
+		sb.WriteString(fmt.Sprintf("# nan.cpu_cores = %d\n", c.CPUCores))
+	}
 	if c.Architecture != "" {
 		sb.WriteString(fmt.Sprintf("lxc.arch = %s\n", c.Architecture))
 	}
@@ -1647,6 +1816,22 @@ func (a *Adapter) writeLxcConfig(c domain.LxcContainer) {
 	if _, err := os.Stat("/usr/share/lxc/config/nesting.conf"); err == nil {
 		sb.WriteString("lxc.include = /usr/share/lxc/config/nesting.conf\n")
 	}
+	if c.Unprivileged {
+		if _, err := os.Stat("/usr/share/lxc/config/userns.conf"); err == nil {
+			sb.WriteString("lxc.include = /usr/share/lxc/config/userns.conf\n")
+		}
+		if len(existingIdmaps) > 0 {
+			for _, idm := range existingIdmaps {
+				sb.WriteString(idm + "\n")
+			}
+		} else {
+			sb.WriteString("lxc.idmap = u 0 100000 65536\n")
+			sb.WriteString("lxc.idmap = g 0 100000 65536\n")
+		}
+	}
+
+	// Shift rootfs UID/GID ownership if needed to match Privileged/Unprivileged mode
+	shiftRootfsOwnership(c.RootfsPath, c.Unprivileged)
 
 	// Override AppArmor profile to unconfined to ensure sync wake pipes work reliably
 	sb.WriteString("lxc.apparmor.profile = unconfined\n")
@@ -1670,7 +1855,12 @@ func (a *Adapter) writeLxcConfig(c domain.LxcContainer) {
 		sb.WriteString(fmt.Sprintf("lxc.cgroup2.memory.max = %dM\n", c.MemoryLimitMiB))
 	}
 	if c.CPUCores > 0 {
-		sb.WriteString(fmt.Sprintf("lxc.cgroup2.cpu.weight = %d\n", c.CPUCores*100))
+		weight := c.CPUCores * 100
+		if weight > 10000 {
+			weight = 10000
+		}
+		sb.WriteString(fmt.Sprintf("lxc.cgroup2.cpu.weight = %d\n", weight))
+		sb.WriteString(fmt.Sprintf("lxc.cgroup2.cpu.max = %d 100000\n", int64(c.CPUCores)*100000))
 	}
 	if c.Autostart {
 		sb.WriteString("lxc.start.auto = 1\n")
@@ -1687,8 +1877,13 @@ func (a *Adapter) writeLxcConfig(c domain.LxcContainer) {
 			if mp.ReadOnly {
 				ro = ",ro"
 			}
-			rel := strings.TrimPrefix(mp.ContainerPath, "/")
-			sb.WriteString(fmt.Sprintf("lxc.mount.entry = %s %s none bind,create=dir%s 0 0\n", mp.HostPath, rel, ro))
+			createOpt := "create=dir"
+			if fi, err := os.Stat(mp.HostPath); err == nil && !fi.IsDir() {
+				createOpt = "create=file"
+			}
+			hostEsc := strings.ReplaceAll(mp.HostPath, " ", "\\040")
+			relEsc := strings.ReplaceAll(strings.TrimPrefix(mp.ContainerPath, "/"), " ", "\\040")
+			sb.WriteString(fmt.Sprintf("lxc.mount.entry = %s %s none bind,%s%s 0 0\n", hostEsc, relEsc, createOpt, ro))
 		}
 		sb.WriteString("\n")
 	}

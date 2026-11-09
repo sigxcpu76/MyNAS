@@ -23,6 +23,7 @@ import SortableTh from '../components/SortableTh.vue';
 import FileDropzone from '../components/FileDropzone.vue';
 import PathSelector from '../components/PathSelector.vue';
 import { useTableSort } from '../composables/useTableSort';
+import { useNetworkBridges } from '../utils/networkBridges';
 import { generateNanosecondId, generateVMDiskFilePath, generateVMDiskName, generateZvolDiskPath, toZfsSafeSlug } from '../../domain/id';
 import {
   mdiAlertCircleOutline,
@@ -329,24 +330,7 @@ const suggestedDiskPath = computed(() => {
   return generateZvolDiskPath(mainPool.value, wizardForm.vmId || wizardForm.vmName || 'vm', 0);
 });
 
-const defaultBridge = computed<string>(() => {
-  const net = nasState.systemTelemetry?.network;
-  if (!net || !Array.isArray(net)) return 'br0';
-  const br = net.find((n: NetworkInterfaceTelemetry) => n.name === 'br0' || n.name === 'vmbr0');
-  if (br) return br.name;
-  const def = net.find((n: NetworkInterfaceTelemetry) => n.isDefault);
-  if (def) return def.name;
-  const firstEth = net.find(
-    (n: NetworkInterfaceTelemetry) =>
-      !n.name.startsWith('lo') &&
-      !n.name.startsWith('docker') &&
-      !n.name.startsWith('br-') &&
-      !n.name.startsWith('veth') &&
-      !n.name.startsWith('lxc')
-  );
-  if (firstEth) return firstEth.name;
-  return 'br0';
-});
+const { defaultBridge, bridgeOptionsFor } = useNetworkBridges();
 
 const socketOptions = [1, 2, 3, 4];
 
@@ -359,42 +343,6 @@ function coreOptionsFor(current: number): number[] {
   const opts = Array.from({ length: hostLogicalCores.value }, (_, i) => i + 1);
   if (current && !opts.includes(current)) opts.push(current);
   return opts.sort((a, b) => a - b);
-}
-
-interface BridgeOption {
-  name: string;
-  label: string;
-}
-
-const hostBridgeInterfaces = computed<BridgeOption[]>(() => {
-  const net = nasState.systemTelemetry?.network;
-  if (!net || !Array.isArray(net)) return [];
-  return net
-    .filter(
-      (n: NetworkInterfaceTelemetry) =>
-        !n.name.startsWith('lo') &&
-        !n.name.startsWith('docker') &&
-        !n.name.startsWith('br-') &&
-        !n.name.startsWith('veth') &&
-        !n.name.startsWith('vnet') &&
-        !n.name.startsWith('tap') &&
-        !n.name.startsWith('lxc')
-    )
-    .map((n: NetworkInterfaceTelemetry) => {
-      const ip = n.ipAddresses?.find((a) => !a.includes(':')) || n.ipAddresses?.[0];
-      const parts = [n.isUp ? 'up' : 'down'];
-      if (ip) parts.push(ip);
-      if (n.isDefault) parts.push('default route');
-      return { name: n.name, label: `${n.name} (${parts.join(', ')})` };
-    });
-});
-
-function bridgeOptionsFor(current: string): BridgeOption[] {
-  const opts = [...hostBridgeInterfaces.value];
-  if (current && !opts.some((o) => o.name === current)) {
-    opts.unshift({ name: current, label: `${current} (not detected on host)` });
-  }
-  return opts;
 }
 
 function onVmNameInput() {
@@ -1528,9 +1476,17 @@ async function handleWizardSubmit() {
                       Network (<code class="mono">{{ nic.id }}</code>)
                     </td>
                     <td class="mono" style="font-size: 12px">
-                      Bridge: {{ nic.bridge }}, Model: {{ nic.model }}
-                      <span v-if="nic.vlanTag" style="color: var(--accent-primary)">, VLAN: {{ nic.vlanTag }}</span>
-                      <span v-if="nic.firewall" style="color: var(--text-muted)">, Firewall: on</span>
+                      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+                        <label style="display: inline-flex; align-items: center; gap: 6px; margin: 0">
+                          <span>Bridge:</span>
+                          <select v-model="nic.bridge" class="select select-sm mono" style="min-width: 190px">
+                            <option v-for="b in bridgeOptionsFor(nic.bridge)" :key="b.name" :value="b.name">{{ b.label }}</option>
+                          </select>
+                        </label>
+                        <span>Model: {{ nic.model }}</span>
+                        <span v-if="nic.vlanTag" style="color: var(--accent-primary)">VLAN: {{ nic.vlanTag }}</span>
+                        <span v-if="nic.firewall" style="color: var(--text-muted)">Firewall: on</span>
+                      </div>
                     </td>
                     <td style="text-align: right">
                       <div style="display: inline-flex; gap: 4px">

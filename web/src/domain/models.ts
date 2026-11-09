@@ -139,6 +139,7 @@ export interface NetworkInterfaceTelemetry {
   rxRateBytesPerSec: number;
   txRateBytesPerSec: number;
   isDefault?: boolean;
+  isBridge?: boolean;
 }
 
 export interface GpuTelemetry {

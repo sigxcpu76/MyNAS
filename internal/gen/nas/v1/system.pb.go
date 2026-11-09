@@ -866,6 +866,7 @@ type NetworkInterfaceTelemetry struct {
 	RxRateBytesPerSec int64                  `protobuf:"varint,8,opt,name=rx_rate_bytes_per_sec,json=rxRateBytesPerSec,proto3" json:"rx_rate_bytes_per_sec,omitempty"`
 	TxRateBytesPerSec int64                  `protobuf:"varint,9,opt,name=tx_rate_bytes_per_sec,json=txRateBytesPerSec,proto3" json:"tx_rate_bytes_per_sec,omitempty"`
 	IsDefault         bool                   `protobuf:"varint,10,opt,name=is_default,json=isDefault,proto3" json:"is_default,omitempty"`
+	IsBridge          bool                   `protobuf:"varint,11,opt,name=is_bridge,json=isBridge,proto3" json:"is_bridge,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -966,6 +967,13 @@ func (x *NetworkInterfaceTelemetry) GetTxRateBytesPerSec() int64 {
 func (x *NetworkInterfaceTelemetry) GetIsDefault() bool {
 	if x != nil {
 		return x.IsDefault
+	}
+	return false
+}
+
+func (x *NetworkInterfaceTelemetry) GetIsBridge() bool {
+	if x != nil {
+		return x.IsBridge
 	}
 	return false
 }
@@ -2003,7 +2011,7 @@ const file_nas_v1_system_proto_rawDesc = "" +
 	"biosVendor\x12!\n" +
 	"\fbios_version\x18\v \x01(\tR\vbiosVersion\x12\x1b\n" +
 	"\tbios_date\x18\f \x01(\tR\bbiosDate\x12\x12\n" +
-	"\x04gpus\x18\r \x03(\tR\x04gpus\"\xe0\x02\n" +
+	"\x04gpus\x18\r \x03(\tR\x04gpus\"\xfd\x02\n" +
 	"\x19NetworkInterfaceTelemetry\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
 	"\fip_addresses\x18\x02 \x03(\tR\vipAddresses\x12\x1f\n" +
@@ -2018,7 +2026,8 @@ const file_nas_v1_system_proto_rawDesc = "" +
 	"\x15tx_rate_bytes_per_sec\x18\t \x01(\x03R\x11txRateBytesPerSec\x12\x1d\n" +
 	"\n" +
 	"is_default\x18\n" +
-	" \x01(\bR\tisDefault\"\xa8\x03\n" +
+	" \x01(\bR\tisDefault\x12\x1b\n" +
+	"\tis_bridge\x18\v \x01(\bR\bisBridge\"\xa8\x03\n" +
 	"\fGpuTelemetry\x12\x14\n" +
 	"\x05index\x18\x01 \x01(\x05R\x05index\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12%\n" +

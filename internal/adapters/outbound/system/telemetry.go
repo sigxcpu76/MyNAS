@@ -546,6 +546,7 @@ func (c *TelemetryCollector) collectNetwork() []domain.NetworkInterfaceTelemetry
 		}
 
 		speed := readInterfaceSpeed(ifi.Name)
+		_, bridgeErr := os.Stat(filepath.Join("/sys/class/net", ifi.Name, "bridge"))
 
 		results = append(results, domain.NetworkInterfaceTelemetry{
 			Name:              ifi.Name,
@@ -558,6 +559,7 @@ func (c *TelemetryCollector) collectNetwork() []domain.NetworkInterfaceTelemetry
 			RxRateBytesPerSec: rxRate,
 			TxRateBytesPerSec: txRate,
 			IsDefault:         ifi.Name == defaultIface,
+			IsBridge:          bridgeErr == nil,
 		})
 	}
 
