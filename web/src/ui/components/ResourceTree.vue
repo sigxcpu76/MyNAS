@@ -607,7 +607,7 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
           <!-- 6. Scheduled Tasks (Native CronJobs) -->
           <div v-show="isSectionVisible('cron')" class="tree-group">
             <div
-              class="tree-row tree-leaf"
+              class="tree-row tree-header-row"
               role="treeitem"
               tabindex="0"
               :class="{ selected: nasState.selectedResourceId === 'node:cron' && nasState.activeTab === 'cron' }"
@@ -616,7 +616,7 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
               @keydown.space.prevent="handleSelect('node:cron', 'cron')"
             >
               <MdiIcon :path="mdiCalendarClock" size="15" style="color: var(--accent-primary)" />
-              <span class="tree-label font-sm">Scheduled Tasks</span>
+              <span class="tree-label">Scheduled Tasks</span>
               <span class="nav-badge font-xs" style="margin-left: auto">{{ nasState.cronJobs.length }}</span>
             </div>
           </div>
@@ -624,7 +624,7 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
           <!-- 7. Access & Identity -->
           <div v-show="isSectionVisible('access')" class="tree-group">
             <div
-              class="tree-row tree-leaf"
+              class="tree-row tree-header-row"
               role="treeitem"
               tabindex="0"
               :class="{ selected: nasState.selectedResourceId === 'node:identity' && nasState.activeTab === 'identity' }"
@@ -633,7 +633,7 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
               @keydown.space.prevent="handleSelect('node:identity', 'identity')"
             >
               <MdiIcon :path="mdiAccountGroup" size="15" style="color: var(--text-secondary)" />
-              <span class="tree-label font-sm">Users & Groups</span>
+              <span class="tree-label">Users & Groups</span>
               <span class="nav-badge font-xs" style="margin-left: auto">{{ nasState.users.length }}</span>
             </div>
           </div>
@@ -706,6 +706,14 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
   padding: 6px 4px;
 }
 
+.tree-group {
+  margin-bottom: 2px;
+}
+
+.tree-group:not(:first-child) {
+  margin-top: 3px;
+}
+
 .tree-row {
   display: flex;
   align-items: center;
@@ -732,10 +740,27 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
 }
 
 .tree-header-row {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   font-weight: 600;
   font-size: 12px;
   color: var(--text-secondary);
   padding: 5px 6px;
+}
+
+.tree-header-row .nav-badge {
+  margin-left: auto;
+}
+
+.tree-header-row:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.tree-header-row.selected {
+  background: var(--accent-bg-subtle);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
 }
 
 .chevron-btn {
