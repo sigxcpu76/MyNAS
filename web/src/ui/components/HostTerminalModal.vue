@@ -257,7 +257,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
+  <div class="modal-backdrop" role="dialog" aria-modal="true" aria-label="Host Terminal">
     <div
       class="modal-card host-terminal-card"
       :class="{ 'host-terminal-fullscreen': isFullscreen }"
@@ -267,7 +267,7 @@ onBeforeUnmount(() => {
         <div style="display: flex; align-items: center; gap: 12px; min-width: 0; flex-wrap: wrap;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <MdiIcon :path="mdiConsole" size="20" style="color: var(--accent-primary)" />
-            <h3 class="modal-title" style="margin: 0; font-size: 15px; color: #f8fafc; font-weight: 600;">
+            <h3 class="modal-title" style="margin: 0; font-size: 15px; color: #e2e8f0; font-weight: 600;">
               Host Terminal
             </h3>
           </div>
@@ -364,10 +364,10 @@ onBeforeUnmount(() => {
 
       <!-- Footer Info -->
       <div class="host-terminal-footer">
-        <span class="mono" style="font-size: 11px; color: var(--text-secondary);">
-          Host Shell: Logged in as <strong style="color: #f8fafc">{{ currentUser?.username }}</strong> (shell from <code>/etc/passwd</code>)
+        <span class="mono" style="font-size: 11px; color: #94a3b8;">
+          Host Shell: Logged in as <strong style="color: #e2e8f0">{{ currentUser?.username }}</strong> (shell from <code>/etc/passwd</code>)
         </span>
-        <span class="mono hide-mobile" style="font-size: 11px; color: var(--text-tertiary, #64748b);">
+        <span class="mono hide-mobile" style="font-size: 11px; color: #94a3b8;">
           Tip: Ctrl+Shift+C / Ctrl+Shift+V to copy &amp; paste
         </span>
       </div>
@@ -414,8 +414,8 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   background: transparent;
-  border: 1px solid var(--border-subtle);
-  color: var(--text-secondary);
+  border: 1px solid #334155;
+  color: #94a3b8;
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -423,9 +423,9 @@ onBeforeUnmount(() => {
 }
 
 .terminal-top-close-btn:hover {
-  background: var(--bg-surface, #1e293b);
-  color: #fff;
-  border-color: var(--border-strong, #475569);
+  background: #1e293b;
+  color: #f8fafc;
+  border-color: #475569;
 }
 
 .host-terminal-fullscreen {

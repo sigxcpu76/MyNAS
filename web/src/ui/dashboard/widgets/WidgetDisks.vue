@@ -64,7 +64,7 @@ function getTempClass(temp?: number): string {
               {{ disk.temperatureCelsius }}°C
             </span>
             <span
-              v-if="disk.smartStatus && disk.smartStatus !== 'PASSED' && disk.smartStatus !== 'OK'"
+              v-if="disk.smartStatus && !['PASSED', 'OK'].includes(disk.smartStatus.toUpperCase())"
               class="badge badge-danger mono"
               style="font-size: 10px; padding: 1px 5px"
             >

@@ -71,6 +71,9 @@ function openVmDetail(vm: VirtualMachine) {
 // Top Navigation Subtabs
 // =============================================================================
 function getInitialKvmTab(): 'vms' | 'isos' {
+  if (nasState.selectedResourceId === 'node:isos') {
+    return 'isos';
+  }
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       const saved = window.localStorage.getItem('kvm_active_tab');
@@ -92,6 +95,18 @@ function switchTab(tab: 'vms' | 'isos') {
     }
   } catch {}
 }
+
+watch(
+  () => nasState.selectedResourceId,
+  (id) => {
+    if (id === 'node:isos') {
+      switchTab('isos');
+    } else if (id === 'node:vms') {
+      switchTab('vms');
+    }
+  },
+  { immediate: true }
+);
 
 
 
@@ -123,9 +138,10 @@ const wizardForm = reactive({
   description: '',
   autostart: true,
   startupDelaySeconds: 0,
+  startAfterCreate: true,
 
   machineType: 'q35',
-  biosType: 'seabios',
+  biosType: 'ovmf',
   tpmVersion: 'none',
   secureBoot: false,
   bootIso: '',
@@ -147,6 +163,7 @@ const wizardForm = reactive({
   networkInterfaces: [] as WizardNic[],
 
   showCloudInit: false,
+  ciEnabled: false,
   ciUser: 'admin',
   ciPassword: '',
   ciSshKeys: '',
@@ -370,6 +387,11 @@ function onOsVariantChange() {
     wizardForm.biosType = 'ovmf';
     wizardForm.tpmVersion = 'none';
     wizardForm.secureBoot = false;
+  } else if (/^(ubuntu|debian|fedora|arch|rocky|alma)/i.test(wizardForm.osVariant)) {
+    wizardForm.machineType = 'q35';
+    wizardForm.biosType = 'ovmf';
+    wizardForm.tpmVersion = 'none';
+    wizardForm.secureBoot = false;
   } else {
     wizardForm.machineType = 'q35';
     wizardForm.biosType = 'seabios';
@@ -378,6 +400,15 @@ function onOsVariantChange() {
   }
 }
 
+watch(
+  () => wizardForm.biosType,
+  (bios) => {
+    if (bios === 'seabios') {
+      wizardForm.secureBoot = false;
+    }
+  }
+);
+
 function openCreateWizard() {
   wizardForm.vmName = 'Debian Server';
   wizardForm.vmId = toZfsSafeSlug(wizardForm.vmName);
@@ -385,8 +416,9 @@ function openCreateWizard() {
   wizardForm.description = '';
   wizardForm.autostart = true;
   wizardForm.startupDelaySeconds = 0;
+  wizardForm.startAfterCreate = true;
   wizardForm.machineType = 'q35';
-  wizardForm.biosType = 'seabios';
+  wizardForm.biosType = 'ovmf';
   wizardForm.tpmVersion = 'none';
   wizardForm.secureBoot = false;
   wizardForm.bootIso = nasState.isos.length > 0 ? nasState.isos[0].path : '';
@@ -423,6 +455,7 @@ function openCreateWizard() {
   ];
 
   wizardForm.showCloudInit = false;
+  wizardForm.ciEnabled = false;
   wizardForm.ciUser = 'admin';
   wizardForm.ciPassword = '';
   wizardForm.ciSshKeys = '';
@@ -700,6 +733,12 @@ async function handleWizardSubmit() {
     .map((k) => k.trim())
     .filter(Boolean);
 
+  const hasCloudInit =
+    wizardForm.ciEnabled ||
+    wizardForm.showCloudInit ||
+    Boolean(wizardForm.ciPassword.trim()) ||
+    sshKeys.length > 0;
+
   try {
     const cdroms: VirtualMachineCdrom[] = [];
     if (wizardForm.bootIso) {
@@ -719,10 +758,10 @@ async function handleWizardSubmit() {
 
     const created = await services.kvm.createVirtualMachine(targetId, {
       vmName: wizardForm.vmName || targetId,
-      description: wizardForm.description,
+      description: wizardForm.description.trim(),
       osVariant: wizardForm.osVariant,
       autostart: wizardForm.autostart,
-      startupDelaySeconds: wizardForm.startupDelaySeconds,
+      startupDelaySeconds: Math.max(0, Number(wizardForm.startupDelaySeconds) || 0),
       sockets: wizardForm.sockets,
       cores: wizardForm.cores,
       vcpus,
@@ -734,19 +773,21 @@ async function handleWizardSubmit() {
       machineType: wizardForm.machineType,
       biosType: wizardForm.biosType,
       tpmVersion: wizardForm.tpmVersion,
-      secureBoot: wizardForm.secureBoot,
+      secureBoot: wizardForm.biosType === 'seabios' ? false : wizardForm.secureBoot,
       cdromIsoImage: wizardForm.bootIso || undefined,
       cdroms,
       bootOrder: wizardForm.bootOrder || 'hd,cdrom',
       displayType: wizardForm.displayType || 'virtio-gpu',
       disks,
       networkInterfaces: nics,
-      cloudInit: {
-        user: wizardForm.ciUser,
-        password: wizardForm.ciPassword,
-        sshPublicKeys: sshKeys,
-        ipConfig: wizardForm.ciIpConfig,
-      },
+      cloudInit: hasCloudInit
+        ? {
+            user: wizardForm.ciUser.trim() || 'admin',
+            password: wizardForm.ciPassword,
+            sshPublicKeys: sshKeys,
+            ipConfig: wizardForm.ciIpConfig.trim() || 'dhcp',
+          }
+        : undefined,
     });
 
     notify('success', `Created VM ${created.vmName}`);
@@ -762,6 +803,14 @@ async function handleWizardSubmit() {
         await services.kvm.attachMedia(created.name, wizardForm.secondaryIso, 'sdy');
       } catch (mediaErr: any) {
         console.warn('Failed to attach secondary boot media:', mediaErr);
+      }
+    }
+    if (wizardForm.startAfterCreate) {
+      try {
+        await services.kvm.startVirtualMachine(created.name);
+        notify('success', `Started VM ${created.vmName}`);
+      } catch (startErr: any) {
+        notify('warning', `VM created, but failed to start: ${startErr?.message || startErr}`);
       }
     }
     showCreateWizard.value = false;
@@ -1240,9 +1289,31 @@ async function handleWizardSubmit() {
                 <option value="generic">Generic Linux 6.x</option>
               </select>
             </div>
-            <div class="form-group" style="margin: 0; display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 6px">
+            <div class="form-group" style="margin: 0">
+              <label>Description (Optional)</label>
+              <input
+                v-model="wizardForm.description"
+                class="input"
+                placeholder="Optional notes or purpose"
+              />
+            </div>
+            <div class="form-group" style="margin: 0">
+              <label>Startup Delay (s)</label>
+              <input
+                v-model.number="wizardForm.startupDelaySeconds"
+                type="number"
+                min="0"
+                max="600"
+                class="input mono"
+                placeholder="0"
+              />
+            </div>
+            <div class="form-group" style="margin: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; padding-bottom: 4px">
               <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 0; cursor: pointer">
                 <input v-model="wizardForm.autostart" type="checkbox" /> Autostart on boot
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 0; cursor: pointer">
+                <input v-model="wizardForm.startAfterCreate" type="checkbox" /> Start VM after creation
               </label>
             </div>
           </div>
@@ -1527,7 +1598,7 @@ async function handleWizardSubmit() {
           <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 16px">
             <div
               style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none"
-              @click="wizardForm.showCloudInit = !wizardForm.showCloudInit"
+              @click="wizardForm.showCloudInit = !wizardForm.showCloudInit; wizardForm.ciEnabled = wizardForm.showCloudInit"
             >
               <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px">
                 <MdiIcon :path="mdiCog" size="16" style="color: var(--text-secondary)" />
@@ -1545,6 +1616,10 @@ async function handleWizardSubmit() {
               <div class="form-group">
                 <label>Password</label>
                 <input v-model="wizardForm.ciPassword" type="password" class="input mono" placeholder="Leave empty for key-only" />
+              </div>
+              <div class="form-group" style="grid-column: span 2">
+                <label>IP Configuration</label>
+                <input v-model="wizardForm.ciIpConfig" class="input mono" placeholder="dhcp or ip=192.168.1.50/24,gw=192.168.1.1" />
               </div>
               <div class="form-group" style="grid-column: span 2">
                 <label>SSH Public Keys</label>
@@ -1679,8 +1754,12 @@ async function handleWizardSubmit() {
           </div>
           <div class="form-group">
             <label>Secure Boot</label>
-            <select v-model="wizardForm.secureBoot" class="select mono">
-              <option :value="true">Enabled</option>
+            <select
+              v-model="wizardForm.secureBoot"
+              class="select mono"
+              :disabled="wizardForm.biosType === 'seabios'"
+            >
+              <option :value="true" :disabled="wizardForm.biosType === 'seabios'">Enabled (Requires OVMF/UEFI)</option>
               <option :value="false">Disabled</option>
             </select>
           </div>

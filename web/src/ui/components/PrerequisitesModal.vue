@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import {
   mdiAlertCircle,
   mdiCheck,
@@ -76,12 +76,23 @@ const statusLevel = computed<'green' | 'amber' | 'red'>(() => {
 
 const linuxFlavor = computed(() => summary.value?.linuxFlavor);
 
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    emit('close');
+  }
+}
+
 // Auto-switch to installed tab if 0 missing
 onMounted(() => {
+  window.addEventListener('keydown', handleKeydown);
   if (missingCount.value === 0 && installedCount.value > 0) {
     activeTab.value = 'installed';
   }
   loadReport(false);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown);
 });
 
 async function loadReport(showToast = false) {
@@ -130,21 +141,40 @@ function generateFallbackScript(): string {
   const packages = new Set<string>();
   for (const p of allMissing) {
     if (p.installHint) {
-      const match = p.installHint.match(/(?:install|add)\s+([a-zA-Z0-9_\- ]+)/i);
+      const match = p.installHint.match(/(?:install(?:\s+-y)?|add|-S(?:\s+--noconfirm)?)\s+([a-zA-Z0-9_\- ]+)/i);
       if (match && match[1]) {
-        match[1].trim().split(/\s+/).forEach((pkg) => packages.add(pkg));
+        match[1]
+          .trim()
+          .split(/\s+/)
+          .filter((pkg) => !pkg.startsWith('-'))
+          .forEach((pkg) => packages.add(pkg));
       }
     }
   }
   if (packages.size > 0) {
-    return `sudo apt-get update && sudo apt-get install -y ${Array.from(packages).join(' ')}`;
+    const pkgList = Array.from(packages).join(' ');
+    const pm = (linuxFlavor.value?.packageManager || '').toLowerCase();
+    const distro = `${linuxFlavor.value?.id || ''} ${linuxFlavor.value?.prettyName || ''}`.toLowerCase();
+    if (pm === 'dnf' || pm === 'yum' || /fedora|rhel|centos|rocky|alma/.test(distro)) {
+      return `sudo dnf install -y ${pkgList}`;
+    }
+    if (pm === 'pacman' || /arch|manjaro/.test(distro)) {
+      return `sudo pacman -S --noconfirm ${pkgList}`;
+    }
+    if (pm === 'apk' || /alpine/.test(distro)) {
+      return `sudo apk add ${pkgList}`;
+    }
+    if (pm === 'zypper' || /suse|opensuse/.test(distro)) {
+      return `sudo zypper install -y ${pkgList}`;
+    }
+    return `sudo apt-get update && sudo apt-get install -y ${pkgList}`;
   }
   return '';
 }
 </script>
 
 <template>
-  <div class="modal-backdrop">
+  <div class="modal-backdrop" role="dialog" aria-modal="true" aria-label="Prerequisites" @click.self="emit('close')">
     <div class="modal-card modal-card-xlarge">
       <!-- Modal Header -->
       <div class="modal-header">

@@ -135,7 +135,11 @@ func serveAutoIndex(w http.ResponseWriter, r *http.Request, share domain.WebdavS
 	if host == "" {
 		host = "localhost"
 	}
-	mountURL := fmt.Sprintf("http://%s/dav/%s/", host, share.ID)
+	scheme := "http"
+	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		scheme = "https"
+	}
+	mountURL := fmt.Sprintf("%s://%s/dav/%s/", scheme, host, share.ID)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
@@ -422,7 +426,7 @@ func serveAutoIndex(w http.ResponseWriter, r *http.Request, share domain.WebdavS
 	}
 
 	modeClass := "badge-rw"
-	modeLabel := "Read-Write"
+	modeLabel := "Read-Write (WebDAV Client; Browser View Read-Only)"
 	if share.ReadOnly {
 		modeClass = "badge-ro"
 		modeLabel = "Read-Only"
@@ -432,7 +436,7 @@ func serveAutoIndex(w http.ResponseWriter, r *http.Request, share domain.WebdavS
         </nav>
       </div>
       <div class="badges">
-        <span class="badge %s">%s</span>
+        <span class="badge %s" title="Mount via a WebDAV client for write access; HTML directory index is read-only">%s</span>
         <span class="badge badge-info">%d items</span>
       </div>
     </div>
@@ -441,7 +445,7 @@ func serveAutoIndex(w http.ResponseWriter, r *http.Request, share domain.WebdavS
       <input type="text" id="filter" class="filter-input" placeholder="Filter files..." oninput="filterItems(this.value)">
       <div class="mount-hint">
         <span>Mount URL: <strong>%s</strong></span>
-        <button class="copy-btn" onclick="navigator.clipboard.writeText('%s'); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy', 1500)">Copy</button>
+        <button class="copy-btn" onclick="(function(btn, text){ if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text); } else { var ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch(e) {} document.body.removeChild(ta); } btn.innerText='Copied!'; setTimeout(function(){ btn.innerText='Copy'; }, 1500); })(this, '%s')">Copy</button>
       </div>
     </div>
 

@@ -36,7 +36,7 @@ import {
 import CodeMirrorEditor from './CodeMirrorEditor.vue';
 import MdiIcon from './MdiIcon.vue';
 import PathSelector from './PathSelector.vue';
-import { notify } from '../store';
+import { nasState, notify } from '../store';
 import { toZfsSafeSlug } from '../../domain/id';
 
 const props = withDefaults(
@@ -59,16 +59,49 @@ const emit = defineEmits<{
 }>();
 
 const cleanAppsPool = computed(() => {
-  const p = props.appsPool || 'tank';
+  const p = props.appsPool || nasState.dockerConfig?.pool || nasState.systemConfig?.mainPool || 'tank';
   return p.replace(/^zfsPools\//, '').trim() || 'tank';
 });
 
+const appsBaseDir = computed(() => {
+  const custom = nasState.dockerConfig?.appdataDataset || nasState.dockerConfig?.dataset;
+  if (custom) {
+    const cleaned = custom.replace(/^zfsPools\//, '').trim();
+    return cleaned.startsWith('/') ? cleaned : `/mnt/${cleaned}`;
+  }
+  return `/mnt/${cleanAppsPool.value}/apps`;
+});
+
+function deriveDefaultAppId(app: CatalogApp): string {
+  const raw = app.title || app.appId || 'app';
+  const lastPart = raw.includes('.') ? raw.split('.').pop()! : raw;
+  return toZfsSafeSlug(app.title || lastPart) || 'app';
+}
+
+const customAppId = ref<string>(deriveDefaultAppId(props.app));
+
 // Form answers state
 const answers = reactive<Record<string, string>>(
-  getQuestionsDefaultAnswers(
-    props.app,
-    (props.appsPool || 'tank').replace(/^zfsPools\//, '').trim() || 'tank'
-  )
+  (() => {
+    const defaults = getQuestionsDefaultAnswers(
+      props.app,
+      (props.appsPool || nasState.dockerConfig?.pool || nasState.systemConfig?.mainPool || 'tank')
+        .replace(/^zfsPools\//, '')
+        .trim() || 'tank'
+    );
+    const customDs = nasState.dockerConfig?.appdataDataset || nasState.dockerConfig?.dataset;
+    if (customDs) {
+      const cleaned = customDs.replace(/^zfsPools\//, '').trim();
+      const baseDir = cleaned.startsWith('/') ? cleaned : `/mnt/${cleaned}`;
+      const poolPrefix = `/mnt/${cleanAppsPool.value}/apps/`;
+      for (const [k, v] of Object.entries(defaults)) {
+        if (typeof v === 'string' && v.startsWith(poolPrefix)) {
+          defaults[k] = `${baseDir}/${v.slice(poolPrefix.length)}`;
+        }
+      }
+    }
+    return defaults;
+  })()
 );
 
 // Password visibility state per variable
@@ -103,8 +136,8 @@ function handlePrevStep() {
   }
 }
 
-// Split preview state
-const showLivePreview = ref(true);
+// Split preview state (default false on mobile/tablet screens <= 900px so the form is shown first)
+const showLivePreview = ref(typeof window !== 'undefined' ? window.innerWidth > 900 : true);
 const isCopied = ref(false);
 const autoStartOnBoot = ref(true);
 
@@ -178,9 +211,7 @@ function generateRandomPassword(variable: string) {
 }
 
 const cleanAppId = computed(() => {
-  const raw = props.app.title || props.app.appId || 'app';
-  const lastPart = raw.includes('.') ? raw.split('.').pop()! : raw;
-  return toZfsSafeSlug(props.app.title || lastPart) || 'app';
+  return toZfsSafeSlug(customAppId.value.trim()) || deriveDefaultAppId(props.app);
 });
 
 function resetStoragePath(variable: string) {
@@ -189,7 +220,26 @@ function resetStoragePath(variable: string) {
   if (leaf === 'host_path' || leaf === 'path') {
     leaf = parts.length > 1 ? parts[parts.length - 2] : 'data';
   }
-  answers[variable] = `/mnt/${cleanAppsPool.value}/apps/${cleanAppId.value}/${leaf}`;
+  answers[variable] = `${appsBaseDir.value}/${cleanAppId.value}/${leaf}`;
+}
+
+function validateRequiredQuestions(): boolean {
+  if (!customAppId.value.trim()) {
+    notify('error', 'App / Instance ID is required');
+    return false;
+  }
+  for (const grp of groups.value) {
+    for (const q of grp.questions) {
+      if (!q.required) continue;
+      const val = (answers[q.variable] ?? '').trim();
+      if (!val) {
+        activeTab.value = grp.name;
+        notify('error', `Required parameter "${q.label || q.variable}" cannot be empty`);
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 async function copyYaml() {
@@ -214,6 +264,7 @@ function handleOpenInEditor() {
 }
 
 function handleDeploy() {
+  if (!validateRequiredQuestions()) return;
   emit('deploy', {
     appId: cleanAppId.value,
     title: props.app.title || props.app.appId,
@@ -337,6 +388,24 @@ watch(
       <div class="wizard-content-area" :class="{ 'show-preview-mobile': showLivePreview }">
         <!-- Left Side: Wizard Form Tabs & Fields -->
         <div class="wizard-form-pane">
+          <!-- App / Instance ID Input Bar -->
+          <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--bg-surface); border-bottom: 1px solid var(--border-subtle); flex-wrap: wrap">
+            <label for="wizard-custom-app-id" style="font-size: 12px; font-weight: 600; color: var(--text-secondary); white-space: nowrap">
+              App / Instance ID <span class="required-star">*</span>
+            </label>
+            <input
+              id="wizard-custom-app-id"
+              v-model="customAppId"
+              type="text"
+              class="input mono"
+              placeholder="e.g. nextcloud, postgres-prod"
+              style="max-width: 240px; padding: 4px 8px; font-size: 12.5px"
+            />
+            <span style="font-size: 11.5px; color: var(--text-secondary)">
+              Customize to deploy multiple instances of this catalog app.
+            </span>
+          </div>
+
           <!-- Top Horizontal Category Navigation Bar -->
           <div class="wizard-nav-tabs">
             <button
@@ -423,7 +492,7 @@ watch(
                     <div style="flex: 1">
                       <PathSelector
                         v-model="answers[q.variable]"
-                        :placeholder="`/mnt/${cleanAppsPool}/apps/${cleanAppId}/...`"
+                        :placeholder="`${appsBaseDir}/${cleanAppId}/...`"
                         :root-hint="`/mnt/${cleanAppsPool}`"
                         :select-files="true"
                         modal-title="Select Host Folder or File"

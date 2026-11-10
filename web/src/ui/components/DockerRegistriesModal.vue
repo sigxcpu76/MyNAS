@@ -4,6 +4,7 @@ import { mdiCheckCircle, mdiAlertCircle, mdiClose, mdiDelete, mdiKeyVariant, mdi
 import MdiIcon from './MdiIcon.vue';
 import { services } from '../../container';
 import { notify } from '../store';
+import { confirmDelete } from '../modal';
 import type { DockerRegistry } from '../../domain/models';
 
 const emit = defineEmits<{ (e: 'close'): void }>();
@@ -85,7 +86,13 @@ async function save() {
 }
 
 async function remove(r: DockerRegistry) {
-  if (!window.confirm(`Remove stored credentials for ${r.server}? Pulls from it will be anonymous.`)) return;
+  const res = await confirmDelete({
+    kind: 'Registry Credentials',
+    name: r.server,
+    details: 'Pulls from this registry will be anonymous.',
+    confirmText: 'Remove Credentials',
+  });
+  if (!res.confirmed) return;
   try {
     await services.apps.deleteRegistry(r.name);
     notify('success', `Removed credentials for ${r.server}`);

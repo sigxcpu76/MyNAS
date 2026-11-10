@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import {
   mdiAlertCircle,
   mdiCheck,
@@ -13,7 +13,8 @@ import {
 import { services } from '../../container';
 import type { DiscoveredPool } from '../../domain/models';
 import MdiIcon from './MdiIcon.vue';
-import { confirmModal, nasState, notify, refreshAllData } from '../store';
+import { confirmModal, nasState, notify, refreshAllData, selectResource } from '../store';
+import { navigateTo } from '../router';
 
 const emit = defineEmits<{
   (e: 'close'): void;
@@ -94,13 +95,30 @@ async function handleSelectPool(poolName: string) {
   }
 }
 
+function goToPoolsView() {
+  selectResource('node:pools');
+  navigateTo('storage-pools');
+  emit('close');
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    emit('close');
+  }
+}
+
 onMounted(() => {
+  window.addEventListener('keydown', handleKeydown);
   loadDiscoveredPools();
+});
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown);
 });
 </script>
 
 <template>
-  <div class="modal-backdrop">
+  <div class="modal-backdrop" role="dialog" aria-modal="true" aria-label="Select Main Storage Pool" @click.self="emit('close')">
     <div class="modal-card">
       <div class="modal-header">
         <div style="display: flex; align-items: center; gap: 10px">
@@ -137,9 +155,12 @@ onMounted(() => {
         <div v-if="allPools.length === 0" style="text-align: center; padding: 32px 16px; background: var(--bg-hover); border-radius: 8px">
           <MdiIcon :path="mdiDatabase" size="36" style="color: var(--text-muted); margin-bottom: 8px" />
           <div style="font-weight: 600; font-size: 14px">No ZFS pools found</div>
-          <p style="font-size: 12.5px; color: var(--text-secondary); margin-top: 4px">
-            Please create a new ZFS pool in the Storage &gt; Pools view first.
+          <p style="font-size: 12.5px; color: var(--text-secondary); margin-top: 4px; margin-bottom: 12px">
+            Create or import a ZFS pool in the Storage Pools view first.
           </p>
+          <button class="btn btn-sm btn-primary" @click="goToPoolsView">
+            Go to Storage Pools
+          </button>
         </div>
 
         <div v-else class="pool-list">
@@ -169,7 +190,7 @@ onMounted(() => {
                   </span>
                 </div>
                 <div class="mono" style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px">
-                  Dataset: {{ p.datasetPath }} · Mountpoint: {{ p.mountpoint || (`/mnt/${p.poolName}/.nas-system`) }}
+                  Dataset: {{ p.datasetPath }} · Mountpoint: {{ p.mountpoint || (`/${p.poolName}/.nas-system`) }}
                 </div>
               </div>
             </div>

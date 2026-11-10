@@ -381,6 +381,7 @@ describe('Overview Dashboard & Telemetry', () => {
     });
 
     it('resets layout to default when clicking reset default', async () => {
+      const { closeActiveModal } = await import('../src/ui/modal');
       const wrapper = mount(OverviewView);
       await wrapper.find('.edit-dashboard-btn').trigger('click');
 
@@ -388,8 +389,11 @@ describe('Overview Dashboard & Telemetry', () => {
       await wrapper.find('.remove-btn').trigger('click');
       expect(wrapper.findAll('.widget-wrapper').length).toBe(3);
 
-      // Click Reset Default
-      await wrapper.find('.reset-layout-btn').trigger('click');
+      // Click Reset Default and confirm modal
+      const clickPromise = wrapper.find('.reset-layout-btn').trigger('click');
+      closeActiveModal(true);
+      await clickPromise;
+      await wrapper.vm.$nextTick();
       expect(wrapper.findAll('.widget-wrapper').length).toBe(4);
     });
 
@@ -409,12 +413,16 @@ describe('Overview Dashboard & Telemetry', () => {
     });
 
     it('applies balanced layout setup when clicking balanced layout button', async () => {
+      const { closeActiveModal } = await import('../src/ui/modal');
       const wrapper = mount(OverviewView);
       await wrapper.find('.edit-dashboard-btn').trigger('click');
 
       const balancedBtn = wrapper.find('.balanced-layout-btn');
       expect(balancedBtn.exists()).toBe(true);
-      await balancedBtn.trigger('click');
+      const clickPromise = balancedBtn.trigger('click');
+      closeActiveModal(true);
+      await clickPromise;
+      await wrapper.vm.$nextTick();
 
       const widgets = wrapper.findAll('.widget-wrapper');
       expect(widgets.length).toBe(7);
@@ -666,9 +674,9 @@ describe('Overview Dashboard & Telemetry', () => {
       const wrapper = mount(WidgetShares);
       expect(wrapper.text()).toContain('Network Shares');
       expect(wrapper.text()).toContain('3/3');
-      expect(wrapper.text()).toContain('//nas/HABackups');
+      expect(wrapper.text()).toContain('//titan-nas/HABackups');
       expect(wrapper.text()).toContain('/mnt/storage/library/ha-backups');
-      expect(wrapper.text()).toContain('//nas/Software');
+      expect(wrapper.text()).toContain('//titan-nas/Software');
       expect(wrapper.text()).toContain('/mnt/raid0/torrents/downloads/Software');
       expect(wrapper.text()).toContain('/dav/movies');
       expect(wrapper.text()).toContain('SMB');

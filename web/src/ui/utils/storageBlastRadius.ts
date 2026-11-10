@@ -11,8 +11,36 @@ export interface StorageBlastRadius {
   summaryWarning: string;
 }
 
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function matchesStoragePath(rawPath: string | undefined, cleanTarget: string, targetPrefix: string, zvolPrefix: string): boolean {
+  if (!rawPath) return false;
+  const p = rawPath.trim().replace(/\/+$/, '');
+  if (!p) return false;
+  const slashTarget = `/${cleanTarget}`;
+  return (
+    p === cleanTarget ||
+    p.startsWith(`${cleanTarget}/`) ||
+    p === slashTarget ||
+    p.startsWith(`${slashTarget}/`) ||
+    p === targetPrefix ||
+    p.startsWith(`${targetPrefix}/`) ||
+    p === zvolPrefix ||
+    p.startsWith(`${zvolPrefix}/`)
+  );
+}
+
+function matchesComposeText(yaml: string, cleanTarget: string, targetPrefix: string): boolean {
+  if (!yaml) return false;
+  const prefixRe = new RegExp(`(?:^|[\\s"':=])${escapeRegex(targetPrefix)}(?:/|[\\s"':]|$)`);
+  const targetRe = new RegExp(`(?:^|[\\s"':=/])${escapeRegex(cleanTarget)}(?:/|[\\s"':]|$)`);
+  return prefixRe.test(yaml) || targetRe.test(yaml);
+}
+
 export function computeStorageBlastRadius(target: string): StorageBlastRadius {
-  const cleanTarget = target.replace(/^(zfsPools\/|pool:)/, '').trim();
+  const cleanTarget = target.replace(/^(zfsPools\/|pool:)/, '').trim().replace(/\/+$/, '');
   const poolName = cleanTarget.split('/')[0];
 
   const isMainPool = Boolean(
@@ -31,11 +59,7 @@ export function computeStorageBlastRadius(target: string): StorageBlastRadius {
     .filter((vm) => {
       const inDisks = vm.disks?.some((d: any) => {
         const p = d.diskPath || d.path || '';
-        return (
-          p.includes(cleanTarget) ||
-          p.startsWith(targetPrefix) ||
-          p.startsWith(zvolPrefix)
-        );
+        return matchesStoragePath(p, cleanTarget, targetPrefix, zvolPrefix);
       });
       return inDisks;
     })
@@ -45,10 +69,10 @@ export function computeStorageBlastRadius(target: string): StorageBlastRadius {
   const affectedLxc = (nasState.lxcContainers || [])
     .filter((ct: any) => {
       const rootfs = ct.rootfsPath || ct.rootfs || '';
-      const inRootfs = rootfs.includes(cleanTarget) || rootfs.startsWith(targetPrefix);
+      const inRootfs = matchesStoragePath(rootfs, cleanTarget, targetPrefix, zvolPrefix);
       const mounts = ct.mountPoints || ct.mounts || [];
-      const inMounts = mounts.some(
-        (m: any) => m.hostPath?.includes(cleanTarget) || m.hostPath?.startsWith(targetPrefix)
+      const inMounts = mounts.some((m: any) =>
+        matchesStoragePath(m.hostPath, cleanTarget, targetPrefix, zvolPrefix)
       );
       return inRootfs || inMounts;
     })
@@ -58,18 +82,18 @@ export function computeStorageBlastRadius(target: string): StorageBlastRadius {
   const affectedApps = (nasState.dockerApps || [])
     .filter((app) => {
       const yaml = app.composeYaml || '';
-      return yaml.includes(cleanTarget) || yaml.includes(targetPrefix);
+      return matchesComposeText(yaml, cleanTarget, targetPrefix);
     })
     .map((app) => app.title || app.appId);
 
   // Check CIFS shares
   const affectedCifs = (nasState.cifsShares || [])
-    .filter((s) => s.path?.includes(cleanTarget) || s.path?.startsWith(targetPrefix))
+    .filter((s) => matchesStoragePath(s.path, cleanTarget, targetPrefix, zvolPrefix))
     .map((s) => s.shareName || s.name.replace(/^cifsShares\//, ''));
 
   // Check WebDAV shares
   const affectedWebdav = (nasState.webdavShares || [])
-    .filter((s) => s.path?.includes(cleanTarget) || s.path?.startsWith(targetPrefix))
+    .filter((s) => matchesStoragePath(s.path, cleanTarget, targetPrefix, zvolPrefix))
     .map((s) => s.shareName || s.name.replace(/^webdavShares\//, ''));
 
   const hasDependencies =

@@ -30,6 +30,7 @@ import {
 } from '@mdi/js';
 import { services } from '../container';
 import {
+  dismissToast,
   getModuleAvailability,
   initSession,
   type ManagedModule,
@@ -94,13 +95,21 @@ import PwaInstallSheet from './components/PwaInstallSheet.vue';
 const { isMobile, viewMode, setViewMode } = useDevice();
 
 async function handleMobileVmConsole(vmName: string) {
+  const popup = typeof window !== 'undefined' ? window.open('about:blank', '_blank') : null;
   try {
     const s = await services.kvm.openConsole(vmName);
     const tokenParam = s.token ? `&token=${encodeURIComponent(s.token)}` : '';
     const portParam = s.vncPort ? `&port=${s.vncPort}` : '';
     const url = `/vnc-console?vm=${encodeURIComponent(vmName)}${tokenParam}${portParam}`;
-    window.open(url, '_blank');
+    if (popup && !popup.closed) {
+      popup.location.href = url;
+    } else if (typeof window !== 'undefined') {
+      window.location.href = url;
+    }
   } catch (err: any) {
+    if (popup && !popup.closed) {
+      popup.close();
+    }
     notify('error', `Failed to open console: ${err.message}`);
   }
 }
@@ -136,6 +145,10 @@ onUnmounted(() => {
 // Register top overlay dismissal for mobile / Android back button
 if (typeof window !== 'undefined') {
   (window as any).nanDismissTopOverlay = () => {
+    if (showCommandPalette.value) {
+      showCommandPalette.value = false;
+      return true;
+    }
     if (activeLxcTerminal.value) {
       activeLxcTerminal.value = null;
       return true;
@@ -300,14 +313,19 @@ function handleNav(id: NavTab) {
 }
 
 watch(
-  () => nasState.activeTab,
-  (tab: string) => {
-    if (tab === 'prerequisites') {
-      showPrerequisitesModal.value = true;
-      navigateTo('overview', true);
+  () => nasState.authenticated,
+  (isAuth) => {
+    if (!isAuth) {
+      showCommandPalette.value = false;
+      showHostTerminalModal.value = false;
+      showPoolModal.value = false;
+      showPrerequisitesModal.value = false;
+      showSystemDetailsModal.value = false;
+      showUpdateModal.value = false;
+      activeLxcTerminal.value = null;
+      isMobileDrawerOpen.value = false;
     }
-  },
-  { immediate: true }
+  }
 );
 
 // Module availability check
@@ -498,7 +516,8 @@ onMounted(() => {
         </button>
 
         <button
-          class="btn btn-xs btn-icon btn-secondary hide-mobile"
+          class="btn btn-xs btn-icon btn-secondary"
+          :class="{ 'hide-mobile': viewMode !== 'desktop' }"
           title="Host Shell (Open Root Host Terminal)"
           aria-label="Host Shell"
           @click="showHostTerminalModal = true"
@@ -507,8 +526,11 @@ onMounted(() => {
         </button>
 
         <button
-          class="btn btn-xs hide-mobile"
-          :class="nasState.systemUpdate?.updateAvailable ? 'btn-warning' : 'btn-secondary'"
+          class="btn btn-xs"
+          :class="[
+            nasState.systemUpdate?.updateAvailable ? 'btn-warning' : 'btn-secondary',
+            { 'hide-mobile': viewMode !== 'desktop' }
+          ]"
           style="display: inline-flex; align-items: center; gap: 4px; font-weight: 500"
           :title="nasState.systemUpdate?.updateAvailable ? 'Software update is available! Click to inspect and apply.' : 'Check for Software Updates'"
           @click="showUpdateModal = true"
@@ -517,10 +539,10 @@ onMounted(() => {
           <span>{{ nasState.systemUpdate?.updateAvailable ? `Update ${nasState.systemUpdate.latestVersion}` : 'Updates' }}</span>
         </button>
 
-        <SystemDetailsTopBarButton class="hide-mobile" @click="showSystemDetailsModal = true" />
-        <PrerequisitesTopBarButton class="hide-mobile" @click="showPrerequisitesModal = true" />
-        <ThemeSelector class="hide-mobile" />
-        <FontSizeSelector class="hide-mobile" />
+        <SystemDetailsTopBarButton :class="{ 'hide-mobile': viewMode !== 'desktop' }" @click="showSystemDetailsModal = true" />
+        <PrerequisitesTopBarButton :class="{ 'hide-mobile': viewMode !== 'desktop' }" @click="showPrerequisitesModal = true" />
+        <ThemeSelector :class="{ 'hide-mobile': viewMode !== 'desktop' }" />
+        <FontSizeSelector :class="{ 'hide-mobile': viewMode !== 'desktop' }" />
 
         <button
           class="btn btn-xs btn-ghost"
@@ -801,14 +823,25 @@ onMounted(() => {
   <PwaInstallSheet />
 
   <!-- Toast Notifications Stack -->
-  <div class="toast-stack">
+  <div class="toast-stack" :style="{ bottom: isMobile ? '76px' : '42px' }">
     <div
       v-for="t in nasState.toasts"
       :key="t.id"
       class="toast"
       :class="`toast-${t.type}`"
+      role="status"
+      aria-live="polite"
     >
-      {{ t.message }}
+      <span style="flex: 1">{{ t.message }}</span>
+      <button
+        type="button"
+        class="btn btn-xs btn-ghost toast-close-btn"
+        aria-label="Dismiss notification"
+        style="padding: 2px; margin-left: 8px; opacity: 0.75; flex-shrink: 0"
+        @click="dismissToast(t.id)"
+      >
+        <MdiIcon :path="mdiClose" size="14" />
+      </button>
     </div>
   </div>
 </template>

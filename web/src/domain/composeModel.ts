@@ -47,6 +47,9 @@ export interface ComposeServiceModel {
   gpuEnabled: boolean;
   gpuCount: string; // 'all' | '1' | '2' | 'custom'
   gpuDeviceIds: string; // e.g. "0" or "0,1"
+  rawCommand?: string[];
+  rawDependsOn?: Record<string, any>;
+  rawNetworks?: Record<string, any>;
   customFields?: Record<string, any>;
 }
 
@@ -96,6 +99,7 @@ export interface ComposeAppFormModel {
   catalogId?: string;
   catalogSource?: string;
   catalogVersion?: string;
+  customTopLevelFields?: Record<string, any>;
 }
 
 // =============================================================================
@@ -272,7 +276,8 @@ export function isTrueNASSettingVolume(source: string, target: string): boolean 
 export function composeYamlToForm(
   yamlStr: string,
   fallbackAppId = '',
-  fallbackTitle = ''
+  fallbackTitle = '',
+  poolName = 'tank'
 ): ComposeAppFormModel {
   const model: ComposeAppFormModel = {
     appId: fallbackAppId,
@@ -364,6 +369,7 @@ export function composeYamlToForm(
         : typeof svc.command === 'string'
         ? svc.command
         : '',
+      rawCommand: Array.isArray(svc.command) ? svc.command.map(String) : undefined,
       ports: [],
       environment: [],
       volumes: [],
@@ -417,12 +423,18 @@ export function composeYamlToForm(
             });
           } else {
             // Port specified under `ports:` without host mapping (e.g. - "80")
-            // Pick a random high port in 32000+ range
+            // Assign a deterministic high host port in 32000-65000 range based on container port
             const [contP, proto] = str.split('/');
-            const randHost = generateRandomHighPort();
             const cleanContP = (contP || '').replace(/^["']+|["']+$/g, '').trim();
+            const contNum = parseInt(cleanContP, 10);
+            const detHost =
+              !isNaN(contNum) && contNum > 0
+                ? contNum >= 32000 && contNum <= 65000
+                  ? contNum
+                  : 32000 + (contNum % 33000)
+                : 32000;
             serviceModel.ports.push({
-              hostPort: String(randHost),
+              hostPort: String(detHost),
               containerPort: cleanContP,
               protocol: (proto?.toLowerCase() === 'udp' ? 'udp' : 'tcp') as 'tcp' | 'udp',
               publishToHost: true,
@@ -430,8 +442,15 @@ export function composeYamlToForm(
           }
         } else if (p && typeof p === 'object') {
           const hasHost = p.published !== undefined && p.published !== null && String(p.published).trim() !== '';
-          const hostP = hasHost ? String(p.published).replace(/^["']+|["']+$/g, '').trim() : String(generateRandomHighPort());
           const contP = String(p.target || p.container || '').replace(/^["']+|["']+$/g, '').trim();
+          const contNum = parseInt(contP, 10);
+          const detHost =
+            !isNaN(contNum) && contNum > 0
+              ? contNum >= 32000 && contNum <= 65000
+                ? contNum
+                : 32000 + (contNum % 33000)
+              : 32000;
+          const hostP = hasHost ? String(p.published).replace(/^["']+|["']+$/g, '').trim() : String(detHost);
           const hostIp = p.host_ip ? String(p.host_ip).trim() : (p.ip ? String(p.ip).trim() : undefined);
           serviceModel.ports.push({
             hostIp: hostIp || undefined,
@@ -511,7 +530,9 @@ export function composeYamlToForm(
             // Rewrite TrueNAS ix_volume reference
             if (source === 'ix_volume' || source === 'ix-volume' || source.startsWith('ix_volume')) {
               const leaf = target ? target.replace(/^\/+/, '').split('/').pop() || 'data' : 'data';
-              source = `/mnt/tank/apps/${serviceModel.name}/${leaf}`;
+              const cleanPool = (poolName || 'tank').replace(/^zfsPools\//, '').replace(/^\/mnt\//, '').trim() || 'tank';
+              const appSlug = (fallbackAppId || parsed.name || serviceModel.name || 'app').trim();
+              source = `/mnt/${cleanPool}/apps/${appSlug}/${leaf}`;
             }
 
             // Fix /path target
@@ -570,6 +591,7 @@ export function composeYamlToForm(
       serviceModel.dependsOn = svc.depends_on.map(String);
     } else if (svc.depends_on && typeof svc.depends_on === 'object') {
       serviceModel.dependsOn = Object.keys(svc.depends_on);
+      serviceModel.rawDependsOn = JSON.parse(JSON.stringify(svc.depends_on));
     }
 
     // Parse networks inside service
@@ -577,18 +599,19 @@ export function composeYamlToForm(
       serviceModel.networks = svc.networks.map(String);
     } else if (svc.networks && typeof svc.networks === 'object') {
       serviceModel.networks = Object.keys(svc.networks);
+      serviceModel.rawNetworks = JSON.parse(JSON.stringify(svc.networks));
     }
 
-    // Preserve custom or unrecognized service attributes (e.g. labels, healthcheck, cap_add, user, shm_size, etc.)
+    // Preserve custom or unrecognized service attributes (e.g. labels, healthcheck, cap_add, user, shm_size, deploy, etc.)
     const knownKeys = new Set([
       'container_name', 'image', 'restart', 'command', 'ports', 'expose',
       'environment', 'volumes', 'configs', 'depends_on', 'network_mode', 'networks',
-      'mem_limit', 'cpus', 'privileged', 'devices', 'deploy', 'runtime', 'labels'
+      'mem_limit', 'cpus', 'privileged', 'devices', 'runtime', 'labels'
     ]);
     const customFields: Record<string, any> = {};
     for (const [k, v] of Object.entries(svc)) {
       if (!knownKeys.has(k)) {
-        customFields[k] = v;
+        customFields[k] = k === 'deploy' && v && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v;
       }
     }
     // Also preserve non-management labels
@@ -795,6 +818,31 @@ export function composeYamlToForm(
     }
   }
 
+  // Preserve unrecognized top-level keys (secrets, name, x-* extensions, etc.)
+  const knownTopKeys = new Set([
+    'services',
+    'networks',
+    'volumes',
+    'configs',
+    'x-portals',
+    'portals',
+    'x-nas-management-port',
+    'x-management-port',
+    'x-webui-port',
+    'x-nas-catalog-id',
+    'x-nas-catalog-source',
+    'x-nas-catalog-version',
+  ]);
+  const customTopLevelFields: Record<string, any> = {};
+  for (const [k, v] of Object.entries(parsed)) {
+    if (!knownTopKeys.has(k)) {
+      customTopLevelFields[k] = v && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v;
+    }
+  }
+  if (Object.keys(customTopLevelFields).length > 0) {
+    model.customTopLevelFields = customTopLevelFields;
+  }
+
   // 5. Determine autoStart status across services
   const hasRestart = model.services.some(
     (s) => s.restart === 'always' || s.restart === 'unless-stopped'
@@ -809,9 +857,11 @@ export function composeYamlToForm(
  * Converts structured form model to standard Docker Compose YAML specification.
  */
 export function formToComposeYaml(form: ComposeAppFormModel): string {
-  const rootObj: any = {
-    services: {},
-  };
+  const rootObj: any = {};
+
+  if (form.customTopLevelFields?.name !== undefined) {
+    rootObj.name = form.customTopLevelFields.name;
+  }
 
   if (form.catalogId) {
     rootObj['x-nas-catalog-id'] = form.catalogId;
@@ -852,6 +902,16 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
     ];
   }
 
+  if (form.customTopLevelFields) {
+    for (const [k, v] of Object.entries(form.customTopLevelFields)) {
+      if (k.startsWith('x-') && !(k in rootObj)) {
+        rootObj[k] = v;
+      }
+    }
+  }
+
+  rootObj.services = {};
+
   for (const svc of form.services) {
     const svcKey = svc.name.trim() || 'app';
     const svcObj: any = {};
@@ -866,14 +926,22 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
 
     if (form.autoStart === false) {
       svcObj.restart = 'no';
-    } else if (svc.restart && svc.restart !== 'no') {
+    } else if (svc.restart) {
       svcObj.restart = svc.restart;
     } else {
       svcObj.restart = 'unless-stopped';
     }
 
     if (svc.command.trim()) {
-      svcObj.command = svc.command.trim();
+      if (
+        svc.rawCommand &&
+        Array.isArray(svc.rawCommand) &&
+        svc.rawCommand.join(' ').trim() === svc.command.trim()
+      ) {
+        svcObj.command = [...svc.rawCommand];
+      } else {
+        svcObj.command = svc.command.trim();
+      }
     }
 
     // Ports & Expose
@@ -946,14 +1014,52 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
 
     // Depends On
     if (svc.dependsOn && svc.dependsOn.length > 0) {
-      svcObj.depends_on = svc.dependsOn.filter((d) => d && d !== svcKey);
+      const validDeps = svc.dependsOn.filter((d) => d && d !== svcKey);
+      if (validDeps.length > 0) {
+        if (svc.rawDependsOn && typeof svc.rawDependsOn === 'object') {
+          const rawKeys = Object.keys(svc.rawDependsOn);
+          const sameKeys =
+            rawKeys.length === validDeps.length &&
+            validDeps.every((d) => Object.prototype.hasOwnProperty.call(svc.rawDependsOn, d));
+          if (sameKeys) {
+            svcObj.depends_on = JSON.parse(JSON.stringify(svc.rawDependsOn));
+          } else {
+            const depObj: Record<string, any> = {};
+            for (const d of validDeps) {
+              depObj[d] = svc.rawDependsOn[d] || { condition: 'service_started' };
+            }
+            svcObj.depends_on = depObj;
+          }
+        } else {
+          svcObj.depends_on = validDeps;
+        }
+      }
     }
 
     // Network Mode or Networks
     if (svc.networkMode && svc.networkMode.trim()) {
       svcObj.network_mode = svc.networkMode.trim();
     } else if (svc.networks && svc.networks.length > 0) {
-      svcObj.networks = svc.networks.filter(Boolean);
+      const validNets = svc.networks.filter(Boolean);
+      if (validNets.length > 0) {
+        if (svc.rawNetworks && typeof svc.rawNetworks === 'object') {
+          const rawKeys = Object.keys(svc.rawNetworks);
+          const sameKeys =
+            rawKeys.length === validNets.length &&
+            validNets.every((n) => Object.prototype.hasOwnProperty.call(svc.rawNetworks, n));
+          if (sameKeys) {
+            svcObj.networks = JSON.parse(JSON.stringify(svc.rawNetworks));
+          } else {
+            const netObj: Record<string, any> = {};
+            for (const n of validNets) {
+              netObj[n] = svc.rawNetworks[n] !== undefined ? svc.rawNetworks[n] : null;
+            }
+            svcObj.networks = netObj;
+          }
+        } else {
+          svcObj.networks = validNets;
+        }
+      }
     }
 
     // Resource limits
@@ -983,11 +1089,11 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
       svcObj.labels = [mgmtLabel];
     }
 
-    // Merge any other customFields (healthcheck, cap_add, user, shm_size, env_file, etc.)
+    // Merge any other customFields (healthcheck, cap_add, user, shm_size, env_file, deploy, etc.)
     if (svc.customFields) {
       for (const [k, v] of Object.entries(svc.customFields)) {
         if (k !== 'labels') {
-          svcObj[k] = v;
+          svcObj[k] = k === 'deploy' && v && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v;
         }
       }
     }
@@ -996,6 +1102,15 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
     const activeDevices = (svc.devices || []).filter((d) => d.trim());
     if (activeDevices.length > 0) {
       svcObj.devices = activeDevices;
+    }
+
+    // Clean up migrated deploy.resources.limits (moved to mem_limit / cpus)
+    if (svcObj.deploy?.resources?.limits) {
+      delete svcObj.deploy.resources.limits.memory;
+      delete svcObj.deploy.resources.limits.cpus;
+      if (Object.keys(svcObj.deploy.resources.limits).length === 0) {
+        delete svcObj.deploy.resources.limits;
+      }
     }
 
     // NVIDIA GPU Passthrough (deploy.resources.reservations.devices)
@@ -1029,6 +1144,32 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
         }
       }
       svcObj.deploy.resources.reservations.devices = [gpuReservation];
+    } else if (Array.isArray(svcObj.deploy?.resources?.reservations?.devices)) {
+      svcObj.deploy.resources.reservations.devices = svcObj.deploy.resources.reservations.devices.filter(
+        (dev: any) => !(dev && (dev.driver === 'nvidia' || (Array.isArray(dev.capabilities) && dev.capabilities.includes('gpu'))))
+      );
+      if (svcObj.deploy.resources.reservations.devices.length === 0) {
+        delete svcObj.deploy.resources.reservations.devices;
+      }
+    }
+
+    // Clean up empty deploy.resources without deleting other deploy keys (replicas, placement, restart_policy, labels)
+    if (svcObj.deploy && typeof svcObj.deploy === 'object') {
+      if (svcObj.deploy.resources && typeof svcObj.deploy.resources === 'object') {
+        if (
+          svcObj.deploy.resources.reservations &&
+          typeof svcObj.deploy.resources.reservations === 'object' &&
+          Object.keys(svcObj.deploy.resources.reservations).length === 0
+        ) {
+          delete svcObj.deploy.resources.reservations;
+        }
+        if (Object.keys(svcObj.deploy.resources).length === 0) {
+          delete svcObj.deploy.resources;
+        }
+      }
+      if (Object.keys(svcObj.deploy).length === 0) {
+        delete svcObj.deploy;
+      }
     }
 
     rootObj.services[svcKey] = svcObj;
@@ -1107,6 +1248,15 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
         cfgObj.content = cfg.content !== undefined && cfg.content !== null ? cfg.content : '';
       }
       rootObj.configs[cfgKey] = cfgObj;
+    }
+  }
+
+  // Emit remaining custom top-level fields (such as secrets)
+  if (form.customTopLevelFields) {
+    for (const [k, v] of Object.entries(form.customTopLevelFields)) {
+      if (!(k in rootObj)) {
+        rootObj[k] = v;
+      }
     }
   }
 

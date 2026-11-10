@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import {
   mdiCheck,
   mdiChip,
@@ -127,10 +127,24 @@ async function copySystemSummary() {
     notify('error', 'Failed to copy system summary');
   }
 }
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    emit('close');
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeydown);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown);
+});
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
+  <div class="modal-backdrop" role="dialog" aria-modal="true" aria-label="System Information" @click.self="emit('close')">
     <div class="modal-card modal-card-large system-modal">
       <!-- Modal Header -->
       <div class="modal-header">
@@ -361,7 +375,7 @@ async function copySystemSummary() {
             </div>
             <div class="spec-row">
               <span class="spec-label">Client Shell:</span>
-              <span class="spec-val mono" :style="{ color: clientApp.isNative ? '#4ade80' : 'var(--accent-primary)', fontWeight: 600 }">
+              <span class="spec-val mono" :style="{ color: clientApp.isNative ? 'var(--success-text)' : 'var(--accent-primary)', fontWeight: 600 }">
                 {{ clientApp.label }}
               </span>
             </div>

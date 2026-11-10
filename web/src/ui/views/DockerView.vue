@@ -52,7 +52,6 @@ import { getDockerAppIcon } from '../utils/appIcons';
 import SortableTh from '../components/SortableTh.vue';
 import { useTableSort } from '../composables/useTableSort';
 import { checkAndPollDeployingApps, nasState, notify, selectResource } from '../store';
-import { confirmDelete } from '../modal';
 
 // =============================================================================
 // Filters & Search
@@ -368,6 +367,7 @@ async function importFromCatalog(app: CatalogApp) {
         detailed.composeYaml ||
         `services:\n  ${installAppId.value}:\n    image: ${resolvedImg}\n`;
       installComposeYaml.value = injectCatalogMetadata(rawYaml, detailed);
+      installEditorInitialMode.value = 'form';
       activeInstallTemplate.value = null;
       installEditorKey.value++;
       isCatalogModalOpen.value = false;
@@ -387,6 +387,7 @@ function handleWizardOpenInEditor(data: { appId: string; title: string; composeY
   installComposeYaml.value = wizardCatalogApp.value
     ? injectCatalogMetadata(data.composeYaml, wizardCatalogApp.value)
     : data.composeYaml;
+  installEditorInitialMode.value = 'form';
   activeInstallTemplate.value = null;
   installEditorKey.value++;
   isQuestionWizardOpen.value = false;
@@ -413,11 +414,12 @@ function handleWizardSkip() {
     app.composeYaml ||
     `services:\n  ${installAppId.value}:\n    image: ${resolvedImg}\n`;
   installComposeYaml.value = injectCatalogMetadata(rawYaml, app);
+  installEditorInitialMode.value = 'yaml';
   activeInstallTemplate.value = null;
   installEditorKey.value++;
   isQuestionWizardOpen.value = false;
   isInstallModalOpen.value = true;
-  notify('info', `Loaded raw template for "${app.title || app.appId}" into Compose Editor`);
+  notify('info', `Loaded raw template for "${app.title || app.appId}" into Raw YAML Editor`);
 }
 
 // =============================================================================
@@ -491,6 +493,7 @@ const activeInstallTemplate = ref<AppCatalogTemplate | null>(APP_CATALOG_TEMPLAT
 const installAppId = ref('nextcloud');
 const installTitle = ref('Nextcloud Hub');
 const installComposeYaml = ref(APP_CATALOG_TEMPLATES[0].composeYaml);
+const installEditorInitialMode = ref<'form' | 'yaml'>('form');
 const installEditorKey = ref(1);
 
 function openInstallModal() {
@@ -500,6 +503,7 @@ function openInstallModal() {
 
 function selectCatalogTemplate(tmpl: AppCatalogTemplate | null) {
   activeInstallTemplate.value = tmpl;
+  installEditorInitialMode.value = 'form';
   if (tmpl) {
     installAppId.value = toZfsSafeSlug(tmpl.name || tmpl.id);
     installTitle.value = tmpl.name;
@@ -601,47 +605,6 @@ async function stopApp(app: DockerApp) {
     notify('error', err?.message || 'Failed to stop App');
   } finally {
     delete transitioningApps[app.name];
-  }
-}
-
-async function restartApp(app: DockerApp) {
-  if (transitioningApps[app.name]) return;
-  transitioningApps[app.name] = 'restarting';
-  try {
-    notify('info', `Restarting app "${app.appId}"...`);
-    await services.apps.restartApp(app.name);
-    notify('success', `App "${app.appId}" restarted`);
-    await refreshApps();
-  } catch (err: any) {
-    notify('error', err?.message || 'Failed to restart App');
-  } finally {
-    delete transitioningApps[app.name];
-  }
-}
-
-async function deleteApp(app: DockerApp) {
-  const res = await confirmDelete({
-    kind: 'App',
-    name: app.appId,
-    details: 'All containers and the compose project of this app will be stopped and removed.',
-    confirmText: 'Delete App',
-    checkbox: {
-      label: 'Purge persistent data volumes on disk (`docker compose down -v`)',
-      checked: false,
-      hint: 'If unchecked, your application data and config volumes will remain safely preserved on disk.',
-    },
-  });
-  if (!res.confirmed) return;
-
-  const removeVols = !!res.checkboxChecked;
-
-  try {
-    notify('info', `Tearing down app "${app.appId}"...`);
-    await services.apps.deleteApp(app.name, removeVols);
-    notify('success', `App "${app.appId}" deleted`);
-    await refreshApps();
-  } catch (err: any) {
-    notify('error', err?.message || 'Failed to delete App');
   }
 }
 
@@ -1434,6 +1397,7 @@ onUnmounted(() => {
             :initial-app-id="installAppId"
             :initial-title="installTitle"
             :initial-compose-yaml="installComposeYaml"
+            :initial-mode="installEditorInitialMode"
             :is-edit-mode="false"
             :is-saving="isDeployingApp"
             :show-cancel="true"

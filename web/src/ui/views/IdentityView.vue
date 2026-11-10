@@ -27,6 +27,19 @@ const userSort = useTableSort(
   }
 );
 
+function getGroupAllMembers(g: Group): string[] {
+  const set = new Set<string>(g.members || []);
+  for (const u of nasState.users || []) {
+    if (
+      (u.primaryGid !== undefined && u.primaryGid === g.gid) ||
+      (u.primaryGroup && u.primaryGroup === g.groupName)
+    ) {
+      if (u.username) set.add(u.username);
+    }
+  }
+  return Array.from(set);
+}
+
 const groupSort = useTableSort(
   () => {
     if (nasState.includeSystemGroups) {
@@ -37,7 +50,7 @@ const groupSort = useTableSort(
   {
     name: (g: Group) => g.groupName,
     gid: (g: Group) => g.gid,
-    members: (g: Group) => (g.members || []).length,
+    members: (g: Group) => getGroupAllMembers(g).length,
   }
 );
 
@@ -251,6 +264,15 @@ async function handleSaveUserEdit() {
       notify('error', 'You cannot revoke your own administrator privileges.');
       return;
     }
+    if (
+      editUserForm.smbEnabled &&
+      !editingUser.value.smbEnabled &&
+      !editUserForm.password.trim() &&
+      !editUserForm.smbPassword.trim()
+    ) {
+      notify('error', 'A password is required when enabling SMB access for this user.');
+      return;
+    }
 
     const updates: Partial<User> = {
       fullName: editUserForm.fullName,
@@ -308,7 +330,7 @@ async function handleDeleteUser(u: User) {
     confirmText: 'Delete User',
     checkbox: {
       label: 'Also permanently remove user home directory and files',
-      checked: true,
+      checked: false,
       hint: 'If unchecked, files belonging to this UID will remain on the filesystem.',
     },
   });
@@ -843,13 +865,13 @@ async function handleDeleteGroup(g: Group) {
               <td>
                 <div style="display: flex; gap: 5px; flex-wrap: wrap">
                   <span
-                    v-for="m in g.members"
+                    v-for="m in getGroupAllMembers(g)"
                     :key="m"
                     class="badge badge-neutral"
                   >
                     {{ m }}
                   </span>
-                  <span v-if="!g.members || g.members.length === 0" class="card-subtitle">
+                  <span v-if="getGroupAllMembers(g).length === 0" class="card-subtitle">
                     No members
                   </span>
                 </div>

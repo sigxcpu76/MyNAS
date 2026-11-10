@@ -21,7 +21,7 @@ import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import SortableTh from '../components/SortableTh.vue';
 import { useTableSort } from '../composables/useTableSort';
-import { nasState, notify, refreshAllData } from '../store';
+import { nasState, notify, refreshAllData, selectResource } from '../store';
 import { navigateTo } from '../router';
 
 const searchQuery = ref('');
@@ -132,8 +132,11 @@ function getTypeBadgeClass(type: string) {
 
 function goToPool(poolName: string) {
   if (!poolName) return;
-  nasState.selectedPoolName = poolName.startsWith('zfsPools/') ? poolName : `zfsPools/${poolName}`;
-  navigateTo('storage-pools');
+  const clean = poolName.replace(/^zfsPools\//, '').trim();
+  if (!clean) return;
+  nasState.selectedPoolName = `zfsPools/${clean}`;
+  selectResource('pool:' + clean);
+  navigateTo('storage-pools', false, 'pool:' + clean);
 }
 </script>
 

@@ -29,7 +29,9 @@ function checkStandalone(): boolean {
 function checkIsIOS(): boolean {
   if (typeof window === 'undefined' || !window.navigator) return false;
   const userAgent = window.navigator.userAgent.toLowerCase();
-  return /iphone|ipad|ipod/.test(userAgent);
+  const isIPadOS =
+    window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1;
+  return /iphone|ipad|ipod/.test(userAgent) || isIPadOS;
 }
 
 export function usePwaInstall() {
@@ -53,13 +55,14 @@ export function usePwaInstall() {
   }
 
   async function triggerNativePrompt(): Promise<boolean> {
-    if (!deferredPrompt.value) return false;
+    const promptEvent = deferredPrompt.value;
+    if (!promptEvent) return false;
+    deferredPrompt.value = null;
+    hasNativePrompt.value = false;
     try {
-      await deferredPrompt.value.prompt();
-      const choice = await deferredPrompt.value.userChoice;
+      await promptEvent.prompt();
+      const choice = await promptEvent.userChoice;
       if (choice.outcome === 'accepted') {
-        deferredPrompt.value = null;
-        hasNativePrompt.value = false;
         showInstallSheet.value = false;
         return true;
       }

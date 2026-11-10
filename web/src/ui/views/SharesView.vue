@@ -126,10 +126,21 @@ const globalForm = reactive<CifsGlobalConfig>({
   wsddEnabled: true,
 });
 
+const defaultSmbPoolName = computed(() => {
+  const main = (nasState.systemConfig?.mainPool || '').replace(/^zfsPools\//, '').trim();
+  if (main) return main;
+  const firstPool = nasState.pools[0]?.name.replace(/^zfsPools\//, '').trim();
+  return firstPool || 'tank';
+});
+
+const smbHost = computed(() =>
+  typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'nas'
+);
+
 const showCreateCifs = ref(false);
 const cifsForm = reactive({
   shareId: '',
-  path: '/mnt/tank/media',
+  path: `/mnt/${defaultSmbPoolName.value}/media`,
   comment: 'Shared Storage',
   validUsersText: '',
   validGroupsText: '',
@@ -150,6 +161,12 @@ const cifsForm = reactive({
   timeMachine: false,
   recycleBin: true,
   enabled: true,
+});
+
+watch(showCreateCifs, (open) => {
+  if (open && (!cifsForm.path || cifsForm.path === '/mnt/tank/media')) {
+    cifsForm.path = `/mnt/${defaultSmbPoolName.value}/media`;
+  }
 });
 
 const editingCifs = ref<CifsShare | null>(null);
@@ -369,8 +386,8 @@ function startEditCifs(share: CifsShare) {
   editCifsForm.browseable = share.browseable;
   editCifsForm.createMask = share.createMask || '0664';
   editCifsForm.directoryMask = share.directoryMask || '0775';
-  editCifsForm.forceCreateMode = share.forceCreateMode || '0664';
-  editCifsForm.forceDirectoryMode = share.forceDirectoryMode || '0775';
+  editCifsForm.forceCreateMode = share.forceCreateMode || '0000';
+  editCifsForm.forceDirectoryMode = share.forceDirectoryMode || '0000';
   editCifsForm.shadowCopy = share.shadowCopy;
   editCifsForm.timeMachine = share.timeMachine;
   editCifsForm.recycleBin = share.recycleBin;
@@ -972,9 +989,16 @@ async function handleDeleteWebdav(share: WebdavShare) {
 
             <tr v-for="s in cifsSort.sorted.value" :key="s.name">
               <td>
-                <div style="display: flex; align-items: center; gap: 6px">
+                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
                   <span class="mono" style="font-weight: 600; font-size: 13.5px; color: var(--accent-primary)">
-                    //nas/{{ s.shareName }}
+                    //{{ smbHost }}/{{ s.shareName }}
+                  </span>
+                  <span
+                    class="badge"
+                    :class="s.enabled !== false ? 'badge-success' : 'badge-neutral'"
+                    style="font-size: 10px"
+                  >
+                    {{ s.enabled !== false ? 'ENABLED' : 'DISABLED' }}
                   </span>
                   <span v-if="!s.browseable" class="badge badge-warning" style="font-size: 10px">Hidden</span>
                 </div>

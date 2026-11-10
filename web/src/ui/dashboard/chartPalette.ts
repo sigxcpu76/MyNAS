@@ -23,7 +23,7 @@ export function useChartPalette() {
 
       // RAM Slices
       ramServices: dark ? '#7aa2f7' : '#0969da',
-      ramArc: dark ? '#7dcfff' : '#0550ae',
+      ramArc: dark ? '#bb9af7' : '#8250df',
       ramBuffers: dark ? '#e0af68' : '#9a6700',
       ramFree: dark ? '#9ece6a' : '#1a7f37',
 

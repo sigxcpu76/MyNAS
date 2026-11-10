@@ -490,7 +490,7 @@ function formatCoreShort(label: string): string {
 .power-number {
   font-size: 26px;
   font-weight: 700;
-  color: #f59e0b;
+  color: var(--warning-text);
   display: block;
   line-height: 1.1;
 }
@@ -526,7 +526,7 @@ function formatCoreShort(label: string): string {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--bg-elevated);
   padding: 2px;
   border-radius: 6px;
 }
@@ -557,7 +557,7 @@ function formatCoreShort(label: string): string {
 
 .gpu-card {
   padding: 10px 12px;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   display: flex;
@@ -619,7 +619,7 @@ function formatCoreShort(label: string): string {
   display: flex;
   flex-direction: column;
   padding: 8px 10px;
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   transition: all 0.15s ease;
@@ -804,7 +804,7 @@ function formatCoreShort(label: string): string {
   align-items: center;
   justify-content: space-between;
   padding: 7px 10px;
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   font-size: 11.5px;

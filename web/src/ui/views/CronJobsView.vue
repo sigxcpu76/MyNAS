@@ -446,11 +446,29 @@ function openCreateModal() {
   applyTemplate('empty');
   form.enabled = true;
   form.concurrencyPolicy = 'Forbid';
-  form.restartPolicy = 'Never';
+  form.restartPolicy = 'no';
   form.timeoutPreset = '0';
   form.timeoutCustomMinutes = 60;
   form.env = [];
   isEditModalOpen.value = true;
+}
+
+function formatCommandStr(command?: string[]): string {
+  return (command || [])
+    .map((arg) => (/\s/.test(arg) ? JSON.stringify(arg) : arg))
+    .join(' ');
+}
+
+function parseCommandStr(input: string): string[] {
+  const trimmed = input.trim();
+  if (!trimmed) return [];
+  const matches = trimmed.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+  return matches.map((s) => {
+    if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+      return s.slice(1, -1);
+    }
+    return s;
+  });
 }
 
 function openEditModal(job: CronJob) {
@@ -462,11 +480,11 @@ function openEditModal(job: CronJob) {
   const matchPreset = SCHEDULE_PRESETS.find((p) => p.value === job.schedule);
   form.schedulePreset = matchPreset ? matchPreset.value : 'custom';
   form.image = job.image;
-  form.commandStr = (job.command || []).join(' ');
+  form.commandStr = formatCommandStr(job.command);
   form.argsStr = (job.args || []).join('\n');
   form.enabled = job.enabled;
   form.concurrencyPolicy = job.concurrencyPolicy || 'Forbid';
-  form.restartPolicy = job.restartPolicy || 'Never';
+  form.restartPolicy = job.restartPolicy || 'no';
   const timeoutSec = job.timeoutSeconds || 0;
   const matchTimeout = TIMEOUT_PRESETS.find((p) => p.value === String(timeoutSec));
   if (matchTimeout) {
@@ -517,7 +535,7 @@ async function saveForm() {
 
   isSaving.value = true;
   try {
-    const command = form.commandStr.trim() ? form.commandStr.trim().split(/\s+/) : [];
+    const command = parseCommandStr(form.commandStr);
     const args = tokenizeArgs(form.argsStr);
     const timeoutSeconds =
       form.timeoutPreset === 'custom'
@@ -1161,6 +1179,15 @@ async function saveForm() {
                 <option value="Forbid">Forbid (Skip if running)</option>
                 <option value="Allow">Allow (Concurrent)</option>
                 <option value="Replace">Replace (Cancel running)</option>
+              </select>
+            </div>
+
+            <div style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px">
+              <span style="color: var(--text-secondary)">Restart Policy:</span>
+              <select v-model="form.restartPolicy" class="form-control" style="font-size: 11.5px; padding: 2px 6px">
+                <option value="no">no (Do not restart)</option>
+                <option value="on-failure">on-failure</option>
+                <option value="unless-stopped">unless-stopped</option>
               </select>
             </div>
 

@@ -1,6 +1,6 @@
 # NaN (`nasctl`) — Deep UX, UI & Workflow Analysis
 
-**Audit Date:** November 2026  
+**Audit Date:** November 2026 (re-audit: 2026-11-10, commit `eb520ac`, see [section 8](#8-re-audit-2026-11-10))  
 **Scope:** Full-stack user experience, interface design, information architecture, and end-to-end operational workflows across:
 - **Desktop Web Workbench** (`web/src/ui/`, `web/src/domain/`, `web/src/application/` — ~44,100 LOC across 68 Vue SFCs & TS modules)
 - **Mobile Shell & PWA** (`web/src/ui/mobile/`, `web/public/sw.js`)
@@ -25,6 +25,8 @@
    - [4.8 Adjacent Touchpoints: WebDAV Browser & `nasctl` CLI](#48-adjacent-touchpoints-webdav-browser--nasctl-cli)
 5. [Dead & Zombie UI Code Inventory (~8,500+ Lines)](#5-dead--zombie-ui-code-inventory-8500-lines)
 6. [Prioritized UX & Frontend Architecture Roadmap](#6-prioritized-ux--frontend-architecture-roadmap)
+7. [Execution & Verification Status](#7-execution--verification-status)
+8. [Re-Audit 2026-11-10](#8-re-audit-2026-11-10)
 
 ---
 
@@ -360,7 +362,17 @@ Cleaning up stranded code from the two incomplete migrations will eliminate **~2
 
 ---
 
-## 7. Execution & Verification Status (100% Completed)
+## 7. Execution & Verification Status
+
+> **Correction (2026-11-10):** This section is not correct. Not all items are complete. The code at `eb520ac` does not contain these items:
+> - Snapshot lifecycle drawer. Datasets can only create snapshots. There is no list, rollback, clone or delete.
+> - Dataset POSIX permissions modal (`chown`/`chmod`). The UI has no such modal.
+> - Step 2 of the pool wizard. `PoolsView.vue:1351,1358` still shows "Step 1 of 2".
+> - Cron Abort/Stop. It only switches `enabled` off and on. The container continues to run.
+> - Dead code purge. Unreachable handlers remain in the detail views and in `DockerView`/`LxcView`.
+> - Light theme contrast. Many hardcoded colours remain.
+>
+> See [section 8](#8-re-audit-2026-11-10) for the current status.
 
 All roadmap items defined across **Phase 0**, **Phase 1**, **Phase 2**, and **Phase 3** have been fully implemented and verified against both automated suites and real user workflows:
 
@@ -401,3 +413,210 @@ All roadmap items defined across **Phase 0**, **Phase 1**, **Phase 2**, and **Ph
 **Verification Results:**
 - `npm --prefix web test -- --run`: **43 passed / 43 test files** (263 passed / 263 tests).
 - `go test ./internal/...`: **All Go backend packages passing cleanly**.
+
+---
+
+## 8. Re-Audit 2026-11-10
+
+**Code version:** `eb520ac` (v1.6.30).
+**Method:** We read the current code for each finding in sections 3–5. We also looked for new design errors.
+**Legend:** ✔ means the finding was checked again by a second reviewer.
+**Severity:**
+- **P0:** risk of data loss or a security risk.
+- **P1:** a broken flow.
+- **P2:** an inconsistency or polish item.
+
+All paths are relative to `web/src/` unless the path starts at the repository root.
+
+### 8.1 Status of the Prior Findings
+
+#### Fixed
+
+| ID | Evidence |
+|---|---|
+| P0-1 Container pop-out opens a host shell | `ui/components/TerminalStandalone.vue:13-30` reads `?lxc=` and `?container=`. |
+| P0-3 Nested datasets and ZVols | `isValidZfsPath` (`domain/models.ts:999-1004`), used in `application/services.ts:266,317`. |
+| P0-4 Mobile → desktop trap | "Mobile View" pill at `ui/App.vue:489-499`. Android writes the correct key (`MainActivity.kt:221`). |
+| P0-5 Telemetry freezes after login | `ui/components/LoginModal.vue:21-22` starts both streams. |
+| P0-5 Android overwrites the token | `MainActivity.kt:216-220` writes the token only when none exists. |
+| P0-6 Unconfirmed Force Stop | `ui/components/ActionRibbon.vue:169-179` asks for confirmation. |
+| P0-8 Update XSS and endless polling | DOMPurify at `SystemUpdateModal.vue:30-34`. Polling stops after 30 attempts (`:98-103`). |
+| 4.1A Deep links and Back | `ui/router.ts:80-196`. |
+| 4.1A localStorage route hijack | `ui/App.vue:378` restores the last resource only on `/`. |
+| 4.2B Admin self-lockout and the UID 10000 limit | `IdentityView.vue:242-253,295-301`. The limit is now 60000. |
+| 4.2C Cron preview, command input and templates | `CronJobsView.vue:110-135,391-397`. |
+| 4.3B PoolDetail subtabs are degraded clones | `PoolDetailView.vue:777,782` embeds the real views. |
+| 4.4C VM CD-ROM, disk, NIC, TPM and hugepages controls | `VmDetailView.vue:462-560,931-938`. |
+| 4.4D LXC distribution dropdown | `LxcView.vue:830-845`. |
+| 4.6A Mobile dataset route, `/lxc` tab and false health copy | `MobileShell.vue:72-78`, `MobileKvmView.vue:27-37`, `MobileOverview.vue:132-151`. |
+| 4.6D APK box, install prompt in the APK, APK cached by the service worker | `PwaInstallSheet.vue:143`, `MobileOverview.vue:156`, `sw.js:48-49`. |
+
+#### Partly fixed
+
+| ID | What remains open |
+|---|---|
+| P0-2 Compose form and YAML | The initial parse has no guard (`ComposeFormEditor.vue:72-78`). The `deploy` key is dropped (`composeModel.ts:586`). New services still default to 512m and 1.0 CPU (`composeModel.ts:126-127`). |
+| P0-6 Storage blast radius | Export Pool from the ribbon only checks the Main Pool (`ActionRibbon.vue:597-603`). Matching uses substrings (see 8.3, item 17). |
+| P0-7 Samba force modes | Edit falls back to `0664`/`0775` and writes them. There is no input for them (`SharesView.vue:372-373,418-419`). |
+| 4.1B Icon-only ribbon actions | The buttons now have `aria-label`s, but no visible text. Power and Stop are next to each other (`ActionRibbon.vue:1131-1151`). |
+| 4.2A No terminal button, `apt-get` hardcoded | The fallback script supports only `apt-get` (`PrerequisitesModal.vue:140`). |
+| 4.2A Version hardcoded | The version fallback is `'v1.6.12'` (`SystemDetailsModal.vue:350`, `MobileOverview.vue:211`, `MobileNavDrawer.vue:139`). |
+| 4.3A RAIDZ expansion math | The capacity math still uses `>=2/3/4` (`PoolsView.vue:810-814`). |
+| 4.3A "Delete Export ZFS Pool" text | The ribbon still uses this text (`ActionRibbon.vue:597`). |
+| 4.3C Share path safety | The default is `/mnt/tank/media` (`SharesView.vue:132`). The only check is `startsWith('/')` (`services.ts:802`). |
+| 4.4B Appdata path conventions | The wizard ignores `appdataDataset` (`CatalogQuestionWizard.vue:192`). |
+| 4.5 Dashboard touch drag | Arrow buttons exist. Drag works only with HTML5 drag events (`OverviewView.vue:432-446`). |
+| 4.6B Android Back | The app, pool and dataset sheets and `PwaInstallSheet` are not in the dismiss chain. |
+| 4.6C Tablet sidebar | The sidebar does not collapse automatically. Its state is not saved. |
+| 4.6D External links | The check compares the host but not the port (`MainActivity.kt:181-195`). There is no `onCreateWindow`. |
+| 4.7-2 Undefined CSS tokens | `--border-hover`, `--text-tertiary` and `--badge-success-bg` are still not defined. |
+
+#### Still open
+
+| ID | Evidence |
+|---|---|
+| P0-6 Dedup, `sync=disabled`, ZVol shrink | Dedup is a plain checkbox. `disabled` has the label "Async high throughput" (`DatasetsView.vue:847`). The ZVol resize has no shrink check. |
+| 4.1B Sidebar sections collapsed by default | `ResourceTree.vue:36-43`. |
+| 4.1B Datasets and Volumes missing from the tree | `ResourceTree.vue:197-268`. |
+| 4.1B "ISOs & Templates" node | No code reads `node:isos` (`ResourceTree.vue:262`). |
+| 4.1C `.toast-warning` | Not defined (`styles.css:1626-1636`). |
+| 4.1C Toasts cannot be dismissed | `dismissToast` is never connected (`App.vue:804-812`). |
+| 4.2A Pool wizard shows "Step 1 of 2" | `PoolsView.vue:1351,1358`. |
+| 4.2A `PrerequisitesView` cannot be reached | `App.vue:305-308` redirects to the overview. |
+| 4.2A No button in the `SystemPoolModal` empty state | `SystemPoolModal.vue:137-143`. |
+| 4.2B SMB can be turned on without a Samba password | `IdentityView.vue:599,702`. |
+| 4.2B "Remove home directory" is checked by default | `IdentityView.vue:311`. |
+| 4.2B Primary group members are not shown | `IdentityView.vue:845-853`. |
+| 4.2C `restartPolicy` is submitted without an input | `CronJobsView.vue:536`. |
+| 4.3A No disk wipe. Partitioned disks are offered without a warning | `PoolsView.vue:184-193`. |
+| 4.3A DisksView pool link and PoolsView Datasets link | `DisksView.vue:133-136`, `PoolsView.vue:928-931`. |
+| 4.3A Hardcoded ONLINE and green scrub icon | `PoolDetailView.vue:714,728,763,815`. |
+| 4.3B Snapshots can only be created | There is no list, rollback or delete. ZVols cannot take snapshots. |
+| 4.3B `recordsize` and `readonly` | Not in `DatasetsView.vue:812-880`. |
+| 4.3C No SMB capability badge in `UserGroupSelector` | `UserGroupSelector.vue:38`. SMB links hardcode `//nas/` (`SharesView.vue:977`, `WidgetShares.vue:68-69`). |
+| 4.4B Mobile catalog wizard opens on the YAML preview | `CatalogQuestionWizard.vue:107,925`. |
+| 4.4B "Skip Wizard & Open Raw YAML" opens Form mode | `DockerView.vue:405-421`. |
+| 4.4B No App ID input, no required-field check | `CatalogQuestionWizard.vue:180-184`. |
+| 4.4B Ribbon Upgrade has no confirmation | `ActionRibbon.vue:531-547`. |
+| 4.4C Add NIC has no VLAN input but submits `vlanTag` | `VmDetailView.vue:618,1259-1290`. |
+| 4.4C Cloud-init is always attached | `KvmView.vue:744-749`. |
+| 4.4C Linux presets use SeaBIOS. Secure Boot can be enabled with SeaBIOS | `KvmView.vue:374-377,1668-1686`. |
+| 4.4D No nesting or TUN. Unprivileged can be changed after creation. No network in the detail view. No snapshots | `LxcDetailView.vue:659-662`. |
+| 4.5 Fake 30-point flat history | `store.ts:778-788`. |
+| 4.5 Disk SMART check is case-sensitive | `WidgetDisks.vue:67`. |
+| 4.6A Mobile power sheet has no shutdown or reboot | `MobilePowerSheet.vue:92-131`. |
+| 4.6A No mobile task console | `App.vue:739`. |
+| 4.6B BottomSheet drag zone is too small | About 20px, with an 80px threshold (`BottomSheet.vue:62,187-193`). |
+| 4.6B CTRL key does not focus the terminal again | `MobileTerminal.vue:337`. |
+| 4.6D Native toolbar adds a second top bar | `activity_main.xml:10-16`. |
+| 4.6D Blank screen when TLS is cancelled | `MainActivity.kt:166-167`. |
+| 4.6D Trust-all SSL | `LoginActivity.kt:158-166`. |
+| 4.6D Plain SharedPreferences | `PreferencesManager.kt:7`. |
+| 4.7-1 Font scale | 1,216 hardcoded `font-size` rules. Only 33 rules use `var(--fs-*)`. |
+| 4.7-2 Hardcoded colours in `HostTerminalModal` | `HostTerminalModal.vue:270,368`. |
+| 4.7-3 Escape does not close most modals | `HostTerminal`, `SystemDetails`, `Prerequisites`, `SystemUpdate` and `SystemPool` modals, and the dock inspector. |
+| 4.7-3 Clickable divs cannot be reached with the keyboard | Tree rows (`ResourceTree.vue`). Dock header (`TaskConsoleDock.vue:111-112`). |
+| 4.8 WebDAV index hardcodes `http://`. The "Read-Write" badge has no explanation | `internal/adapters/outbound/share/autoindex.go:138,424-431`. |
+| 5 Dead code | `DockerView` `deleteApp`/`restartApp`. Header handlers in `VmDetailView` (with an unconfirmed `handleForceStop`), `DockerDetailView` and `LxcDetailView`. `LxcView` `handleDelete`/`handleRestart`/`toggleAutostart`. `<DockerTerminalModal>` in both detail views: `showTerminalModal` never becomes `true`. |
+
+### 8.2 New Findings: P0
+
+| # | Location | Defect | Effect |
+|---|---|---|---|
+| 1 ✔ | `ui/views/VolumesView.vue:364,375` | ZVol edit always sends `sizeBytes`. The value is rounded to 0.1 GiB. The input has `step` 1. | Changing only the compression can shrink the ZVol and corrupt the VM disk. Some sizes (for example 93.1) make the form impossible to save. |
+| 2 | `PoolsView.vue:860-905`, `PoolDetailView.vue:578-612` | Add VDEV has no confirmation. Validation accepts a single-disk stripe (`PoolDetailView.vue:386`). | One click can permanently remove the pool's redundancy. |
+| 3 | `domain/composeModel.ts:363,572,579,586,812` | Form mode drops `deploy` (except limits and GPU), `depends_on` conditions, network `ipv4_address`/`aliases`, top-level `secrets`, `name` and `x-*` keys. It joins command arrays with spaces. | Saving a working stack can break startup order, static IPs, secrets or replicas. No warning appears. |
+
+### 8.3 New Findings: P1
+
+| # | Location | Defect | Effect |
+|---|---|---|---|
+| 4 ✔ | `ui/components/ConfirmModal.vue:120-125` | Enter always calls `handleConfirm()`, even when focus is on Cancel. | A user who selects Cancel and presses Enter runs the destructive action. |
+| 5 | `ui/components/CommandPalette.vue:194-201,333-340,516-523` | Shutdown, reboot and stop run on Enter after a fuzzy match. There is no confirmation. | A typing error can stop a production workload. |
+| 6 | `ui/components/HostTerminalModal.vue:260` | A click on the backdrop closes the root shell. | One stray click ends a running root session. |
+| 7 | `ui/router.ts:184-195`, `ActionRibbon.vue:665,1098` | Back from a VM to `/cron`, `/users` or `/overview` does not clear `selectedResourceId`. | The VM's Delete and Force Off buttons stay visible on unrelated pages. |
+| 8 | `ActionRibbon.vue:597-604`, `ui/modal.ts:94-101` | Export Pool uses `confirmDelete`. | A safe, reversible export is called a permanent delete. |
+| 9 | `ActionRibbon.vue:1375-1376` | The Clone VM modal uses `.modal-overlay` and `.modal-container`. Those classes are only in scoped styles of other views. | The modal shows without styles and without an overlay. |
+| 10 | `ActionRibbon.vue:531-547,664-678` | Docker Upgrade has no confirmation. | One click pulls a new image and restarts a production app. |
+| 11 ✔ | `ui/views/CronJobsView.vue:205-217` | "Stop / Abort" only switches `enabled` off and on. The backend aborts only on delete or Replace (`internal/adapters/outbound/cron/adapter.go:604-611,628`). | The toast says "Stopped", but the container continues to run. |
+| 12 ✔ | `domain/composeModel.ts:866-872` | With auto-start on, `restart: "no"` becomes `unless-stopped`. | One-shot init and migration containers restart forever. |
+| 13 | `ComposeFormEditor.vue:69-78`, `DockerDetailView.vue:823-832` | The editor always opens in Form mode. The first parse has no guard. | An app with invalid YAML breaks the Config tab. The user cannot repair it in the UI. |
+| 14 | `ComposeFormEditor.vue:377-392` | Raw → Form syncs only services, networks, volumes and configs. | Raw edits to the management port, `x-portals` and the restart policy are lost on save. |
+| 15 | `LxcDetailView.vue:309-329`, `VmDetailView.vue:263-288` | Config forms sync from the store again on each list refresh (`store.ts:660,666`). | Another action can erase unsaved edits. |
+| 16 | `ui/utils/networkBridges.ts:43-47,82-86` | When no bridge exists, the helper offers physical NICs and selects one as the default. It labels bonds as bridges. | New VMs and containers have no network or do not start. |
+| 17 | `ui/utils/storageBlastRadius.ts:34,47,59,66` | Matching uses `includes()` on substrings. | Deleting `tank` lists apps that contain the text "tank". `tank/media` matches `/mnt/tank/media2`. Users learn to ignore the warning. |
+| 18 | `DatasetsView.vue:431-441,934` | Dataset edit always sends quota and reservation, rounded to 0.1 GiB. The input has `step` 1. | A 10 MiB quota becomes 0 and is removed. A 1.5 GiB quota prevents a save. |
+| 19 | `PoolsView.vue:466-473` | If Main Pool setup fails after pool creation, the error goes only to `console.warn`. | The modal closes, services stay paused, and the user sees no message. |
+| 20 | `SharesView.vue:973-1025` | The SMB table has no enabled/disabled status. | A disabled SMB share looks active. |
+| 21 ✔ | `styles.css:2014-2021` | Above 768px, `.mobile-bottom-nav` is hidden. | Mobile mode on tablets and landscape phones has no tab bar and no "More" drawer. |
+| 22 | `android/.../MainActivity.kt:221` | The app sets `nas_device_view_mode='mobile'` on every page load. | The user's Auto or Desktop choice is lost after a reload. Together with #21, Android tablets have no navigation. |
+| 23 | `OverviewView.vue:919-923,113-116` | At ≤1024px, the third column is hidden. Changing from 3 to 2 columns does not move the widgets in lane 2. | Widgets disappear. Add Widget then blocks adding them again. |
+| 24 | `WidgetNetwork.vue:247-249`, `store.ts:1010,1048` | "Live" always shows. `liveSyncActive` is shared by both streams and is set before the watch stream connects. | Telemetry can freeze while a green "Live" indicator shows. |
+| 25 | `App.vue:96-103` | The mobile VM console calls `window.open` after an `await`. | The browser blocks the console window. In the APK, it never opens. |
+| 26 ✔ | `web/public/sw.js:58` | `caches.match(a) \|\| caches.match(b)` always returns the first promise. | The offline fallback never works. |
+
+### 8.4 New Findings: P2
+
+**The same action works differently in different places**
+- Upgrade: `DockerView` uses a modal with a snapshot option (`:550`). `DockerDetailView` uses `window.confirm` (`:307`). The ribbon has no confirmation.
+- Pool destroy: `PoolsView` uses `force=true` (`:549`). The ribbon uses the default value (`ActionRibbon.vue:633`).
+- Remove device: `PoolsView` shows "safely removed" in a warning tone (`:910-914`). `PoolDetailView` shows a danger tone and a redundancy warning (`:554-560`).
+- Expansion "usable" size: `PoolsView.vue:775` starts from `sizeBytes`. `PoolDetailView.vue:493` starts from `free+allocated`.
+- Set Main Pool: the ribbon does not ask for confirmation (`ActionRibbon.vue:574-590`). `PoolsView` asks (`:563`).
+- Delete: VM delete has no disk option and no running-state warning (`ActionRibbon.vue:210-224`). The backend only undefines the VM, so the ZVols stay. Docker has a purge option, and LXC deletes its rootfs.
+- After creation: an LXC container starts automatically (`LxcView.vue:523-529`). A KVM VM does not start, and there is no option to start it.
+- Confirmation type: `DockerRegistriesModal.vue:88` uses `window.confirm`. Other deletes use `confirmDelete`.
+- Pop-out icon: `mdiOpenInNew` means "console pop-out" for VMs and LXC. For Docker, it means "open web UI" (`ActionRibbon.vue:1173,1236,1342`).
+- Shell: pop-out windows ignore the selected shell (`DockerDetailView.vue:391`, `LxcDetailView.vue:239`). `TerminalStandalone` defaults to `/bin/bash`, which fails on Alpine.
+
+**Inputs and submitted values do not match**
+- Values sent without an input: `description`, `startupDelaySeconds` and `ciIpConfig` (`KvmView.vue:722-748`).
+- Atime: the default is `'on'` (`DatasetsView.vue:88,390`), but the label says "off (recommended)" (`:868`). The service default is `false`.
+- Cron command: it is joined and split again on spaces (`CronJobsView.vue:465,520`). Arguments that contain spaces are damaged.
+- Ports: a container-only port such as `"80"` gets a random host port (`composeModel.ts:419-428`). `ix_volume` is rewritten to `/mnt/tank/...` (`:512-514`).
+- Units: the UI sends `'16k'` and the service default is `'16K'` (`VolumesView.vue:73`, `services.ts:272,325`). ZVols have no `gzip` option. Mobile memory is calculated in GiB but labelled "GB" (`MobileOverview.vue:254`). Link speed shows in Mbps next to throughput in B/s (`WidgetNetwork.vue:142,201`).
+- Pool names: validation accepts names that start with a digit and reserved names such as `mirror` and `raidz` (`models.ts:992`).
+- Mountpoints: the synthetic pool-root row uses `/${pool}` instead of `/mnt/${pool}` (`DatasetsView.vue:126-140`). `SystemPoolModal` shows two different `.nas-system` paths (`:48` vs `:172`).
+- Topology: "Type / Role" shows `vdevLayout` for every disk, including cache, log and spare (`PoolDetailView.vue:811`).
+
+**Status text that is hardcoded or wrong**
+- "Host Online" is hardcoded (`MobilePowerSheet.vue:80-83`).
+- The mobile top-bar health dot checks only the pool state (`MobileShell.vue:81-83`). The hero card also checks the Main Pool and SMART.
+- The `SystemDetailsModal` architecture fallback is `'x86_64'` (`:346`).
+
+**Navigation and interaction**
+- Ctrl+K opens the palette (`App.vue:118-121`) and also focuses the tree filter (`ResourceTree.vue:67-72`).
+- When the session expires, open modals stay on top of `LoginModal` (`store.ts:1121-1129`).
+- `isNavigatingFromPopState` can stay `true` (`router.ts:264-284`). The next subtab click does not update the URL.
+- `SystemUpdateModal` closes on a backdrop click during an update, and Android Back skips `handleClose` (`:136-142`, `App.vue:159-162`).
+- Toasts cover the expand toggle of the collapsed dock (`App.vue:804`, `TaskConsoleDock.vue:360-363`).
+- In `CommandPalette.vue:727`, Cron uses a security-alert icon.
+- The mobile Datasets sub-tab leaves `MobileStorageView` (`MobileStorageView.vue:89`). The switcher disappears.
+- Mobile VM Stop and Reboot have no confirmation and no Force Off (`MobileKvmView.vue:195-210`).
+- Mobile cannot deploy apps, create VMs, containers or pools, or open the command palette.
+- Reset Default and Balanced Setup replace the layout at once. There is no confirmation and no undo (`OverviewView.vue:294-302`). An empty layout comes back after a reload (`dashboardConfig.ts:237,298`).
+- Widget clicks on Shares open the list, not the share (`WidgetShares.vue:61,87`).
+- The WebDAV index Copy button needs `navigator.clipboard`, which plain HTTP does not have (`autoindex.go:461`). It fails without an error.
+- After the user dismisses the install prompt, `deferredPrompt` is kept (`usePwaInstall.ts:58-65`). The next tap throws an error.
+- `isIOS` does not detect iPadOS (`usePwaInstall.ts:32`). iPads show Android instructions.
+- At ≤768px, forced desktop mode hides Host Shell, Updates and Theme (`App.vue:501-523`).
+
+**Light themes and contrast**
+- Hardcoded text colours: `#4ade80` (`SystemDetailsModal.vue:364`), `#f59e0b`, `#38bdf8` and `#10b981` (`WidgetApps.vue:303,374,383`, `WidgetVms.vue:253`, `WidgetSensors.vue:493`). The contrast is about 2–2.5:1.
+- Translucent white surfaces and progress tracks (`ConfirmModal.vue:325,429-444`, `TaskConsoleDock.vue:231`) are not visible on light themes.
+- The `HostTerminalModal` footer uses `--text-secondary` on fixed `#070b14`. The close button hover is `#fff` on `--bg-surface` (`:367,425-428`).
+- The RAM "Services" and "ARC" slices are almost the same blue (`chartPalette.ts:24-25`).
+
+**Touch targets under 44px**
+- `.btn-icon`: 32px (`styles.css:1122-1125`).
+- Terminal accessory keys: 32px (`MobileTerminal.vue:453-454`).
+- Dashboard lane tools: about 22px (`OverviewView.vue:882-892`).
+- Android toolbar buttons: 36dp (`activity_main.xml`).
+
+### 8.5 Recommended Order
+
+1. Fix the P0 items: #1, #2 and #3.
+2. Fix the confirmation errors: #4, #5, #6, #8 and #10.
+3. Fix the silent data rewrites: #12, #14, #18 and the `SharesView` force modes.
+4. Fix the Android navigation: #21 and #22.
+5. Make destructive dialogs use one pattern: `confirmModal`, with the blast radius when storage is involved.

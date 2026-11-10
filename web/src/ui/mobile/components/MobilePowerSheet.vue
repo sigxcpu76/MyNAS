@@ -9,6 +9,7 @@ import {
   mdiCellphone,
   mdiMonitor,
   mdiRefresh,
+  mdiUpdate,
 } from '@mdi/js';
 import MdiIcon from '../../components/MdiIcon.vue';
 import BottomSheet from '../../components/BottomSheet.vue';
@@ -25,6 +26,7 @@ const emit = defineEmits<{
   (e: 'open-terminal'): void;
   (e: 'open-system-details'): void;
   (e: 'open-pool-modal'): void;
+  (e: 'open-update'): void;
   (e: 'logout'): void;
 }>();
 
@@ -55,6 +57,11 @@ function handleDetails() {
 function handlePool() {
   emit('update:modelValue', false);
   emit('open-pool-modal');
+}
+
+function handleUpdate() {
+  emit('update:modelValue', false);
+  emit('open-update');
 }
 
 function handleLogout() {
@@ -121,12 +128,12 @@ function selectMode(mode: DeviceViewMode) {
           <span class="tile-sub">Hardware</span>
         </button>
 
-        <button class="action-tile" @click="refreshAllData">
+        <button class="action-tile" @click="handleUpdate">
           <div class="tile-icon" style="background: rgba(251, 191, 36, 0.15); color: #fbbf24">
-            <MdiIcon :path="mdiRefresh" size="22" :class="{ 'spin-icon': nasState.loading }" />
+            <MdiIcon :path="mdiUpdate" size="22" />
           </div>
-          <span class="tile-label">Refresh</span>
-          <span class="tile-sub">Telemetry</span>
+          <span class="tile-label">Updates</span>
+          <span class="tile-sub">{{ nasState.systemUpdate?.updateAvailable ? nasState.systemUpdate.latestVersion : 'Daemon' }}</span>
         </button>
       </div>
 

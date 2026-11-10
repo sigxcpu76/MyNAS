@@ -775,19 +775,6 @@ export function recordNetworkTrafficSample(telem?: SystemTelemetry | null): void
   const rx = iface.rxRateBytesPerSec || 0;
   const tx = iface.txRateBytesPerSec || 0;
 
-  if (nasState.networkTrafficHistory.length === 0) {
-    const ts = now.getTime();
-    for (let i = MAX_TRAFFIC_HISTORY_POINTS - 1; i >= 0; i--) {
-      const t = new Date(ts - i * 1000);
-      nasState.networkTrafficHistory.push({
-        time: t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        rxRate: rx,
-        txRate: tx,
-      });
-    }
-    return;
-  }
-
   nasState.networkTrafficHistory.push({
     time: timeStr,
     rxRate: rx,
@@ -840,6 +827,7 @@ export function handleWatchResourceChange(msg: {
   jsonPayload: string;
 }): void {
   if (!msg || !msg.resourceType) return;
+  nasState.liveSyncActive = true;
 
   let payload: any = null;
   if (msg.jsonPayload) {
@@ -1007,7 +995,6 @@ export function startWatchStream(): void {
   watchAbortController = new AbortController();
   const endpoint = 'resources:watch?resourceTypes=dockerApps,dockerContainers,virtualMachines,lxcContainers,telemetry,cronJobs';
 
-  nasState.liveSyncActive = true;
   aipClient
     .watchStream(endpoint, handleWatchResourceChange, watchAbortController.signal)
     .catch((err) => {
@@ -1124,6 +1111,8 @@ aipClient.onUnauthorized = () => {
   stopWatchStream();
   stopEventStream();
   services.auth.logout();
+  closeActiveModal(false);
+  nasState.updateModalOpen = false;
   nasState.authenticated = false;
   nasState.currentUser = null;
   nasState.userPreferences = null;
@@ -1188,5 +1177,6 @@ export function closeUpdateModal(): void {
   nasState.updateModalOpen = false;
 }
 
-export { activeModal, askModal, confirmModal, alertModal, closeActiveModal } from './modal';
+import { activeModal, askModal, confirmModal, alertModal, closeActiveModal } from './modal';
+export { activeModal, askModal, confirmModal, alertModal, closeActiveModal };
 export type { ModalOptions, ModalResult, ModalTone } from './modal';

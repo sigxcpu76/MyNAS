@@ -27,13 +27,21 @@ const activeTaskModal = ref<TaskRecord | null>(null);
 const nowTimestamp = ref(Date.now());
 let timerInterval: any = null;
 
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && activeTaskModal.value) {
+    closeTaskDetails();
+  }
+}
+
 onMounted(() => {
+  window.addEventListener('keydown', handleKeydown);
   timerInterval = setInterval(() => {
     nowTimestamp.value = Date.now();
   }, 500);
 });
 
 onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown);
   if (timerInterval) clearInterval(timerInterval);
 });
 
@@ -109,7 +117,15 @@ function copyLogs(task: TaskRecord) {
   >
     <!-- Dock Header Toolbar -->
     <div class="dock-header" @click.self="toggleCollapse">
-      <div class="dock-header-left" @click="toggleCollapse">
+      <div
+        class="dock-header-left"
+        role="button"
+        tabindex="0"
+        :aria-expanded="!nasState.isTaskConsoleCollapsed"
+        @click="toggleCollapse"
+        @keydown.enter.prevent="toggleCollapse"
+        @keydown.space.prevent="toggleCollapse"
+      >
         <MdiIcon
           :path="mdiClipboardTextClockOutline"
           size="16"

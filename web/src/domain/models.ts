@@ -991,9 +991,18 @@ export function formatUptime(totalSeconds: number | string | null | undefined): 
 }
 
 const RESOURCE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$/;
+const POOL_NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9._-]{0,62}$/;
+const RESERVED_ZFS_POOL_NAMES = /^(mirror|raidz|raidz1|raidz2|raidz3|spare|log|cache|draid)(?:$|[^a-zA-Z])/i;
 
 export function isValidResourceId(id: string): boolean {
   return RESOURCE_ID_PATTERN.test(id.trim());
+}
+
+export function isValidPoolName(id: string): boolean {
+  const trimmed = id.trim();
+  if (!POOL_NAME_PATTERN.test(trimmed)) return false;
+  if (RESERVED_ZFS_POOL_NAMES.test(trimmed)) return false;
+  return true;
 }
 
 export function isValidZfsPath(path: string): boolean {

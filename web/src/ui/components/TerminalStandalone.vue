@@ -271,6 +271,7 @@ onBeforeUnmount(() => {
           class="select select-xs"
           style="max-width: 130px; font-family: monospace"
           title="Shell environment"
+          aria-label="Shell environment"
           @change="handleShellChange"
         >
           <option value="/bin/bash">/bin/bash</option>

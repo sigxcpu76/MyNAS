@@ -118,12 +118,18 @@ function handleKeydown(e: KeyboardEvent) {
     e.preventDefault();
     handleCancel();
   } else if (e.key === 'Enter' && !e.shiftKey) {
-    // If not in a textarea
-    const target = e.target as HTMLElement;
-    if (target.tagName !== 'TEXTAREA') {
-      e.preventDefault();
-      handleConfirm();
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+    // Allow focused buttons (such as Cancel) and checkboxes/textareas to handle Enter natively
+    if (
+      target.tagName === 'TEXTAREA' ||
+      target.tagName === 'BUTTON' ||
+      (target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'checkbox')
+    ) {
+      return;
     }
+    e.preventDefault();
+    handleConfirm();
   }
 }
 
@@ -322,7 +328,7 @@ onUnmounted(() => {
 }
 
 .modal-close-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -426,7 +432,7 @@ onUnmounted(() => {
   font-weight: 500;
   padding: 2px 7px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   cursor: pointer;
@@ -435,13 +441,13 @@ onUnmounted(() => {
 }
 
 .phrase-copy-btn:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: var(--bg-hover);
   color: var(--text-primary);
   border-color: var(--border-strong);
 }
 
 .confirm-checkbox-row {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   padding: 10px 12px;

@@ -486,50 +486,71 @@ const editPoolCapacitySummary = computed(() => {
       cacheDrivesCount: 0,
       logDrivesCount: 0,
       spareDrivesCount: 0,
+      specialDrivesCount: 0,
     };
   }
   const currentPool = pool.value;
-  let rawBytes = currentPool.sizeBytes || 0;
-  let usableBytes = currentPool.freeBytes + currentPool.allocatedBytes;
-  let dataCount = currentPool.devices?.length || 0;
-  let cacheCount = 0;
-  let logCount = 0;
-  let spareCount = 0;
+  let totalRawBytes = 0;
+  let estimatedUsableBytes = currentPool.sizeBytes || (currentPool.freeBytes + currentPool.allocatedBytes) || 0;
+  let dataDrivesCount = 0;
+  let cacheDrivesCount = 0;
+  let logDrivesCount = 0;
+  let spareDrivesCount = 0;
+  let specialDrivesCount = 0;
 
-  for (const v of editBuilderVdevs.value) {
-    const disks = v.devicePaths.map((p) => getDiskByPath(p)).filter(Boolean) as Disk[];
-    const vRaw = disks.reduce((acc, d) => acc + d.sizeBytes, 0);
-    rawBytes += vRaw;
+  for (const ev of existingActiveVdevs.value) {
+    for (const dp of ev.devicePaths) {
+      const disk = getDiskByPath(dp);
+      totalRawBytes += disk?.sizeBytes || (currentPool.devices?.length ? currentPool.sizeBytes / currentPool.devices.length : 0);
+      if (ev.type === 'data') dataDrivesCount++;
+      else if (ev.type === 'cache') cacheDrivesCount++;
+      else if (ev.type === 'log') logDrivesCount++;
+      else if (ev.type === 'spare') spareDrivesCount++;
+      else if (ev.type === 'special') specialDrivesCount++;
+    }
+  }
 
-    if (v.type === 'data') {
-      dataCount += disks.length;
-      if (v.layout === 'mirror') {
-        const minDisk = disks.reduce((min, d) => Math.min(min, d.sizeBytes), Infinity);
-        usableBytes += minDisk === Infinity ? 0 : minDisk;
-      } else if (v.layout.startsWith('raidz')) {
-        const parity = v.layout === 'raidz1' ? 1 : v.layout === 'raidz2' ? 2 : 3;
-        const dataDisks = Math.max(0, disks.length - parity);
-        const minDisk = disks.reduce((min, d) => Math.min(min, d.sizeBytes), Infinity);
-        usableBytes += minDisk === Infinity ? 0 : minDisk * dataDisks;
-      } else {
-        usableBytes += vRaw;
+  for (const vdev of editBuilderVdevs.value) {
+    const driveSizes = vdev.devicePaths.map((p) => getDiskByPath(p)?.sizeBytes || 0);
+    const vdevRaw = driveSizes.reduce((acc, bytes) => acc + bytes, 0);
+    totalRawBytes += vdevRaw;
+
+    if (vdev.type === 'data') {
+      dataDrivesCount += vdev.devicePaths.length;
+      if (vdev.devicePaths.length > 0) {
+        const minDrive = Math.min(...driveSizes);
+        const count = vdev.devicePaths.length;
+        if (vdev.layout === 'stripe') {
+          estimatedUsableBytes += vdevRaw;
+        } else if (vdev.layout === 'mirror') {
+          estimatedUsableBytes += minDrive;
+        } else if (vdev.layout === 'raidz1' && count >= 3) {
+          estimatedUsableBytes += minDrive * (count - 1);
+        } else if (vdev.layout === 'raidz2' && count >= 4) {
+          estimatedUsableBytes += minDrive * (count - 2);
+        } else if (vdev.layout === 'raidz3' && count >= 5) {
+          estimatedUsableBytes += minDrive * (count - 3);
+        }
       }
-    } else if (v.type === 'cache') {
-      cacheCount += disks.length;
-    } else if (v.type === 'log') {
-      logCount += disks.length;
-    } else if (v.type === 'spare') {
-      spareCount += disks.length;
+    } else if (vdev.type === 'cache') {
+      cacheDrivesCount += vdev.devicePaths.length;
+    } else if (vdev.type === 'log') {
+      logDrivesCount += vdev.devicePaths.length;
+    } else if (vdev.type === 'spare') {
+      spareDrivesCount += vdev.devicePaths.length;
+    } else if (vdev.type === 'special') {
+      specialDrivesCount += vdev.devicePaths.length;
     }
   }
 
   return {
-    totalRawBytes: rawBytes,
-    estimatedUsableBytes: usableBytes,
-    dataDrivesCount: dataCount,
-    cacheDrivesCount: cacheCount,
-    logDrivesCount: logCount,
-    spareDrivesCount: spareCount,
+    totalRawBytes,
+    estimatedUsableBytes,
+    dataDrivesCount,
+    cacheDrivesCount,
+    logDrivesCount,
+    spareDrivesCount,
+    specialDrivesCount,
   };
 });
 
@@ -575,10 +596,45 @@ async function handleRemoveExistingDevice(devicePath: string) {
 
 async function handleApplyPoolConfig() {
   if (!pool.value || isBusy.value) return;
+  const p = pool.value;
+  const newVdevs = editBuilderVdevs.value.filter((v) => v.devicePaths.length > 0);
+  for (const v of newVdevs) {
+    const val = getVdevValidation(v);
+    if (!val.valid) {
+      notify('error', `VDEV ${v.type.toUpperCase()}: ${val.message}`);
+      return;
+    }
+  }
+
+  if (newVdevs.length > 0) {
+    const hasRedundantExisting = existingActiveVdevs.value.some(
+      (ev) => ev.type === 'data' && ev.layout !== 'stripe'
+    ) || (p.vdevLayout && p.vdevLayout !== 'stripe');
+    const addingStripeData = newVdevs.some(
+      (v) => v.type === 'data' && v.layout === 'stripe'
+    );
+    const vdevSummary = newVdevs
+      .map((v) => `${v.type.toUpperCase()} (${v.layout.toUpperCase()}: ${v.devicePaths.join(', ')})`)
+      .join('; ');
+    const confirmed = await confirmModal({
+      title: addingStripeData && hasRedundantExisting
+        ? 'Warning: Adding Non-Redundant Stripe VDEV to Redundant Pool'
+        : `Confirm Pool Expansion (${cleanName.value})`,
+      tone: addingStripeData && hasRedundantExisting ? 'danger' : 'warning',
+      message: addingStripeData && hasRedundantExisting
+        ? `You are about to add a non-redundant STRIPE Data VDEV to redundant pool "${cleanName.value}"!`
+        : `Add ${newVdevs.length} new VDEV tier(s) to pool "${cleanName.value}"?`,
+      details: addingStripeData && hasRedundantExisting
+        ? `Adding a single-disk or stripe Data VDEV (${vdevSummary}) permanently removes pool-level redundancy: if that stripe drive fails, the ENTIRE pool "${cleanName.value}" will be lost and cannot be detached.`
+        : `The following VDEV tier(s) will be permanently added to "${cleanName.value}": ${vdevSummary}. Data VDEVs cannot be easily removed from RAIDZ pools once added.`,
+      confirmText: addingStripeData && hasRedundantExisting ? 'Add Stripe VDEV Anyway' : 'Expand Pool',
+    });
+    if (!confirmed) return;
+  }
+
   isBusy.value = true;
 
   try {
-    const p = pool.value;
     const hasSettingsChanges =
       configForm.sync !== ((p.sync as any) || 'standard') ||
       configForm.autotrim !== ((p.autotrim as any) || 'off') ||
@@ -592,14 +648,7 @@ async function handleApplyPoolConfig() {
       });
     }
 
-    const newVdevs = editBuilderVdevs.value.filter((v) => v.devicePaths.length > 0);
     for (const v of newVdevs) {
-      const val = getVdevValidation(v);
-      if (!val.valid) {
-        notify('error', `VDEV ${v.type.toUpperCase()}: ${val.message}`);
-        isBusy.value = false;
-        return;
-      }
       await services.zfs.addVdev(p.name, {
         type: v.type,
         layout: v.layout,
@@ -650,6 +699,67 @@ const poolDisks = computed(() => {
     if (devPaths.has(d.name)) return true;
     return false;
   });
+});
+
+function getDiskRole(d: Disk): string {
+  if (pool.value?.vdevs) {
+    for (const v of pool.value.vdevs) {
+      const vType = v.type || 'data';
+      const vLayout = v.layout || pool.value.vdevLayout || 'mirror';
+      const roleLabel = vType === 'data' ? vLayout : `${vType}${vLayout && vLayout !== 'stripe' ? ' (' + vLayout + ')' : ''}`;
+      if (v.path === d.devicePath || v.name === d.devicePath || v.name === d.diskId) {
+        return roleLabel;
+      }
+      if (v.children) {
+        for (const c of v.children) {
+          if (c.path === d.devicePath || c.name === d.devicePath || c.name === d.diskId) {
+            return roleLabel;
+          }
+        }
+      }
+    }
+  }
+  return pool.value?.vdevLayout || 'mirror';
+}
+
+function getDiskState(d: Disk): string {
+  if (pool.value?.vdevs) {
+    for (const v of pool.value.vdevs) {
+      if (v.path === d.devicePath || v.name === d.devicePath || v.name === d.diskId) {
+        if (v.state) return v.state;
+      }
+      if (v.children) {
+        for (const c of v.children) {
+          if (c.path === d.devicePath || c.name === d.devicePath || c.name === d.diskId) {
+            if (c.state) return c.state;
+          }
+        }
+      }
+    }
+  }
+  if (d.smartStatus && d.smartStatus.toUpperCase() === 'FAILED') {
+    return 'FAULTED';
+  }
+  return pool.value?.state || 'ONLINE';
+}
+
+function getDiskStateBadgeClass(d: Disk): string {
+  const st = getDiskState(d).toUpperCase();
+  if (st === 'ONLINE' || st === 'AVAIL' || st === 'INUSE') return 'badge-success';
+  if (st === 'DEGRADED' || st === 'RESILVERING') return 'badge-warning';
+  return 'badge-danger';
+}
+
+const scrubHasWarningOrError = computed(() => {
+  const s = (pool.value?.lastScrubStatus || '').toLowerCase();
+  if (!s) return false;
+  if (s.includes('canceled') || s.includes('cancelled') || s.includes('aborted')) return true;
+  const errMatch = /(\d+)\s+errors?/.exec(s);
+  if (errMatch && parseInt(errMatch[1], 10) > 0) return true;
+  if (s.includes('error') && !s.includes('0 errors') && !s.includes('no scrub errors') && !s.includes('no known data errors')) {
+    return true;
+  }
+  return false;
 });
 </script>
 
@@ -711,7 +821,19 @@ const poolDisks = computed(() => {
               </div>
               <div class="metric-item">
                 <span class="metric-label">Health State</span>
-                <span class="metric-val" style="color: var(--success-text)">{{ pool?.state || 'ONLINE' }}</span>
+                <span
+                  class="metric-val"
+                  :style="{
+                    color:
+                      !pool?.state || pool.state === 'ONLINE'
+                        ? 'var(--success-text)'
+                        : pool.state === 'DEGRADED'
+                        ? 'var(--warning-text, var(--warning))'
+                        : 'var(--danger-text, var(--danger))',
+                  }"
+                >
+                  {{ pool?.state || 'ONLINE' }}
+                </span>
               </div>
             </div>
           </div>
@@ -725,7 +847,11 @@ const poolDisks = computed(() => {
           <div class="card-body">
             <div class="scrub-status-box">
               <div style="display: flex; align-items: center; gap: 8px">
-                <MdiIcon :path="mdiCheckCircle" size="20" style="color: var(--success)" />
+                <MdiIcon
+                  :path="scrubHasWarningOrError ? mdiAlertCircle : mdiCheckCircle"
+                  size="20"
+                  :style="{ color: scrubHasWarningOrError ? 'var(--warning)' : 'var(--success)' }"
+                />
                 <span style="font-weight: 600">{{ pool?.lastScrubStatus || 'No scrub errors recorded' }}</span>
               </div>
               <p class="font-sm text-secondary" style="margin-top: 8px">
@@ -760,7 +886,7 @@ const poolDisks = computed(() => {
                       <td class="font-sm text-secondary">{{ d.model || d.vendor || 'Unknown' }}</td>
                       <td class="font-sm">{{ formatBytes(d.sizeBytes) }}</td>
                       <td>
-                        <span class="badge badge-success font-xs">ONLINE</span>
+                        <span class="badge font-xs" :class="getDiskStateBadgeClass(d)">{{ getDiskState(d) }}</span>
                       </td>
                     </tr>
                   </tbody>
@@ -808,11 +934,11 @@ const poolDisks = computed(() => {
               <tbody>
                 <tr v-for="d in poolDisks" :key="d.devicePath">
                   <td class="mono font-sm" style="font-weight: 600">{{ d.devicePath }}</td>
-                  <td class="font-sm"><span class="badge badge-neutral">{{ pool?.vdevLayout || 'mirror' }}</span></td>
+                  <td class="font-sm"><span class="badge badge-neutral">{{ getDiskRole(d) }}</span></td>
                   <td class="font-sm text-secondary">{{ d.model || d.vendor || '-' }}</td>
                   <td class="font-sm">{{ formatBytes(d.sizeBytes) }}</td>
                   <td class="font-xs text-muted">{{ d.transport || 'SATA/NVMe' }}</td>
-                  <td><span class="badge badge-success font-xs">ONLINE</span></td>
+                  <td><span class="badge font-xs" :class="getDiskStateBadgeClass(d)">{{ getDiskState(d) }}</span></td>
                 </tr>
               </tbody>
             </table>
@@ -957,10 +1083,18 @@ const poolDisks = computed(() => {
                   </div>
 
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 10.5px">
-                    <div style="display: flex; gap: 4px">
+                    <div style="display: flex; gap: 4px; flex-wrap: wrap">
                       <span class="badge badge-neutral" style="font-size: 9.5px">{{ d.type }}</span>
                       <span class="badge badge-neutral" style="font-size: 9.5px">{{ (d.transport || 'disk').toUpperCase() }}</span>
                       <span v-if="d.smartStatus" class="badge badge-success" style="font-size: 9.5px">{{ d.smartStatus }}</span>
+                      <span
+                        v-if="d.partitions && d.partitions.length > 0"
+                        class="badge badge-warning"
+                        style="font-size: 9.5px"
+                        :title="`Warning: Disk has ${d.partitions.length} existing partition(s) that will be overwritten`"
+                      >
+                        {{ d.partitions.length }} part{{ d.partitions.length === 1 ? '' : 's' }} (will wipe)
+                      </span>
                     </div>
 
                     <span v-if="editBuilderAssignedPaths.has(d.devicePath)" class="badge badge-success" style="font-size: 9.5px">

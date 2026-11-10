@@ -32,13 +32,13 @@ import { navigateTo } from '../router';
 const searchQuery = ref('');
 const searchInputRef = ref<HTMLInputElement | null>(null);
 
-// Tree collapse states (start all collapsed by default)
+// Tree collapse states (open main sections by default for immediate visibility)
 const openSections = ref<Record<string, boolean>>({
-  storage: false,
-  vms: false,
-  lxc: false,
-  docker: false,
-  shares: false,
+  storage: true,
+  vms: true,
+  lxc: true,
+  docker: true,
+  shares: true,
   access: false,
 });
 
@@ -64,9 +64,9 @@ const defaultIp = computed(() => {
   return '';
 });
 
-// Keydown handler for Ctrl+K
+// Keydown handler for quick tree filter (Alt+F) without conflicting with CommandPalette (Ctrl+K)
 function handleKeyDown(e: KeyboardEvent) {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+  if (e.altKey && e.key.toLowerCase() === 'f') {
     e.preventDefault();
     searchInputRef.value?.focus();
   }
@@ -126,7 +126,15 @@ const filteredDocker = computed(() => {
 function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'shares' | 'cron' | 'access'): boolean {
   if (!query.value) return true;
   if (section === 'storage') {
-    return matches('storage') || matches('disks') || matches('pools') || filteredPools.value.length > 0;
+    return (
+      matches('storage') ||
+      matches('disks') ||
+      matches('pools') ||
+      matches('datasets') ||
+      matches('volumes') ||
+      matches('zvols') ||
+      filteredPools.value.length > 0
+    );
   }
   if (section === 'vms') {
     return matches('virtual machines') || matches('kvm') || matches('vms') || filteredVms.value.length > 0;
@@ -160,7 +168,7 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
         v-model="searchQuery"
         type="text"
         class="tree-search-input"
-        placeholder="Filter (Ctrl+K)..."
+        placeholder="Filter tree (Alt+F)..."
         aria-label="Filter resource tree"
       />
       <button
@@ -175,11 +183,15 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
     <!-- Tree Structure Container -->
     <div class="tree-content">
       <!-- Root Node: Server Appliance -->
-      <div class="tree-node-item root-node">
+      <div class="tree-node-item root-node" role="tree" aria-label="Resource Navigation Tree">
         <div
           class="tree-row"
+          role="treeitem"
+          tabindex="0"
           :class="{ selected: nasState.selectedResourceId === 'node:local' && nasState.activeTab === 'overview' }"
           @click="handleSelect('node:local', 'overview')"
+          @keydown.enter.prevent="handleSelect('node:local', 'overview')"
+          @keydown.space.prevent="handleSelect('node:local', 'overview')"
         >
           <MdiIcon :path="mdiServer" size="16" style="color: var(--accent-primary)" />
           <span class="tree-label node-name">
@@ -200,8 +212,13 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
           <div v-show="isSectionVisible('storage')" class="tree-group">
             <div
               class="tree-row tree-header-row"
+              role="treeitem"
+              tabindex="0"
+              :aria-expanded="openSections.storage || Boolean(query)"
               :class="{ selected: nasState.selectedResourceId === 'node:pools' && nasState.activeTab === 'storage-pools' }"
               @click="handleHeaderSelect('storage', 'node:pools', 'storage-pools')"
+              @keydown.enter.prevent="handleHeaderSelect('storage', 'node:pools', 'storage-pools')"
+              @keydown.space.prevent="toggleSection('storage')"
             >
               <span
                 class="chevron-btn"
@@ -225,8 +242,12 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
                 v-for="p in filteredPools"
                 :key="p.name"
                 class="tree-row tree-leaf"
+                role="treeitem"
+                tabindex="0"
                 :class="{ selected: nasState.selectedResourceId === `pool:${p.poolName || p.name.replace(/^zfsPools\//, '')}` }"
                 @click="nasState.selectedPoolName = p.name; handleSelect(`pool:${p.poolName || p.name.replace(/^zfsPools\//, '')}`, 'storage-pools')"
+                @keydown.enter.prevent="nasState.selectedPoolName = p.name; handleSelect(`pool:${p.poolName || p.name.replace(/^zfsPools\//, '')}`, 'storage-pools')"
+                @keydown.space.prevent="nasState.selectedPoolName = p.name; handleSelect(`pool:${p.poolName || p.name.replace(/^zfsPools\//, '')}`, 'storage-pools')"
               >
                 <MdiIcon
                   :path="mdiCircle"
@@ -240,12 +261,52 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
                 <span class="tree-label font-sm">{{ p.poolName || p.name.replace(/^zfsPools\//, '') }}</span>
               </div>
 
+              <!-- Datasets -->
+              <div
+                v-if="matches('datasets') || matches('storage')"
+                class="tree-row tree-leaf"
+                role="treeitem"
+                tabindex="0"
+                :class="{ selected: nasState.selectedResourceId === 'node:datasets' && nasState.activeTab === 'storage-datasets' }"
+                @click="handleSelect('node:datasets', 'storage-datasets')"
+                @keydown.enter.prevent="handleSelect('node:datasets', 'storage-datasets')"
+                @keydown.space.prevent="handleSelect('node:datasets', 'storage-datasets')"
+              >
+                <MdiIcon :path="mdiDatabase" size="13" style="color: var(--text-secondary)" />
+                <span class="tree-label font-sm">Datasets</span>
+                <span class="nav-badge font-xs" style="margin-left: auto">
+                  {{ Object.values(nasState.datasetsByPool || {}).flat().length }}
+                </span>
+              </div>
+
+              <!-- Volumes (ZVols) -->
+              <div
+                v-if="matches('volumes') || matches('zvols') || matches('storage')"
+                class="tree-row tree-leaf"
+                role="treeitem"
+                tabindex="0"
+                :class="{ selected: nasState.selectedResourceId === 'node:volumes' && nasState.activeTab === 'storage-volumes' }"
+                @click="handleSelect('node:volumes', 'storage-volumes')"
+                @keydown.enter.prevent="handleSelect('node:volumes', 'storage-volumes')"
+                @keydown.space.prevent="handleSelect('node:volumes', 'storage-volumes')"
+              >
+                <MdiIcon :path="mdiLayers" size="13" style="color: var(--text-secondary)" />
+                <span class="tree-label font-sm">Volumes</span>
+                <span class="nav-badge font-xs" style="margin-left: auto">
+                  {{ Object.values(nasState.volumesByPool || {}).flat().length }}
+                </span>
+              </div>
+
               <!-- Physical Disks -->
               <div
                 v-if="matches('disks')"
                 class="tree-row tree-leaf"
+                role="treeitem"
+                tabindex="0"
                 :class="{ selected: nasState.selectedResourceId === 'node:disks' && nasState.activeTab === 'storage-disks' }"
                 @click="handleSelect('node:disks', 'storage-disks')"
+                @keydown.enter.prevent="handleSelect('node:disks', 'storage-disks')"
+                @keydown.space.prevent="handleSelect('node:disks', 'storage-disks')"
               >
                 <MdiIcon :path="mdiHarddisk" size="13" style="color: var(--text-secondary)" />
                 <span class="tree-label font-sm">Disks</span>
@@ -258,8 +319,12 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
               <div
                 v-if="matches('iso') || matches('templates')"
                 class="tree-row tree-leaf"
+                role="treeitem"
+                tabindex="0"
                 :class="{ selected: nasState.selectedResourceId === 'node:isos' }"
                 @click="handleSelect('node:isos', 'kvm')"
+                @keydown.enter.prevent="handleSelect('node:isos', 'kvm')"
+                @keydown.space.prevent="handleSelect('node:isos', 'kvm')"
               >
                 <MdiIcon :path="mdiDisc" size="13" style="color: var(--text-secondary)" />
                 <span class="tree-label font-sm">ISOs & Templates</span>
@@ -271,8 +336,13 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
           <div v-show="isSectionVisible('vms')" class="tree-group">
             <div
               class="tree-row tree-header-row"
+              role="treeitem"
+              tabindex="0"
+              :aria-expanded="openSections.vms || Boolean(query)"
               :class="{ selected: nasState.selectedResourceId === 'node:vms' && nasState.activeTab === 'kvm' }"
               @click="handleHeaderSelect('vms', 'node:vms', 'kvm')"
+              @keydown.enter.prevent="handleHeaderSelect('vms', 'node:vms', 'kvm')"
+              @keydown.space.prevent="toggleSection('vms')"
             >
               <span
                 class="chevron-btn"
@@ -301,6 +371,8 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
                 v-for="vm in filteredVms"
                 :key="vm.name"
                 class="tree-row tree-leaf"
+                role="treeitem"
+                tabindex="0"
                 :class="{
                   selected:
                     nasState.selectedResourceId === `vm:${vm.name}` ||
@@ -308,6 +380,8 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
                     nasState.selectedResourceId === `vm:${vm.name.replace(/^virtualMachines\//, '')}`
                 }"
                 @click="handleSelect(`vm:${vm.vmName || vm.name.replace(/^virtualMachines\//, '')}`, 'kvm')"
+                @keydown.enter.prevent="handleSelect(`vm:${vm.vmName || vm.name.replace(/^virtualMachines\//, '')}`, 'kvm')"
+                @keydown.space.prevent="handleSelect(`vm:${vm.vmName || vm.name.replace(/^virtualMachines\//, '')}`, 'kvm')"
               >
                 <!-- Power State Glyph -->
                 <MdiIcon
@@ -330,8 +404,13 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
           <div v-show="isSectionVisible('lxc')" class="tree-group">
             <div
               class="tree-row tree-header-row"
+              role="treeitem"
+              tabindex="0"
+              :aria-expanded="openSections.lxc || Boolean(query)"
               :class="{ selected: nasState.selectedResourceId === 'node:lxc' && nasState.activeTab === 'lxc' }"
               @click="handleHeaderSelect('lxc', 'node:lxc', 'lxc')"
+              @keydown.enter.prevent="handleHeaderSelect('lxc', 'node:lxc', 'lxc')"
+              @keydown.space.prevent="toggleSection('lxc')"
             >
               <span
                 class="chevron-btn"
@@ -360,6 +439,8 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
                 v-for="c in filteredLxc"
                 :key="c.name"
                 class="tree-row tree-leaf"
+                role="treeitem"
+                tabindex="0"
                 :class="{
                   selected:
                     nasState.selectedResourceId === `lxc:${c.name}` ||
@@ -367,6 +448,8 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
                     nasState.selectedResourceId === `lxc:${c.name.replace(/^lxcContainers\//, '')}`
                 }"
                 @click="handleSelect(`lxc:${c.name.replace(/^lxcContainers\//, '')}`, 'lxc')"
+                @keydown.enter.prevent="handleSelect(`lxc:${c.name.replace(/^lxcContainers\//, '')}`, 'lxc')"
+                @keydown.space.prevent="handleSelect(`lxc:${c.name.replace(/^lxcContainers\//, '')}`, 'lxc')"
               >
                 <MdiIcon
                   v-if="c.state === 'FROZEN'"
@@ -395,8 +478,13 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
           <div v-show="isSectionVisible('docker')" class="tree-group">
             <div
               class="tree-row tree-header-row"
+              role="treeitem"
+              tabindex="0"
+              :aria-expanded="openSections.docker || Boolean(query)"
               :class="{ selected: nasState.selectedResourceId === 'node:docker' && nasState.activeTab === 'docker' }"
               @click="handleHeaderSelect('docker', 'node:docker', 'docker')"
+              @keydown.enter.prevent="handleHeaderSelect('docker', 'node:docker', 'docker')"
+              @keydown.space.prevent="toggleSection('docker')"
             >
               <span
                 class="chevron-btn"
@@ -425,6 +513,8 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
                 v-for="a in filteredDocker"
                 :key="a.name"
                 class="tree-row tree-leaf"
+                role="treeitem"
+                tabindex="0"
                 :class="{
                   selected:
                     nasState.selectedResourceId === `docker:${a.name}` ||
@@ -432,6 +522,8 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
                     nasState.selectedResourceId === `docker:${a.name.replace(/^dockerApps\//, '')}`
                 }"
                 @click="handleSelect(`docker:${a.appId || a.name.replace(/^dockerApps\//, '')}`, 'docker')"
+                @keydown.enter.prevent="handleSelect(`docker:${a.appId || a.name.replace(/^dockerApps\//, '')}`, 'docker')"
+                @keydown.space.prevent="handleSelect(`docker:${a.appId || a.name.replace(/^dockerApps\//, '')}`, 'docker')"
               >
                 <MdiIcon
                   :path="mdiCircle"
@@ -456,8 +548,13 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
           <div v-show="isSectionVisible('shares')" class="tree-group">
             <div
               class="tree-row tree-header-row"
+              role="treeitem"
+              tabindex="0"
+              :aria-expanded="openSections.shares || Boolean(query)"
               :class="{ selected: (nasState.selectedResourceId === 'shares:cifs' || nasState.selectedResourceId === 'shares:webdav') && (nasState.activeTab === 'shares-cifs' || nasState.activeTab === 'shares-webdav') }"
               @click="handleHeaderSelect('shares', 'shares:cifs', 'shares-cifs')"
+              @keydown.enter.prevent="handleHeaderSelect('shares', 'shares:cifs', 'shares-cifs')"
+              @keydown.space.prevent="toggleSection('shares')"
             >
               <span
                 class="chevron-btn"
@@ -480,8 +577,12 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
             <div v-show="openSections.shares || query" class="tree-sub-branch">
               <div
                 class="tree-row tree-leaf"
+                role="treeitem"
+                tabindex="0"
                 :class="{ selected: nasState.selectedResourceId === 'shares:cifs' && nasState.activeTab === 'shares-cifs' }"
                 @click="handleSelect('shares:cifs', 'shares-cifs')"
+                @keydown.enter.prevent="handleSelect('shares:cifs', 'shares-cifs')"
+                @keydown.space.prevent="handleSelect('shares:cifs', 'shares-cifs')"
               >
                 <MdiIcon :path="mdiFolderNetwork" size="13" style="color: var(--text-secondary)" />
                 <span class="tree-label font-sm">CIFS (SMB)</span>
@@ -489,8 +590,12 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
               </div>
               <div
                 class="tree-row tree-leaf"
+                role="treeitem"
+                tabindex="0"
                 :class="{ selected: nasState.selectedResourceId === 'shares:webdav' && nasState.activeTab === 'shares-webdav' }"
                 @click="handleSelect('shares:webdav', 'shares-webdav')"
+                @keydown.enter.prevent="handleSelect('shares:webdav', 'shares-webdav')"
+                @keydown.space.prevent="handleSelect('shares:webdav', 'shares-webdav')"
               >
                 <MdiIcon :path="mdiWeb" size="13" style="color: var(--text-secondary)" />
                 <span class="tree-label font-sm">WebDAV</span>
@@ -503,8 +608,12 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
           <div v-show="isSectionVisible('cron')" class="tree-group">
             <div
               class="tree-row tree-leaf"
+              role="treeitem"
+              tabindex="0"
               :class="{ selected: nasState.selectedResourceId === 'node:cron' && nasState.activeTab === 'cron' }"
               @click="handleSelect('node:cron', 'cron')"
+              @keydown.enter.prevent="handleSelect('node:cron', 'cron')"
+              @keydown.space.prevent="handleSelect('node:cron', 'cron')"
             >
               <MdiIcon :path="mdiCalendarClock" size="15" style="color: var(--accent-primary)" />
               <span class="tree-label font-sm">Scheduled Tasks</span>
@@ -516,8 +625,12 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
           <div v-show="isSectionVisible('access')" class="tree-group">
             <div
               class="tree-row tree-leaf"
+              role="treeitem"
+              tabindex="0"
               :class="{ selected: nasState.selectedResourceId === 'node:identity' && nasState.activeTab === 'identity' }"
               @click="handleSelect('node:identity', 'identity')"
+              @keydown.enter.prevent="handleSelect('node:identity', 'identity')"
+              @keydown.space.prevent="handleSelect('node:identity', 'identity')"
             >
               <MdiIcon :path="mdiAccountGroup" size="15" style="color: var(--text-secondary)" />
               <span class="tree-label font-sm">Users & Groups</span>

@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
   mdiAccountMultiple,
+  mdiClockOutline,
   mdiClose,
   mdiCogOutline,
   mdiConsole,
@@ -24,7 +25,7 @@ import {
   mdiUpdate,
 } from '@mdi/js';
 import MdiIcon from './MdiIcon.vue';
-import { nasState, notify, refreshAllData, runTrackedTask, selectResource } from '../store';
+import { confirmModal, nasState, notify, refreshAllData, runTrackedTask, selectResource } from '../store';
 import { navigateTo } from '../router';
 import { services } from '../../container';
 
@@ -198,7 +199,17 @@ const allItems = computed<CommandItem[]>(() => {
         icon: mdiPower,
         badge: 'Shutdown',
         keywords: [vmName.toLowerCase(), 'shutdown', 'stop', 'halt', 'acpi', 'poweroff'],
-        action: () => runAsyncAction(`VM "${vmName}": ACPI Shutdown`, () => services.kvm.stopVirtualMachine(vm.name, false)),
+        action: async () => {
+          close();
+          const ok = await confirmModal({
+            title: `Shutdown VM "${vmName}"?`,
+            message: `Send an ACPI shutdown signal to virtual machine "${vmName}"?`,
+            tone: 'warning',
+            confirmText: 'Shutdown VM',
+          });
+          if (!ok) return;
+          await runAsyncAction(`VM "${vmName}": ACPI Shutdown`, () => services.kvm.stopVirtualMachine(vm.name, false));
+        },
       });
       items.push({
         id: `vm:${vmName}:reboot`,
@@ -208,7 +219,17 @@ const allItems = computed<CommandItem[]>(() => {
         icon: mdiRestart,
         badge: 'Reboot',
         keywords: [vmName.toLowerCase(), 'reboot', 'restart', 'reset'],
-        action: () => runAsyncAction(`VM "${vmName}": Reboot`, () => services.kvm.rebootVirtualMachine(vm.name, false)),
+        action: async () => {
+          close();
+          const ok = await confirmModal({
+            title: `Reboot VM "${vmName}"?`,
+            message: `Send an ACPI reboot signal to virtual machine "${vmName}"?`,
+            tone: 'warning',
+            confirmText: 'Reboot VM',
+          });
+          if (!ok) return;
+          await runAsyncAction(`VM "${vmName}": Reboot`, () => services.kvm.rebootVirtualMachine(vm.name, false));
+        },
       });
     } else {
       items.push({
@@ -337,7 +358,17 @@ const allItems = computed<CommandItem[]>(() => {
         icon: mdiPower,
         badge: 'Shutdown',
         keywords: [name.toLowerCase(), 'stop', 'shutdown', 'halt', 'poweroff'],
-        action: () => runAsyncAction(`LXC "${name}": Shutdown`, () => services.lxc.stopContainer(ct.name)),
+        action: async () => {
+          close();
+          const ok = await confirmModal({
+            title: `Stop Container "${name}"?`,
+            message: `Gracefully stop LXC container "${name}"?`,
+            tone: 'warning',
+            confirmText: 'Stop Container',
+          });
+          if (!ok) return;
+          await runAsyncAction(`LXC "${name}": Shutdown`, () => services.lxc.stopContainer(ct.name));
+        },
       });
       items.push({
         id: `lxc:${name}:reboot`,
@@ -347,7 +378,17 @@ const allItems = computed<CommandItem[]>(() => {
         icon: mdiRestart,
         badge: 'Reboot',
         keywords: [name.toLowerCase(), 'reboot', 'restart', 'reset'],
-        action: () => runAsyncAction(`LXC "${name}": Reboot`, () => services.lxc.restartContainer(ct.name)),
+        action: async () => {
+          close();
+          const ok = await confirmModal({
+            title: `Reboot Container "${name}"?`,
+            message: `Restart LXC container "${name}"?`,
+            tone: 'warning',
+            confirmText: 'Reboot Container',
+          });
+          if (!ok) return;
+          await runAsyncAction(`LXC "${name}": Reboot`, () => services.lxc.restartContainer(ct.name));
+        },
       });
     } else {
       items.push({
@@ -510,7 +551,17 @@ const allItems = computed<CommandItem[]>(() => {
         icon: mdiRestart,
         badge: 'Restart',
         keywords: [title.toLowerCase(), rawId.toLowerCase(), 'restart', 'reboot', 'reload'],
-        action: () => runAsyncAction(`App "${title}": Restart`, () => services.apps.restartApp(app.name)),
+        action: async () => {
+          close();
+          const ok = await confirmModal({
+            title: `Restart App "${title}"?`,
+            message: `Restart all containers in Docker application "${title}"?`,
+            tone: 'warning',
+            confirmText: 'Restart App',
+          });
+          if (!ok) return;
+          await runAsyncAction(`App "${title}": Restart`, () => services.apps.restartApp(app.name));
+        },
       });
       items.push({
         id: `docker:${rawId}:stop`,
@@ -520,7 +571,17 @@ const allItems = computed<CommandItem[]>(() => {
         icon: mdiStop,
         badge: 'Stop',
         keywords: [title.toLowerCase(), rawId.toLowerCase(), 'stop', 'halt', 'down'],
-        action: () => runAsyncAction(`App "${title}": Stop`, () => services.apps.stopApp(app.name)),
+        action: async () => {
+          close();
+          const ok = await confirmModal({
+            title: `Stop App "${title}"?`,
+            message: `Stop all containers in Docker application "${title}"?`,
+            tone: 'warning',
+            confirmText: 'Stop App',
+          });
+          if (!ok) return;
+          await runAsyncAction(`App "${title}": Stop`, () => services.apps.stopApp(app.name));
+        },
       });
     } else {
       items.push({
@@ -723,7 +784,7 @@ const allItems = computed<CommandItem[]>(() => {
       category: 'Navigation',
       title: 'Scheduled Tasks & Cron Jobs',
       subtitle: 'Periodic maintenance, automation scripts, and timers',
-      icon: mdiShieldAlertOutline,
+      icon: mdiClockOutline,
       keywords: ['cron', 'jobs', 'scheduled', 'tasks', 'automation', 'timers'],
       action: () => {
         nasState.activeTab = 'cron';

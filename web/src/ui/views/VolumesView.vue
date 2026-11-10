@@ -25,7 +25,7 @@ import MdiIcon from '../components/MdiIcon.vue';
 import SkeletonBox from '../components/SkeletonBox.vue';
 import SortableTh from '../components/SortableTh.vue';
 import { sortHierarchy, useTableSort } from '../composables/useTableSort';
-import { confirmDelete } from '../modal';
+import { confirmDelete, confirmModal } from '../modal';
 import { computeStorageBlastRadius } from '../utils/storageBlastRadius';
 import { nasState, notify, refreshAllData, refreshZfsSubresources } from '../store';
 
@@ -70,7 +70,7 @@ const volumeForm = reactive({
   volumeId: '',
   volsizeGib: 20,
   thinProvisioned: true,
-  volblocksize: '16k',
+  volblocksize: '16K',
   compression: 'lz4',
   sync: 'standard',
   readonly: false,
@@ -170,7 +170,7 @@ const hierarchyTree = computed<VolumeNode[]>(() => {
         devicePath: v.devicePath || '',
         sizeBytes: v.sizeBytes || 0,
         usedBytes: v.usedBytes || 0,
-        volblocksize: v.volblocksize || '16k',
+        volblocksize: v.volblocksize || '16K',
         thinProvisioned: Boolean(v.thinProvisioned),
         compression: (v.compression as string) || 'lz4',
         sync: v.sync || 'standard',
@@ -231,7 +231,7 @@ const visibleNodes = computed<VolumeNode[]>(() => {
           devicePath: v.devicePath || '',
           sizeBytes: v.sizeBytes || 0,
           usedBytes: v.usedBytes || 0,
-          volblocksize: v.volblocksize || '16k',
+          volblocksize: v.volblocksize || '16K',
           thinProvisioned: Boolean(v.thinProvisioned),
           compression: (v.compression as string) || 'lz4',
           sync: v.sync || 'standard',
@@ -328,7 +328,7 @@ function openCreateModal(targetPoolName?: string) {
   volumeForm.volumeId = '';
   volumeForm.volsizeGib = 20;
   volumeForm.thinProvisioned = true;
-  volumeForm.volblocksize = '16k';
+  volumeForm.volblocksize = '16K';
   volumeForm.compression = 'lz4';
   volumeForm.sync = 'standard';
   volumeForm.readonly = false;
@@ -372,18 +372,44 @@ function startEditVolume(vol: ZfsVolume) {
 async function handleSaveEditVolume() {
   if (!editingVolume.value) return;
   try {
-    const targetSize = gibToBytes(editVolumeForm.volsizeGib);
-    const updateMask: string[] = ['sizeBytes', 'thinProvisioned', 'compression', 'sync', 'readonly', 'dedup'];
+    const origSizeBytes = editingVolume.value.sizeBytes || 0;
+    const origGib = bytesToGib(origSizeBytes);
+    const sizeChanged = Math.abs(editVolumeForm.volsizeGib - origGib) > 0.001;
+    const targetSize = sizeChanged ? gibToBytes(editVolumeForm.volsizeGib) : origSizeBytes;
+
+    if (sizeChanged && targetSize < origSizeBytes) {
+      const shortName = editingVolume.value.volumePath || editingVolume.value.name;
+      const confirmed = await confirmModal({
+        title: 'Shrink ZFS Volume (Data Loss Risk)',
+        tone: 'danger',
+        message: `Are you sure you want to shrink volume "${shortName}" from ${formatBytes(origSizeBytes)} to ${formatBytes(targetSize)}?`,
+        details: 'Shrinking a ZVol block device can truncate and permanently corrupt an existing filesystem or VM disk stored on it.',
+        confirmText: 'Shrink Volume',
+      });
+      if (!confirmed) return;
+    }
+
+    const updateMask: string[] = [
+      ...(sizeChanged ? ['sizeBytes'] : []),
+      'thinProvisioned',
+      'compression',
+      'sync',
+      'readonly',
+      'dedup',
+    ];
+    const payload: Partial<ZfsVolume> = {
+      thinProvisioned: editVolumeForm.thinProvisioned,
+      compression: editVolumeForm.compression,
+      sync: editVolumeForm.sync,
+      readonly: editVolumeForm.readonly,
+      dedup: editVolumeForm.dedup,
+    };
+    if (sizeChanged) {
+      payload.sizeBytes = targetSize;
+    }
     const updated = await services.zfs.updateVolume(
       editingVolume.value.name,
-      {
-        sizeBytes: targetSize,
-        thinProvisioned: editVolumeForm.thinProvisioned,
-        compression: editVolumeForm.compression,
-        sync: editVolumeForm.sync,
-        readonly: editVolumeForm.readonly,
-        dedup: editVolumeForm.dedup,
-      },
+      payload,
       updateMask
     );
     notify('success', `Updated volume ${updated.volumePath || updated.name}`);
@@ -641,7 +667,7 @@ onMounted(async () => {
               <!-- Block Size -->
               <td class="col-desktop-only">
                 <span v-if="!node.isPoolRoot" class="badge mono badge-neutral" style="font-size: 10.5px">
-                  {{ node.volblocksize || '16k' }}
+                  {{ (node.volblocksize || '16K').toUpperCase() }}
                 </span>
                 <span v-else style="color: var(--text-secondary); font-size: 11px">—</span>
               </td>
@@ -756,17 +782,17 @@ onMounted(async () => {
             <div class="form-grid">
               <div class="form-group">
                 <label>Volsize (GiB)</label>
-                <input v-model.number="volumeForm.volsizeGib" type="number" min="1" class="input mono" required />
+                <input v-model.number="volumeForm.volsizeGib" type="number" min="0.1" step="any" class="input mono" required />
               </div>
 
               <div class="form-group">
                 <label>Block Size (volblocksize)</label>
                 <select v-model="volumeForm.volblocksize" class="select mono">
-                  <option value="4k">4k</option>
-                  <option value="8k">8k</option>
-                  <option value="16k">16k (Recommended for VMs)</option>
-                  <option value="64k">64k</option>
-                  <option value="128k">128k</option>
+                  <option value="4K">4K</option>
+                  <option value="8K">8K</option>
+                  <option value="16K">16K (Recommended for VMs)</option>
+                  <option value="64K">64K</option>
+                  <option value="128K">128K</option>
                 </select>
               </div>
             </div>
@@ -777,6 +803,7 @@ onMounted(async () => {
                 <select v-model="volumeForm.compression" class="select">
                   <option value="lz4">lz4 (Fast, recommended)</option>
                   <option value="zstd">zstd</option>
+                  <option value="gzip">gzip</option>
                   <option value="off">off</option>
                 </select>
               </div>
@@ -786,7 +813,7 @@ onMounted(async () => {
                 <select v-model="volumeForm.sync" class="select">
                   <option value="standard">standard (Default)</option>
                   <option value="always">always (Highest data safety)</option>
-                  <option value="disabled">disabled (Benchmark / Non-critical)</option>
+                  <option value="disabled">disabled (Uncommitted data loss risk)</option>
                 </select>
               </div>
             </div>
@@ -801,6 +828,20 @@ onMounted(async () => {
                 <input v-model="volumeForm.dedup" type="checkbox" />
                 <span>Enable Deduplication</span>
               </label>
+            </div>
+
+            <div
+              v-if="volumeForm.dedup"
+              style="padding: 10px 12px; border-radius: 6px; background: var(--warning-bg, rgba(245, 158, 11, 0.1)); border: 1px solid var(--warning-border, rgba(245, 158, 11, 0.3)); color: var(--warning-text, #f59e0b); font-size: 12px"
+            >
+              <strong>High RAM Requirement:</strong> ZFS Deduplication consumes ~5 GiB of RAM per 1 TiB of storage and can severely degrade pool performance if memory is insufficient.
+            </div>
+
+            <div
+              v-if="volumeForm.sync === 'disabled'"
+              style="padding: 10px 12px; border-radius: 6px; background: var(--danger-bg, rgba(239, 68, 68, 0.1)); border: 1px solid var(--danger-border, rgba(239, 68, 68, 0.3)); color: var(--danger-text, #ef4444); font-size: 12px"
+            >
+              <strong>Data Loss Risk:</strong> Disabling synchronous writes ignores application <code>fsync</code> requests. Uncommitted writes in RAM (up to 5 seconds of transactions) will be lost on power loss or crash.
             </div>
           </div>
 
@@ -834,7 +875,7 @@ onMounted(async () => {
             </div>
             <div class="form-group">
               <label>Provisioned Size (GiB)</label>
-              <input v-model.number="editVolumeForm.volsizeGib" type="number" min="1" class="input mono" required />
+              <input v-model.number="editVolumeForm.volsizeGib" type="number" min="0.1" step="any" class="input mono" required />
               <span class="card-subtitle" style="font-size: 11px">
                 Current: {{ formatBytes(editingVolume.sizeBytes) }}
               </span>
@@ -846,6 +887,7 @@ onMounted(async () => {
                 <select v-model="editVolumeForm.compression" class="select">
                   <option value="lz4">lz4</option>
                   <option value="zstd">zstd</option>
+                  <option value="gzip">gzip</option>
                   <option value="off">off</option>
                 </select>
               </div>
@@ -855,7 +897,7 @@ onMounted(async () => {
                 <select v-model="editVolumeForm.sync" class="select">
                   <option value="standard">standard</option>
                   <option value="always">always</option>
-                  <option value="disabled">disabled</option>
+                  <option value="disabled">disabled (Uncommitted data loss risk)</option>
                 </select>
               </div>
             </div>
@@ -870,6 +912,25 @@ onMounted(async () => {
                 <input v-model="editVolumeForm.readonly" type="checkbox" />
                 <span>Read-Only</span>
               </label>
+
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer">
+                <input v-model="editVolumeForm.dedup" type="checkbox" />
+                <span>Enable Deduplication</span>
+              </label>
+            </div>
+
+            <div
+              v-if="editVolumeForm.dedup"
+              style="padding: 10px 12px; border-radius: 6px; background: var(--warning-bg, rgba(245, 158, 11, 0.1)); border: 1px solid var(--warning-border, rgba(245, 158, 11, 0.3)); color: var(--warning-text, #f59e0b); font-size: 12px"
+            >
+              <strong>High RAM Requirement:</strong> ZFS Deduplication consumes ~5 GiB of RAM per 1 TiB of storage and can severely degrade pool performance if memory is insufficient.
+            </div>
+
+            <div
+              v-if="editVolumeForm.sync === 'disabled'"
+              style="padding: 10px 12px; border-radius: 6px; background: var(--danger-bg, rgba(239, 68, 68, 0.1)); border: 1px solid var(--danger-border, rgba(239, 68, 68, 0.3)); color: var(--danger-text, #ef4444); font-size: 12px"
+            >
+              <strong>Data Loss Risk:</strong> Disabling synchronous writes ignores application <code>fsync</code> requests. Uncommitted writes in RAM (up to 5 seconds of transactions) will be lost on power loss or crash.
             </div>
           </div>
 

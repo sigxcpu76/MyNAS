@@ -15,7 +15,7 @@ import {
 } from '@mdi/js';
 import type { NetworkInterfaceTelemetry } from '../../domain/models';
 import { services } from '../../container';
-import { nasState, refreshTelemetry } from '../store';
+import { confirmModal, nasState, refreshTelemetry } from '../store';
 import OverviewSkeleton from '../components/OverviewSkeleton.vue';
 import AddWidgetModal from '../dashboard/AddWidgetModal.vue';
 import {
@@ -115,6 +115,11 @@ const dashboardLayout = ref<DashboardWidgetConfig[]>(loadDashboardLayout());
 
 function setColumnCount(count: number) {
   columnCount.value = count;
+  for (const w of dashboardLayout.value) {
+    if (w.lane >= count) {
+      w.lane = count - 1;
+    }
+  }
   persistLayout();
 }
 
@@ -196,8 +201,11 @@ const topRibbonWidgets = computed(() =>
   dashboardLayout.value.filter((w) => w.lane === -1)
 );
 
-// Column Lane widgets
+// Column Lane widgets (fold any overflow lanes into the last visible lane so no widget disappears)
 function getLaneWidgets(laneIndex: number): DashboardWidgetConfig[] {
+  if (laneIndex === columnCount.value - 1) {
+    return dashboardLayout.value.filter((w) => w.lane >= laneIndex);
+  }
   return dashboardLayout.value.filter((w) => w.lane === laneIndex);
 }
 
@@ -286,12 +294,26 @@ function handleAddWidget(type: string) {
   persistLayout();
 }
 
-function resetToDefault() {
+async function resetToDefault() {
+  const ok = await confirmModal({
+    title: 'Reset Dashboard to Default?',
+    message: 'Your custom widget arrangement will be replaced with the default dashboard layout.',
+    tone: 'warning',
+    confirmText: 'Reset Layout',
+  });
+  if (!ok) return;
   dashboardLayout.value = JSON.parse(JSON.stringify(DEFAULT_DASHBOARD_LAYOUT));
   persistLayout();
 }
 
-function applyBalancedLayout() {
+async function applyBalancedLayout() {
+  const ok = await confirmModal({
+    title: 'Apply Balanced Layout?',
+    message: 'Your current widget arrangement will be replaced with the balanced preset layout.',
+    tone: 'info',
+    confirmText: 'Apply Balanced Layout',
+  });
+  if (!ok) return;
   dashboardLayout.value = JSON.parse(JSON.stringify(BALANCED_DASHBOARD_LAYOUT));
   persistLayout();
 }
@@ -917,8 +939,15 @@ function onDragEnd() {
 
 /* Responsive Breakpoints */
 @media (max-width: 1024px) {
+  .dashboard-lanes.columns-3 {
+    flex-wrap: wrap;
+  }
+  .dashboard-lanes.columns-3 .dashboard-lane {
+    flex: 1 1 calc(50% - 16px);
+    min-width: 280px;
+  }
   .dashboard-lanes.columns-3 .dashboard-lane:nth-child(3) {
-    display: none;
+    flex: 1 1 100%;
   }
 }
 

@@ -22,15 +22,20 @@ function isDockerOrEphemeralInterface(name: string): boolean {
   );
 }
 
+function isBondInterface(name: string): boolean {
+  return /^bond\d+/i.test(name);
+}
+
 function isSystemBridgeInterface(n: NetworkInterfaceTelemetry): boolean {
   if (isDockerOrEphemeralInterface(n.name)) return false;
   if (n.isBridge) return true;
-  return /^(br\d+|vmbr\d+|virbr\d+|lxcbr\d+|ovsbr\d+|bond\d+)/i.test(n.name);
+  return /^(br\d+|vmbr\d+|virbr\d+|lxcbr\d+|ovs\S*|bond\d+)/i.test(n.name);
 }
 
 function formatBridgeLabel(n: NetworkInterfaceTelemetry): string {
   const ip = n.ipAddresses?.find((a) => !a.includes(':')) || n.ipAddresses?.[0];
-  const parts: string[] = [n.isUp ? 'up' : 'down'];
+  const typeLabel = isBondInterface(n.name) ? 'Bonded Interface' : 'Linux Bridge';
+  const parts: string[] = [typeLabel, n.isUp ? 'up' : 'down'];
   if (ip) parts.push(ip);
   if (n.isDefault) parts.push('default route');
   return `${n.name} (${parts.join(' · ')})`;
@@ -41,12 +46,9 @@ export function useNetworkBridges() {
     const net = nasState.systemTelemetry?.network;
     if (Array.isArray(net) && net.length > 0) {
       const bridges = net.filter(isSystemBridgeInterface);
-      const candidates =
-        bridges.length > 0
-          ? bridges
-          : net.filter((n) => !isDockerOrEphemeralInterface(n.name));
 
-      const sorted = [...candidates].sort((a, b) => {
+      const sorted = [...bridges].sort((a, b) => {
+        if (isBondInterface(a.name) !== isBondInterface(b.name)) return isBondInterface(a.name) ? 1 : -1;
         if (Boolean(a.isDefault) !== Boolean(b.isDefault)) return a.isDefault ? -1 : 1;
         if (Boolean(a.isUp) !== Boolean(b.isUp)) return a.isUp ? -1 : 1;
         return a.name.localeCompare(b.name);
@@ -60,7 +62,7 @@ export function useNetworkBridges() {
       }
     }
 
-    // Fallback: gather bridges referenced by existing VMs/LXC containers, or br0
+    // Fallback: gather bridges referenced by existing VMs/LXC containers, or br0 / virbr0
     const known = new Set<string>();
     for (const c of nasState.lxcContainers || []) {
       if (c.networkBridge) known.add(c.networkBridge);
@@ -73,8 +75,9 @@ export function useNetworkBridges() {
     }
     if (known.size === 0) {
       known.add('br0');
+      known.add('virbr0');
     }
-    return Array.from(known).map((name) => ({ name, label: name }));
+    return Array.from(known).map((name) => ({ name, label: `${name} (Linux Bridge)` }));
   });
 
   const defaultBridge = computed<string>(() => {

@@ -26,16 +26,13 @@ import {
 import MdiIcon from '../components/MdiIcon.vue';
 import ComposeFormEditor from '../components/ComposeFormEditor.vue';
 import EmbeddedTerminal from '../components/EmbeddedTerminal.vue';
-import DockerTerminalModal, { type TerminalContainerOption } from '../components/DockerTerminalModal.vue';
+import { type TerminalContainerOption } from '../components/DockerTerminalModal.vue';
 import LogViewer from '../components/LogViewer.vue';
 import { useAutoScroll } from '../composables/useAutoScroll';
-import { stripAnsi } from '../utils/ansi';
 import { services } from '../../container';
 import { composeYamlToForm, formToComposeYaml } from '../../domain/composeModel';
 import {
-  formatBytes,
   type DockerApp,
-  type DockerAppContainer,
 } from '../../domain/models';
 import {
   nasState,
@@ -43,7 +40,7 @@ import {
   refreshAllData,
   runTrackedTask,
 } from '../store';
-import { confirmDelete } from '../modal';
+import { confirmModal } from '../modal';
 import { getDockerAppIcon } from '../utils/appIcons';
 
 const failedIcon = ref(false);
@@ -240,63 +237,6 @@ async function handleStart() {
   }
 }
 
-async function handleStop() {
-  if (!app.value || isBusy.value) return;
-  isBusy.value = true;
-  try {
-    await runTrackedTask(`App "${app.value.title || cleanAppName.value}": Stop`, async () => {
-      await services.apps.stopApp(app.value!.name);
-    });
-    notify('info', `Application "${app.value.title || cleanAppName.value}" stopped`);
-    await refreshAllData();
-  } catch (err: any) {
-    notify('error', `Stop failed: ${err.message}`);
-  } finally {
-    isBusy.value = false;
-  }
-}
-
-async function handleRestart() {
-  if (!app.value || isBusy.value) return;
-  isBusy.value = true;
-  try {
-    await runTrackedTask(`App "${app.value.title || cleanAppName.value}": Restart`, async () => {
-      await services.apps.restartApp(app.value!.name);
-    });
-    notify('info', `Application "${app.value.title || cleanAppName.value}" restarted`);
-    await refreshAllData();
-  } catch (err: any) {
-    notify('error', `Restart failed: ${err.message}`);
-  } finally {
-    isBusy.value = false;
-  }
-}
-
-async function handleDeleteApp() {
-  if (!app.value || isBusy.value) return;
-  const confirmed = await confirmDelete({
-    kind: 'Docker Application',
-    name: app.value.title || cleanAppName.value,
-    details: 'The Docker Compose service stack, containers and associated virtual network will be removed.',
-    confirmText: 'Delete App',
-  });
-  if (!confirmed.confirmed) return;
-
-  isBusy.value = true;
-  try {
-    await runTrackedTask(`App "${app.value.title || cleanAppName.value}": Delete`, async () => {
-      await services.apps.deleteApp(app.value!.name, false);
-    });
-    notify('warning', `Docker application "${cleanAppName.value}" deleted`);
-    emit('back');
-    await refreshAllData();
-  } catch (err: any) {
-    notify('error', `Delete failed: ${err.message}`);
-  } finally {
-    isBusy.value = false;
-  }
-}
-
 // -----------------------------------------------------------------------------
 // Upgrade App
 // -----------------------------------------------------------------------------
@@ -304,9 +244,13 @@ const isUpgrading = ref(false);
 
 async function handleUpgradeApp() {
   if (!app.value || isUpgrading.value) return;
-  const ok = window.confirm(
-    `Upgrade application "${app.value.title || cleanAppName.value}"?\nThis will pull the latest images and recreate containers.`
-  );
+  const ok = await confirmModal({
+    title: 'Upgrade Application',
+    message: `Upgrade application "${app.value.title || cleanAppName.value}"?`,
+    details: 'This will pull the latest container images and recreate containers.',
+    confirmText: 'Upgrade Stack',
+    tone: 'primary',
+  });
   if (!ok) return;
 
   isUpgrading.value = true;
@@ -354,9 +298,8 @@ async function toggleAutostart() {
 }
 
 // -----------------------------------------------------------------------------
-// Terminal Modal
+// Console / Terminal
 // -----------------------------------------------------------------------------
-const showTerminalModal = ref(false);
 const terminalDefaultContainerId = ref('');
 
 const terminalContainerOptions = computed<TerminalContainerOption[]>(() => {
@@ -471,11 +414,6 @@ async function fetchLogs(silent = false) {
       scrollToBottom();
     }
   }
-}
-
-function copyLogs() {
-  navigator.clipboard.writeText(stripAnsi(logsContent.value));
-  notify('info', 'Logs copied to clipboard (clean plain text)');
 }
 
 watch(
@@ -866,16 +804,6 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
-
-    <!-- Terminal Modal Component -->
-    <DockerTerminalModal
-      v-if="showTerminalModal"
-      :app-title="app?.title || cleanAppName"
-      :containers="terminalContainerOptions"
-      :initial-container-id="terminalDefaultContainerId"
-      :endpoint-type="'docker'"
-      @close="showTerminalModal = false"
-    />
   </div>
 </template>
 
@@ -906,72 +834,6 @@ onUnmounted(() => {
   min-height: max(520px, calc(100vh - 160px));
   display: flex;
   flex-direction: column;
-}
-
-.docker-header-card {
-  padding: 14px 18px 0 18px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-}
-
-.docker-header-main {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.docker-title {
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.docker-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.docker-subtabs {
-  display: flex;
-  gap: 4px;
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 8px;
-  padding-bottom: 8px;
-  overflow-x: auto;
-}
-
-.subtab-item {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
-  padding: 5px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-
-.subtab-item:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.subtab-item.active {
-  background: var(--accent-bg-subtle);
-  color: var(--accent-primary);
-  border-color: var(--accent-primary);
-  font-weight: 600;
 }
 
 .docker-tab-content {

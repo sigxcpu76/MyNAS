@@ -96,7 +96,7 @@ const rawOptions = computed<SelectorOption[]>(() => {
       value: u.username,
       label: u.username,
       secondary: u.fullName ? `${u.fullName} (UID: ${u.uid})` : `UID: ${u.uid}`,
-      badge: u.systemAccount ? 'system' : undefined,
+      badge: u.smbEnabled ? 'SMB' : u.systemAccount ? 'system' : undefined,
     }));
   } else {
     const list: Group[] = nasState.groups || [];

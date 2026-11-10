@@ -59,7 +59,7 @@ function onTouchEnd() {
   if (!isDragging.value) return;
   isDragging.value = false;
   const delta = currentY.value - startY.value;
-  if (delta > 80) {
+  if (delta > 50) {
     close();
   }
   translateY.value = 0;
@@ -70,6 +70,8 @@ function handleKeydown(e: KeyboardEvent) {
     close();
   }
 }
+
+let prevDismissOverlay: (() => boolean) | undefined;
 
 watch(
   () => props.modelValue,
@@ -88,12 +90,23 @@ watch(
 onMounted(() => {
   if (typeof window !== 'undefined') {
     window.addEventListener('keydown', handleKeydown);
+    prevDismissOverlay = (window as any).nanDismissTopOverlay;
+    (window as any).nanDismissTopOverlay = () => {
+      if (props.modelValue) {
+        close();
+        return true;
+      }
+      return typeof prevDismissOverlay === 'function' ? prevDismissOverlay() : false;
+    };
   }
 });
 
 onUnmounted(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('keydown', handleKeydown);
+    if (prevDismissOverlay) {
+      (window as any).nanDismissTopOverlay = prevDismissOverlay;
+    }
     document.body.style.overflow = '';
   }
 });
@@ -122,7 +135,13 @@ onUnmounted(() => {
           </div>
 
           <!-- Title Bar -->
-          <div v-if="title || $slots.header" class="bottom-sheet-header">
+          <div
+            v-if="title || $slots.header"
+            class="bottom-sheet-header"
+            @touchstart="onTouchStart"
+            @touchmove="onTouchMove"
+            @touchend="onTouchEnd"
+          >
             <slot name="header">
               <div class="bottom-sheet-header-text">
                 <h3 class="bottom-sheet-title">{{ title }}</h3>
@@ -189,7 +208,8 @@ onUnmounted(() => {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 10px 0 6px 0;
+  padding: 14px 0 8px 0;
+  min-height: 28px;
   cursor: grab;
 }
 

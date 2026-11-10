@@ -8,6 +8,12 @@ import SkeletonBox from '../../components/SkeletonBox.vue';
 const cifsShares = computed(() => nasState.cifsShares || []);
 const webdavShares = computed(() => nasState.webdavShares || []);
 
+const smbHost = computed(
+  () =>
+    nasState.systemTelemetry?.host?.hostname ||
+    (typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'nas')
+);
+
 const totalCount = computed(() => cifsShares.value.length + webdavShares.value.length);
 const activeCount = computed(() => {
   const cActive = cifsShares.value.filter((s) => s.enabled).length;
@@ -58,15 +64,17 @@ const activeCount = computed(() => {
         v-for="cs in cifsShares"
         :key="cs.name"
         class="workload-item"
-        @click="navigateTo('shares')"
+        @click="navigateTo('shares-cifs', false, 'shares:cifs')"
+        @keydown.enter.prevent="navigateTo('shares-cifs', false, 'shares:cifs')"
+        @keydown.space.prevent="navigateTo('shares-cifs', false, 'shares:cifs')"
         role="button"
         tabindex="0"
       >
         <div class="item-meta">
           <div class="item-row-top">
             <span class="type-pill pill-smb">SMB</span>
-            <span class="item-title" :title="`//nas/${cs.shareName}`">
-              //nas/{{ cs.shareName }}
+            <span class="item-title" :title="`//${smbHost}/${cs.shareName}`">
+              //{{ smbHost }}/{{ cs.shareName }}
             </span>
           </div>
           <div class="item-subtitle mono share-path" :title="cs.path">
@@ -84,7 +92,9 @@ const activeCount = computed(() => {
         v-for="ws in webdavShares"
         :key="ws.name"
         class="workload-item"
-        @click="navigateTo('shares')"
+        @click="navigateTo('shares-webdav', false, 'shares:webdav')"
+        @keydown.enter.prevent="navigateTo('shares-webdav', false, 'shares:webdav')"
+        @keydown.space.prevent="navigateTo('shares-webdav', false, 'shares:webdav')"
         role="button"
         tabindex="0"
       >
@@ -256,14 +266,14 @@ const activeCount = computed(() => {
 }
 
 .pill-smb {
-  background: rgba(59, 130, 246, 0.14);
-  color: #60a5fa;
-  border: 1px solid rgba(59, 130, 246, 0.28);
+  background: var(--info-bg);
+  color: var(--info-text);
+  border: 1px solid var(--info-border);
 }
 
 .pill-webdav {
   background: rgba(168, 85, 247, 0.14);
-  color: #c084fc;
+  color: var(--accent-secondary);
   border: 1px solid rgba(168, 85, 247, 0.28);
 }
 
@@ -308,9 +318,9 @@ const activeCount = computed(() => {
 }
 
 .perm-ro {
-  background: rgba(245, 158, 11, 0.12);
-  color: #f59e0b;
-  border: 1px solid rgba(245, 158, 11, 0.25);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  border: 1px solid var(--warning-border);
 }
 
 .empty-state {

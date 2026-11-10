@@ -13,7 +13,7 @@ import {
   mdiConsole,
 } from '@mdi/js';
 import MdiIcon from '../../components/MdiIcon.vue';
-import { nasState, notify, refreshAllData } from '../../store';
+import { confirmModal, nasState, notify, refreshAllData } from '../../store';
 import { services } from '../../../container';
 import { getLxcContainerIcon } from '../../utils/appIcons';
 import type { VirtualMachine, LxcContainer } from '../../../domain/models';
@@ -50,7 +50,7 @@ async function handleStartVm(vm: VirtualMachine) {
   if (actionLoading.value) return;
   actionLoading.value = true;
   try {
-    await services.kvm.startVirtualMachine(vm.vmName);
+    await services.kvm.startVirtualMachine(vm.name || vm.vmName);
     notify('success', `Started VM ${vm.vmName}`);
     await refreshAllData();
   } catch (err: any) {
@@ -62,9 +62,16 @@ async function handleStartVm(vm: VirtualMachine) {
 
 async function handleStopVm(vm: VirtualMachine) {
   if (actionLoading.value) return;
+  const ok = await confirmModal({
+    title: `Stop VM "${vm.vmName}"?`,
+    message: `Send an ACPI shutdown signal to virtual machine "${vm.vmName}"?`,
+    tone: 'warning',
+    confirmText: 'Stop VM',
+  });
+  if (!ok) return;
   actionLoading.value = true;
   try {
-    await services.kvm.stopVirtualMachine(vm.vmName);
+    await services.kvm.stopVirtualMachine(vm.name || vm.vmName, false);
     notify('success', `Stopped VM ${vm.vmName}`);
     await refreshAllData();
   } catch (err: any) {
@@ -76,9 +83,16 @@ async function handleStopVm(vm: VirtualMachine) {
 
 async function handleRebootVm(vm: VirtualMachine) {
   if (actionLoading.value) return;
+  const ok = await confirmModal({
+    title: `Reboot VM "${vm.vmName}"?`,
+    message: `Send an ACPI reboot signal to virtual machine "${vm.vmName}"?`,
+    tone: 'warning',
+    confirmText: 'Reboot VM',
+  });
+  if (!ok) return;
   actionLoading.value = true;
   try {
-    await services.kvm.rebootVirtualMachine(vm.vmName);
+    await services.kvm.rebootVirtualMachine(vm.name || vm.vmName, false);
     notify('success', `Rebooting VM ${vm.vmName}`);
     await refreshAllData();
   } catch (err: any) {
@@ -104,10 +118,18 @@ async function handleStartLxc(c: LxcContainer) {
 
 async function handleStopLxc(c: LxcContainer) {
   if (actionLoading.value) return;
+  const label = c.containerName || c.name.replace(/^lxcContainers\//, '');
+  const ok = await confirmModal({
+    title: `Stop Container "${label}"?`,
+    message: `Gracefully stop LXC container "${label}"?`,
+    tone: 'warning',
+    confirmText: 'Stop Container',
+  });
+  if (!ok) return;
   actionLoading.value = true;
   try {
     await services.lxc.stopContainer(c.name);
-    notify('success', `Stopped container ${c.containerName || c.name}`);
+    notify('success', `Stopped container ${label}`);
     await refreshAllData();
   } catch (err: any) {
     notify('error', `Failed to stop container: ${err.message || err}`);

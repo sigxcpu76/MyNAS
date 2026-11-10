@@ -10,6 +10,7 @@ import {
   type ComposeTopLevelConfig,
   type ComposeVolumeMountModel,
   composeYamlToForm,
+  createDefaultAppForm,
   createDefaultService,
   DEFAULT_COMPOSE_MEMORY_LIMIT,
   DEFAULT_COMPOSE_CPU_LIMIT,
@@ -51,6 +52,7 @@ const props = withDefaults(
     initialAppId?: string;
     initialTitle?: string;
     initialComposeYaml?: string;
+    initialMode?: 'form' | 'raw' | 'yaml';
     isEditMode?: boolean;
     isSaving?: boolean;
     showCancel?: boolean;
@@ -66,16 +68,38 @@ const emit = defineEmits<{
 }>();
 
 // Editor View Mode: 'form' (default user-friendly) vs 'raw' (on demand)
-const editorMode = ref<'form' | 'raw'>('form');
+const yamlParseError = ref('');
+const editorMode = ref<'form' | 'raw'>(
+  props.initialMode === 'raw' || props.initialMode === 'yaml' ? 'raw' : 'form'
+);
 
-// Form Model State
-const form = reactive<ComposeAppFormModel>(
-  composeYamlToForm(
+const initialPoolName = (
+  nasState.dockerConfig?.pool ||
+  nasState.systemConfig?.mainPool ||
+  'tank'
+)
+  .replace(/^zfsPools\//, '')
+  .trim();
+
+let initialParsedForm: ComposeAppFormModel;
+try {
+  initialParsedForm = composeYamlToForm(
     props.initialComposeYaml || '',
     props.initialAppId || '',
+    props.initialTitle || '',
+    initialPoolName
+  );
+} catch (err: any) {
+  yamlParseError.value = err?.message || String(err);
+  editorMode.value = 'raw';
+  initialParsedForm = createDefaultAppForm(
+    props.initialAppId || '',
     props.initialTitle || ''
-  )
-);
+  );
+}
+
+// Form Model State
+const form = reactive<ComposeAppFormModel>(initialParsedForm);
 
 // Raw YAML buffer for raw mode
 const rawYaml = ref(props.initialComposeYaml || formToComposeYaml(form));
@@ -194,7 +218,7 @@ const appsPoolName = computed(() =>
   (nasState.dockerConfig?.pool || nasState.systemConfig?.mainPool || 'tank').replace(/^zfsPools\//, '').trim()
 );
 const appsPoolAppdataDir = computed(() => {
-  const custom = nasState.dockerConfig?.appdataDataset;
+  const custom = nasState.dockerConfig?.appdataDataset || nasState.dockerConfig?.dataset;
   if (custom) {
     const cleaned = custom.replace(/^zfsPools\//, '').trim();
     return cleaned.startsWith('/') ? cleaned : `/mnt/${cleaned}`;
@@ -373,25 +397,45 @@ function createAndAttachNamedVolume(mount: ComposeVolumeMountModel) {
   notify('info', `Created named volume "${volName}"`);
 }
 
+function syncRawYamlToForm(): boolean {
+  try {
+    const parsed = composeYamlToForm(
+      rawYaml.value,
+      form.appId,
+      form.title,
+      appsPoolName.value
+    );
+    form.services = parsed.services;
+    form.networks = parsed.networks;
+    form.volumes = parsed.volumes;
+    form.configs = parsed.configs;
+    form.managementPort = parsed.managementPort;
+    form.portals = parsed.portals;
+    form.autoStart = parsed.autoStart;
+    form.catalogId = parsed.catalogId;
+    form.catalogSource = parsed.catalogSource;
+    form.catalogVersion = parsed.catalogVersion;
+    form.customTopLevelFields = parsed.customTopLevelFields;
+    yamlParseError.value = '';
+    if (!form.services.some((s) => s.id === activeServiceId.value)) {
+      activeServiceId.value = form.services[0]?.id || '';
+    }
+    return true;
+  } catch (err: any) {
+    yamlParseError.value = err?.message || 'Invalid YAML syntax';
+    notify('error', `Cannot switch to Form mode: ${yamlParseError.value}`);
+    return false;
+  }
+}
+
 // Watch mode changes: sync form <-> rawYaml
 watch(editorMode, (newMode) => {
   if (newMode === 'raw') {
-    rawYaml.value = formToComposeYaml(form);
+    if (!yamlParseError.value) {
+      rawYaml.value = formToComposeYaml(form);
+    }
   } else {
-    try {
-      const parsed = composeYamlToForm(rawYaml.value, form.appId, form.title);
-      form.services = parsed.services;
-      form.networks = parsed.networks;
-      form.volumes = parsed.volumes;
-      form.configs = parsed.configs;
-      form.catalogId = parsed.catalogId;
-      form.catalogSource = parsed.catalogSource;
-      form.catalogVersion = parsed.catalogVersion;
-      if (!form.services.some((s) => s.id === activeServiceId.value)) {
-        activeServiceId.value = form.services[0]?.id || '';
-      }
-    } catch (err: any) {
-      notify('error', `Cannot switch to Form mode: ${err?.message || 'Invalid YAML syntax'}`);
+    if (!syncRawYamlToForm()) {
       nextTick(() => {
         editorMode.value = 'raw';
       });
@@ -791,6 +835,12 @@ function handleSave() {
   if (!form.appId.trim()) {
     notify('error', 'App ID is required');
     return;
+  }
+
+  if (editorMode.value === 'raw') {
+    if (!syncRawYamlToForm()) {
+      return;
+    }
   }
 
   // Validate that every service has a name and image
@@ -2228,6 +2278,13 @@ function copyYaml() {
     <!-- VIEW B: Raw Docker Compose YAML (On Demand)                           -->
     <!-- ===================================================================== -->
     <div v-else class="card" style="padding: 16px; flex: 1; display: flex; flex-direction: column; min-height: 520px; width: 100%">
+      <div
+        v-if="yamlParseError"
+        style="margin-bottom: 12px; padding: 10px 12px; border-radius: 6px; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); color: var(--danger, #ef4444); font-size: 12.5px; display: flex; align-items: center; gap: 8px"
+      >
+        <MdiIcon :path="mdiAlertCircle" size="16" style="flex-shrink: 0" />
+        <span>{{ yamlParseError }} — Fix the YAML syntax below to save or switch back to Form mode.</span>
+      </div>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px">
         <div>
           <label class="form-label" style="margin-bottom: 0; font-size: 13.5px">

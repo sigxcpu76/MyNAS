@@ -51,12 +51,27 @@ function normalizePool(p?: string): string {
   return p.startsWith('zfsPools/') ? p : `zfsPools/${p}`;
 }
 
-const selectedPool = ref<string>(normalizePool(props.initialPool));
+const selectedPool = ref<string>(
+  props.initialPool && props.initialPool !== 'all'
+    ? normalizePool(props.initialPool)
+    : !props.embedded && nasState.selectedPoolName
+    ? normalizePool(nasState.selectedPoolName)
+    : 'all'
+);
 
 watch(
   () => props.initialPool,
   (newP) => {
     selectedPool.value = normalizePool(newP);
+  }
+);
+
+watch(
+  () => nasState.selectedPoolName,
+  (newPool) => {
+    if (!props.embedded && newPool) {
+      selectedPool.value = normalizePool(newPool);
+    }
   }
 );
 
@@ -82,19 +97,25 @@ const datasetForm = reactive({
   datasetId: '',
   mountpoint: '',
   compression: 'lz4',
+  recordsize: '128K',
   quotaGib: 0,
   reservationGib: 0,
   sync: 'standard',
-  atime: 'on',
+  atime: 'off',
+  readonly: false,
   dedup: false,
 });
 
 const editDatasetForm = reactive({
   compression: 'lz4',
+  recordsize: '128K',
   quotaGib: 0,
+  origQuotaGib: 0,
   reservationGib: 0,
+  origReservationGib: 0,
   sync: 'standard',
-  atime: 'on',
+  atime: 'off',
+  readonly: false,
   dedup: false,
 });
 
@@ -126,15 +147,15 @@ const allDatasets = computed<Array<ZfsDataset & { poolName: string; isPoolRoot: 
       result.push({
         name: `${pName}/datasets/root`,
         datasetPath: shortName,
-        mountpoint: pool.mountpoint || `/${shortName}`,
+        mountpoint: pool.mountpoint || `/mnt/${shortName}`,
         usedBytes: pool.allocatedBytes,
         availableBytes: pool.freeBytes,
         referencedBytes: 0,
         quotaBytes: 0,
         compression: pool.compression || 'lz4',
-        recordsize: '128k',
+        recordsize: '128K',
         readonly: false,
-        atime: true,
+        atime: false,
         snapshotsCount: 0,
         lastSnapshot: '',
         poolName: shortName,
@@ -172,6 +193,7 @@ interface DatasetNode {
   recordsize: string;
   sync?: string;
   atime?: boolean;
+  readonly?: boolean;
   dedup?: boolean;
   snapshotsCount?: number;
   lastSnapshot?: string;
@@ -204,6 +226,7 @@ const hierarchyTree = computed<DatasetNode[]>(() => {
       recordsize: ds.recordsize || '128k',
       sync: ds.sync,
       atime: ds.atime,
+      readonly: Boolean(ds.readonly),
       dedup: ds.dedup,
       snapshotsCount: ds.snapshotsCount,
       lastSnapshot: ds.lastSnapshot,
@@ -306,6 +329,7 @@ const visibleNodes = computed<DatasetNode[]>(() => {
           recordsize: ds.recordsize || '128k',
           sync: ds.sync,
           atime: ds.atime,
+          readonly: Boolean(ds.readonly),
           dedup: ds.dedup,
           snapshotsCount: ds.snapshotsCount,
           lastSnapshot: ds.lastSnapshot,
@@ -385,10 +409,12 @@ function openCreateModal(parentPath?: string) {
   datasetForm.datasetId = '';
   datasetForm.mountpoint = '';
   datasetForm.compression = 'lz4';
+  datasetForm.recordsize = '128K';
   datasetForm.quotaGib = 0;
   datasetForm.reservationGib = 0;
   datasetForm.sync = 'standard';
-  datasetForm.atime = 'on';
+  datasetForm.atime = 'off';
+  datasetForm.readonly = false;
   datasetForm.dedup = false;
   showCreateDataset.value = true;
 }
@@ -408,10 +434,12 @@ async function handleCreateDataset() {
 
     const payload: Partial<ZfsDataset> = {
       compression: datasetForm.compression,
+      recordsize: datasetForm.recordsize,
       quotaBytes: gibToBytes(datasetForm.quotaGib),
       reservationBytes: gibToBytes(datasetForm.reservationGib),
       sync: datasetForm.sync,
       atime: datasetForm.atime === 'on',
+      readonly: datasetForm.readonly,
       dedup: datasetForm.dedup,
     };
     if (datasetForm.mountpoint) payload.mountpoint = datasetForm.mountpoint;
@@ -428,27 +456,53 @@ async function handleCreateDataset() {
 function startEditDataset(ds: ZfsDataset) {
   editingDataset.value = ds;
   editDatasetForm.compression = ds.compression || 'lz4';
-  editDatasetForm.quotaGib = bytesToGib(ds.quotaBytes || 0);
-  editDatasetForm.reservationGib = bytesToGib(ds.reservationBytes || 0);
+  editDatasetForm.recordsize = (ds.recordsize || '128K').toUpperCase();
+  const qGib = bytesToGib(ds.quotaBytes || 0);
+  const rGib = bytesToGib(ds.reservationBytes || 0);
+  editDatasetForm.quotaGib = qGib;
+  editDatasetForm.origQuotaGib = qGib;
+  editDatasetForm.reservationGib = rGib;
+  editDatasetForm.origReservationGib = rGib;
   editDatasetForm.sync = ds.sync || 'standard';
   editDatasetForm.atime = ds.atime ? 'on' : 'off';
+  editDatasetForm.readonly = Boolean(ds.readonly);
   editDatasetForm.dedup = Boolean(ds.dedup);
 }
 
 async function handleSaveEditDataset() {
   if (!editingDataset.value) return;
   try {
-    const updateMask: string[] = ['compression', 'quotaBytes', 'reservationBytes', 'sync', 'atime', 'dedup'];
+    const quotaChanged = Math.abs(editDatasetForm.quotaGib - editDatasetForm.origQuotaGib) > 0.001;
+    const reservationChanged = Math.abs(editDatasetForm.reservationGib - editDatasetForm.origReservationGib) > 0.001;
+
+    const updateMask: string[] = [
+      'compression',
+      'recordsize',
+      ...(quotaChanged ? ['quotaBytes'] : []),
+      ...(reservationChanged ? ['reservationBytes'] : []),
+      'sync',
+      'atime',
+      'readonly',
+      'dedup',
+    ];
+    const updates: Partial<ZfsDataset> = {
+      compression: editDatasetForm.compression,
+      recordsize: editDatasetForm.recordsize,
+      sync: editDatasetForm.sync,
+      atime: editDatasetForm.atime === 'on',
+      readonly: editDatasetForm.readonly,
+      dedup: editDatasetForm.dedup,
+    };
+    if (quotaChanged) {
+      updates.quotaBytes = gibToBytes(editDatasetForm.quotaGib);
+    }
+    if (reservationChanged) {
+      updates.reservationBytes = gibToBytes(editDatasetForm.reservationGib);
+    }
+
     const updated = await services.zfs.updateDataset(
       editingDataset.value.name,
-      {
-        compression: editDatasetForm.compression,
-        quotaBytes: gibToBytes(editDatasetForm.quotaGib),
-        reservationBytes: gibToBytes(editDatasetForm.reservationGib),
-        sync: editDatasetForm.sync,
-        atime: editDatasetForm.atime === 'on',
-        dedup: editDatasetForm.dedup,
-      },
+      updates,
       updateMask
     );
     notify('success', `Updated dataset ${updated.datasetPath || updated.name}`);
@@ -723,6 +777,7 @@ onMounted(async () => {
                     sync:std
                   </span>
                   <span v-if="node.atime === false" class="badge badge-warning mono" style="font-size: 10px">noatime</span>
+                  <span v-if="node.readonly" class="badge badge-warning mono" style="font-size: 10px">RO</span>
                   <span v-if="node.dedup" class="badge badge-purple mono" style="font-size: 10px">Dedup</span>
                 </div>
               </td>
@@ -840,11 +895,34 @@ onMounted(async () => {
               </div>
 
               <div class="form-group">
+                <label>Record Size (recordsize)</label>
+                <select v-model="datasetForm.recordsize" class="select mono">
+                  <option value="16K">16K (Databases)</option>
+                  <option value="32K">32K</option>
+                  <option value="64K">64K</option>
+                  <option value="128K">128K (General Purpose, default)</option>
+                  <option value="256K">256K</option>
+                  <option value="512K">512K</option>
+                  <option value="1M">1M (Large Media / Backups)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-group">
                 <label>Sync Mode</label>
                 <select v-model="datasetForm.sync" class="select">
                   <option value="standard">standard (Default)</option>
                   <option value="always">always (Force sync writes)</option>
-                  <option value="disabled">disabled (Async high throughput)</option>
+                  <option value="disabled">Disabled (Uncommitted data loss risk)</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Access Time (Atime)</label>
+                <select v-model="datasetForm.atime" class="select">
+                  <option value="off">off (Faster performance, recommended)</option>
+                  <option value="on">on (Update access time on reads)</option>
                 </select>
               </div>
             </div>
@@ -852,30 +930,39 @@ onMounted(async () => {
             <div class="form-grid">
               <div class="form-group">
                 <label>Quota (GiB, 0 = unlimited)</label>
-                <input v-model.number="datasetForm.quotaGib" type="number" min="0" class="input" />
+                <input v-model.number="datasetForm.quotaGib" type="number" min="0" step="any" class="input" />
               </div>
 
               <div class="form-group">
                 <label>Reservation (GiB, 0 = none)</label>
-                <input v-model.number="datasetForm.reservationGib" type="number" min="0" class="input" />
+                <input v-model.number="datasetForm.reservationGib" type="number" min="0" step="any" class="input" />
               </div>
             </div>
 
-            <div class="form-grid">
-              <div class="form-group">
-                <label>Access Time (Atime)</label>
-                <select v-model="datasetForm.atime" class="select">
-                  <option value="on">on (Update access time on reads)</option>
-                  <option value="off">off (Faster performance, recommended)</option>
-                </select>
-              </div>
+            <div class="form-grid" style="align-items: center">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer">
+                <input v-model="datasetForm.readonly" type="checkbox" />
+                <span>Read-Only</span>
+              </label>
 
-              <div class="form-group" style="justify-content: center">
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 18px">
-                  <input v-model="datasetForm.dedup" type="checkbox" />
-                  <span>Enable Deduplication</span>
-                </label>
-              </div>
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer">
+                <input v-model="datasetForm.dedup" type="checkbox" />
+                <span>Enable Deduplication</span>
+              </label>
+            </div>
+
+            <div
+              v-if="datasetForm.dedup"
+              style="padding: 10px 12px; border-radius: 6px; background: var(--warning-bg, rgba(245, 158, 11, 0.1)); border: 1px solid var(--warning-border, rgba(245, 158, 11, 0.3)); color: var(--warning-text, #f59e0b); font-size: 12px"
+            >
+              <strong>High RAM Requirement:</strong> ZFS Deduplication consumes ~5 GiB of RAM per 1 TiB of storage and can severely degrade pool performance if memory is insufficient.
+            </div>
+
+            <div
+              v-if="datasetForm.sync === 'disabled'"
+              style="padding: 10px 12px; border-radius: 6px; background: var(--danger-bg, rgba(239, 68, 68, 0.1)); border: 1px solid var(--danger-border, rgba(239, 68, 68, 0.3)); color: var(--danger-text, #ef4444); font-size: 12px"
+            >
+              <strong>Data Loss Risk:</strong> Disabling synchronous writes ignores application <code>fsync</code> requests. Uncommitted writes in RAM (up to 5 seconds of transactions) will be lost on power loss or crash.
             </div>
           </div>
 
@@ -919,11 +1006,34 @@ onMounted(async () => {
               </div>
 
               <div class="form-group">
+                <label>Record Size (recordsize)</label>
+                <select v-model="editDatasetForm.recordsize" class="select mono">
+                  <option value="16K">16K</option>
+                  <option value="32K">32K</option>
+                  <option value="64K">64K</option>
+                  <option value="128K">128K</option>
+                  <option value="256K">256K</option>
+                  <option value="512K">512K</option>
+                  <option value="1M">1M</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-group">
                 <label>Sync Mode</label>
                 <select v-model="editDatasetForm.sync" class="select">
                   <option value="standard">standard</option>
                   <option value="always">always</option>
-                  <option value="disabled">disabled</option>
+                  <option value="disabled">Disabled (Uncommitted data loss risk)</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Access Time (Atime)</label>
+                <select v-model="editDatasetForm.atime" class="select">
+                  <option value="off">off (recommended)</option>
+                  <option value="on">on</option>
                 </select>
               </div>
             </div>
@@ -931,30 +1041,39 @@ onMounted(async () => {
             <div class="form-grid">
               <div class="form-group">
                 <label>Quota (GiB, 0 = unlimited)</label>
-                <input v-model.number="editDatasetForm.quotaGib" type="number" min="0" class="input" />
+                <input v-model.number="editDatasetForm.quotaGib" type="number" min="0" step="any" class="input" />
               </div>
 
               <div class="form-group">
                 <label>Reservation (GiB, 0 = none)</label>
-                <input v-model.number="editDatasetForm.reservationGib" type="number" min="0" class="input" />
+                <input v-model.number="editDatasetForm.reservationGib" type="number" min="0" step="any" class="input" />
               </div>
             </div>
 
-            <div class="form-grid">
-              <div class="form-group">
-                <label>Access Time (Atime)</label>
-                <select v-model="editDatasetForm.atime" class="select">
-                  <option value="on">on</option>
-                  <option value="off">off</option>
-                </select>
-              </div>
+            <div class="form-grid" style="align-items: center">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer">
+                <input v-model="editDatasetForm.readonly" type="checkbox" />
+                <span>Read-Only</span>
+              </label>
 
-              <div class="form-group" style="justify-content: center">
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 18px">
-                  <input v-model="editDatasetForm.dedup" type="checkbox" />
-                  <span>Enable Deduplication</span>
-                </label>
-              </div>
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer">
+                <input v-model="editDatasetForm.dedup" type="checkbox" />
+                <span>Enable Deduplication</span>
+              </label>
+            </div>
+
+            <div
+              v-if="editDatasetForm.dedup"
+              style="padding: 10px 12px; border-radius: 6px; background: var(--warning-bg, rgba(245, 158, 11, 0.1)); border: 1px solid var(--warning-border, rgba(245, 158, 11, 0.3)); color: var(--warning-text, #f59e0b); font-size: 12px"
+            >
+              <strong>High RAM Requirement:</strong> ZFS Deduplication consumes ~5 GiB of RAM per 1 TiB of storage and can severely degrade pool performance if memory is insufficient.
+            </div>
+
+            <div
+              v-if="editDatasetForm.sync === 'disabled'"
+              style="padding: 10px 12px; border-radius: 6px; background: var(--danger-bg, rgba(239, 68, 68, 0.1)); border: 1px solid var(--danger-border, rgba(239, 68, 68, 0.3)); color: var(--danger-text, #ef4444); font-size: 12px"
+            >
+              <strong>Data Loss Risk:</strong> Disabling synchronous writes ignores application <code>fsync</code> requests. Uncommitted writes in RAM (up to 5 seconds of transactions) will be lost on power loss or crash.
             </div>
           </div>
 

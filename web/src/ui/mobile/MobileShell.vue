@@ -216,6 +216,7 @@ const isDegraded = computed(() => {
       @open-terminal="emit('open-terminal')"
       @open-system-details="emit('open-system-details')"
       @open-pool-modal="emit('open-pool-modal')"
+      @open-update="emit('open-update')"
       @logout="emit('logout')"
     />
 

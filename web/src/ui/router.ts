@@ -182,15 +182,29 @@ export function applyResolvedRoute(route: ResolvedRoute): void {
       }
     }
   } else {
-    // When navigating to the list view without a child resource (e.g. Browser Back from /kvm/vm to /kvm)
-    if (route.tab === 'kvm' && nasState.selectedResourceId?.startsWith('vm:')) {
+    // When navigating to a top-level view without a child resource, reset selectedResourceId to match the destination tab
+    if (route.tab === 'kvm') {
       nasState.selectedResourceId = 'node:vms';
-    } else if (route.tab === 'docker' && nasState.selectedResourceId?.startsWith('docker:')) {
+    } else if (route.tab === 'docker') {
       nasState.selectedResourceId = 'node:docker';
-    } else if (route.tab === 'lxc' && nasState.selectedResourceId?.startsWith('lxc:')) {
+    } else if (route.tab === 'lxc') {
       nasState.selectedResourceId = 'node:lxc';
-    } else if ((route.tab === 'storage-pools' || route.tab === 'zfs') && nasState.selectedResourceId?.startsWith('pool:')) {
+    } else if (route.tab === 'storage-pools' || route.tab === 'zfs') {
       nasState.selectedResourceId = 'node:pools';
+    } else if (route.tab === 'storage-datasets') {
+      nasState.selectedResourceId = 'node:datasets';
+    } else if (route.tab === 'storage-volumes') {
+      nasState.selectedResourceId = 'node:volumes';
+    } else if (route.tab === 'storage-disks') {
+      nasState.selectedResourceId = 'node:disks';
+    } else if (route.tab === 'shares' || route.tab === 'shares-cifs' || route.tab === 'shares-webdav') {
+      nasState.selectedResourceId = 'node:shares';
+    } else if (route.tab === 'cron') {
+      nasState.selectedResourceId = 'node:cron';
+    } else if (route.tab === 'identity') {
+      nasState.selectedResourceId = 'node:identity';
+    } else {
+      nasState.selectedResourceId = 'node:local';
     }
   }
 }
@@ -225,6 +239,20 @@ export function navigateTo(tab: NavTab, replace = false, targetResourceId?: stri
       nasState.selectedResourceId = 'node:lxc';
     } else if ((tab === 'storage-pools' || tab === 'zfs') && !nasState.selectedResourceId?.startsWith('pool:')) {
       nasState.selectedResourceId = 'node:pools';
+    } else if (tab === 'storage-datasets') {
+      nasState.selectedResourceId = 'node:datasets';
+    } else if (tab === 'storage-volumes') {
+      nasState.selectedResourceId = 'node:volumes';
+    } else if (tab === 'storage-disks') {
+      nasState.selectedResourceId = 'node:disks';
+    } else if (tab === 'shares' || tab === 'shares-cifs' || tab === 'shares-webdav') {
+      nasState.selectedResourceId = 'node:shares';
+    } else if (tab === 'cron') {
+      nasState.selectedResourceId = 'node:cron';
+    } else if (tab === 'identity') {
+      nasState.selectedResourceId = 'node:identity';
+    } else if (tab === 'overview') {
+      nasState.selectedResourceId = 'node:local';
     }
   }
 
@@ -261,10 +289,13 @@ export function initRouter(): void {
   }
 
   // 2. Listen to browser Back / Forward (popstate)
-  window.addEventListener('popstate', (e: PopStateEvent) => {
+  window.addEventListener('popstate', () => {
     isNavigatingFromPopState = true;
     const route = resolveRouteFromPath(window.location.pathname);
     applyResolvedRoute(route);
+    Promise.resolve().then(() => {
+      isNavigatingFromPopState = false;
+    });
   });
 
   // 3. Keep URL in sync if state changed via direct assignment or selectResource

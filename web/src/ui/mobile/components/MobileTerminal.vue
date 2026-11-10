@@ -262,6 +262,11 @@ function clearScreen() {
   sendKey('\x0c');
 }
 
+function toggleCtrl() {
+  isCtrlActive.value = !isCtrlActive.value;
+  term?.focus();
+}
+
 onMounted(() => {
   initTerminal();
 
@@ -334,7 +339,7 @@ onBeforeUnmount(() => {
       <button
         class="acc-key"
         :class="{ active: isCtrlActive }"
-        @click="isCtrlActive = !isCtrlActive"
+        @click="toggleCtrl"
       >
         CTRL
       </button>

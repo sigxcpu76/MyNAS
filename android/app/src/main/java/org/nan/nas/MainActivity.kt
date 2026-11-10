@@ -3,8 +3,10 @@ package org.nan.nas
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
+import android.os.Message
 import android.view.View
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
@@ -13,6 +15,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import org.nan.nas.databinding.ActivityMainBinding
 
@@ -111,6 +114,8 @@ class MainActivity : AppCompatActivity() {
         webSettings.cacheMode = WebSettings.LOAD_DEFAULT
         webSettings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         webSettings.mediaPlaybackRequiresUserGesture = false
+        webSettings.setSupportMultipleWindows(true)
+        webSettings.javaScriptCanOpenWindowsAutomatically = true
 
         val ver = getAppVersionName()
         val build = getAppVersionCode()
@@ -156,6 +161,30 @@ class MainActivity : AppCompatActivity() {
                     binding.pageProgressBar.visibility = View.GONE
                 }
             }
+
+            override fun onCreateWindow(
+                view: WebView?,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                resultMsg: Message?
+            ): Boolean {
+                val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
+                val popupWebView = WebView(this@MainActivity)
+                popupWebView.webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(
+                        popupView: WebView?,
+                        request: WebResourceRequest?
+                    ): Boolean {
+                        val uri = request?.url ?: return false
+                        routePopupOrNavigationUri(uri, isPopup = true)
+                        popupView?.destroy()
+                        return true
+                    }
+                }
+                transport.webView = popupWebView
+                resultMsg.sendToTarget()
+                return true
+            }
         }
 
         binding.webView.webViewClient = object : WebViewClient() {
@@ -164,7 +193,26 @@ class MainActivity : AppCompatActivity() {
                     // Bypass self-signed SSL errors when explicitly configured
                     handler?.proceed()
                 } else {
-                    handler?.cancel()
+                    if (isFinishing || isDestroyed) {
+                        handler?.cancel()
+                        redirectToLogin()
+                        return
+                    }
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Untrusted TLS Certificate")
+                        .setMessage("The server TLS certificate is not trusted. Do you want to proceed anyway?")
+                        .setPositiveButton("Proceed") { _, _ ->
+                            handler?.proceed()
+                        }
+                        .setNegativeButton("Cancel") { _, _ ->
+                            handler?.cancel()
+                            redirectToLogin()
+                        }
+                        .setOnCancelListener {
+                            handler?.cancel()
+                            redirectToLogin()
+                        }
+                        .show()
                 }
             }
 
@@ -180,19 +228,41 @@ class MainActivity : AppCompatActivity() {
 
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val uri = request?.url ?: return false
-                val targetHost = profile?.host ?: ""
-                // Keep server URLs inside the WebView; allow external links to open outside
-                if (targetHost.isNotEmpty() && uri.host?.contains(targetHost) == true) {
-                    return false
-                }
-                return try {
-                    val intent = Intent(Intent.ACTION_VIEW, uri)
-                    startActivity(intent)
-                    true
-                } catch (e: Exception) {
-                    false
-                }
+                return routePopupOrNavigationUri(uri, isPopup = false)
             }
+        }
+    }
+
+    private fun resolvePort(uri: Uri): Int {
+        if (uri.port != -1) return uri.port
+        return if (uri.scheme.equals("https", ignoreCase = true)) 443 else 80
+    }
+
+    private fun isSameServerOrigin(uri: Uri): Boolean {
+        val baseUrl = profile?.baseUrl ?: return false
+        val baseUri = Uri.parse(baseUrl)
+        val baseHost = baseUri.host ?: return false
+        val uriHost = uri.host ?: return false
+        return uriHost.equals(baseHost, ignoreCase = true) &&
+            (uri.port == baseUri.port || resolvePort(uri) == resolvePort(baseUri))
+    }
+
+    private fun routePopupOrNavigationUri(uri: Uri, isPopup: Boolean): Boolean {
+        // Keep same-server (matching host and port) URLs inside the WebView;
+        // open external links or Docker app portals on different ports via ACTION_VIEW
+        if (isSameServerOrigin(uri)) {
+            if (isPopup) {
+                binding.webView.loadUrl(uri.toString())
+                return true
+            }
+            return false
+        }
+        return try {
+            val intent = Intent(Intent.ACTION_VIEW, uri)
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            false
         }
     }
 
@@ -201,7 +271,7 @@ class MainActivity : AppCompatActivity() {
         val ver = getAppVersionName()
         val build = getAppVersionCode()
 
-        // Inject stored auth token, APK version metadata, and force mobile-specific layout
+        // Inject stored auth token, APK version metadata, and default mobile-specific layout if unset
         val js = """
             (function() {
                 try {
@@ -218,8 +288,12 @@ class MainActivity : AppCompatActivity() {
                                 window.localStorage.setItem('nas_jwt_token', '$token');
                             }
                         }
-                        window.localStorage.setItem('nas_device_view_mode', 'mobile');
-                        window.localStorage.setItem('device_ui_mode_override', 'mobile');
+                        if (!window.localStorage.getItem('nas_device_view_mode')) {
+                            window.localStorage.setItem('nas_device_view_mode', 'mobile');
+                        }
+                        if (!window.localStorage.getItem('device_ui_mode_override')) {
+                            window.localStorage.setItem('device_ui_mode_override', 'mobile');
+                        }
                     }
                 } catch(e) {}
             })();

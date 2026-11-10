@@ -17,6 +17,7 @@ import {
   type DockerNetworkInfo,
   type Group,
   type HostPortStatus,
+  isValidPoolName,
   isValidResourceId,
   isValidZfsPath,
   type LxcCatalogItem,
@@ -195,7 +196,7 @@ export class ZfsService {
   }
 
   async createPool(poolId: string, pool: Partial<ZfsPool>): Promise<ZfsPool> {
-    if (!isValidResourceId(poolId)) {
+    if (!isValidPoolName(poolId)) {
       throw new Error(`Invalid ZFS pool ID: "${poolId}"`);
     }
     const hasDevices = pool.devices && pool.devices.length > 0;

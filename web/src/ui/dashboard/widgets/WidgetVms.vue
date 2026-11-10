@@ -249,12 +249,12 @@ function openVm(vm: VirtualMachine) {
 }
 
 .chip-running {
-  background: rgba(16, 185, 129, 0.12);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.25);
+  background: var(--success-bg);
+  color: var(--success-text);
+  border: 1px solid var(--success-border);
 }
 .chip-running .status-dot {
-  background: #10b981;
+  background: var(--success);
   box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
 }
 
@@ -271,12 +271,12 @@ function openVm(vm: VirtualMachine) {
 }
 
 .chip-warning {
-  background: rgba(245, 158, 11, 0.12);
-  color: #f59e0b;
-  border: 1px solid rgba(245, 158, 11, 0.25);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  border: 1px solid var(--warning-border);
 }
 .chip-warning .status-dot {
-  background: #f59e0b;
+  background: var(--warning);
 }
 
 .empty-state {

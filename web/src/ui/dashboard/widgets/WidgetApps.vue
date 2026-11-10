@@ -299,14 +299,14 @@ function getAppStateLabel(state?: string): string {
 }
 
 .pill-app {
-  background: rgba(56, 189, 248, 0.14);
-  color: #38bdf8;
-  border: 1px solid rgba(56, 189, 248, 0.28);
+  background: var(--info-bg);
+  color: var(--info-text);
+  border: 1px solid var(--info-border);
 }
 
 .pill-lxc {
   background: rgba(168, 85, 247, 0.14);
-  color: #c084fc;
+  color: var(--accent-secondary);
   border: 1px solid rgba(168, 85, 247, 0.28);
 }
 
@@ -348,12 +348,12 @@ function getAppStateLabel(state?: string): string {
 }
 
 .chip-running {
-  background: rgba(16, 185, 129, 0.12);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.25);
+  background: var(--success-bg);
+  color: var(--success-text);
+  border: 1px solid var(--success-border);
 }
 .chip-running .status-dot {
-  background: #10b981;
+  background: var(--success);
   box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
 }
 
@@ -370,30 +370,30 @@ function getAppStateLabel(state?: string): string {
 }
 
 .chip-info {
-  background: rgba(56, 189, 248, 0.12);
-  color: #38bdf8;
-  border: 1px solid rgba(56, 189, 248, 0.25);
+  background: var(--info-bg);
+  color: var(--info-text);
+  border: 1px solid var(--info-border);
 }
 .chip-info .status-dot {
-  background: #38bdf8;
+  background: var(--info);
 }
 
 .chip-warning {
-  background: rgba(245, 158, 11, 0.12);
-  color: #f59e0b;
-  border: 1px solid rgba(245, 158, 11, 0.25);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  border: 1px solid var(--warning-border);
 }
 .chip-warning .status-dot {
-  background: #f59e0b;
+  background: var(--warning);
 }
 
 .chip-danger {
-  background: rgba(244, 63, 94, 0.12);
-  color: #f43f5e;
-  border: 1px solid rgba(244, 63, 94, 0.25);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  border: 1px solid var(--danger-border);
 }
 .chip-danger .status-dot {
-  background: #f43f5e;
+  background: var(--danger);
 }
 
 .empty-state {

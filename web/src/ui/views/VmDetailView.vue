@@ -1,28 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import {
-  mdiAlertCircle,
-  mdiArrowLeft,
   mdiCamera,
-  mdiCheckCircle,
   mdiClose,
-  mdiCpu64Bit,
-  mdiDelete,
   mdiDisc,
   mdiHarddisk,
-  mdiInformationOutline,
-  mdiMemory,
-  mdiMonitor,
   mdiNetwork,
   mdiOpenInNew,
   mdiPencil,
-  mdiPlay,
   mdiPlus,
-  mdiPower,
-  mdiRefresh,
-  mdiRestart,
-  mdiRestore,
-  mdiStop,
   mdiTrashCanOutline,
 } from '@mdi/js';
 import MdiIcon from '../components/MdiIcon.vue';
@@ -118,97 +104,8 @@ function popoutConsole() {
 }
 
 // -----------------------------------------------------------------------------
-// VM Power Controls
+// Autostart Toggle
 // -----------------------------------------------------------------------------
-async function handleStart() {
-  if (!vm.value || isBusy.value) return;
-  isBusy.value = true;
-  try {
-    await runTrackedTask(`VM "${cleanVmName.value}": Start`, async () => {
-      await services.kvm.startVirtualMachine(vm.value!.name);
-    });
-    notify('success', `Virtual machine "${cleanVmName.value}" started`);
-    await refreshAllData();
-  } catch (err: any) {
-    notify('error', `Start failed: ${err.message}`);
-  } finally {
-    isBusy.value = false;
-  }
-}
-
-async function handleShutdown() {
-  if (!vm.value || isBusy.value) return;
-  isBusy.value = true;
-  try {
-    await runTrackedTask(`VM "${cleanVmName.value}": ACPI Shutdown`, async () => {
-      await services.kvm.stopVirtualMachine(vm.value!.name, false);
-    });
-    notify('info', `Shutdown signal sent to "${cleanVmName.value}"`);
-    await refreshAllData();
-  } catch (err: any) {
-    notify('error', `Shutdown failed: ${err.message}`);
-  } finally {
-    isBusy.value = false;
-  }
-}
-
-async function handleForceStop() {
-  if (!vm.value || isBusy.value) return;
-  isBusy.value = true;
-  try {
-    await runTrackedTask(`VM "${cleanVmName.value}": Force Stop`, async () => {
-      await services.kvm.stopVirtualMachine(vm.value!.name, true);
-    });
-    notify('info', `Virtual machine "${cleanVmName.value}" terminated`);
-    await refreshAllData();
-  } catch (err: any) {
-    notify('error', `Stop failed: ${err.message}`);
-  } finally {
-    isBusy.value = false;
-  }
-}
-
-async function handleReboot() {
-  if (!vm.value || isBusy.value) return;
-  isBusy.value = true;
-  try {
-    await runTrackedTask(`VM "${cleanVmName.value}": Reboot`, async () => {
-      await services.kvm.rebootVirtualMachine(vm.value!.name, false);
-    });
-    notify('info', `Reboot signal sent to "${cleanVmName.value}"`);
-    await refreshAllData();
-  } catch (err: any) {
-    notify('error', `Reboot failed: ${err.message}`);
-  } finally {
-    isBusy.value = false;
-  }
-}
-
-async function handleDeleteVm() {
-  if (!vm.value || isBusy.value) return;
-  const confirmed = await confirmDelete({
-    kind: 'Virtual Machine',
-    name: cleanVmName.value,
-    details: 'The virtual machine definition and guest configuration will be removed.',
-    confirmText: 'Delete VM',
-  });
-  if (!confirmed.confirmed) return;
-
-  isBusy.value = true;
-  try {
-    await runTrackedTask(`VM "${cleanVmName.value}": Delete`, async () => {
-      await services.kvm.deleteVirtualMachine(vm.value!.name);
-    });
-    notify('warning', `Virtual machine "${cleanVmName.value}" deleted`);
-    emit('back');
-    await refreshAllData();
-  } catch (err: any) {
-    notify('error', `Delete failed: ${err.message}`);
-  } finally {
-    isBusy.value = false;
-  }
-}
-
 const isTogglingAutostart = ref(false);
 
 async function toggleAutostart() {
@@ -262,8 +159,8 @@ const ciForm = reactive({
 
 watch(
   vm,
-  (v) => {
-    if (v) {
+  (v, oldV) => {
+    if (v && v.name !== oldV?.name) {
       hwForm.vmName = v.vmName || cleanVmName.value;
       hwForm.description = v.description || '';
       hwForm.autostart = Boolean(v.autostart);
@@ -511,6 +408,7 @@ const newNic = reactive({
   bridge: defaultBridge.value || 'br0',
   vlanTag: 0,
 });
+const addNicForm = newNic;
 
 function openAddNic() {
   newNic.model = 'virtio';
@@ -1282,6 +1180,10 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
               <option value="rtl8139">Realtek RTL8139</option>
             </select>
           </div>
+          <div class="form-group">
+            <label class="form-label">VLAN Tag (Optional)</label>
+            <input v-model.number="addNicForm.vlanTag" type="number" min="0" max="4094" class="form-input" placeholder="0 (Native / No VLAN)" />
+          </div>
         </div>
         <div class="modal-footer" style="padding: 12px 20px; display: flex; justify-content: flex-end; gap: 8px">
           <button class="btn btn-secondary btn-sm" @click="showAddNicModal = false">Cancel</button>
@@ -1466,77 +1368,6 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-.vm-header-card {
-  padding: 16px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.vm-header-main {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 14px;
-}
-
-.vm-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.vm-metrics-line {
-  margin-top: 2px;
-}
-
-.vm-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.vm-subtabs {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 12px;
-  margin-top: 4px;
-  overflow-x: auto;
-}
-
-.subtab-item {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  font-weight: 500;
-  padding: 5px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-
-.subtab-item:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.subtab-item.active {
-  background: var(--accent-bg-subtle);
-  color: var(--accent-primary);
-  border-color: var(--accent-primary);
-  font-weight: 600;
 }
 
 .vm-tab-content {

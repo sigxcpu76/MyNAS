@@ -602,6 +602,13 @@ func (a *Adapter) UpdateJob(ctx context.Context, job domain.CronJob, fields []st
 		return nil, err
 	}
 
+	if !existing.Enabled {
+		if active, isRunning := a.activeRuns[cleanID]; isRunning {
+			active.abortCancel()
+			delete(a.activeRuns, cleanID)
+		}
+	}
+
 	if a.started {
 		if existing.Enabled {
 			a.scheduleJobLocked(existing)

@@ -1,40 +1,22 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import {
   mdiAlertCircle,
-  mdiArrowLeft,
-  mdiCheckCircle,
-  mdiChevronDoubleDown,
   mdiClose,
-  mdiConsole,
-  mdiContentCopy,
   mdiCubeOutline,
-  mdiDelete,
-  mdiFolder,
-  mdiFolderOutline,
-  mdiInformationOutline,
-  mdiNetwork,
-  mdiOpenInNew,
-  mdiPencil,
   mdiPlay,
   mdiPlus,
-  mdiPower,
-  mdiRefresh,
-  mdiRestart,
-  mdiServer,
-  mdiSnowflake,
-  mdiStop,
   mdiTrashCanOutline,
 } from '@mdi/js';
 import MdiIcon from '../components/MdiIcon.vue';
 import PathSelector from '../components/PathSelector.vue';
 import EmbeddedTerminal from '../components/EmbeddedTerminal.vue';
-import DockerTerminalModal, { type TerminalContainerOption } from '../components/DockerTerminalModal.vue';
 import LogViewer from '../components/LogViewer.vue';
 import { useAutoScroll } from '../composables/useAutoScroll';
 import { stripAnsi } from '../utils/ansi';
 import { services } from '../../container';
 import {
+  formatBytes,
   type LxcContainer,
   type LxcMountPoint,
 } from '../../domain/models';
@@ -44,7 +26,6 @@ import {
   refreshAllData,
   runTrackedTask,
 } from '../store';
-import { confirmDelete } from '../modal';
 import { getLxcContainerIcon } from '../utils/appIcons';
 import { useNetworkBridges } from '../utils/networkBridges';
 
@@ -112,87 +93,6 @@ async function handleStart() {
   }
 }
 
-async function handleStop() {
-  if (!container.value || isBusy.value) return;
-  isBusy.value = true;
-  try {
-    await runTrackedTask(`LXC "${cleanContainerName.value}": Stop`, async () => {
-      await services.lxc.stopContainer(container.value!.name);
-    });
-    notify('info', `Container "${cleanContainerName.value}" stopped`);
-    await refreshAllData();
-  } catch (err: any) {
-    notify('error', `Stop failed: ${err.message}`);
-  } finally {
-    isBusy.value = false;
-  }
-}
-
-async function handleRestart() {
-  if (!container.value || isBusy.value) return;
-  isBusy.value = true;
-  try {
-    await runTrackedTask(`LXC "${cleanContainerName.value}": Restart`, async () => {
-      await services.lxc.restartContainer(container.value!.name);
-    });
-    notify('info', `Container "${cleanContainerName.value}" restarted`);
-    await refreshAllData();
-  } catch (err: any) {
-    notify('error', `Restart failed: ${err.message}`);
-  } finally {
-    isBusy.value = false;
-  }
-}
-
-async function handleFreezeToggle() {
-  if (!container.value || isBusy.value) return;
-  const isFrozen = container.value.state === 'FROZEN';
-  isBusy.value = true;
-  try {
-    await runTrackedTask(
-      `LXC "${cleanContainerName.value}": ${isFrozen ? 'Unfreeze' : 'Freeze'}`,
-      async () => {
-        if (isFrozen) {
-          await services.lxc.startContainer(container.value!.name);
-        } else {
-          await services.lxc.freezeContainer(container.value!.name);
-        }
-      }
-    );
-    notify('info', `Container "${cleanContainerName.value}" ${isFrozen ? 'unfrozen' : 'frozen'}`);
-    await refreshAllData();
-  } catch (err: any) {
-    notify('error', `Action failed: ${err.message}`);
-  } finally {
-    isBusy.value = false;
-  }
-}
-
-async function handleDeleteContainer() {
-  if (!container.value || isBusy.value) return;
-  const confirmed = await confirmDelete({
-    kind: 'LXC Container',
-    name: cleanContainerName.value,
-    details: 'The container root filesystem, state, and host configuration will be destroyed.',
-    confirmText: 'Delete Container',
-  });
-  if (!confirmed.confirmed) return;
-
-  isBusy.value = true;
-  try {
-    await runTrackedTask(`LXC "${cleanContainerName.value}": Delete`, async () => {
-      await services.lxc.deleteContainer(container.value!.name);
-    });
-    notify('warning', `LXC container "${cleanContainerName.value}" deleted`);
-    emit('back');
-    await refreshAllData();
-  } catch (err: any) {
-    notify('error', `Delete failed: ${err.message}`);
-  } finally {
-    isBusy.value = false;
-  }
-}
-
 // -----------------------------------------------------------------------------
 // Autostart Toggle
 // -----------------------------------------------------------------------------
@@ -220,23 +120,12 @@ async function toggleAutostart() {
 // -----------------------------------------------------------------------------
 // Terminal & Console
 // -----------------------------------------------------------------------------
-const showTerminalModal = ref(false);
+const selectedShell = ref('/bin/bash');
 
-const terminalContainerOptions = computed<TerminalContainerOption[]>(() => {
-  if (!container.value) return [];
+function popoutTerminal(shellArg?: string) {
   const id = technicalContainerId.value;
-  return [
-    {
-      id,
-      name: container.value.containerName || id,
-      state: container.value.state,
-    },
-  ];
-});
-
-function popoutTerminal() {
-  const id = technicalContainerId.value;
-  const url = `/terminal?lxc=${encodeURIComponent(id)}`;
+  const shell = typeof shellArg === 'string' && shellArg ? shellArg : selectedShell.value;
+  const url = `/terminal?lxc=${encodeURIComponent(id)}&shell=${encodeURIComponent(shell)}`;
   window.open(
     url,
     `lxc_terminal_${id}`,
@@ -309,17 +198,17 @@ const configForm = reactive({
 
 watch(
   container,
-  (ct) => {
-    if (ct) {
-      configForm.containerName = ct.containerName || cleanContainerName.value;
-      configForm.description = ct.description || '';
-      configForm.cpuCores = ct.cpuCores || 2;
-      configForm.memoryLimitMib = ct.memoryLimitMib || 2048;
-      configForm.networkBridge = ct.networkBridge || defaultBridge.value || 'br0';
-      configForm.autostart = Boolean(ct.autostart);
-      configForm.unprivileged = Boolean(ct.unprivileged);
-      configForm.gpuEnabled = Boolean(ct.gpuEnabled);
-      configForm.mountPoints = (ct.mountPoints || []).map((m) => ({
+  (newVal, oldVal) => {
+    if (newVal && newVal.name !== oldVal?.name) {
+      configForm.containerName = newVal.containerName || cleanContainerName.value;
+      configForm.description = newVal.description || '';
+      configForm.cpuCores = newVal.cpuCores || 2;
+      configForm.memoryLimitMib = newVal.memoryLimitMib || 2048;
+      configForm.networkBridge = newVal.networkBridge || defaultBridge.value || 'br0';
+      configForm.autostart = Boolean(newVal.autostart);
+      configForm.unprivileged = Boolean(newVal.unprivileged);
+      configForm.gpuEnabled = Boolean(newVal.gpuEnabled);
+      configForm.mountPoints = (newVal.mountPoints || []).map((m) => ({
         hostPath: m.hostPath,
         containerPath: m.containerPath,
         readOnly: Boolean(m.readOnly),
@@ -502,6 +391,33 @@ onBeforeUnmount(() => {
                 </span>
               </div>
               <div class="metric-item">
+                <span class="metric-label">Memory Limit</span>
+                <span class="metric-val">
+                  {{
+                    container?.memoryLimitMib
+                      ? container.memoryLimitMib >= 1024
+                        ? (container.memoryLimitMib / 1024).toFixed(2) + ' GiB'
+                        : container.memoryLimitMib + ' MiB'
+                      : '-'
+                  }}
+                </span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Network RX / TX</span>
+                <span class="metric-val mono font-xs">
+                  <template v-if="container?.state === 'RUNNING'">
+                    {{ formatBytes(container?.netRxRate || 0) }}/s ↓ · {{ formatBytes(container?.netTxRate || 0) }}/s ↑
+                    <span
+                      v-if="(container?.netRxBytes || 0) > 0 || (container?.netTxBytes || 0) > 0"
+                      style="display: block; color: var(--text-muted); font-weight: 400"
+                    >
+                      Total: {{ formatBytes(container?.netRxBytes || 0) }} ↓ / {{ formatBytes(container?.netTxBytes || 0) }} ↑
+                    </span>
+                  </template>
+                  <template v-else>-</template>
+                </span>
+              </div>
+              <div class="metric-item">
                 <span class="metric-label">IPv4 Address</span>
                 <span class="metric-val mono" style="color: var(--success-text)">
                   {{ container?.ipv4Address || 'None assigned / querying...' }}
@@ -600,6 +516,7 @@ onBeforeUnmount(() => {
         <EmbeddedTerminal
           :container-id="technicalContainerId"
           :container-name="container?.containerName || technicalContainerId"
+          :initial-shell="selectedShell"
           endpoint-type="lxc"
           @popout="popoutTerminal"
         />
@@ -660,6 +577,13 @@ onBeforeUnmount(() => {
                   <input v-model="configForm.unprivileged" type="checkbox" />
                   <span>Unprivileged Container (maps UID/GID to unprivileged ranges)</span>
                 </label>
+                <div
+                  v-if="container && configForm.unprivileged !== Boolean(container.unprivileged)"
+                  class="font-xs"
+                  style="color: var(--warning-text, #f59e0b); padding-left: 24px"
+                >
+                  Warning: Changing UID/GID mapping after rootfs creation requires a manual UID/GID ownership shift on the host filesystem, otherwise the container may fail to boot.
+                </div>
 
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px">
                   <input v-model="configForm.gpuEnabled" type="checkbox" />
@@ -760,15 +684,6 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
-
-    <!-- Terminal Modal Component -->
-    <DockerTerminalModal
-      v-if="showTerminalModal"
-      :app-title="container?.containerName || cleanContainerName"
-      :containers="terminalContainerOptions"
-      :endpoint-type="'lxc'"
-      @close="showTerminalModal = false"
-    />
 
     <!-- Add Mount Point Modal -->
     <div v-if="showAddMountModal" class="modal-backdrop" @click.self="showAddMountModal = false">
@@ -876,72 +791,6 @@ onBeforeUnmount(() => {
   min-height: max(520px, calc(100vh - 160px));
   display: flex;
   flex-direction: column;
-}
-
-.lxc-header-card {
-  padding: 14px 18px 0 18px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-}
-
-.lxc-header-main {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.lxc-title {
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.lxc-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.lxc-subtabs {
-  display: flex;
-  gap: 4px;
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 8px;
-  padding-bottom: 8px;
-  overflow-x: auto;
-}
-
-.subtab-item {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
-  padding: 5px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-
-.subtab-item:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.subtab-item.active {
-  background: var(--accent-bg-subtle);
-  color: var(--accent-primary);
-  border-color: var(--accent-primary);
-  font-weight: 600;
 }
 
 .lxc-tab-content {

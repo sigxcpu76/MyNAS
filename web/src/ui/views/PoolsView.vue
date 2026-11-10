@@ -469,6 +469,7 @@ async function handleCreatePool() {
           notify('success', `Created pool "${cleanId}" and initialized as Main Storage Pool`);
         } catch (e: any) {
           console.warn('Auto set main pool warning:', e);
+          notify('warning', `Created pool "${cleanId}", but failed to designate as Main Storage Pool: ${e?.message || e}`);
         }
       } else {
         notify(
@@ -807,11 +808,11 @@ const editPoolCapacitySummary = computed(() => {
           estimatedUsableBytes += vdevRaw;
         } else if (vdev.layout === 'mirror') {
           estimatedUsableBytes += minDrive;
-        } else if (vdev.layout === 'raidz1' && count >= 2) {
+        } else if (vdev.layout === 'raidz1' && count >= 3) {
           estimatedUsableBytes += minDrive * (count - 1);
-        } else if (vdev.layout === 'raidz2' && count >= 3) {
+        } else if (vdev.layout === 'raidz2' && count >= 4) {
           estimatedUsableBytes += minDrive * (count - 2);
-        } else if (vdev.layout === 'raidz3' && count >= 4) {
+        } else if (vdev.layout === 'raidz3' && count >= 5) {
           estimatedUsableBytes += minDrive * (count - 3);
         }
       }
@@ -857,6 +858,43 @@ async function handleApplyPoolConfig() {
   if (!configuringPool.value) return;
   const pool = configuringPool.value;
   const poolName = pool.name;
+  const shortPoolName = pool.poolName || pool.name.replace(/^zfsPools\//, '');
+
+  const newVdevs = editBuilderVdevs.value.filter((v) => v.devicePaths.length > 0);
+  for (const v of newVdevs) {
+    const val = getVdevValidation(v);
+    if (!val.valid) {
+      notify('error', `VDEV ${v.type.toUpperCase()}: ${val.message}`);
+      return;
+    }
+  }
+
+  if (newVdevs.length > 0) {
+    const hasRedundantExisting = existingActiveVdevs.value.some(
+      (ev) => ev.type === 'data' && ev.layout !== 'stripe'
+    ) || (pool.vdevLayout && pool.vdevLayout !== 'stripe');
+    const addingStripeData = newVdevs.some(
+      (v) => v.type === 'data' && v.layout === 'stripe'
+    );
+    const vdevSummary = newVdevs
+      .map((v) => `${v.type.toUpperCase()} (${v.layout.toUpperCase()}: ${v.devicePaths.join(', ')})`)
+      .join('; ');
+    const confirmed = await confirmModal({
+      title: addingStripeData && hasRedundantExisting
+        ? 'Warning: Adding Non-Redundant Stripe VDEV to Redundant Pool'
+        : `Confirm Pool Expansion (${shortPoolName})`,
+      tone: addingStripeData && hasRedundantExisting ? 'danger' : 'warning',
+      message: addingStripeData && hasRedundantExisting
+        ? `You are about to add a non-redundant STRIPE Data VDEV to redundant pool "${shortPoolName}"!`
+        : `Add ${newVdevs.length} new VDEV tier(s) to pool "${shortPoolName}"?`,
+      details: addingStripeData && hasRedundantExisting
+        ? `Adding a single-disk or stripe Data VDEV (${vdevSummary}) permanently removes pool-level redundancy: if that stripe drive fails, the ENTIRE pool "${shortPoolName}" will be lost and cannot be detached.`
+        : `The following VDEV tier(s) will be permanently added to "${shortPoolName}": ${vdevSummary}. Data VDEVs cannot be easily removed from RAIDZ pools once added.`,
+      confirmText: addingStripeData && hasRedundantExisting ? 'Add Stripe VDEV Anyway' : 'Expand Pool',
+    });
+    if (!confirmed) return;
+  }
+
   isApplyingPoolConfig.value = true;
 
   try {
@@ -873,14 +911,7 @@ async function handleApplyPoolConfig() {
       });
     }
 
-    const newVdevs = editBuilderVdevs.value.filter((v) => v.devicePaths.length > 0);
     for (const v of newVdevs) {
-      const val = getVdevValidation(v);
-      if (!val.valid) {
-        notify('error', `VDEV ${v.type.toUpperCase()}: ${val.message}`);
-        isApplyingPoolConfig.value = false;
-        return;
-      }
       await services.zfs.addVdev(poolName, {
         type: v.type,
         layout: v.layout,
@@ -891,8 +922,8 @@ async function handleApplyPoolConfig() {
     notify(
       'success',
       newVdevs.length > 0
-        ? `Successfully expanded pool "${pool.poolName || pool.name.replace(/^zfsPools\//, '')}" with ${newVdevs.length} new VDEV tier(s)`
-        : `Updated settings for pool "${pool.poolName || pool.name.replace(/^zfsPools\//, '')}"`
+        ? `Successfully expanded pool "${shortPoolName}" with ${newVdevs.length} new VDEV tier(s)`
+        : `Updated settings for pool "${shortPoolName}"`
     );
     configuringPool.value = null;
     await refreshAllData();
@@ -906,10 +937,10 @@ async function handleApplyPoolConfig() {
 async function handleRemoveExistingDevice(devicePath: string) {
   if (!configuringPool.value) return;
   const confirmed = await confirmModal({
-    title: 'Detach Device from Pool',
-    tone: 'warning',
+    title: 'Remove Device from Pool',
+    tone: 'danger',
     message: `Remove device "${devicePath}" from pool "${configuringPool.value.poolName || configuringPool.value.name}"?`,
-    details: 'The device will be safely removed from this VDEV tier and returned to the unassigned drive bank.',
+    details: 'This device will be detached from the pool. Ensure data redundancy is preserved before detaching.',
     confirmText: 'Remove Device',
   });
   if (!confirmed) return;
@@ -1348,15 +1379,12 @@ function viewPoolDatasets(poolName: string) {
               <div>
                 <h3 class="card-title" style="margin: 0; font-size: 18px">Create Storage Pool</h3>
                 <div class="card-subtitle" style="margin-top: 2px">
-                  Step 1 of 2: Define VDEV topology and assign physical drives
+                  Define VDEV topology and assign physical drives
                 </div>
               </div>
             </div>
           </div>
           <div class="stepper-nav">
-            <span class="step-circle active" title="Step 1: Topology & Disks">1</span>
-            <span class="step-circle upcoming" title="Step 2: Initialization">2</span>
-            <div class="stepper-divider"></div>
             <button class="modal-close-btn" title="Close modal" @click="showCreatePool = false">
               <MdiIcon :path="mdiClose" size="16" />
             </button>
@@ -1468,10 +1496,18 @@ function viewPoolDatasets(poolName: string) {
                   </div>
 
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 10.5px">
-                    <div style="display: flex; gap: 4px">
+                    <div style="display: flex; gap: 4px; flex-wrap: wrap">
                       <span class="badge badge-neutral" style="font-size: 9.5px">{{ d.type }}</span>
                       <span class="badge badge-neutral" style="font-size: 9.5px">{{ (d.transport || 'disk').toUpperCase() }}</span>
                       <span v-if="d.smartStatus" class="badge badge-success" style="font-size: 9.5px">{{ d.smartStatus }}</span>
+                      <span
+                        v-if="d.partitions && d.partitions.length > 0"
+                        class="badge badge-warning"
+                        style="font-size: 9.5px"
+                        :title="`Warning: Disk has ${d.partitions.length} existing partition(s) that will be overwritten`"
+                      >
+                        {{ d.partitions.length }} part{{ d.partitions.length === 1 ? '' : 's' }} (will wipe)
+                      </span>
                     </div>
 
                     <span v-if="builderAssignedPaths.has(d.devicePath)" class="badge badge-success" style="font-size: 9.5px">
@@ -1866,10 +1902,18 @@ function viewPoolDatasets(poolName: string) {
                   </div>
 
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 10.5px">
-                    <div style="display: flex; gap: 4px">
+                    <div style="display: flex; gap: 4px; flex-wrap: wrap">
                       <span class="badge badge-neutral" style="font-size: 9.5px">{{ d.type }}</span>
                       <span class="badge badge-neutral" style="font-size: 9.5px">{{ (d.transport || 'disk').toUpperCase() }}</span>
                       <span v-if="d.smartStatus" class="badge badge-success" style="font-size: 9.5px">{{ d.smartStatus }}</span>
+                      <span
+                        v-if="d.partitions && d.partitions.length > 0"
+                        class="badge badge-warning"
+                        style="font-size: 9.5px"
+                        :title="`Warning: Disk has ${d.partitions.length} existing partition(s) that will be overwritten`"
+                      >
+                        {{ d.partitions.length }} part{{ d.partitions.length === 1 ? '' : 's' }} (will wipe)
+                      </span>
                     </div>
 
                     <span v-if="editBuilderAssignedPaths.has(d.devicePath)" class="badge badge-success" style="font-size: 9.5px">

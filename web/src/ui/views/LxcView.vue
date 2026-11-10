@@ -545,29 +545,6 @@ async function handleCreate() {
 }
 
 // =============================================================================
-// Autostart Toggle
-// =============================================================================
-const togglingAutostart = ref<Record<string, boolean>>({});
-
-async function toggleAutostart(lx: LxcContainer) {
-  if (togglingAutostart.value[lx.name]) return;
-  togglingAutostart.value[lx.name] = true;
-  try {
-    const updated = await services.lxc.updateContainer(
-      lx.name,
-      { autostart: !lx.autostart },
-      ['autostart']
-    );
-    lx.autostart = updated.autostart;
-    notify('success', `Autostart ${updated.autostart ? 'enabled' : 'disabled'} for ${lx.containerName}`);
-  } catch (err: any) {
-    notify('error', err?.message || 'Failed to update autostart setting');
-  } finally {
-    togglingAutostart.value[lx.name] = false;
-  }
-}
-
-// =============================================================================
 // Container Lifecycle & Actions
 // =============================================================================
 const transitioningContainers = reactive<Record<string, 'starting' | 'stopping' | 'restarting' | 'freezing'>>({});
@@ -584,39 +561,6 @@ async function handleAction(name: string, verb: 'start' | 'stop' | 'freeze') {
     notify('error', err?.message || `Failed to ${verb} LXC container`);
   } finally {
     delete transitioningContainers[name];
-  }
-}
-
-async function handleRestart(lx: LxcContainer) {
-  transitioningContainers[lx.name] = 'restarting';
-  try {
-    await services.lxc.restartContainer(lx.name);
-    notify('success', `Restarted LXC container ${lx.containerName}`);
-    await refreshLxc();
-  } catch (err: any) {
-    notify('error', err?.message || 'Failed to restart LXC container');
-  } finally {
-    delete transitioningContainers[lx.name];
-  }
-}
-
-async function handleDelete(lx: LxcContainer) {
-  const name = lx.name;
-  const shortName = name.replace(/^lxcContainers\//, '');
-  const res = await confirmDelete({
-    kind: 'Container',
-    name: lx.containerName || shortName,
-    details: 'The container will be stopped and its rootfs and configuration deleted.',
-    confirmText: 'Delete Container',
-  });
-  if (!res.confirmed) return;
-
-  try {
-    await services.lxc.deleteContainer(name, true);
-    notify('info', `Deleted LXC container ${shortName}`);
-    await refreshLxc();
-  } catch (err: any) {
-    notify('error', err?.message || 'Failed to delete LXC container');
   }
 }
 

@@ -210,10 +210,13 @@ async function rebootVm() {
 async function deleteVm() {
   if (!currentVm.value || isBusy.value) return;
   const vm = currentVm.value;
+  const runningWarn = vm.state === 'RUNNING'
+    ? 'WARNING: This virtual machine is currently RUNNING and will be forcibly powered off.\n\n'
+    : '';
   const confirmed = await confirmDelete({
     kind: 'Virtual Machine',
     name: vm.vmName,
-    details: 'The virtual machine definition and guest configuration will be removed.',
+    details: `${runningWarn}The virtual machine definition and guest configuration will be removed. Backing ZVols on the storage pool are preserved and can be deleted separately in Volumes.`,
     confirmText: 'Delete VM',
   });
   if (!confirmed.confirmed) return;
@@ -532,6 +535,13 @@ async function upgradeDocker() {
   if (!currentDocker.value || isBusy.value) return;
   const app = currentDocker.value;
   const appDisplayName = app.title || app.appId || app.name.replace(/^dockerApps\//, '');
+  const ok = await confirmModal({
+    title: `Upgrade "${appDisplayName}"?`,
+    message: `Pull the latest container images and recreate running services for "${appDisplayName}"? Active connections will be briefly interrupted during redeployment.`,
+    tone: 'warning',
+    confirmText: 'Upgrade App',
+  });
+  if (!ok) return;
   isBusy.value = true;
   try {
     await runTrackedTask(`App "${appDisplayName}": Upgrade`, async () => {
@@ -576,6 +586,13 @@ async function setMainPool() {
   if (!currentPool.value || isBusy.value) return;
   const pool = currentPool.value;
   const name = pool.poolName || pool.name.replace(/^zfsPools\//, '');
+  const ok = await confirmModal({
+    title: `Set "${name}" as Main System Pool?`,
+    message: `Designate "${name}" as the primary storage pool for Docker apps, LXC containers, and system state (${name}/.nas-system)?`,
+    tone: 'info',
+    confirmText: 'Set as Main Pool',
+  });
+  if (!ok) return;
   isBusy.value = true;
   try {
     await runTrackedTask(`System: Set Main Pool to "${name}"`, async () => {
@@ -594,15 +611,22 @@ async function exportPool() {
   if (!currentPool.value || isBusy.value) return;
   const pool = currentPool.value;
   const name = pool.poolName || pool.name.replace(/^zfsPools\//, '');
-  const confirmed = await confirmDelete({
-    kind: 'Export ZFS Pool',
-    name,
-    details: isMainPool.value
-      ? 'WARNING: This is the MAIN POOL. Exporting it will pause Apps and Containers!'
-      : 'The pool will be unmounted and safely detached. You can re-import it anytime.',
+  const blast = computeStorageBlastRadius(name);
+  const detailsParts: string[] = [];
+  if (isMainPool.value) {
+    detailsParts.push('WARNING: This is the MAIN SYSTEM POOL. Exporting it will interrupt Docker applications, LXC containers, and system storage.');
+  }
+  if (blast.hasDependencies) {
+    detailsParts.push(`ACTIVE DEPENDENCIES DETECTED:\n${blast.summaryWarning}`);
+  }
+  detailsParts.push('The pool will be unmounted and detached from this host. No data is deleted and you can re-import it later.');
+  const ok = await confirmModal({
+    title: `Export ZFS Pool "${name}"?`,
+    message: detailsParts.join('\n\n'),
+    tone: isMainPool.value || blast.hasDependencies ? 'danger' : 'warning',
     confirmText: 'Export Pool',
   });
-  if (!confirmed.confirmed) return;
+  if (!ok) return;
   isBusy.value = true;
   try {
     await runTrackedTask(`ZFS Pool "${name}": Export`, async () => {
@@ -636,7 +660,7 @@ async function destroyPool() {
   isBusy.value = true;
   try {
     await runTrackedTask(`ZFS Pool "${name}": Destroy`, async () => {
-      await services.zfs.deletePool(pool.name);
+      await services.zfs.deletePool(pool.name, true);
     });
     notify('warning', `ZFS pool "${name}" destroyed`);
     selectResource('node:pools');
@@ -1372,8 +1396,8 @@ function popoutHostTerminal() {
     </div>
 
     <!-- Clone VM Modal -->
-    <div v-if="showCloneVmModal && currentVm" class="modal-overlay" @click.self="showCloneVmModal = false">
-      <div class="modal-container" style="max-width: 460px">
+    <div v-if="showCloneVmModal && currentVm" class="modal-backdrop" @click.self="showCloneVmModal = false">
+      <div class="modal-card" style="max-width: 460px">
         <div class="modal-header">
           <h3 class="modal-title">Clone VM: {{ currentVm.vmName }}</h3>
           <button class="btn btn-xs btn-ghost" @click="showCloneVmModal = false">

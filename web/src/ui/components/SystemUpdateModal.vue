@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import {
   mdiAlertCircle,
   mdiCheckCircle,
@@ -54,9 +54,24 @@ const runningSummary = computed(() => {
   return parts.join(', ');
 });
 
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    handleClose();
+  }
+}
+
 onMounted(() => {
+  window.addEventListener('keydown', handleKeydown);
   if (!updateInfo.value) {
     handleCheck(false);
+  }
+});
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown);
+  if (reconnectTimer) {
+    clearInterval(reconnectTimer);
+    reconnectTimer = null;
   }
 });
 
@@ -133,13 +148,13 @@ function startReconnectPolling() {
 }
 
 function handleClose() {
-  if (updateStep.value === 'restarting') return;
+  if (updateStep.value === 'restarting' || updateStep.value === 'updating' || isApplying.value) return;
   emit('close');
 }
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="handleClose">
+  <div class="modal-backdrop" role="dialog" aria-modal="true" aria-label="Software Updates" @click.self="handleClose">
     <div class="modal-card system-update-modal" style="max-width: 680px">
       <!-- Modal Header -->
       <div class="modal-header">
