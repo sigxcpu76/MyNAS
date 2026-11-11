@@ -196,7 +196,7 @@ func (a *Adapter) ListPools(ctx context.Context) ([]domain.ZfsPool, error) {
 func (a *Adapter) listHostPools(ctx context.Context) ([]domain.ZfsPool, error) {
 	cmd := exec.CommandContext(ctx, "zpool", "list", "-j", "-p")
 	out, err := cmd.Output()
-	if err != nil {
+	if err != nil || strings.TrimSpace(string(out)) == "" {
 		// If zpool returns empty or no pools exist
 		return []domain.ZfsPool{}, nil
 	}
@@ -752,7 +752,7 @@ func (a *Adapter) listHostDatasets(ctx context.Context, poolID string) ([]domain
 	cmd := exec.CommandContext(ctx, "zfs", "list", "-j", "-p", "-r", "-t", "filesystem",
 		"-o", "name,type,used,available,referenced,mountpoint,compression,readonly,atime,recordsize,sync,quota,reservation,dedup", poolID)
 	out, err := cmd.Output()
-	if err != nil {
+	if err != nil || strings.TrimSpace(string(out)) == "" {
 		return []domain.ZfsDataset{}, nil
 	}
 	var zfsData zfsListJSON
@@ -1060,7 +1060,7 @@ func (a *Adapter) listHostVolumes(ctx context.Context, poolID string) ([]domain.
 	cmd := exec.CommandContext(ctx, "zfs", "list", "-j", "-p", "-r", "-t", "volume",
 		"-o", "name,type,used,available,volsize,volblocksize,compression,refreservation,sync,readonly,dedup", poolID)
 	out, err := cmd.Output()
-	if err != nil {
+	if err != nil || strings.TrimSpace(string(out)) == "" {
 		return []domain.ZfsVolume{}, nil
 	}
 	var zfsData zfsListJSON
