@@ -40,7 +40,7 @@ import { useTableSort } from '../composables/useTableSort';
 import { services } from '../../container';
 import { nasState, notify, refreshLxcTemplates as storeRefreshTemplates, selectResource, uploadLxcTemplateTracked } from '../store';
 import { confirmDelete } from '../modal';
-import { toZfsSafeSlug } from '../../domain/id';
+import { generateLxcRootfsPath, toZfsSafeSlug } from '../../domain/id';
 import { formatBytes, type LxcCatalogItem, type LxcContainer, type LxcMountPoint, type StorageImage } from '../../domain/models';
 import { getLxcContainerIcon } from '../utils/appIcons';
 import { useNetworkBridges } from '../utils/networkBridges';
@@ -108,6 +108,22 @@ const mainPool = computed(() => {
     cleanPoolName(nasState.pools?.[0]?.name) ||
     'tank';
   return p || 'tank';
+});
+const availablePools = computed(() => {
+  const seen = new Set<string>();
+  const list: Array<{ name: string; isMain: boolean }> = [];
+  for (const p of nasState.pools || []) {
+    const clean = cleanPoolName(p.poolName || p.name);
+    if (clean && !seen.has(clean)) {
+      seen.add(clean);
+      list.push({ name: clean, isMain: clean === mainPool.value });
+    }
+  }
+  if (mainPool.value && !seen.has(mainPool.value)) {
+    seen.add(mainPool.value);
+    list.push({ name: mainPool.value, isMain: true });
+  }
+  return list;
 });
 const lxcTemplatesDir = computed(() => `/mnt/${mainPool.value}/lxc-templates`);
 
@@ -337,6 +353,7 @@ const deployingCatalogItem = ref<LxcCatalogItem | null>(null);
 const form = reactive({
   containerName: '',
   containerId: '',
+  storagePool: '',
   distribution: 'debian',
   release: 'bookworm',
   architecture: 'amd64',
@@ -399,6 +416,7 @@ function toggleCreate() {
   } else {
     deployingCatalogItem.value = null;
     form.containerName = 'Debian Container';
+    form.storagePool = mainPool.value;
     form.distribution = 'debian';
     form.release = 'bookworm';
     form.containerId = toZfsSafeSlug(form.containerName);
@@ -421,6 +439,7 @@ function openDeployModal(item: LxcCatalogItem) {
   deployingCatalogItem.value = item;
   form.containerName = item.title;
   form.containerId = toZfsSafeSlug(item.title) || toZfsSafeSlug(item.id.replace(/^(community|turnkey|lxc)-/, ''));
+  form.storagePool = mainPool.value;
   const normDistro = normalizeDistroName(item.baseDistribution || 'debian') || 'debian';
   form.distribution = normDistro;
   form.release = (item.baseRelease && !(normDistro !== 'debian' && item.baseRelease === 'bookworm'))
@@ -500,9 +519,11 @@ async function handleCreate() {
   isDeploying.value = true;
   try {
     const targetId = toZfsSafeSlug(form.containerId || form.containerName || `${form.distribution}-${form.release}`) || 'container';
+    const targetPool = (form.storagePool || mainPool.value).trim();
     const validMounts = form.mountPoints.filter((mp) => mp.hostPath.trim() && mp.containerPath.trim());
     const created = await services.lxc.createContainer(targetId, {
       containerName: form.containerName || targetId,
+      rootfsPath: generateLxcRootfsPath(targetPool, targetId),
       distribution: form.distribution,
       release: form.release,
       architecture: form.architecture,
@@ -814,6 +835,14 @@ function copyTemplatePath(path: string) {
             <select v-model="form.networkBridge" class="select mono">
               <option v-for="b in bridgeOptionsFor(form.networkBridge)" :key="b.name" :value="b.name">
                 {{ b.label }}
+              </option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Rootfs Storage Pool</label>
+            <select v-model="form.storagePool" class="select mono">
+              <option v-for="p in availablePools" :key="p.name" :value="p.name">
+                {{ p.name }}{{ p.isMain ? ' (main)' : '' }}
               </option>
             </select>
           </div>

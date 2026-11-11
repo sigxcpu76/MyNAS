@@ -20,6 +20,7 @@ import {
   type LxcContainer,
   type LxcMountPoint,
 } from '../../domain/models';
+import { generateLxcRootfsPath } from '../../domain/id';
 import {
   nasState,
   notify,
@@ -148,6 +149,42 @@ const mainPool = computed(() => {
   return p || 'tank';
 });
 
+function extractPoolFromRootfs(rootfsPath?: string): string {
+  const raw = (rootfsPath || '').replace(/^dir:/, '').trim();
+  const match = raw.match(/^\/(?:mnt|nas)\/([^/]+)\//);
+  if (match && match[1]) {
+    return match[1];
+  }
+  const relMatch = raw.match(/^([^/]+)\/containers\//);
+  if (relMatch && relMatch[1]) {
+    return relMatch[1];
+  }
+  return mainPool.value;
+}
+
+const currentRootfsPool = computed(() => extractPoolFromRootfs(container.value?.rootfsPath));
+
+const availablePools = computed(() => {
+  const seen = new Set<string>();
+  const list: Array<{ name: string; isMain: boolean }> = [];
+  for (const p of nasState.pools || []) {
+    const clean = cleanPoolName(p.poolName || p.name);
+    if (clean && !seen.has(clean)) {
+      seen.add(clean);
+      list.push({ name: clean, isMain: clean === mainPool.value });
+    }
+  }
+  if (mainPool.value && !seen.has(mainPool.value)) {
+    seen.add(mainPool.value);
+    list.push({ name: mainPool.value, isMain: true });
+  }
+  if (currentRootfsPool.value && !seen.has(currentRootfsPool.value)) {
+    seen.add(currentRootfsPool.value);
+    list.push({ name: currentRootfsPool.value, isMain: currentRootfsPool.value === mainPool.value });
+  }
+  return list;
+});
+
 // -----------------------------------------------------------------------------
 // Mount Points Management & Configuration Editor
 // -----------------------------------------------------------------------------
@@ -187,6 +224,7 @@ const isSavingConfig = ref(false);
 const configForm = reactive({
   containerName: '',
   description: '',
+  storagePool: '',
   cpuCores: 2,
   memoryLimitMib: 2048,
   networkBridge: '',
@@ -199,9 +237,10 @@ const configForm = reactive({
 watch(
   container,
   (newVal, oldVal) => {
-    if (newVal && newVal.name !== oldVal?.name) {
+    if (newVal && (newVal.name !== oldVal?.name || newVal.rootfsPath !== oldVal?.rootfsPath)) {
       configForm.containerName = newVal.containerName || cleanContainerName.value;
       configForm.description = newVal.description || '';
+      configForm.storagePool = extractPoolFromRootfs(newVal.rootfsPath);
       configForm.cpuCores = newVal.cpuCores || 2;
       configForm.memoryLimitMib = newVal.memoryLimitMib || 2048;
       configForm.networkBridge = newVal.networkBridge || defaultBridge.value || 'br0';
@@ -221,11 +260,18 @@ watch(
 async function handleSaveConfig() {
   if (!container.value || isSavingConfig.value) return;
   isSavingConfig.value = true;
+  const targetPool = (configForm.storagePool || mainPool.value).trim();
+  const isMigratingPool = targetPool !== currentRootfsPool.value;
+  const targetRootfsPath = generateLxcRootfsPath(targetPool, technicalContainerId.value);
+  const taskLabel = isMigratingPool
+    ? `LXC "${cleanContainerName.value}": Migrate Rootfs to ${targetPool} & Save Config`
+    : `LXC "${cleanContainerName.value}": Save Configuration`;
   try {
-    await runTrackedTask(`LXC "${cleanContainerName.value}": Save Configuration`, async () => {
+    await runTrackedTask(taskLabel, async () => {
       await services.lxc.updateContainer(container.value!.name, {
         containerName: configForm.containerName.trim(),
         description: configForm.description.trim(),
+        rootfsPath: targetRootfsPath,
         cpuCores: Number(configForm.cpuCores) || 2,
         memoryLimitMib: Number(configForm.memoryLimitMib) || 2048,
         networkBridge: configForm.networkBridge.trim() || defaultBridge.value || 'br0',
@@ -239,7 +285,12 @@ async function handleSaveConfig() {
         })),
       });
     });
-    notify('success', `Saved configuration for ${cleanContainerName.value}`);
+    notify(
+      'success',
+      isMigratingPool
+        ? `Migrated rootfs to pool "${targetPool}" and saved configuration for ${cleanContainerName.value}`
+        : `Saved configuration for ${cleanContainerName.value}`
+    );
     await refreshAllData();
   } catch (err: any) {
     notify('error', `Failed to save configuration: ${err.message}`);
@@ -436,6 +487,12 @@ onBeforeUnmount(() => {
                 <span class="metric-val mono">{{ container?.networkBridge || 'br0' }}</span>
               </div>
               <div class="metric-item">
+                <span class="metric-label">Rootfs Storage Pool</span>
+                <span class="metric-val mono" :title="container?.rootfsPath || ''">
+                  {{ currentRootfsPool }}
+                </span>
+              </div>
+              <div class="metric-item">
                 <span class="metric-label">Autostart on Boot</span>
                 <button
                   type="button"
@@ -552,6 +609,15 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div class="form-group">
+                  <label class="form-label">Rootfs Storage Pool</label>
+                  <select v-model="configForm.storagePool" class="form-select mono">
+                    <option v-for="p in availablePools" :key="p.name" :value="p.name">
+                      {{ p.name }}{{ p.isMain ? ' (main)' : '' }}
+                    </option>
+                  </select>
+                </div>
+
+                <div class="form-group">
                   <label class="form-label">CPU Cores</label>
                   <input v-model.number="configForm.cpuCores" type="number" min="1" max="64" class="form-input" />
                 </div>
@@ -560,6 +626,23 @@ onBeforeUnmount(() => {
                   <label class="form-label">Memory Limit (MiB)</label>
                   <input v-model.number="configForm.memoryLimitMib" type="number" min="128" step="128" class="form-input" />
                 </div>
+              </div>
+
+              <div
+                v-if="configForm.storagePool && configForm.storagePool !== currentRootfsPool"
+                class="font-xs"
+                style="
+                  color: var(--warning-text, #f59e0b);
+                  background: rgba(245, 158, 11, 0.08);
+                  border: 1px solid rgba(245, 158, 11, 0.28);
+                  border-radius: 6px;
+                  padding: 8px 12px;
+                "
+              >
+                Saving will migrate this container's ZFS dataset from
+                <strong class="mono">{{ currentRootfsPool }}/containers/{{ technicalContainerId }}</strong> to
+                <strong class="mono">{{ configForm.storagePool }}/containers/{{ technicalContainerId }}</strong>
+                via ZFS replication (<span class="mono">zfs send | zfs receive</span>). If the container is running, it will be briefly stopped during migration and restarted automatically.
               </div>
 
               <div class="form-group">

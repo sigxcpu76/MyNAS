@@ -24,6 +24,7 @@ import FileDropzone from '../components/FileDropzone.vue';
 import PathSelector from '../components/PathSelector.vue';
 import { useTableSort } from '../composables/useTableSort';
 import { useNetworkBridges } from '../utils/networkBridges';
+import { getVmIcon } from '../utils/appIcons';
 import { generateNanosecondId, generateVMDiskFilePath, generateVMDiskName, generateZvolDiskPath, toZfsSafeSlug } from '../../domain/id';
 import {
   mdiAlertCircleOutline,
@@ -57,6 +58,8 @@ import {
   mdiTrashCanOutline,
   mdiUpload,
 } from '@mdi/js';
+
+const failedVmIcons = ref<Record<string, boolean>>({});
 
 // State
 const searchQuery = ref('');
@@ -996,6 +999,14 @@ async function handleWizardSubmit() {
                     }"
                     :title="`Status: ${(vm.state || 'STOPPED').toLowerCase()}`"
                   />
+                  <img
+                    v-if="getVmIcon(vm) && !failedVmIcons[vm.name]"
+                    :src="getVmIcon(vm)"
+                    :alt="vm.vmName"
+                    style="width: 18px; height: 18px; object-fit: contain; flex-shrink: 0"
+                    :style="{ filter: vm.state === 'RUNNING' ? 'none' : 'grayscale(100%)', opacity: vm.state === 'RUNNING' ? 1 : 0.55 }"
+                    @error="failedVmIcons[vm.name] = true"
+                  />
                   <div>
                     <div class="font-semibold" style="color: var(--text-primary); display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
                       <span>{{ vm.vmName }}</span>
@@ -1285,7 +1296,15 @@ async function handleWizardSubmit() {
                 <option value="ubuntu24.04">Ubuntu 24.04 LTS</option>
                 <option value="almalinux9">AlmaLinux / RHEL 9</option>
                 <option value="freebsd14.0">FreeBSD 14 / OPNsense</option>
-                <option value="win2k22">Windows Server 2022 / 11</option>
+                <option value="win2k22">Windows Server 2022 / 11 / 10</option>
+                <option value="archlinux">Arch Linux</option>
+                <option value="fedora">Fedora Linux</option>
+                <option value="alpine">Alpine Linux</option>
+                <option value="proxmox">Proxmox VE</option>
+                <option value="truenas">TrueNAS</option>
+                <option value="homeassistant">Home Assistant OS</option>
+                <option value="talos">Talos Linux</option>
+                <option value="nixos">NixOS</option>
                 <option value="generic">Generic Linux 6.x</option>
               </select>
             </div>

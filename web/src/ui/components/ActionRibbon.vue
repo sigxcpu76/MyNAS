@@ -50,8 +50,9 @@ import { confirmDelete, confirmModal } from '../modal';
 import { computeStorageBlastRadius } from '../utils/storageBlastRadius';
 import { toZfsSafeSlug } from '../../domain/id';
 import type { VirtualMachine, LxcContainer, ZfsPool, DockerApp } from '../../domain/models';
-import { getDockerAppIcon, getLxcContainerIcon } from '../utils/appIcons';
+import { getDockerAppIcon, getLxcContainerIcon, getVmIcon } from '../utils/appIcons';
 
+const failedVmIcons = ref<Record<string, boolean>>({});
 const failedDockerIcons = ref<Record<string, boolean>>({});
 const failedLxcIcons = ref<Record<string, boolean>>({});
 
@@ -694,7 +695,16 @@ function popoutHostTerminal() {
         >
           <MdiIcon :path="mdiArrowLeft" size="15" />
         </button>
-        <MdiIcon :path="mdiMonitor" size="16" style="color: var(--accent-primary)" />
+        <div class="ribbon-icon-avatar">
+          <img
+            v-if="getVmIcon(currentVm) && !failedVmIcons[currentVm.name]"
+            :src="getVmIcon(currentVm)"
+            :alt="currentVm.vmName"
+            class="ribbon-avatar-img"
+            @error="failedVmIcons[currentVm.name] = true"
+          />
+          <MdiIcon v-else :path="mdiMonitor" size="16" style="color: var(--accent-primary)" />
+        </div>
         <MdiIcon
           :path="mdiCircle"
           size="9"

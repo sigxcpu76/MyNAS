@@ -3,9 +3,11 @@ import {
   getDockerAppIcon,
   getDockerContainerIcon,
   getLxcContainerIcon,
+  getVmIcon,
   LXC_DISTRO_ICONS,
+  VM_OS_ICONS,
 } from '../src/ui/utils/appIcons';
-import type { CatalogApp, DockerApp, LxcContainer } from '../src/domain/models';
+import type { CatalogApp, DockerApp, LxcContainer, VirtualMachine } from '../src/domain/models';
 
 describe('appIcons utility', () => {
   const mockCatalog = [
@@ -159,6 +161,30 @@ describe('appIcons utility', () => {
         distribution: 'debian',
       } as LxcContainer;
       expect(getLxcContainerIcon(lx)).toBe('https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/pihole.png');
+    });
+  });
+
+  describe('getVmIcon', () => {
+    it('resolves icon from declared osVariant', () => {
+      expect(getVmIcon({ vmName: 'vm-1', osVariant: 'debian12' } as VirtualMachine)).toBe(VM_OS_ICONS.debian);
+      expect(getVmIcon({ vmName: 'vm-2', osVariant: 'win2k22' } as VirtualMachine)).toBe(VM_OS_ICONS.windows);
+      expect(getVmIcon({ vmName: 'vm-3', osVariant: 'ubuntu24.04' } as VirtualMachine)).toBe(VM_OS_ICONS.ubuntu);
+    });
+
+    it('falls back to ISO path and VM name when osVariant is empty', () => {
+      expect(
+        getVmIcon({
+          vmName: 'windows-10',
+          cdromIsoImage: '/mnt/isos/Windows.10.Pro.iso',
+        } as VirtualMachine)
+      ).toBe(VM_OS_ICONS.windows);
+
+      expect(
+        getVmIcon({
+          vmName: 'opnsense-fw',
+          osVariant: 'freebsd14.0',
+        } as VirtualMachine)
+      ).toBe(VM_OS_ICONS.opnsense);
     });
   });
 });

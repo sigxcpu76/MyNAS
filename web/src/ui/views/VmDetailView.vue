@@ -133,6 +133,7 @@ async function toggleAutostart() {
 const isSavingConfig = ref(false);
 const hwForm = reactive({
   vmName: '',
+  osVariant: 'debian12',
   description: '',
   autostart: false,
   sockets: 1,
@@ -162,6 +163,7 @@ watch(
   (v, oldV) => {
     if (v && v.name !== oldV?.name) {
       hwForm.vmName = v.vmName || cleanVmName.value;
+      hwForm.osVariant = v.osVariant || 'debian12';
       hwForm.description = v.description || '';
       hwForm.autostart = Boolean(v.autostart);
       hwForm.sockets = v.sockets || 1;
@@ -199,6 +201,7 @@ async function handleSaveHardwareConfig() {
         vm.value!.name,
         {
           vmName: hwForm.vmName.trim() || cleanVmName.value,
+          osVariant: hwForm.osVariant,
           description: hwForm.description.trim(),
           autostart: hwForm.autostart,
           vcpus,
@@ -218,6 +221,7 @@ async function handleSaveHardwareConfig() {
         },
         [
           'vm_name',
+          'os_variant',
           'description',
           'autostart',
           'vcpus',
@@ -768,6 +772,25 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
                 <div class="form-group">
                   <label class="form-label">VM Name</label>
                   <input v-model="hwForm.vmName" type="text" class="form-input" required />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Operating System</label>
+                  <select v-model="hwForm.osVariant" class="form-input">
+                    <option value="debian12">Debian 12 (Bookworm)</option>
+                    <option value="ubuntu24.04">Ubuntu 24.04 LTS</option>
+                    <option value="almalinux9">AlmaLinux / RHEL 9</option>
+                    <option value="freebsd14.0">FreeBSD 14 / OPNsense</option>
+                    <option value="win2k22">Windows Server 2022 / 11 / 10</option>
+                    <option value="archlinux">Arch Linux</option>
+                    <option value="fedora">Fedora Linux</option>
+                    <option value="alpine">Alpine Linux</option>
+                    <option value="proxmox">Proxmox VE</option>
+                    <option value="truenas">TrueNAS</option>
+                    <option value="homeassistant">Home Assistant OS</option>
+                    <option value="talos">Talos Linux</option>
+                    <option value="nixos">NixOS</option>
+                    <option value="generic">Generic Linux 6.x</option>
+                  </select>
                 </div>
                 <div class="form-group">
                   <label class="form-label">Description</label>

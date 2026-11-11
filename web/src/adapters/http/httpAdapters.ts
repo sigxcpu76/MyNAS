@@ -1875,6 +1875,7 @@ export class HttpLxcAdapter implements LxcPort {
       containerName: container.containerName,
       autostart: container.autostart,
       unprivileged: container.unprivileged,
+      rootfsPath: container.rootfsPath,
       memoryLimitMib: container.memoryLimitMib,
       cpuCores: container.cpuCores,
       mountPoints: container.mountPoints?.map(mp => ({

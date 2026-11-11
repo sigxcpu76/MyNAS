@@ -2545,6 +2545,7 @@ func (s *Server) UpdateLxcContainer(ctx context.Context, req *nasv1.UpdateLxcCon
 		ContainerName:   in.GetContainerName(),
 		Autostart:       in.GetAutostart(),
 		Unprivileged:    in.GetUnprivileged(),
+		RootfsPath:      in.GetRootfsPath(),
 		MemoryLimitMiB:  in.GetMemoryLimitMib(),
 		CPUCores:        in.GetCpuCores(),
 		MountPoints:     mountPoints,

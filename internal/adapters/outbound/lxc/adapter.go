@@ -1505,6 +1505,33 @@ func (a *Adapter) ensureTemplateArchive(ctx context.Context, sourceURL, targetPa
 	return destPath, nil
 }
 
+func resolveRootfsPoolAndDataset(rootfsPath, fallbackPool, containerID string) (pool, datasetPath, containerDir string) {
+	if rootfsPath == "" {
+		if fallbackPool != "" {
+			rootfsPath = domain.GenerateLxcRootfsPath(fallbackPool, containerID)
+		} else {
+			return "", "", ""
+		}
+	}
+	containerDir = filepath.Clean(filepath.Dir(rootfsPath))
+	rel := strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(containerDir, "/mnt/"), "/nas/"), "/")
+	parts := strings.Split(rel, "/")
+	if len(parts) > 0 && parts[0] != "" {
+		first := parts[0]
+		switch first {
+		case "var", "tmp", "etc", "usr", "root", "home", "dev", "proc", "sys", "run", "opt", "srv":
+			return "", "", containerDir
+		}
+		pool = first
+		if len(parts) >= 2 {
+			datasetPath = rel
+		} else {
+			datasetPath = fmt.Sprintf("%s/containers/%s", pool, containerID)
+		}
+	}
+	return pool, datasetPath, containerDir
+}
+
 func (a *Adapter) ensureContainerDataset(ctx context.Context, pool, datasetPath, mountpoint string) error {
 	if pool == "" || datasetPath == "" {
 		return nil
@@ -2112,21 +2139,14 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 	}
 	cleanMainPool := strings.TrimPrefix(strings.TrimSpace(mainPool), "zfsPools/")
 
-	if cleanMainPool != "" {
-		if c.RootfsPath == "" {
+	if c.RootfsPath == "" {
+		if cleanMainPool != "" {
 			c.RootfsPath = domain.GenerateLxcRootfsPath(cleanMainPool, c.ID)
 		} else {
-			cleaned := filepath.Clean(c.RootfsPath)
-			hasMntPrefix := cleaned == "/mnt/"+cleanMainPool || strings.HasPrefix(cleaned, "/mnt/"+cleanMainPool+"/")
-			hasNasPrefix := cleaned == "/nas/"+cleanMainPool || strings.HasPrefix(cleaned, "/nas/"+cleanMainPool+"/")
-			hasDirectPrefix := cleaned == "/"+cleanMainPool || strings.HasPrefix(cleaned, "/"+cleanMainPool+"/")
-			hasDatasetPrefix := cleaned == cleanMainPool || strings.HasPrefix(cleaned, cleanMainPool+"/")
-			if !hasMntPrefix && !hasNasPrefix && !hasDirectPrefix && !hasDatasetPrefix {
-				return nil, fmt.Errorf("%w: lxc rootfs must reside on the main pool (%s); path %q is not permitted", domain.ErrInvalidArgument, cleanMainPool, c.RootfsPath)
-			}
+			c.RootfsPath = fmt.Sprintf("/var/lib/lxc/%s/rootfs", c.ID)
 		}
-	} else if c.RootfsPath == "" {
-		c.RootfsPath = fmt.Sprintf("/var/lib/lxc/%s/rootfs", c.ID)
+	} else {
+		c.RootfsPath = filepath.Clean(c.RootfsPath)
 	}
 
 	if c.CPUCores <= 0 {
@@ -2139,18 +2159,10 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 		c.NetworkBridge = "br0"
 	}
 
-	// Create dedicated ZFS dataset for container if on main pool
-	if cleanMainPool != "" {
-		containerDir := filepath.Dir(c.RootfsPath)
-		cleanDir := filepath.Clean(containerDir)
-		rel := strings.TrimPrefix(strings.TrimPrefix(cleanDir, "/mnt/"), "/")
-		var datasetPath string
-		if strings.HasPrefix(rel, cleanMainPool+"/") {
-			datasetPath = rel
-		} else {
-			datasetPath = fmt.Sprintf("%s/containers/%s", cleanMainPool, c.ID)
-		}
-		_ = a.ensureContainerDataset(ctx, cleanMainPool, datasetPath, containerDir)
+	// Create dedicated ZFS dataset for container on target pool
+	targetPool, datasetPath, containerDir := resolveRootfsPoolAndDataset(c.RootfsPath, cleanMainPool, c.ID)
+	if targetPool != "" && datasetPath != "" {
+		_ = a.ensureContainerDataset(ctx, targetPool, datasetPath, containerDir)
 	}
 
 	// Create rootfs and container datasets/directories
@@ -2332,6 +2344,159 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.LxcContainer) (*
 	return &cp, nil
 }
 
+func (a *Adapter) migrateContainerRootfs(ctx context.Context, c *domain.LxcContainer, newRootfsPath string) error {
+	oldRootfs := filepath.Clean(c.RootfsPath)
+	newRootfs := filepath.Clean(newRootfsPath)
+	if newRootfs == "" || newRootfs == "." || oldRootfs == newRootfs {
+		return nil
+	}
+
+	configPath := fmt.Sprintf("/var/lib/lxc/%s/config", c.ID)
+	hasHostConfig := false
+	if _, err := os.Stat(configPath); err == nil {
+		hasHostConfig = true
+	}
+
+	wasRunning := c.State == "RUNNING"
+	if hasHostConfig {
+		if st := a.fetchSingleContainerStatus(ctx, c.ID); st != nil {
+			wasRunning = (st.state == "RUNNING")
+		}
+		if wasRunning {
+			if _, err := exec.LookPath("lxc-stop"); err == nil {
+				slog.Info("[lxc] stopping container for rootfs pool migration", "container_id", c.ID, "from", oldRootfs, "to", newRootfs)
+				if err := exec.CommandContext(ctx, "lxc-stop", "-n", c.ID, "-t", "15").Run(); err != nil {
+					_ = exec.CommandContext(ctx, "lxc-stop", "-n", c.ID, "-k").Run()
+				}
+				c.State = "STOPPED"
+			}
+		}
+	}
+
+	cleanMainPool := strings.TrimPrefix(strings.TrimSpace(a.mainPool), "zfsPools/")
+	if cleanMainPool == "" {
+		cleanMainPool = strings.TrimPrefix(strings.TrimSpace(config.GetGlobal().System.MainPool), "zfsPools/")
+	}
+	oldPool, oldDataset, oldContainerDir := resolveRootfsPoolAndDataset(oldRootfs, cleanMainPool, c.ID)
+	newPool, newDataset, newContainerDir := resolveRootfsPoolAndDataset(newRootfs, cleanMainPool, c.ID)
+
+	migratedViaZfs := false
+	if _, err := exec.LookPath("zfs"); err == nil && oldDataset != "" && newDataset != "" && oldDataset != newDataset {
+		if err := exec.CommandContext(ctx, "zfs", "list", "-H", "-o", "name", oldDataset).Run(); err == nil {
+			newParent := filepath.Dir(newDataset)
+			if newParent != newPool && newParent != "." {
+				_ = exec.CommandContext(ctx, "zfs", "create", "-p", newParent).Run()
+			}
+			if err := exec.CommandContext(ctx, "zfs", "list", "-H", "-o", "name", newDataset).Run(); err == nil {
+				if !hasInitBinary(newRootfs) {
+					_ = exec.CommandContext(ctx, "zfs", "destroy", "-r", newDataset).Run()
+				}
+			}
+
+			snapTag := fmt.Sprintf("migrate-%d", time.Now().UnixNano())
+			srcSnap := fmt.Sprintf("%s@%s", oldDataset, snapTag)
+			if out, err := exec.CommandContext(ctx, "zfs", "snapshot", srcSnap).CombinedOutput(); err != nil {
+				return fmt.Errorf("failed to snapshot source dataset %s: %s: %w", oldDataset, strings.TrimSpace(string(out)), err)
+			}
+
+			sendCmd := exec.CommandContext(ctx, "zfs", "send", srcSnap)
+			recvCmd := exec.CommandContext(ctx, "zfs", "receive", "-F", "-o", fmt.Sprintf("mountpoint=%s", newContainerDir), newDataset)
+			pipe, err := sendCmd.StdoutPipe()
+			if err != nil {
+				_ = exec.CommandContext(ctx, "zfs", "destroy", srcSnap).Run()
+				return fmt.Errorf("failed to create pipe for zfs send: %w", err)
+			}
+			var sendStderr, recvStderr strings.Builder
+			sendCmd.Stderr = &sendStderr
+			recvCmd.Stdin = pipe
+			recvCmd.Stderr = &recvStderr
+
+			if err := sendCmd.Start(); err != nil {
+				_ = exec.CommandContext(ctx, "zfs", "destroy", srcSnap).Run()
+				return fmt.Errorf("failed to start zfs send: %w", err)
+			}
+			if err := recvCmd.Start(); err != nil {
+				_ = sendCmd.Process.Kill()
+				_ = sendCmd.Wait()
+				_ = exec.CommandContext(ctx, "zfs", "destroy", srcSnap).Run()
+				return fmt.Errorf("failed to start zfs receive: %w", err)
+			}
+			sendErr := sendCmd.Wait()
+			recvErr := recvCmd.Wait()
+
+			_ = exec.CommandContext(ctx, "zfs", "destroy", fmt.Sprintf("%s@%s", newDataset, snapTag)).Run()
+			_ = exec.CommandContext(ctx, "zfs", "destroy", srcSnap).Run()
+
+			if sendErr != nil || recvErr != nil {
+				return fmt.Errorf("zfs migration from %s to %s failed (send: %v %s, recv: %v %s)",
+					oldDataset, newDataset, sendErr, strings.TrimSpace(sendStderr.String()), recvErr, strings.TrimSpace(recvStderr.String()))
+			}
+
+			_ = exec.CommandContext(ctx, "zfs", "mount", newDataset).Run()
+			a.destroyContainerDataset(ctx, oldPool, oldDataset, oldContainerDir)
+			if oldContainerDir != "" && oldContainerDir != "/" && oldContainerDir != newContainerDir {
+				_ = os.RemoveAll(oldContainerDir)
+			}
+			migratedViaZfs = true
+			slog.Info("[lxc] migrated container ZFS dataset to new pool", "container_id", c.ID, "from", oldDataset, "to", newDataset)
+		}
+	}
+
+	if !migratedViaZfs {
+		if newPool != "" && newDataset != "" {
+			_ = a.ensureContainerDataset(ctx, newPool, newDataset, newContainerDir)
+		}
+		if err := os.MkdirAll(newRootfs, 0755); err != nil {
+			return fmt.Errorf("failed to create target rootfs directory %s: %w", newRootfs, err)
+		}
+		if oldRootfs != "" && oldRootfs != "." {
+			if fi, err := os.Stat(oldRootfs); err == nil && fi.IsDir() {
+				if _, err := exec.LookPath("rsync"); err == nil {
+					out, err := exec.CommandContext(ctx, "rsync", "-aHAX", "--numeric-ids", strings.TrimSuffix(oldRootfs, "/")+"/", strings.TrimSuffix(newRootfs, "/")+"/").CombinedOutput()
+					if err != nil {
+						return fmt.Errorf("rsync rootfs migration failed: %s: %w", strings.TrimSpace(string(out)), err)
+					}
+				} else {
+					out, err := exec.CommandContext(ctx, "cp", "-a", strings.TrimSuffix(oldRootfs, "/")+"/.", strings.TrimSuffix(newRootfs, "/")+"/").CombinedOutput()
+					if err != nil {
+						return fmt.Errorf("cp rootfs migration failed: %s: %w", strings.TrimSpace(string(out)), err)
+					}
+				}
+				if oldPool != "" && oldDataset != "" {
+					a.destroyContainerDataset(ctx, oldPool, oldDataset, oldContainerDir)
+				}
+				if oldContainerDir != "" && oldContainerDir != "/" && oldContainerDir != newContainerDir {
+					_ = os.RemoveAll(oldContainerDir)
+				}
+			}
+		}
+	}
+
+	c.RootfsPath = newRootfs
+	a.writeLxcConfig(*c)
+
+	if wasRunning {
+		if hasHostConfig {
+			if _, err := exec.LookPath("lxc-start"); err == nil {
+				logPath := fmt.Sprintf("/var/log/lxc/%s.log", c.ID)
+				_ = os.MkdirAll("/var/log/lxc", 0755)
+				_ = exec.CommandContext(ctx, "lxc-start", "-n", c.ID, "-d", "-s", "lxc.apparmor.profile=unconfined", "-l", "DEBUG", "-o", logPath).Run()
+				time.Sleep(300 * time.Millisecond)
+				if st := a.fetchSingleContainerStatus(ctx, c.ID); st != nil {
+					c.State = st.state
+					c.IPv4Address = st.ipv4
+				} else {
+					c.State = "RUNNING"
+				}
+			}
+		} else {
+			c.State = "RUNNING"
+		}
+	}
+
+	return nil
+}
+
 func (a *Adapter) UpdateContainer(ctx context.Context, c domain.LxcContainer, fields []string) (*domain.LxcContainer, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -2341,12 +2506,16 @@ func (a *Adapter) UpdateContainer(ctx context.Context, c domain.LxcContainer, fi
 	}
 	current := *currentPtr
 
+	var requestedRootfs string
 	if len(fields) == 0 {
 		if c.ContainerName != "" {
 			current.ContainerName = c.ContainerName
 		}
 		current.Autostart = c.Autostart
 		current.Unprivileged = c.Unprivileged
+		if c.RootfsPath != "" {
+			requestedRootfs = c.RootfsPath
+		}
 		if c.MemoryLimitMiB > 0 {
 			current.MemoryLimitMiB = c.MemoryLimitMiB
 		}
@@ -2370,6 +2539,10 @@ func (a *Adapter) UpdateContainer(ctx context.Context, c domain.LxcContainer, fi
 				current.Autostart = c.Autostart
 			case "unprivileged":
 				current.Unprivileged = c.Unprivileged
+			case "rootfspath":
+				if c.RootfsPath != "" {
+					requestedRootfs = c.RootfsPath
+				}
 			case "memorylimitmib":
 				if c.MemoryLimitMiB > 0 {
 					current.MemoryLimitMiB = c.MemoryLimitMiB
@@ -2387,6 +2560,12 @@ func (a *Adapter) UpdateContainer(ctx context.Context, c domain.LxcContainer, fi
 			case "networkbridge":
 				current.NetworkBridge = c.NetworkBridge
 			}
+		}
+	}
+
+	if requestedRootfs != "" && filepath.Clean(requestedRootfs) != filepath.Clean(current.RootfsPath) {
+		if err := a.migrateContainerRootfs(ctx, &current, requestedRootfs); err != nil {
+			return nil, err
 		}
 	}
 
@@ -2435,17 +2614,9 @@ func (a *Adapter) DeleteContainer(ctx context.Context, id string, force bool) er
 	if cleanMainPool == "" {
 		cleanMainPool = strings.TrimPrefix(strings.TrimSpace(config.GetGlobal().System.MainPool), "zfsPools/")
 	}
-	if cleanMainPool != "" {
-		containerDir := filepath.Dir(c.RootfsPath)
-		cleanDir := filepath.Clean(containerDir)
-		rel := strings.TrimPrefix(strings.TrimPrefix(cleanDir, "/mnt/"), "/")
-		var datasetPath string
-		if strings.HasPrefix(rel, cleanMainPool+"/") {
-			datasetPath = rel
-		} else {
-			datasetPath = fmt.Sprintf("%s/containers/%s", cleanMainPool, id)
-		}
-		a.destroyContainerDataset(ctx, cleanMainPool, datasetPath, containerDir)
+	targetPool, datasetPath, containerDir := resolveRootfsPoolAndDataset(c.RootfsPath, cleanMainPool, id)
+	if targetPool != "" && datasetPath != "" {
+		a.destroyContainerDataset(ctx, targetPool, datasetPath, containerDir)
 	}
 
 	// Remove container directory if still remaining (e.g. non-ZFS fallback)

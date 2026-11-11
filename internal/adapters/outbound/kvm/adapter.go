@@ -290,6 +290,16 @@ type domainXML struct {
 	Name          string    `xml:"name"`
 	UUID          string    `xml:"uuid"`
 	Description   string    `xml:"description"`
+	Metadata      struct {
+		NasctlOS struct {
+			Variant string `xml:"variant,attr"`
+		} `xml:"os"`
+		Libosinfo struct {
+			OS struct {
+				ID string `xml:"id,attr"`
+			} `xml:"os"`
+		} `xml:"libosinfo"`
+	} `xml:"metadata"`
 	Memory        memoryXML `xml:"memory"`
 	CurrentMemory memoryXML `xml:"currentMemory"`
 	VCPU          struct {
@@ -516,6 +526,46 @@ func (a *Adapter) sanitizeAndEnsureDisks(vm *domain.VirtualMachine) bool {
 	return changed
 }
 
+func inferVMOSVariant(vm *domain.VirtualMachine) string {
+	candidates := []string{vm.VMName, vm.ID, vm.Description, vm.CdromIsoImage, vm.ISOImage}
+	for _, cd := range vm.Cdroms {
+		if cd.IsoPath != "" {
+			candidates = append(candidates, cd.IsoPath)
+		}
+	}
+	combined := strings.ToLower(strings.Join(candidates, " "))
+	switch {
+	case strings.Contains(combined, "windows") || strings.Contains(combined, "win10") || strings.Contains(combined, "win11") || strings.Contains(combined, "win2k") || strings.Contains(combined, "win-"):
+		return "win2k22"
+	case strings.Contains(combined, "ubuntu"):
+		return "ubuntu24.04"
+	case strings.Contains(combined, "debian") || strings.Contains(combined, "mynas"):
+		return "debian12"
+	case strings.Contains(combined, "almalinux") || strings.Contains(combined, "alma") || strings.Contains(combined, "rocky") || strings.Contains(combined, "rhel") || strings.Contains(combined, "centos"):
+		return "almalinux9"
+	case strings.Contains(combined, "freebsd") || strings.Contains(combined, "opnsense") || strings.Contains(combined, "pfsense") || strings.Contains(combined, "truenas-core"):
+		return "freebsd14.0"
+	case strings.Contains(combined, "arch"):
+		return "archlinux"
+	case strings.Contains(combined, "fedora"):
+		return "fedora"
+	case strings.Contains(combined, "alpine"):
+		return "alpine"
+	case strings.Contains(combined, "proxmox"):
+		return "proxmox"
+	case strings.Contains(combined, "truenas"):
+		return "truenas"
+	case strings.Contains(combined, "homeassistant") || strings.Contains(combined, "haos"):
+		return "homeassistant"
+	case strings.Contains(combined, "talos"):
+		return "talos"
+	case strings.Contains(combined, "nixos"):
+		return "nixos"
+	default:
+		return ""
+	}
+}
+
 func (a *Adapter) getDomainFromVirsh(ctx context.Context, name string) (*domain.VirtualMachine, error) {
 	cmd := exec.CommandContext(ctx, "virsh", "dumpxml", "--inactive", name)
 	xmlBytes, err := cmd.CombinedOutput()
@@ -543,11 +593,17 @@ func (a *Adapter) getDomainFromVirsh(ctx context.Context, name string) (*domain.
 		machType = "q35"
 	}
 
+	osVariant := strings.TrimSpace(doc.Metadata.NasctlOS.Variant)
+	if osVariant == "" && doc.Metadata.Libosinfo.OS.ID != "" {
+		osVariant = strings.TrimSpace(doc.Metadata.Libosinfo.OS.ID)
+	}
+
 	vm := domain.VirtualMachine{
 		ID:               doc.Name,
 		VMName:           doc.Name,
 		UUID:             doc.UUID,
 		Description:      doc.Description,
+		OSVariant:        osVariant,
 		MemoryMiB:        doc.Memory.ToMiB(),
 		BalloonMinMiB:    doc.CurrentMemory.ToMiB(),
 		VCPUs:            doc.VCPU.Value,
@@ -660,6 +716,12 @@ func (a *Adapter) getDomainFromVirsh(ctx context.Context, name string) (*domain.
 	}
 
 	a.mu.Lock()
+	if prev, ok := a.vms[name]; ok && vm.OSVariant == "" && prev.OSVariant != "" {
+		vm.OSVariant = prev.OSVariant
+	}
+	if vm.OSVariant == "" {
+		vm.OSVariant = inferVMOSVariant(&vm)
+	}
 	a.vms[name] = vm
 	a.mu.Unlock()
 
@@ -1062,6 +1124,31 @@ func (a *Adapter) enrichRuntimeTelemetry(ctx context.Context, vm *domain.Virtual
 				}
 			}
 		}
+
+		osCtx, osCancel := context.WithTimeout(ctx, 1*time.Second)
+		defer osCancel()
+		osCmd := exec.CommandContext(osCtx, "virsh", "qemu-agent-command", vm.ID, `{"execute":"guest-get-osinfo"}`)
+		if osOut, osErr := osCmd.Output(); osErr == nil && len(osOut) > 0 {
+			var osResp struct {
+				Return struct {
+					ID         string `json:"id"`
+					Name       string `json:"name"`
+					PrettyName string `json:"pretty-name"`
+				} `json:"return"`
+			}
+			if err := json.Unmarshal(osOut, &osResp); err == nil {
+				if osResp.Return.PrettyName != "" {
+					vm.GuestOSName = osResp.Return.PrettyName
+				} else if osResp.Return.Name != "" {
+					vm.GuestOSName = osResp.Return.Name
+				} else if osResp.Return.ID != "" {
+					vm.GuestOSName = osResp.Return.ID
+				}
+				if vm.GuestOSName != "" {
+					vm.AgentRunning = true
+				}
+			}
+		}
 	}
 }
 
@@ -1244,11 +1331,23 @@ func (a *Adapter) UpdateVM(ctx context.Context, vm domain.VirtualMachine, fields
 	if vm.BootOrder != "" {
 		existing.BootOrder = vm.BootOrder
 	}
+	if vm.OSVariant != "" {
+		existing.OSVariant = vm.OSVariant
+	}
+	if vm.Description != "" {
+		existing.Description = vm.Description
+	}
 	hasDisksPath := false
 	hasNicsPath := false
 	hasCdromsPath := false
 	hasAutostartPath := false
 	for _, p := range fields {
+		if p == "os_variant" || p == "osVariant" {
+			existing.OSVariant = vm.OSVariant
+		}
+		if p == "description" {
+			existing.Description = vm.Description
+		}
 		if p == "boot_order" || p == "bootOrder" {
 			existing.BootOrder = vm.BootOrder
 		}
@@ -2282,6 +2381,12 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 	if vm.Description != "" {
 		sb.WriteString(fmt.Sprintf(`  <description>%s</description>
 `, vm.Description))
+	}
+	if vm.OSVariant != "" {
+		sb.WriteString(fmt.Sprintf(`  <metadata>
+    <nasctl:os xmlns:nasctl='https://mynas.local/xmlns/kvm/1.0' variant='%s'/>
+  </metadata>
+`, vm.OSVariant))
 	}
 	sb.WriteString(fmt.Sprintf(`  <memory unit='MiB'>%d</memory>
   <currentMemory unit='MiB'>%d</currentMemory>

@@ -11,6 +11,7 @@ import {
   mdiCubeOutline,
   mdiDatabase,
   mdiDisc,
+  mdiDocker,
   mdiFolderNetwork,
   mdiHarddisk,
   mdiLayers,
@@ -28,9 +29,13 @@ import {
   selectResource,
 } from '../store';
 import { navigateTo } from '../router';
+import { getDockerAppIcon, getLxcContainerIcon, getVmIcon } from '../utils/appIcons';
 
 const searchQuery = ref('');
 const searchInputRef = ref<HTMLInputElement | null>(null);
+const failedVmIcons = ref<Record<string, boolean>>({});
+const failedLxcIcons = ref<Record<string, boolean>>({});
+const failedDockerIcons = ref<Record<string, boolean>>({});
 
 // Tree collapse states (open main sections by default for immediate visibility)
 const openSections = ref<Record<string, boolean>>({
@@ -412,17 +417,29 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
                 @keydown.enter.prevent="handleSelect(`vm:${vm.vmName || vm.name.replace(/^virtualMachines\//, '')}`, 'kvm')"
                 @keydown.space.prevent="handleSelect(`vm:${vm.vmName || vm.name.replace(/^virtualMachines\//, '')}`, 'kvm')"
               >
-                <!-- Power State Glyph -->
+                <img
+                  v-if="getVmIcon(vm) && !failedVmIcons[vm.name]"
+                  :src="getVmIcon(vm)"
+                  :alt="vm.vmName"
+                  class="tree-item-icon"
+                  :class="{ 'is-stopped': vm.state !== 'RUNNING' }"
+                  :title="`Status: ${vm.state === 'RUNNING' ? 'running' : 'stopped'}`"
+                  @error="failedVmIcons[vm.name] = true"
+                />
                 <MdiIcon
-                  :path="mdiCircle"
-                  size="9"
-                  :style="{
-                    color: vm.state === 'RUNNING' ? 'var(--success)' : 'var(--text-muted)',
-                    opacity: vm.state === 'RUNNING' ? 1 : 0.6,
-                  }"
+                  v-else
+                  :path="mdiMonitor"
+                  size="14"
+                  class="tree-item-fallback-icon"
+                  :class="{ 'is-stopped': vm.state !== 'RUNNING' }"
+                  style="color: var(--accent-primary)"
                   :title="`Status: ${vm.state === 'RUNNING' ? 'running' : 'stopped'}`"
                 />
-                <span class="tree-label font-sm" :title="vm.vmName">
+                <span
+                  class="tree-label font-sm"
+                  :class="{ 'is-stopped': vm.state !== 'RUNNING' }"
+                  :title="vm.vmName"
+                >
                   {{ vm.vmName }}
                 </span>
               </div>
@@ -480,25 +497,38 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
                 @keydown.enter.prevent="handleSelect(`lxc:${c.name.replace(/^lxcContainers\//, '')}`, 'lxc')"
                 @keydown.space.prevent="handleSelect(`lxc:${c.name.replace(/^lxcContainers\//, '')}`, 'lxc')"
               >
+                <img
+                  v-if="getLxcContainerIcon(c) && !failedLxcIcons[c.name]"
+                  :src="getLxcContainerIcon(c)"
+                  :alt="c.containerName || c.name"
+                  class="tree-item-icon"
+                  :class="{ 'is-stopped': c.state !== 'RUNNING' }"
+                  :title="`Status: ${(c.state || 'stopped').toLowerCase()}`"
+                  @error="failedLxcIcons[c.name] = true"
+                />
+                <MdiIcon
+                  v-else
+                  :path="mdiCubeOutline"
+                  size="14"
+                  class="tree-item-fallback-icon"
+                  :class="{ 'is-stopped': c.state !== 'RUNNING' }"
+                  style="color: var(--accent-secondary)"
+                  :title="`Status: ${(c.state || 'stopped').toLowerCase()}`"
+                />
+                <span
+                  class="tree-label font-sm"
+                  :class="{ 'is-stopped': c.state !== 'RUNNING' }"
+                  :title="c.containerName || c.name"
+                >
+                  {{ c.containerName || c.name.replace('lxcContainers/', '') }}
+                </span>
                 <MdiIcon
                   v-if="c.state === 'FROZEN'"
                   :path="mdiSnowflake"
                   size="11"
-                  style="color: var(--info)"
+                  style="color: var(--info); margin-left: auto; flex-shrink: 0"
+                  title="Status: frozen"
                 />
-                <MdiIcon
-                  v-else
-                  :path="mdiCircle"
-                  size="9"
-                  :style="{
-                    color: c.state === 'RUNNING' ? 'var(--success)' : 'var(--text-muted)',
-                    opacity: c.state === 'RUNNING' ? 1 : 0.6,
-                  }"
-                  :title="`Status: ${(c.state || 'stopped').toLowerCase()}`"
-                />
-                <span class="tree-label font-sm" :title="c.containerName || c.name">
-                  {{ c.containerName || c.name.replace('lxcContainers/', '') }}
-                </span>
               </div>
             </div>
           </div>
@@ -554,17 +584,27 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
                 @keydown.enter.prevent="handleSelect(`docker:${a.appId || a.name.replace(/^dockerApps\//, '')}`, 'docker')"
                 @keydown.space.prevent="handleSelect(`docker:${a.appId || a.name.replace(/^dockerApps\//, '')}`, 'docker')"
               >
+                <img
+                  v-if="getDockerAppIcon(a) && !failedDockerIcons[a.name]"
+                  :src="getDockerAppIcon(a)"
+                  :alt="a.title || a.appId || a.name"
+                  class="tree-item-icon"
+                  :class="{ 'is-stopped': a.state !== 'RUNNING' }"
+                  :title="`Status: ${(a.state || 'stopped').toLowerCase()}`"
+                  @error="failedDockerIcons[a.name] = true"
+                />
                 <MdiIcon
-                  :path="mdiCircle"
-                  size="9"
-                  :style="{
-                    color: a.state === 'RUNNING' ? 'var(--success)' : 'var(--text-muted)',
-                    opacity: a.state === 'RUNNING' ? 1 : 0.6,
-                  }"
+                  v-else
+                  :path="mdiDocker"
+                  size="14"
+                  class="tree-item-fallback-icon"
+                  :class="{ 'is-stopped': a.state !== 'RUNNING' }"
+                  style="color: var(--info-text)"
                   :title="`Status: ${(a.state || 'stopped').toLowerCase()}`"
                 />
                 <span
                   class="tree-label font-sm"
+                  :class="{ 'is-stopped': a.state !== 'RUNNING' }"
                   :title="a.title || a.appId || a.name.replace(/^dockerApps\//, '')"
                 >
                   {{ a.title || a.appId || a.name.replace(/^dockerApps\//, '') }}
@@ -833,6 +873,25 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
 
 .tree-leaf {
   padding: 3px 8px;
+}
+
+.tree-item-icon {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  flex-shrink: 0;
+  border-radius: 2px;
+  transition: filter 0.15s ease, opacity 0.15s ease;
+}
+
+.tree-item-icon.is-stopped,
+.tree-item-fallback-icon.is-stopped {
+  filter: grayscale(100%);
+  opacity: 0.45;
+}
+
+.tree-row:not(.selected) .tree-label.is-stopped {
+  color: var(--text-muted);
 }
 
 .tree-label {

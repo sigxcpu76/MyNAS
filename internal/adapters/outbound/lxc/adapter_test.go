@@ -2,7 +2,6 @@ package lxc_test
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -49,17 +48,37 @@ func TestLxcAdapter_MainPoolEnforcement(t *testing.T) {
 		t.Fatalf("unexpected rootfs path: %s", c2.RootfsPath)
 	}
 
-	// 3. Rootfs on another pool is rejected
-	_, err = adapter.CreateContainer(ctx, domain.LxcContainer{
-		ID:           "ct-invalid",
+	// 3. Rootfs on another pool is allowed and can be migrated via UpdateContainer
+	srcPoolDir := t.TempDir()
+	dstPoolDir := t.TempDir()
+	srcRootfs := filepath.Join(srcPoolDir, "rootfs")
+	dstRootfs := filepath.Join(dstPoolDir, "rootfs")
+
+	c3, err := adapter.CreateContainer(ctx, domain.LxcContainer{
+		ID:           "ct-multipool",
 		Distribution: "ubuntu",
-		RootfsPath:   "/otherpool/lxc/invalid/rootfs",
+		RootfsPath:   srcRootfs,
 	})
-	if err == nil {
-		t.Fatalf("expected error when rootfs is not on main pool tank, got nil")
+	if err != nil {
+		t.Fatalf("expected success when rootfs is on custom pool path, got: %v", err)
 	}
-	if !errors.Is(err, domain.ErrInvalidArgument) {
-		t.Fatalf("expected ErrInvalidArgument, got: %v", err)
+	if err := os.WriteFile(filepath.Join(c3.RootfsPath, "marker.txt"), []byte("migrated-ok"), 0644); err != nil {
+		t.Fatalf("failed to write marker file: %v", err)
+	}
+
+	updated, err := adapter.UpdateContainer(ctx, domain.LxcContainer{
+		ID:         "ct-multipool",
+		RootfsPath: dstRootfs,
+	}, []string{"rootfs_path"})
+	if err != nil {
+		t.Fatalf("expected UpdateContainer rootfs migration to succeed, got: %v", err)
+	}
+	if updated.RootfsPath != dstRootfs {
+		t.Fatalf("expected migrated RootfsPath %q, got %q", dstRootfs, updated.RootfsPath)
+	}
+	data, err := os.ReadFile(filepath.Join(dstRootfs, "marker.txt"))
+	if err != nil || string(data) != "migrated-ok" {
+		t.Fatalf("expected marker file in migrated rootfs, got %q (err=%v)", string(data), err)
 	}
 }
 

@@ -119,7 +119,14 @@ describe('Proxmox-Style Task Console & Resource System', () => {
   it('renders ResourceTree with node hierarchy and status indicators', async () => {
     nasState.pools = [{ name: 'fast', poolName: 'fast', state: 'ONLINE', size: 1000, allocated: 500, free: 500 } as any];
     nasState.vms = [{ name: 'virtualMachines/debian-server', vmName: 'debian-server', state: 'RUNNING' } as any];
-    nasState.lxcContainers = [{ name: 'lxcContainers/alpine', containerName: 'alpine', state: 'RUNNING' } as any];
+    nasState.lxcContainers = [
+      { name: 'lxcContainers/alpine', containerName: 'alpine', distribution: 'alpine', state: 'RUNNING' } as any,
+      { name: 'lxcContainers/debian-stopped', containerName: 'debian-stopped', distribution: 'debian', state: 'STOPPED' } as any,
+    ];
+    nasState.dockerApps = [
+      { name: 'dockerApps/plex', appId: 'plex', title: 'Plex', state: 'RUNNING' } as any,
+      { name: 'dockerApps/jellyfin', appId: 'jellyfin', title: 'Jellyfin', state: 'STOPPED' } as any,
+    ];
 
     const wrapper = mount(ResourceTree);
     expect(wrapper.text()).toContain('Storage');
@@ -128,6 +135,15 @@ describe('Proxmox-Style Task Console & Resource System', () => {
     expect(wrapper.text()).toContain('fast');
     expect(wrapper.text()).toContain('debian-server');
     expect(wrapper.text()).toContain('alpine');
+    expect(wrapper.text()).toContain('Plex');
+
+    const icons = wrapper.findAll('img.tree-item-icon');
+    expect(icons.length).toBe(5);
+    expect(icons[0].classes()).not.toContain('is-stopped'); // debian-server VM (running)
+    expect(icons[1].classes()).not.toContain('is-stopped'); // alpine LXC (running)
+    expect(icons[2].classes()).toContain('is-stopped'); // debian-stopped LXC
+    expect(icons[3].classes()).not.toContain('is-stopped'); // plex Docker (running)
+    expect(icons[4].classes()).toContain('is-stopped'); // jellyfin Docker (stopped)
   });
 
   it('selects unfocused section on first click and expands/collapses when already in focus', async () => {
