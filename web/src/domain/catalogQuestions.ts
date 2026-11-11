@@ -568,6 +568,7 @@ export function generateComposeFromQuestions(
   lines.push(`  ${serviceName}:`);
   lines.push(`    image: ${image}`);
   lines.push(`    container_name: ${serviceName}`);
+  lines.push(`    hostname: ${serviceName}`);
   lines.push('    restart: unless-stopped');
 
   if (hasUserConfig && puid && pgid) {

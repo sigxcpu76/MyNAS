@@ -925,6 +925,7 @@ func GenerateComposeFromQuestions(app domain.CatalogApp, answers map[string]stri
 	sb.WriteString(fmt.Sprintf("  %s:\n", serviceName))
 	sb.WriteString(fmt.Sprintf("    image: %s\n", image))
 	sb.WriteString(fmt.Sprintf("    container_name: %s\n", serviceName))
+	sb.WriteString(fmt.Sprintf("    hostname: %s\n", serviceName))
 	sb.WriteString("    restart: unless-stopped\n")
 
 	if puid != "" && pgid != "" && puid != "0" {

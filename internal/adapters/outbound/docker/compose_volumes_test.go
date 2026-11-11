@@ -145,4 +145,37 @@ services:
 	if strings.Contains(normalized, ":/data") {
 		t.Errorf("expected generic fallback :/data to be removed when specific /config exists, got:\n%s", normalized)
 	}
+	if !strings.Contains(normalized, "hostname: esphome") {
+		t.Errorf("expected hostname: esphome to be injected, got:\n%s", normalized)
+	}
+}
+
+func TestNormalizeComposeVolumes_InjectsServiceHostnames(t *testing.T) {
+	rawCompose := `services:
+  app:
+    image: nextcloud:apache
+  db:
+    image: postgres:16-alpine
+    container_name: nextcloud-postgres
+  redis:
+    image: redis:7-alpine
+    hostname: custom-redis-host
+  sidecar:
+    image: busybox:latest
+    network_mode: "service:app"
+`
+	normalized := NormalizeComposeVolumes("nextcloud", "tank", rawCompose)
+
+	if !strings.Contains(normalized, "hostname: nextcloud-app") {
+		t.Errorf("expected app service without container_name in multi-service app to get hostname: nextcloud-app, got:\n%s", normalized)
+	}
+	if !strings.Contains(normalized, "hostname: nextcloud-postgres") {
+		t.Errorf("expected db service with container_name to get hostname: nextcloud-postgres, got:\n%s", normalized)
+	}
+	if !strings.Contains(normalized, "hostname: custom-redis-host") {
+		t.Errorf("expected redis service with explicit hostname to preserve hostname: custom-redis-host, got:\n%s", normalized)
+	}
+	if strings.Contains(normalized, "hostname: nextcloud-sidecar") {
+		t.Errorf("expected sidecar sharing service network namespace not to get a conflicting hostname, got:\n%s", normalized)
+	}
 }

@@ -465,4 +465,21 @@ configs:
 `;
     expect(() => composeYamlToForm(badYaml, 'bad')).toThrow(/YAML syntax error/);
   });
+
+  it('sets default container hostname and preserves explicit hostname overrides', () => {
+    const form = createDefaultAppForm('jellyfin', 'Jellyfin');
+    form.services[0].name = 'app';
+    form.services[0].image = 'jellyfin/jellyfin:latest';
+
+    const generatedSingle = formToComposeYaml(form);
+    expect(generatedSingle).toContain('hostname: jellyfin');
+
+    // Explicit hostname override
+    form.services[0].hostname = 'custom-jellyfin-host';
+    const generatedCustom = formToComposeYaml(form);
+    expect(generatedCustom).toContain('hostname: custom-jellyfin-host');
+
+    const parsed = composeYamlToForm(generatedCustom, 'jellyfin', 'Jellyfin');
+    expect(parsed.services[0].hostname).toBe('custom-jellyfin-host');
+  });
 });

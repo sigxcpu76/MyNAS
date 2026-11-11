@@ -248,6 +248,9 @@ func GenerateComposeYAML(c domain.DockerContainer) string {
 	sb.WriteString("services:\n")
 	sb.WriteString(fmt.Sprintf("  %s:\n", serviceName))
 	sb.WriteString(fmt.Sprintf("    container_name: %s\n", c.ID))
+	if h := sanitizeDockerHostname(serviceName); h != "" && !strings.HasPrefix(c.NetworkMode, "service:") && !strings.HasPrefix(c.NetworkMode, "container:") {
+		sb.WriteString(fmt.Sprintf("    hostname: %s\n", h))
+	}
 	sb.WriteString(fmt.Sprintf("    image: %s\n", c.Image))
 	if c.RestartPolicy != "" {
 		sb.WriteString(fmt.Sprintf("    restart: %q\n", c.RestartPolicy))
@@ -588,6 +591,9 @@ func (a *Adapter) CreateContainer(ctx context.Context, c domain.DockerContainer)
 			"Env":          c.Environment,
 			"ExposedPorts": exposedPorts,
 			"HostConfig":   hostConfig,
+		}
+		if h := sanitizeDockerHostname(c.ID); h != "" && !strings.HasPrefix(c.NetworkMode, "service:") && !strings.HasPrefix(c.NetworkMode, "container:") {
+			createPayload["Hostname"] = h
 		}
 
 		bodyBytes, _ := json.Marshal(createPayload)
@@ -1315,7 +1321,35 @@ func (a *Adapter) fetchLiveContainers(ctx context.Context) []dockerContainerSumm
 	return liveContainers
 }
 
-// ListApps returns all deployed Docker Compose Applications.
+// isManagedUnit returns true if the given app/container ID has a persisted compose.yaml in a.unitsDir.
+func (a *Adapter) isManagedUnit(id string) bool {
+	if id == "" || a.unitsDir == "" {
+		return false
+	}
+	composePath := filepath.Join(a.unitsDir, id, "compose.yaml")
+	_, err := os.Stat(composePath)
+	return err == nil
+}
+
+// isExternalComposeWorkingDir returns true if a container carries a compose working_dir label
+// that points outside of NaN's managed unitsDir.
+func (a *Adapter) isExternalComposeWorkingDir(workingDir, appID string) bool {
+	workingDir = strings.TrimSpace(workingDir)
+	if workingDir == "" || a.unitsDir == "" {
+		return false
+	}
+	cleanWork := filepath.Clean(workingDir)
+	cleanUnits := filepath.Clean(a.unitsDir)
+	if cleanWork == filepath.Join(cleanUnits, appID) {
+		return false
+	}
+	if strings.HasPrefix(cleanWork, cleanUnits+string(filepath.Separator)) {
+		return false
+	}
+	return true
+}
+
+// ListApps returns all deployed Docker Compose Applications managed by NaN.
 func (a *Adapter) ListApps(ctx context.Context) ([]domain.DockerApp, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -1325,19 +1359,9 @@ func (a *Adapter) ListApps(ctx context.Context) ([]domain.DockerApp, error) {
 	appIDs := make(map[string]bool)
 	if entries, err := os.ReadDir(a.unitsDir); err == nil {
 		for _, e := range entries {
-			if e.IsDir() {
-				composePath := filepath.Join(a.unitsDir, e.Name(), "compose.yaml")
-				if _, err := os.Stat(composePath); err == nil {
-					appIDs[e.Name()] = true
-				}
+			if e.IsDir() && a.isManagedUnit(e.Name()) {
+				appIDs[e.Name()] = true
 			}
-		}
-	}
-
-	// Also discover any compose projects running on host docker
-	for _, c := range liveContainers {
-		if proj := c.Labels["com.docker.compose.project"]; proj != "" {
-			appIDs[proj] = true
 		}
 	}
 
@@ -1361,20 +1385,8 @@ func (a *Adapter) GetApp(ctx context.Context, id string) (*domain.DockerApp, err
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	composePath := filepath.Join(a.unitsDir, id, "compose.yaml")
-	if _, err := os.Stat(composePath); err != nil {
-		// Check if it's running on host docker
-		liveContainers := a.fetchLiveContainers(ctx)
-		found := false
-		for _, c := range liveContainers {
-			if c.Labels["com.docker.compose.project"] == id {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil, fmt.Errorf("app %q not found", id)
-		}
+	if !a.isManagedUnit(id) {
+		return nil, fmt.Errorf("app %q not found", id)
 	}
 
 	liveContainers := a.fetchLiveContainers(ctx)
@@ -2087,9 +2099,12 @@ func (a *Adapter) buildApp(ctx context.Context, appID string, liveContainers []d
 	failedCount := 0
 
 	for _, c := range liveContainers {
+		if a.isExternalComposeWorkingDir(c.Labels["com.docker.compose.project.working_dir"], appID) {
+			continue
+		}
 		proj := c.Labels["com.docker.compose.project"]
 		isMatch := (proj == appID)
-		if !isMatch {
+		if !isMatch && proj == "" && !a.hasCompose {
 			for _, n := range c.Names {
 				cleanName := strings.TrimPrefix(n, "/")
 				if cleanName == appID || strings.HasPrefix(cleanName, appID+"-") || strings.HasPrefix(cleanName, appID+"_") {
@@ -2503,11 +2518,18 @@ func (a *Adapter) watchDockerEvents(ctx context.Context, onEvent func(domain.Eve
 				}
 				project := msg.Actor.Attributes["com.docker.compose.project"]
 				service := msg.Actor.Attributes["com.docker.compose.service"]
+				workDir := msg.Actor.Attributes["com.docker.compose.project.working_dir"]
 
 				var resource string
 				if project != "" {
+					if !a.isManagedUnit(project) || a.isExternalComposeWorkingDir(workDir, project) {
+						continue
+					}
 					resource = "dockerApps/" + project
 				} else {
+					if !a.isManagedUnit(name) {
+						continue
+					}
 					resource = "dockerContainers/" + name
 				}
 
@@ -2844,6 +2866,9 @@ func (a *Adapter) isContainerOfApp(c dockerContainerSummary, appID string) bool 
 	}
 	cleanAppID := strings.ToLower(strings.TrimSpace(appID))
 	if c.Labels != nil {
+		if a.isExternalComposeWorkingDir(c.Labels["com.docker.compose.project.working_dir"], cleanAppID) {
+			return false
+		}
 		proj := strings.ToLower(c.Labels["com.docker.compose.project"])
 		nasID := strings.ToLower(c.Labels["nas.app.id"])
 		if proj == cleanAppID || nasID == cleanAppID {
@@ -2853,6 +2878,9 @@ func (a *Adapter) isContainerOfApp(c dockerContainerSummary, appID string) bool 
 		cleanTarget := strings.ReplaceAll(cleanAppID, "-", "")
 		if cleanProj == cleanTarget && cleanProj != "" {
 			return true
+		}
+		if proj != "" {
+			return false
 		}
 	}
 	for _, n := range c.Names {

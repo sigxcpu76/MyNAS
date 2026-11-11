@@ -31,6 +31,7 @@ export interface ComposeServiceModel {
   id: string; // Client UI row id
   name: string; // Service key in compose (e.g. "web", "db", "redis")
   containerName: string;
+  hostname?: string;
   image: string;
   restart: 'unless-stopped' | 'always' | 'on-failure' | 'no' | string;
   command: string;
@@ -152,11 +153,51 @@ export const COMPOSE_CPU_LIMIT_OPTIONS = [
   '32',
 ] as const;
 
+export function sanitizeDockerHostname(raw: string): string {
+  if (!raw) return '';
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[_. ]+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 63)
+    .replace(/-+$/g, '');
+}
+
+export function resolveDefaultServiceHostname(
+  appId: string,
+  serviceName: string,
+  containerName?: string,
+  totalServices = 1
+): string {
+  if (containerName && !containerName.includes('$')) {
+    const h = sanitizeDockerHostname(containerName);
+    if (h) return h;
+  }
+  const cleanApp = sanitizeDockerHostname(appId);
+  const cleanSvc = sanitizeDockerHostname(serviceName);
+  if (totalServices <= 1) {
+    if (cleanApp && cleanApp !== 'app') return cleanApp;
+    if (cleanSvc) return cleanSvc;
+    return cleanApp;
+  }
+  if (cleanApp && cleanApp !== 'app') {
+    if (!cleanSvc || cleanSvc === cleanApp || cleanSvc.startsWith(`${cleanApp}-`)) {
+      return cleanSvc || cleanApp;
+    }
+    return sanitizeDockerHostname(`${cleanApp}-${cleanSvc}`);
+  }
+  return cleanSvc;
+}
+
 export function createDefaultService(name = 'app', image = ''): ComposeServiceModel {
   return {
     id: generateUid(),
     name,
     containerName: '',
+    hostname: '',
     image,
     restart: 'unless-stopped',
     command: '',
@@ -362,6 +403,7 @@ export function composeYamlToForm(
       id: generateUid(),
       name: svcName,
       containerName: svc.container_name || '',
+      hostname: svc.hostname ? String(svc.hostname).trim() : '',
       image: svc.image || '',
       restart: svc.restart || 'unless-stopped',
       command: Array.isArray(svc.command)
@@ -604,7 +646,7 @@ export function composeYamlToForm(
 
     // Preserve custom or unrecognized service attributes (e.g. labels, healthcheck, cap_add, user, shm_size, deploy, etc.)
     const knownKeys = new Set([
-      'container_name', 'image', 'restart', 'command', 'ports', 'expose',
+      'container_name', 'hostname', 'image', 'restart', 'command', 'ports', 'expose',
       'environment', 'volumes', 'configs', 'depends_on', 'network_mode', 'networks',
       'mem_limit', 'cpus', 'privileged', 'devices', 'runtime', 'labels'
     ]);
@@ -918,6 +960,18 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
 
     if (svc.containerName.trim()) {
       svcObj.container_name = svc.containerName.trim();
+    }
+
+    const netMode = (svc.networkMode || '').trim();
+    const sharesContainerNet = netMode.startsWith('service:') || netMode.startsWith('container:');
+    if (!sharesContainerNet) {
+      const explicitHost = (svc.hostname || '').trim();
+      const resolvedHost =
+        explicitHost ||
+        resolveDefaultServiceHostname(form.appId, svcKey, svc.containerName, form.services.length);
+      if (resolvedHost) {
+        svcObj.hostname = resolvedHost;
+      }
     }
 
     if (svc.image.trim()) {

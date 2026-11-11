@@ -17,6 +17,7 @@ import {
   formToComposeYaml,
   generateRandomHighPort,
   generateUid,
+  resolveDefaultServiceHostname,
 } from '../../domain/composeModel';
 import { nasState, notify } from '../store';
 import { generateNanosecondId, toZfsSafeSlug } from '../../domain/id';
@@ -469,6 +470,7 @@ function duplicateService(svc: ComposeServiceModel) {
   cloned.id = generateUid();
   cloned.name = `${svc.name}-copy`;
   cloned.containerName = svc.containerName ? `${svc.containerName}-copy` : '';
+  cloned.hostname = svc.hostname ? `${svc.hostname}-copy` : '';
   form.services.push(cloned);
   activeServiceId.value = cloned.id;
 }
@@ -1176,7 +1178,7 @@ function copyYaml() {
 
           <!-- Sub-Tab: General -->
           <div v-if="serviceSubTab === 'general'">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 12px">
               <div>
                 <label class="form-label">Service Key *</label>
                 <input
@@ -1197,6 +1199,18 @@ function copyYaml() {
                   class="form-input mono"
                   placeholder="Optional, e.g. nextcloud-web"
                 />
+              </div>
+              <div>
+                <label class="form-label">Container Hostname</label>
+                <input
+                  v-model="activeService.hostname"
+                  type="text"
+                  class="form-input mono"
+                  :placeholder="resolveDefaultServiceHostname(form.appId, activeService.name, activeService.containerName, form.services.length) || 'e.g. nextcloud-web'"
+                />
+                <span style="font-size: 11px; color: var(--text-secondary)">
+                  Defaults to container/service name when blank.
+                </span>
               </div>
             </div>
 

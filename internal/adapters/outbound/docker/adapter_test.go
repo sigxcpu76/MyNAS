@@ -911,3 +911,57 @@ func TestDockerExecAttachMock(t *testing.T) {
 	}
 	_ = conn2.Close()
 }
+
+func TestListApps_ExcludesExternalComposeAndContainers(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/containers/json" {
+			raw := []map[string]any{
+				{
+					"Id":      "aaaa111122223333",
+					"Names":   []string{"/external-stack-web-1"},
+					"Image":   "nginx:alpine",
+					"State":   "running",
+					"Status":  "Up 1 hour",
+					"Created": 1700000000,
+					"Labels": map[string]string{
+						"com.docker.compose.project":             "external-stack",
+						"com.docker.compose.service":             "web",
+						"com.docker.compose.project.working_dir": "/opt/external/external-stack",
+					},
+				},
+				{
+					"Id":      "bbbb111122223333",
+					"Names":   []string{"/standalone-redis"},
+					"Image":   "redis:alpine",
+					"State":   "running",
+					"Status":  "Up 2 hours",
+					"Created": 1700000000,
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(raw)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	})
+
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	adapter := docker.NewAdapterWithClient(server.Client(), server.URL)
+	ctx := context.Background()
+
+	// Without any persisted NaN units on disk, external compose projects and standalone containers must not appear in ListApps
+	apps, err := adapter.ListApps(ctx)
+	if err != nil {
+		t.Fatalf("ListApps failed: %v", err)
+	}
+	if len(apps) != 0 {
+		t.Fatalf("expected 0 NaN-managed apps, got %d: %+v", len(apps), apps)
+	}
+
+	// GetApp on external compose project must return not found
+	if _, err := adapter.GetApp(ctx, "external-stack"); err == nil {
+		t.Fatalf("expected GetApp to fail for unmanaged external-stack")
+	}
+}

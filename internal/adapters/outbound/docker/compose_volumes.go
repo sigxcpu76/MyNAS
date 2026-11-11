@@ -64,6 +64,8 @@ func NormalizeComposeVolumes(appID, pool, composeYAML string) string {
 		}
 	}
 
+	totalServices := len(servicesNode.Content) / 2
+
 	for i := 1; i < len(servicesNode.Content); i += 2 {
 		svcMap := servicesNode.Content[i]
 		if svcMap.Kind != yaml.MappingNode {
@@ -75,9 +77,52 @@ func NormalizeComposeVolumes(appID, pool, composeYAML string) string {
 			svcName = servicesNode.Content[i-1].Value
 		}
 		image := ""
+		containerName := ""
+		networkMode := ""
+		hostnameValIdx := -1
+		insertAfterValIdx := -1
 		for k := 0; k < len(svcMap.Content); k += 2 {
-			if svcMap.Content[k].Value == "image" && k+1 < len(svcMap.Content) {
+			if k+1 >= len(svcMap.Content) {
+				break
+			}
+			switch svcMap.Content[k].Value {
+			case "image":
 				image = svcMap.Content[k+1].Value
+				if insertAfterValIdx == -1 {
+					insertAfterValIdx = k + 1
+				}
+			case "container_name":
+				containerName = svcMap.Content[k+1].Value
+				insertAfterValIdx = k + 1
+			case "hostname":
+				hostnameValIdx = k + 1
+			case "network_mode":
+				networkMode = strings.TrimSpace(svcMap.Content[k+1].Value)
+			}
+		}
+
+		// Ensure container hostname is set unless network_mode shares another container's UTS/network namespace
+		if !strings.HasPrefix(networkMode, "service:") && !strings.HasPrefix(networkMode, "container:") {
+			defaultHost := defaultServiceHostname(cleanAppID, svcName, containerName, totalServices)
+			if defaultHost != "" {
+				if hostnameValIdx != -1 {
+					if strings.TrimSpace(svcMap.Content[hostnameValIdx].Value) == "" {
+						svcMap.Content[hostnameValIdx].Value = defaultHost
+					}
+				} else {
+					hostKeyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: "hostname"}
+					hostValNode := &yaml.Node{Kind: yaml.ScalarNode, Value: defaultHost}
+					if insertAfterValIdx != -1 && insertAfterValIdx+1 <= len(svcMap.Content) {
+						idx := insertAfterValIdx + 1
+						updated := make([]*yaml.Node, 0, len(svcMap.Content)+2)
+						updated = append(updated, svcMap.Content[:idx]...)
+						updated = append(updated, hostKeyNode, hostValNode)
+						updated = append(updated, svcMap.Content[idx:]...)
+						svcMap.Content = updated
+					} else {
+						svcMap.Content = append(svcMap.Content, hostKeyNode, hostValNode)
+					}
+				}
 			}
 		}
 
@@ -383,4 +428,61 @@ func EnsureVolumeHostPaths(composeYAML string) {
 			}
 		}
 	}
+}
+
+// sanitizeDockerHostname converts a string into a valid RFC 1123 container hostname label.
+func sanitizeDockerHostname(raw string) string {
+	raw = strings.ToLower(strings.TrimSpace(raw))
+	if raw == "" {
+		return ""
+	}
+	var sb strings.Builder
+	prevHyphen := false
+	for i := 0; i < len(raw); i++ {
+		ch := raw[i]
+		if (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') {
+			sb.WriteByte(ch)
+			prevHyphen = false
+		} else if ch == '-' || ch == '_' || ch == '.' || ch == ' ' {
+			if sb.Len() > 0 && !prevHyphen {
+				sb.WriteByte('-')
+				prevHyphen = true
+			}
+		}
+	}
+	out := strings.Trim(sb.String(), "-")
+	if len(out) > 63 {
+		out = strings.TrimRight(out[:63], "-")
+	}
+	return out
+}
+
+// defaultServiceHostname computes a clean container hostname for a compose service.
+func defaultServiceHostname(appID, svcName, containerName string, totalServices int) string {
+	if containerName != "" && !strings.Contains(containerName, "$") {
+		if h := sanitizeDockerHostname(containerName); h != "" {
+			return h
+		}
+	}
+	cleanAppID := sanitizeDockerHostname(appID)
+	cleanSvc := sanitizeDockerHostname(svcName)
+	if totalServices <= 1 {
+		if cleanAppID != "" && cleanAppID != "app" {
+			return cleanAppID
+		}
+		if cleanSvc != "" {
+			return cleanSvc
+		}
+		return cleanAppID
+	}
+	if cleanAppID != "" && cleanAppID != "app" {
+		if cleanSvc == "" || cleanSvc == cleanAppID || strings.HasPrefix(cleanSvc, cleanAppID+"-") {
+			if cleanSvc != "" {
+				return cleanSvc
+			}
+			return cleanAppID
+		}
+		return sanitizeDockerHostname(cleanAppID + "-" + cleanSvc)
+	}
+	return cleanSvc
 }

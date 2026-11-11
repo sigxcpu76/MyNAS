@@ -66,6 +66,12 @@ const SERVICE_PROPERTY_COMPLETIONS: Completion[] = [
     type: 'property',
     boost: 90,
   }),
+  snippetCompletion('hostname: ${1:custom-hostname}', {
+    label: 'hostname:',
+    detail: 'Specify the internal hostname of the container',
+    type: 'property',
+    boost: 89,
+  }),
   snippetCompletion('restart: ${1:unless-stopped}', {
     label: 'restart:',
     detail: 'Container restart policy (always, unless-stopped, on-failure, no)',
