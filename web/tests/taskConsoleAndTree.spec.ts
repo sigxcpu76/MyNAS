@@ -130,6 +130,34 @@ describe('Proxmox-Style Task Console & Resource System', () => {
     expect(wrapper.text()).toContain('alpine');
   });
 
+  it('selects unfocused section on first click and expands/collapses when already in focus', async () => {
+    nasState.activeTab = 'overview';
+    nasState.selectedResourceId = 'node:local';
+
+    const wrapper = mount(ResourceTree);
+    const headers = wrapper.findAll('.tree-header-row');
+    const storageHeader = headers.find((h) => h.text().includes('Storage'))!;
+
+    // Initially expanded and not selected
+    expect(storageHeader.classes()).not.toContain('selected');
+    expect(storageHeader.attributes('aria-expanded')).toBe('true');
+
+    // First click when not in focus: selects Storage, stays expanded
+    await storageHeader.trigger('click');
+    expect(nasState.selectedResourceId).toBe('node:pools');
+    expect(nasState.activeTab).toBe('storage-pools');
+    expect(storageHeader.classes()).toContain('selected');
+    expect(storageHeader.attributes('aria-expanded')).toBe('true');
+
+    // Second click when in focus: collapses Storage tree
+    await storageHeader.trigger('click');
+    expect(storageHeader.attributes('aria-expanded')).toBe('false');
+
+    // Third click when still in focus: expands Storage tree
+    await storageHeader.trigger('click');
+    expect(storageHeader.attributes('aria-expanded')).toBe('true');
+  });
+
   it('renders ActionRibbon with contextual actions for selected VM', async () => {
     nasState.selectedResourceId = 'vm:debian-server';
     nasState.vms = [

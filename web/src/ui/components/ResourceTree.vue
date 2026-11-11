@@ -85,9 +85,38 @@ function handleSelect(resourceId: string, tab: NavTab) {
   navigateTo(tab, false, resourceId);
 }
 
+function isSectionSelected(sec: string): boolean {
+  if (sec === 'storage') {
+    return nasState.selectedResourceId === 'node:pools' && (nasState.activeTab === 'storage-pools' || nasState.activeTab === 'zfs');
+  }
+  if (sec === 'vms') {
+    return nasState.selectedResourceId === 'node:vms' && nasState.activeTab === 'kvm';
+  }
+  if (sec === 'lxc') {
+    return nasState.selectedResourceId === 'node:lxc' && nasState.activeTab === 'lxc';
+  }
+  if (sec === 'docker') {
+    return nasState.selectedResourceId === 'node:docker' && nasState.activeTab === 'docker';
+  }
+  if (sec === 'shares') {
+    return (
+      (nasState.selectedResourceId === 'node:shares' ||
+        nasState.selectedResourceId === 'shares:cifs' ||
+        nasState.selectedResourceId === 'shares:webdav') &&
+      (nasState.activeTab === 'shares' ||
+        nasState.activeTab === 'shares-cifs' ||
+        nasState.activeTab === 'shares-webdav')
+    );
+  }
+  return false;
+}
+
 function handleHeaderSelect(sec: string, resourceId: string, tab: NavTab) {
-  openSections.value[sec] = true;
-  handleSelect(resourceId, tab);
+  if (isSectionSelected(sec)) {
+    toggleSection(sec);
+  } else {
+    handleSelect(resourceId, tab);
+  }
 }
 
 // Filter matching helpers
@@ -215,7 +244,7 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
               role="treeitem"
               tabindex="0"
               :aria-expanded="openSections.storage || Boolean(query)"
-              :class="{ selected: nasState.selectedResourceId === 'node:pools' && nasState.activeTab === 'storage-pools' }"
+              :class="{ selected: isSectionSelected('storage') }"
               @click="handleHeaderSelect('storage', 'node:pools', 'storage-pools')"
               @keydown.enter.prevent="handleHeaderSelect('storage', 'node:pools', 'storage-pools')"
               @keydown.space.prevent="toggleSection('storage')"
@@ -339,7 +368,7 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
               role="treeitem"
               tabindex="0"
               :aria-expanded="openSections.vms || Boolean(query)"
-              :class="{ selected: nasState.selectedResourceId === 'node:vms' && nasState.activeTab === 'kvm' }"
+              :class="{ selected: isSectionSelected('vms') }"
               @click="handleHeaderSelect('vms', 'node:vms', 'kvm')"
               @keydown.enter.prevent="handleHeaderSelect('vms', 'node:vms', 'kvm')"
               @keydown.space.prevent="toggleSection('vms')"
@@ -407,7 +436,7 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
               role="treeitem"
               tabindex="0"
               :aria-expanded="openSections.lxc || Boolean(query)"
-              :class="{ selected: nasState.selectedResourceId === 'node:lxc' && nasState.activeTab === 'lxc' }"
+              :class="{ selected: isSectionSelected('lxc') }"
               @click="handleHeaderSelect('lxc', 'node:lxc', 'lxc')"
               @keydown.enter.prevent="handleHeaderSelect('lxc', 'node:lxc', 'lxc')"
               @keydown.space.prevent="toggleSection('lxc')"
@@ -481,7 +510,7 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
               role="treeitem"
               tabindex="0"
               :aria-expanded="openSections.docker || Boolean(query)"
-              :class="{ selected: nasState.selectedResourceId === 'node:docker' && nasState.activeTab === 'docker' }"
+              :class="{ selected: isSectionSelected('docker') }"
               @click="handleHeaderSelect('docker', 'node:docker', 'docker')"
               @keydown.enter.prevent="handleHeaderSelect('docker', 'node:docker', 'docker')"
               @keydown.space.prevent="toggleSection('docker')"
@@ -551,7 +580,7 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
               role="treeitem"
               tabindex="0"
               :aria-expanded="openSections.shares || Boolean(query)"
-              :class="{ selected: (nasState.selectedResourceId === 'shares:cifs' || nasState.selectedResourceId === 'shares:webdav') && (nasState.activeTab === 'shares-cifs' || nasState.activeTab === 'shares-webdav') }"
+              :class="{ selected: isSectionSelected('shares') }"
               @click="handleHeaderSelect('shares', 'shares:cifs', 'shares-cifs')"
               @keydown.enter.prevent="handleHeaderSelect('shares', 'shares:cifs', 'shares-cifs')"
               @keydown.space.prevent="toggleSection('shares')"
