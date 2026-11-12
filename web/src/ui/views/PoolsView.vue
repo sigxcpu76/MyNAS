@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
   mdiAlertCircleOutline,
   mdiArrowRight,
@@ -69,7 +69,29 @@ const poolForm = reactive({
   compression: 'lz4',
   mountpoint: '',
   setAsMainPool: !nasState.systemConfig?.mainPool,
+  force: false,
 });
+const mountpointManuallyEdited = ref(false);
+
+watch(
+  () => poolForm.poolId,
+  (newId) => {
+    if (mountpointManuallyEdited.value) return;
+    const clean = newId.trim().replace(/^zfsPools\//, '');
+    poolForm.mountpoint = clean ? `/mnt/${clean}` : '';
+  }
+);
+
+function handlePoolMountpointChange(val: string) {
+  poolForm.mountpoint = val;
+  const clean = poolForm.poolId.trim().replace(/^zfsPools\//, '');
+  const autoMount = clean ? `/mnt/${clean}` : '';
+  if (!val.trim()) {
+    mountpointManuallyEdited.value = false;
+  } else {
+    mountpointManuallyEdited.value = val.trim() !== autoMount;
+  }
+}
 
 const builderVdevs = ref<BuilderVdev[]>([
   {
@@ -85,6 +107,8 @@ function resetPoolBuilder() {
   poolForm.compression = 'lz4';
   poolForm.mountpoint = '';
   poolForm.setAsMainPool = !nasState.systemConfig?.mainPool;
+  poolForm.force = false;
+  mountpointManuallyEdited.value = false;
   driveSearchQuery.value = '';
   draggedDevicePath.value = null;
   hoveredVdevId.value = null;
@@ -455,13 +479,17 @@ async function handleCreatePool() {
   try {
     const cleanId = poolForm.poolId.replace(/^zfsPools\//, '').trim();
     await runTrackedTask(`ZFS: Create Storage Pool "${cleanId}"`, async () => {
-      const created = await services.zfs.createPool(cleanId, {
-        vdevLayout: primaryDataVdev?.layout || 'mirror',
-        devices: allDevices,
-        compression: poolForm.compression || 'lz4',
-        mountpoint: poolForm.mountpoint || `/mnt/${cleanId}`,
-        vdevs,
-      });
+      const created = await services.zfs.createPool(
+        cleanId,
+        {
+          vdevLayout: primaryDataVdev?.layout || 'mirror',
+          devices: allDevices,
+          compression: poolForm.compression || 'lz4',
+          mountpoint: poolForm.mountpoint || `/mnt/${cleanId}`,
+          vdevs,
+        },
+        poolForm.force
+      );
 
       if (poolForm.setAsMainPool || !nasState.systemConfig?.mainPool) {
         try {
@@ -1403,9 +1431,10 @@ function viewPoolDatasets(poolName: string) {
             <div class="form-group">
               <label>Mountpoint</label>
               <PathSelector
-                v-model="poolForm.mountpoint"
+                :model-value="poolForm.mountpoint"
                 :placeholder="poolForm.poolId ? `/mnt/${poolForm.poolId.trim()}` : '/mnt/<pool-name>'"
                 root-hint="/mnt"
+                @update:model-value="handlePoolMountpointChange"
               />
             </div>
 
@@ -1423,6 +1452,13 @@ function viewPoolDatasets(poolName: string) {
               <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 13px; font-weight: 500">
                 <input v-model="poolForm.setAsMainPool" type="checkbox" style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--accent-primary)" />
                 <span>Designate as Main Storage Pool (Initializes system config, enables Docker appdata and LXC storage)</span>
+              </label>
+            </div>
+
+            <div class="form-group" style="grid-column: 1 / -1; margin-top: -8px">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 13px; font-weight: 500">
+                <input v-model="poolForm.force" type="checkbox" style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--accent-primary)" />
+                <span>Force creation (<code class="mono">-f</code>): Override existing filesystems, partitions, or mismatched drive checks</span>
               </label>
             </div>
           </div>

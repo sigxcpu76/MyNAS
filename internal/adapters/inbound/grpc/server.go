@@ -616,6 +616,7 @@ func (s *Server) CreateZfsPool(ctx context.Context, req *nasv1.CreateZfsPoolRequ
 		Mountpoint:  p.GetMountpoint(),
 		Compression: p.GetCompression(),
 		Vdevs:       vdevs,
+		Force:       req.GetForce(),
 	})
 	if err != nil {
 		return nil, ToGRPCError(err)

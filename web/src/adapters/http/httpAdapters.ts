@@ -1076,7 +1076,7 @@ export class HttpZfsAdapter implements ZfsPort {
     return mapZfsPool(raw);
   }
 
-  async createPool(poolId: string, pool: Partial<ZfsPool>): Promise<ZfsPool> {
+  async createPool(poolId: string, pool: Partial<ZfsPool>, force = false): Promise<ZfsPool> {
     const payload = {
       vdevLayout: pool.vdevLayout,
       devices: pool.devices ?? [],
@@ -1086,6 +1086,7 @@ export class HttpZfsAdapter implements ZfsPort {
     };
     const raw = await this.client.post<any>('zfsPools', payload, {
       zfsPoolId: poolId,
+      ...(force ? { force: true } : {}),
     });
     return mapZfsPool(raw);
   }

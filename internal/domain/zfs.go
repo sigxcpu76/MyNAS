@@ -25,6 +25,7 @@ type ZfsPool struct {
 	Sync                 string // standard, always, disabled
 	Autotrim             string // on, off
 	Vdevs                []ZfsVdev
+	Force                bool
 }
 
 type ZfsVdev struct {

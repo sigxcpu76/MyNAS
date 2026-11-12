@@ -75,7 +75,7 @@ export interface ZfsPort {
   // ZFS Pools
   listPools(): Promise<ZfsPool[]>;
   getPool(name: string): Promise<ZfsPool>;
-  createPool(poolId: string, pool: Partial<ZfsPool>): Promise<ZfsPool>;
+  createPool(poolId: string, pool: Partial<ZfsPool>, force?: boolean): Promise<ZfsPool>;
   updatePool(name: string, update: Partial<ZfsPool>): Promise<ZfsPool>;
   deletePool(name: string, force?: boolean): Promise<void>;
   exportPool(name: string, force?: boolean): Promise<void>;

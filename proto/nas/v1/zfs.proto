@@ -74,6 +74,7 @@ message GetZfsPoolRequest {
 message CreateZfsPoolRequest {
   string zfs_pool_id = 1 [(google.api.field_behavior) = REQUIRED];
   ZfsPool zfs_pool = 2 [(google.api.field_behavior) = REQUIRED];
+  bool force = 3;
 }
 
 message DeleteZfsPoolRequest {

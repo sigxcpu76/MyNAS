@@ -479,6 +479,7 @@ type CreateZfsPoolRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ZfsPoolId     string                 `protobuf:"bytes,1,opt,name=zfs_pool_id,json=zfsPoolId,proto3" json:"zfs_pool_id,omitempty"`
 	ZfsPool       *ZfsPool               `protobuf:"bytes,2,opt,name=zfs_pool,json=zfsPool,proto3" json:"zfs_pool,omitempty"`
+	Force         bool                   `protobuf:"varint,3,opt,name=force,proto3" json:"force,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -525,6 +526,13 @@ func (x *CreateZfsPoolRequest) GetZfsPool() *ZfsPool {
 		return x.ZfsPool
 	}
 	return nil
+}
+
+func (x *CreateZfsPoolRequest) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
 }
 
 type DeleteZfsPoolRequest struct {
@@ -1958,10 +1966,11 @@ const file_nas_v1_zfs_proto_rawDesc = "" +
 	"total_size\x18\x03 \x01(\x05R\ttotalSize\"H\n" +
 	"\x11GetZfsPoolRequest\x123\n" +
 	"\x04name\x18\x01 \x01(\tB\x1f\xe2A\x01\x02\xfaA\x18\n" +
-	"\x16nas.sigxcpu.io/ZfsPoolR\x04name\"n\n" +
+	"\x16nas.sigxcpu.io/ZfsPoolR\x04name\"\x84\x01\n" +
 	"\x14CreateZfsPoolRequest\x12$\n" +
 	"\vzfs_pool_id\x18\x01 \x01(\tB\x04\xe2A\x01\x02R\tzfsPoolId\x120\n" +
-	"\bzfs_pool\x18\x02 \x01(\v2\x0f.nas.v1.ZfsPoolB\x04\xe2A\x01\x02R\azfsPool\"a\n" +
+	"\bzfs_pool\x18\x02 \x01(\v2\x0f.nas.v1.ZfsPoolB\x04\xe2A\x01\x02R\azfsPool\x12\x14\n" +
+	"\x05force\x18\x03 \x01(\bR\x05force\"a\n" +
 	"\x14DeleteZfsPoolRequest\x123\n" +
 	"\x04name\x18\x01 \x01(\tB\x1f\xe2A\x01\x02\xfaA\x18\n" +
 	"\x16nas.sigxcpu.io/ZfsPoolR\x04name\x12\x14\n" +

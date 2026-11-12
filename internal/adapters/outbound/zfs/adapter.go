@@ -348,7 +348,11 @@ func (a *Adapter) CreatePool(ctx context.Context, pool domain.ZfsPool) (*domain.
 
 	_ = os.MkdirAll("/mnt", 0755)
 	_ = os.MkdirAll("/etc/zfs", 0755)
-	args := []string{"create", "-m", pool.Mountpoint}
+	args := []string{"create"}
+	if pool.Force {
+		args = append(args, "-f")
+	}
+	args = append(args, "-m", pool.Mountpoint)
 	args = append(args, "-o", "cachefile=/etc/zfs/zpool.cache")
 	if pool.Compression != "" && pool.Compression != "off" {
 		args = append(args, "-O", fmt.Sprintf("compression=%s", pool.Compression))

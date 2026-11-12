@@ -195,7 +195,7 @@ export class ZfsService {
     return this.zfsPort.getPool(ResourceNames.zfsPool(poolIdOrName));
   }
 
-  async createPool(poolId: string, pool: Partial<ZfsPool>): Promise<ZfsPool> {
+  async createPool(poolId: string, pool: Partial<ZfsPool>, force = false): Promise<ZfsPool> {
     if (!isValidPoolName(poolId)) {
       throw new Error(`Invalid ZFS pool ID: "${poolId}"`);
     }
@@ -205,12 +205,16 @@ export class ZfsService {
       throw new Error('At least one backing device path is required to create a ZFS pool');
     }
     const cleanId = poolId.trim().replace(/^zfsPools\//, '');
-    return this.zfsPort.createPool(cleanId, {
-      vdevLayout: pool.vdevLayout || 'mirror',
-      compression: pool.compression || 'lz4',
-      mountpoint: pool.mountpoint || `/mnt/${cleanId}`,
-      ...pool,
-    });
+    return this.zfsPort.createPool(
+      cleanId,
+      {
+        vdevLayout: pool.vdevLayout || 'mirror',
+        compression: pool.compression || 'lz4',
+        mountpoint: pool.mountpoint || `/mnt/${cleanId}`,
+        ...pool,
+      },
+      force
+    );
   }
 
   async deletePool(poolIdOrName: string, force = false): Promise<void> {

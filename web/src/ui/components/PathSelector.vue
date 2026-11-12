@@ -153,10 +153,15 @@ const pathBreadcrumbs = computed(() => {
 });
 
 const finalSelectedPath = computed(() => {
+  const rawSub = subfolderInput.value.trim();
+  if (!rawSub) return currentBrowsePath.value || '/';
+  // Treat an explicit absolute path in the subfolder box as an absolute path
+  // instead of prepending currentBrowsePath (which would yield /mnt/mnt/...).
+  if (rawSub.startsWith('/')) {
+    return rawSub.replace(/\/+$/, '') || '/';
+  }
   const base = (currentBrowsePath.value || '/').replace(/\/+$/, '');
-  const sub = subfolderInput.value.trim().replace(/^\/+/, '');
-  if (!sub) return currentBrowsePath.value || '/';
-  return (base === '' ? '' : base) + '/' + sub;
+  return (base === '' ? '' : base) + '/' + rawSub;
 });
 
 // Quick shortcut paths based on available pools and mount points
