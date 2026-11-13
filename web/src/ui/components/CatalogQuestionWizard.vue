@@ -72,10 +72,25 @@ const appsBaseDir = computed(() => {
   return `/mnt/${cleanAppsPool.value}/apps`;
 });
 
-function deriveDefaultAppId(app: CatalogApp): string {
+function deriveBaseAppSlug(app: CatalogApp): string {
   const raw = app.title || app.appId || 'app';
   const lastPart = raw.includes('.') ? raw.split('.').pop()! : raw;
   return toZfsSafeSlug(app.title || lastPart) || 'app';
+}
+
+function deriveDefaultAppId(app: CatalogApp): string {
+  const base = deriveBaseAppSlug(app);
+  const existingIds = new Set(
+    (nasState.dockerApps || []).map((a) =>
+      (a.appId || a.name?.replace(/^dockerApps\//, '') || '').toLowerCase()
+    )
+  );
+  if (!existingIds.has(base)) return base;
+  let suffix = 2;
+  while (existingIds.has(`${base}-${suffix}`)) {
+    suffix++;
+  }
+  return `${base}-${suffix}`;
 }
 
 const customAppId = ref<string>(deriveDefaultAppId(props.app));
@@ -90,13 +105,26 @@ const answers = reactive<Record<string, string>>(
         .trim() || 'tank'
     );
     const customDs = nasState.dockerConfig?.appdataDataset || nasState.dockerConfig?.dataset;
+    const poolPrefix = `/mnt/${cleanAppsPool.value}/apps/`;
     if (customDs) {
       const cleaned = customDs.replace(/^zfsPools\//, '').trim();
       const baseDir = cleaned.startsWith('/') ? cleaned : `/mnt/${cleaned}`;
-      const poolPrefix = `/mnt/${cleanAppsPool.value}/apps/`;
       for (const [k, v] of Object.entries(defaults)) {
         if (typeof v === 'string' && v.startsWith(poolPrefix)) {
           defaults[k] = `${baseDir}/${v.slice(poolPrefix.length)}`;
+        }
+      }
+    }
+    // Rewrite default storage paths if an auto-incremented instance ID was assigned
+    const initialId = customAppId.value;
+    const rawId = props.app.appId?.includes('.') ? props.app.appId.split('.').pop()! : (props.app.appId || 'app');
+    const defaultQuestionSlug = toZfsSafeSlug(rawId) || 'app';
+    if (initialId && initialId !== defaultQuestionSlug) {
+      const oldPrefix = `${appsBaseDir.value}/${defaultQuestionSlug}/`;
+      const newPrefix = `${appsBaseDir.value}/${initialId}/`;
+      for (const [k, v] of Object.entries(defaults)) {
+        if (typeof v === 'string' && v.startsWith(oldPrefix)) {
+          defaults[k] = `${newPrefix}${v.slice(oldPrefix.length)}`;
         }
       }
     }
@@ -151,7 +179,7 @@ const totalQuestionsCount = computed(() => getAllAppQuestions(props.app).length)
 
 // Live compiled Compose YAML
 const compiledComposeYaml = computed<string>(() => {
-  let yaml = generateComposeFromQuestions(props.app, answers, cleanAppsPool.value);
+  let yaml = generateComposeFromQuestions(props.app, answers, cleanAppsPool.value, cleanAppId.value);
   if (!autoStartOnBoot.value) {
     yaml = yaml.replace(/restart:\s*(unless-stopped|always)/g, 'restart: no');
   }
@@ -212,6 +240,17 @@ function generateRandomPassword(variable: string) {
 
 const cleanAppId = computed(() => {
   return toZfsSafeSlug(customAppId.value.trim()) || deriveDefaultAppId(props.app);
+});
+
+watch(cleanAppId, (newId, oldId) => {
+  if (!newId || !oldId || newId === oldId) return;
+  const oldPrefix = `${appsBaseDir.value}/${oldId}/`;
+  const newPrefix = `${appsBaseDir.value}/${newId}/`;
+  for (const [k, v] of Object.entries(answers)) {
+    if (typeof v === 'string' && v.startsWith(oldPrefix)) {
+      answers[k] = `${newPrefix}${v.slice(oldPrefix.length)}`;
+    }
+  }
 });
 
 function resetStoragePath(variable: string) {

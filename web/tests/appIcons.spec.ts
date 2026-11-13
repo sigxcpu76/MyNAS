@@ -152,6 +152,13 @@ describe('appIcons utility', () => {
         distribution: 'debian',
       } as LxcContainer;
       expect(getLxcContainerIcon(lx)).toBe(LXC_DISTRO_ICONS.debian);
+
+      const rocky = {
+        name: 'lxcContainers/103',
+        containerName: 'ct-rocky',
+        distribution: 'rockylinux',
+      } as LxcContainer;
+      expect(getLxcContainerIcon(rocky)).toBe(LXC_DISTRO_ICONS.rockylinux);
     });
 
     it('returns service icon if container name matches a known service', () => {

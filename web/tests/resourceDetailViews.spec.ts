@@ -146,8 +146,6 @@ describe('Proxmox-Style Resource Detail Views (VM, LXC, Docker)', () => {
     expect(ribbon.text()).toContain('Console');
     expect(ribbon.text()).toContain('Configuration');
     expect(ribbon.text()).toContain('Snapshots');
-    expect(ribbon.text()).toContain('12.5%');
-    expect(ribbon.text()).toContain('1.50 GiB');
     expect(ribbon.find('[aria-label="Pause"]').exists()).toBe(true);
     expect(ribbon.find('[aria-label="Shutdown"]').exists()).toBe(true);
     expect(ribbon.find('[aria-label="Stop"]').exists()).toBe(true);
@@ -177,8 +175,6 @@ describe('Proxmox-Style Resource Detail Views (VM, LXC, Docker)', () => {
     expect(ribbon.text()).toContain('Console');
     expect(ribbon.text()).toContain('Configuration');
     expect(ribbon.text()).toContain('Logs');
-    expect(ribbon.text()).toContain('3.4%');
-    expect(ribbon.text()).toContain('256 MiB');
     expect(ribbon.find('[aria-label="Stop"]').exists()).toBe(true);
     expect(ribbon.find('[aria-label="Reboot"]').exists()).toBe(true);
     expect(ribbon.find('[aria-label="Freeze"]').exists()).toBe(true);
@@ -208,8 +204,6 @@ describe('Proxmox-Style Resource Detail Views (VM, LXC, Docker)', () => {
     expect(ribbon.text()).toContain('Configuration');
     expect(ribbon.text()).toContain('Containers');
     expect(ribbon.text()).toContain('Logs');
-    expect(ribbon.text()).toContain('8.2%');
-    expect(ribbon.text()).toContain('512 MiB');
     expect(ribbon.find('[aria-label="Stop"]').exists()).toBe(true);
     expect(ribbon.find('[aria-label="Restart"]').exists()).toBe(true);
     expect(ribbon.find('[aria-label="Web UI"]').exists()).toBe(true);

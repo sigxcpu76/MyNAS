@@ -1,5 +1,5 @@
 [Unit]
-Description=Generate dynamic mynas console banner
+Description=Generate dynamic NaN console banner
 After=network-online.target ifupdown2.service
 Wants=network-online.target
 

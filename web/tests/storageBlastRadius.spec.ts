@@ -102,4 +102,33 @@ describe('Storage Blast Radius Engine', () => {
     expect(blast.affectedApps.length).toBe(0);
     expect(blast.summaryWarning).toBe('');
   });
+
+  it('detects custom mountpoint datasets, standalone docker containers, and cron jobs', () => {
+    nasState.datasetsByPool['zfsPools/tank'] = [
+      {
+        name: 'zfsPools/tank/datasets/backups',
+        datasetPath: 'tank/backups',
+        mountpoint: '/srv/custom-backups',
+      } as any,
+    ];
+    nasState.dockerContainers = [
+      {
+        containerId: 'abc',
+        containerName: 'restic-worker',
+        volumes: ['/srv/custom-backups:/data'],
+      } as any,
+    ];
+    nasState.cronJobs = [
+      {
+        name: 'cronJobs/nightly-sync',
+        title: 'Nightly Sync',
+        volumes: [{ hostPath: '/srv/custom-backups/daily', mountPath: '/backup' }],
+      } as any,
+    ];
+
+    const blast = computeStorageBlastRadius('tank/backups');
+    expect(blast.hasDependencies).toBe(true);
+    expect(blast.affectedContainers).toContain('restic-worker');
+    expect(blast.affectedCronJobs).toContain('Nightly Sync');
+  });
 });

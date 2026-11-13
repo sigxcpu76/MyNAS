@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
-import { mdiDelete, mdiPencil } from '@mdi/js';
+import { computed, nextTick, reactive, ref } from 'vue';
+import { mdiDelete, mdiMagnify, mdiPencil } from '@mdi/js';
 import { services } from '../../container';
 import type { Group, User } from '../../domain/models';
 import MdiIcon from '../components/MdiIcon.vue';
@@ -11,12 +11,28 @@ import { useTableSort } from '../composables/useTableSort';
 import { nasState, notify } from '../store';
 import { confirmDelete } from '../modal';
 
+const userSearch = ref('');
+const groupSearch = ref('');
+const submittingUser = ref(false);
+const submittingGroup = ref(false);
+const editUserPanelRef = ref<HTMLElement | null>(null);
+const editGroupPanelRef = ref<HTMLElement | null>(null);
+
 const userSort = useTableSort(
   () => {
-    if (nasState.includeSystemAccounts) {
-      return nasState.users;
-    }
-    return nasState.users.filter((u) => u.uid >= 1000 && u.uid <= 60000);
+    const base = nasState.includeSystemAccounts
+      ? nasState.users
+      : nasState.users.filter((u) => u.uid >= 1000 && u.uid <= 60000);
+    const q = userSearch.value.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter(
+      (u) =>
+        u.username.toLowerCase().includes(q) ||
+        String(u.uid).includes(q) ||
+        (u.fullName || '').toLowerCase().includes(q) ||
+        (u.primaryGroup || '').toLowerCase().includes(q) ||
+        (u.supplementaryGroups || []).some((g) => g.toLowerCase().includes(q))
+    );
   },
   {
     username: (u: User) => u.username,
@@ -42,10 +58,17 @@ function getGroupAllMembers(g: Group): string[] {
 
 const groupSort = useTableSort(
   () => {
-    if (nasState.includeSystemGroups) {
-      return nasState.groups;
-    }
-    return nasState.groups.filter((g) => g.gid >= 1000 && g.gid <= 60000);
+    const base = nasState.includeSystemGroups
+      ? nasState.groups
+      : nasState.groups.filter((g) => g.gid >= 1000 && g.gid <= 60000);
+    const q = groupSearch.value.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter(
+      (g) =>
+        g.groupName.toLowerCase().includes(q) ||
+        String(g.gid).includes(q) ||
+        getGroupAllMembers(g).some((m) => m.toLowerCase().includes(q))
+    );
   },
   {
     name: (g: Group) => g.groupName,
@@ -99,6 +122,7 @@ const editUserForm = reactive({
   shell: '/bin/bash',
   password: '',
   smbPassword: '',
+  syncSmbPassword: false,
   smbEnabled: false,
   sshEnabled: true,
   sshPasswordAuth: true,
@@ -164,6 +188,7 @@ async function refreshIdentity() {
 }
 
 async function handleCreateUser() {
+  if (submittingUser.value) return;
   if (duplicateUidUser.value) {
     notify('error', `UID ${userForm.uid} is already used by user "${duplicateUidUser.value.username}".`);
     return;
@@ -172,6 +197,11 @@ async function handleCreateUser() {
     notify('error', 'UID must be between 1000 and 60000.');
     return;
   }
+  if (userForm.smbEnabled && !userForm.password.trim() && !userForm.smbPassword.trim()) {
+    notify('error', 'A password is required when Enable Samba / SMB is checked.');
+    return;
+  }
+  submittingUser.value = true;
   try {
     const supplementaryGroups = userForm.supplementaryGroupsText
       .split(',')
@@ -208,6 +238,8 @@ async function handleCreateUser() {
     await refreshIdentity();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to create user');
+  } finally {
+    submittingUser.value = false;
   }
 }
 
@@ -219,16 +251,21 @@ function startEditUser(u: User) {
   editUserForm.shell = u.shell || '/bin/bash';
   editUserForm.password = '';
   editUserForm.smbPassword = '';
+  editUserForm.syncSmbPassword = !u.smbEnabled;
   editUserForm.smbEnabled = Boolean(u.smbEnabled);
   editUserForm.sshEnabled = u.sshEnabled;
   editUserForm.sshPasswordAuth = u.sshPasswordAuth;
   editUserForm.sshAuthorizedKeysText = (u.sshAuthorizedKeys || []).join('\n');
   editUserForm.locked = u.locked;
   editUserForm.isAdmin = u.isAdmin;
+  nextTick(() => {
+    editUserPanelRef.value?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+  });
 }
 
 async function handleSaveUserEdit() {
-  if (!editingUser.value) return;
+  if (!editingUser.value || submittingUser.value) return;
+  submittingUser.value = true;
   try {
     const supplementaryGroups = editUserForm.supplementaryGroupsText
       .split(',')
@@ -289,8 +326,12 @@ async function handleSaveUserEdit() {
     if (editUserForm.password) {
       updates.password = editUserForm.password;
       mask.push('password');
-      // If Samba is enabled and no explicit Samba password was entered, synchronize Samba with Linux password
-      if (editUserForm.smbEnabled && !editUserForm.smbPassword) {
+      // Only sync Samba password with new Linux password when explicitly requested or when newly enabling SMB
+      if (
+        editUserForm.smbEnabled &&
+        !editUserForm.smbPassword &&
+        (editUserForm.syncSmbPassword || !editingUser.value.smbEnabled)
+      ) {
         updates.smbPassword = editUserForm.password;
         mask.push('smb_password');
       }
@@ -306,6 +347,8 @@ async function handleSaveUserEdit() {
     await refreshIdentity();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to update user');
+  } finally {
+    submittingUser.value = false;
   }
 }
 
@@ -348,6 +391,7 @@ async function handleDeleteUser(u: User) {
 }
 
 async function handleCreateGroup() {
+  if (submittingGroup.value) return;
   if (duplicateGidGroup.value) {
     notify('error', `GID ${groupForm.gid} is already used by group "${duplicateGidGroup.value.groupName}".`);
     return;
@@ -356,6 +400,7 @@ async function handleCreateGroup() {
     notify('error', 'GID must be between 1000 and 60000.');
     return;
   }
+  submittingGroup.value = true;
   try {
     const members = groupForm.membersText
       .split(',')
@@ -372,16 +417,22 @@ async function handleCreateGroup() {
     await refreshIdentity();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to create group');
+  } finally {
+    submittingGroup.value = false;
   }
 }
 
 function startEditGroup(g: Group) {
   editingGroup.value = g;
   editGroupMembersText.value = (g.members || []).join(', ');
+  nextTick(() => {
+    editGroupPanelRef.value?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+  });
 }
 
 async function handleSaveGroupEdit() {
-  if (!editingGroup.value) return;
+  if (!editingGroup.value || submittingGroup.value) return;
+  submittingGroup.value = true;
   try {
     const members = editGroupMembersText.value
       .split(',')
@@ -393,6 +444,8 @@ async function handleSaveGroupEdit() {
     await refreshIdentity();
   } catch (err: any) {
     notify('error', err?.message || 'Failed to update group');
+  } finally {
+    submittingGroup.value = false;
   }
 }
 
@@ -426,7 +479,21 @@ async function handleDeleteGroup(g: Group) {
           <h2 class="card-title" style="font-size: 17px">Users</h2>
         </div>
 
-        <div style="display: flex; align-items: center; gap: 12px">
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+          <div style="position: relative; width: 200px">
+            <input
+              v-model="userSearch"
+              type="text"
+              class="input"
+              placeholder="Filter users..."
+              style="padding-left: 28px; font-size: 12px; height: 30px"
+            />
+            <MdiIcon
+              :path="mdiMagnify"
+              size="14"
+              style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none"
+            />
+          </div>
           <label style="font-size: 12px; display: flex; align-items: center; gap: 6px">
             <input
               v-model="nasState.includeSystemAccounts"
@@ -538,13 +605,16 @@ async function handleDeleteGroup(g: Group) {
               <input v-model="userForm.isAdmin" type="checkbox" /> NAS Admin
             </label>
           </div>
-          <button type="submit" class="btn btn-primary">Create User</button>
+          <button type="submit" class="btn btn-primary" :disabled="submittingUser">
+            {{ submittingUser ? 'Creating...' : 'Create User' }}
+          </button>
         </div>
       </form>
 
       <!-- Edit User & SSH Keys Modal/Panel -->
       <div
         v-if="editingUser"
+        ref="editUserPanelRef"
         style="
           background: rgba(56, 189, 248, 0.08);
           border: 1px solid var(--accent-primary);
@@ -595,7 +665,19 @@ async function handleDeleteGroup(g: Group) {
           </div>
           <div class="form-group">
             <label>New Samba / SMB Password</label>
-            <input v-model="editUserForm.smbPassword" type="password" class="input" placeholder="Leave blank to sync with new Linux password" />
+            <input
+              v-model="editUserForm.smbPassword"
+              type="password"
+              class="input"
+              :placeholder="editUserForm.syncSmbPassword ? 'Leave blank to sync with new Linux password' : 'Leave blank to keep current SMB password'"
+            />
+            <label
+              v-if="editingUser.smbEnabled && editUserForm.smbEnabled && editUserForm.password && !editUserForm.smbPassword"
+              style="display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--text-secondary); margin-top: 4px; cursor: pointer"
+            >
+              <input v-model="editUserForm.syncSmbPassword" type="checkbox" />
+              Also update Samba password to match new Linux password
+            </label>
           </div>
         </div>
 
@@ -628,9 +710,9 @@ async function handleDeleteGroup(g: Group) {
             </label>
           </div>
           <div style="display: flex; gap: 8px">
-            <button class="btn btn-sm" @click="editingUser = null">Cancel</button>
-            <button class="btn btn-primary btn-sm" @click="handleSaveUserEdit">
-              Save
+            <button class="btn btn-sm" :disabled="submittingUser" @click="editingUser = null">Cancel</button>
+            <button class="btn btn-primary btn-sm" :disabled="submittingUser" @click="handleSaveUserEdit">
+              {{ submittingUser ? 'Saving...' : 'Save' }}
             </button>
           </div>
         </div>
@@ -675,9 +757,9 @@ async function handleDeleteGroup(g: Group) {
               </tr>
             </template>
 
-            <tr v-else-if="nasState.users.length === 0">
+            <tr v-else-if="userSort.sorted.value.length === 0">
               <td colspan="5" style="text-align: center; color: var(--text-secondary); padding: 32px">
-                No users.
+                {{ userSearch.trim() ? 'No users match the current filter.' : 'No standard users found. Enable Show System Accounts or create a user.' }}
               </td>
             </tr>
 
@@ -758,7 +840,21 @@ async function handleDeleteGroup(g: Group) {
           <h3 class="card-title">Groups</h3>
         </div>
 
-        <div style="display: flex; align-items: center; gap: 12px">
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+          <div style="position: relative; width: 200px">
+            <input
+              v-model="groupSearch"
+              type="text"
+              class="input"
+              placeholder="Filter groups..."
+              style="padding-left: 28px; font-size: 12px; height: 30px"
+            />
+            <MdiIcon
+              :path="mdiMagnify"
+              size="14"
+              style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none"
+            />
+          </div>
           <label style="font-size: 12px; display: flex; align-items: center; gap: 6px">
             <input
               v-model="nasState.includeSystemGroups"
@@ -815,13 +911,16 @@ async function handleDeleteGroup(g: Group) {
           </div>
         </div>
         <div style="margin-top: 10px; display: flex; justify-content: flex-end">
-          <button type="submit" class="btn btn-primary btn-sm">Create Group</button>
+          <button type="submit" class="btn btn-primary btn-sm" :disabled="submittingGroup">
+            {{ submittingGroup ? 'Creating...' : 'Create Group' }}
+          </button>
         </div>
       </form>
 
       <!-- Edit Group Inline -->
       <div
         v-if="editingGroup"
+        ref="editGroupPanelRef"
         style="
           background: rgba(56, 189, 248, 0.08);
           border: 1px solid var(--accent-primary);
@@ -844,8 +943,10 @@ async function handleDeleteGroup(g: Group) {
             placeholder="Select group members..."
           />
         </div>
-        <button class="btn btn-primary btn-sm" @click="handleSaveGroupEdit">Save</button>
-        <button class="btn btn-sm" @click="editingGroup = null">Cancel</button>
+        <button class="btn btn-primary btn-sm" :disabled="submittingGroup" @click="handleSaveGroupEdit">
+          {{ submittingGroup ? 'Saving...' : 'Save' }}
+        </button>
+        <button class="btn btn-sm" :disabled="submittingGroup" @click="editingGroup = null">Cancel</button>
       </div>
 
       <div class="table-wrap">
@@ -859,6 +960,11 @@ async function handleDeleteGroup(g: Group) {
             </tr>
           </thead>
           <tbody>
+            <tr v-if="groupSort.sorted.value.length === 0">
+              <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 28px">
+                {{ groupSearch.trim() ? 'No groups match the current filter.' : 'No standard groups found. Enable Show System Groups or create a group.' }}
+              </td>
+            </tr>
             <tr v-for="g in groupSort.sorted.value" :key="g.name">
               <td class="mono" style="font-weight: 600">{{ g.groupName }}</td>
               <td class="mono">{{ g.gid }}</td>

@@ -329,36 +329,49 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
+    <!-- Reconnect Banner when Disconnected -->
+    <div
+      v-if="status === 'DISCONNECTED' || status === 'ERROR'"
+      class="mobile-terminal-reconnect-bar"
+    >
+      <span>Session {{ status.toLowerCase() }}.</span>
+      <button class="btn btn-xs btn-primary" @click="connectWebSocket">
+        <MdiIcon :path="mdiRefresh" size="13" />
+        <span>Reconnect</span>
+      </button>
+    </div>
+
     <!-- Terminal Canvas -->
     <div ref="terminalContainer" class="mobile-terminal-canvas" />
 
     <!-- Mobile Virtual Accessory Key Bar -->
     <div class="mobile-accessory-bar">
-      <button class="acc-key" @click="sendEscape">ESC</button>
-      <button class="acc-key" @click="sendTab">TAB</button>
+      <button class="acc-key" @mousedown.prevent @click="sendEscape">ESC</button>
+      <button class="acc-key" @mousedown.prevent @click="sendTab">TAB</button>
       <button
         class="acc-key"
         :class="{ active: isCtrlActive }"
+        @mousedown.prevent
         @click="toggleCtrl"
       >
         CTRL
       </button>
-      <button class="acc-key key-accent" @click="sendCtrlC">^C</button>
-      <button class="acc-key" @click="sendCtrlD">^D</button>
-      <button class="acc-key" @click="sendKey('|')">|</button>
-      <button class="acc-key" @click="sendKey('/')">/</button>
-      <button class="acc-key" @click="sendKey('~')">~</button>
-      <button class="acc-key" @click="sendKey('-')">-</button>
-      <button class="acc-key key-icon" @click="sendUp">
+      <button class="acc-key key-accent" @mousedown.prevent @click="sendCtrlC">^C</button>
+      <button class="acc-key" @mousedown.prevent @click="sendCtrlD">^D</button>
+      <button class="acc-key" @mousedown.prevent @click="sendKey('|')">|</button>
+      <button class="acc-key" @mousedown.prevent @click="sendKey('/')">/</button>
+      <button class="acc-key" @mousedown.prevent @click="sendKey('~')">~</button>
+      <button class="acc-key" @mousedown.prevent @click="sendKey('-')">-</button>
+      <button class="acc-key key-icon" @mousedown.prevent @click="sendUp">
         <MdiIcon :path="mdiArrowUp" size="14" />
       </button>
-      <button class="acc-key key-icon" @click="sendDown">
+      <button class="acc-key key-icon" @mousedown.prevent @click="sendDown">
         <MdiIcon :path="mdiArrowDown" size="14" />
       </button>
-      <button class="acc-key key-icon" @click="sendKey('\x1b[D')">
+      <button class="acc-key key-icon" @mousedown.prevent @click="sendKey('\x1b[D')">
         <MdiIcon :path="mdiArrowLeft" size="14" />
       </button>
-      <button class="acc-key key-icon" @click="sendKey('\x1b[C')">
+      <button class="acc-key key-icon" @mousedown.prevent @click="sendKey('\x1b[C')">
         <MdiIcon :path="mdiArrowRight" size="14" />
       </button>
     </div>
@@ -430,6 +443,19 @@ onBeforeUnmount(() => {
   gap: 4px;
 }
 
+.mobile-terminal-reconnect-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(239, 68, 68, 0.16);
+  border-bottom: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
 .mobile-terminal-canvas {
   flex: 1;
   overflow: hidden;
@@ -438,13 +464,13 @@ onBeforeUnmount(() => {
 }
 
 .mobile-accessory-bar {
-  height: 42px;
+  min-height: 46px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 4px 8px;
+  padding: 5px 8px;
   background: #111827;
   border-top: 1px solid #1f2937;
   flex-shrink: 0;
@@ -456,9 +482,9 @@ onBeforeUnmount(() => {
 }
 
 .acc-key {
-  height: 32px;
-  min-width: 36px;
-  padding: 0 8px;
+  min-height: 36px;
+  min-width: 38px;
+  padding: 0 9px;
   display: inline-flex;
   align-items: center;
   justify-content: center;

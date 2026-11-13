@@ -1,5 +1,5 @@
 #!/bin/sh
-# Generate dynamic appliance console greeting in /etc/issue
+# Generate dynamic NaN appliance console greeting in /etc/issue
 
 IP_ADDR=$(ip -4 addr show br0 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n 1)
 if [ -z "$IP_ADDR" ]; then
@@ -17,13 +17,14 @@ fi
 cat <<EOF > /etc/issue
 
 ==============================================================
-                         mynas Appliance
+                  NaN Appliance (nasctl)
 ==============================================================
-  Web UI:        http://${IP_ADDR}:8080 (via br0)
-  API / gRPC:    https://${IP_ADDR}:9090
-  WebDAV:        http://${IP_ADDR}:8081
-  SSH:           ssh root@${IP_ADDR}
-  ZFS Root:      rpool (OpenZFS on Proxmox 7.0 Kernel)
+  Web UI (HTTPS): https://${IP_ADDR}:8443 (via br0)
+  Web UI (HTTP):  http://${IP_ADDR}:8080
+  gRPC API:       ${IP_ADDR}:9090
+  WebDAV:         http://${IP_ADDR}:8081
+  SSH:            ssh root@${IP_ADDR}
+  ZFS Root:       rpool (OpenZFS on Proxmox 7.0 Kernel)
 ==============================================================
 
 \n \l

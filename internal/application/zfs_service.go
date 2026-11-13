@@ -129,9 +129,6 @@ func (s *ZfsService) CreateDataset(ctx context.Context, dataset domain.ZfsDatase
 	if dataset.Recordsize == "" {
 		dataset.Recordsize = "128K"
 	}
-	if dataset.Mountpoint == "" {
-		dataset.Mountpoint = fmt.Sprintf("/%s/%s", dataset.PoolID, dataset.ID)
-	}
 	dataset.DatasetPath = fmt.Sprintf("%s/%s", dataset.PoolID, dataset.ID)
 	if err := dataset.Validate(); err != nil {
 		return nil, err

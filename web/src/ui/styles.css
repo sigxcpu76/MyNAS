@@ -1034,6 +1034,26 @@ input.mono {
   border: 1px solid var(--badge-neutral-border);
 }
 
+.badge-secondary {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.badge-purple {
+  background: rgba(168, 85, 247, 0.14);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.32);
+}
+
+[data-theme='github-light'] .badge-purple,
+[data-theme='catppuccin-latte'] .badge-purple,
+[data-theme='one-light'] .badge-purple {
+  background: rgba(147, 51, 234, 0.1);
+  color: #7e22ce;
+  border-color: rgba(147, 51, 234, 0.28);
+}
+
 .badge-main-pool {
   background: var(--badge-pool-bg);
   color: var(--badge-pool-text);
@@ -1129,6 +1149,63 @@ input.mono {
   background: var(--btn-danger-bg);
   color: var(--btn-danger-text);
   border: 1px solid var(--btn-danger-border);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+
+/* ==========================================================================
+   Inline Alerts & Validation States
+   ========================================================================== */
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.alert-danger {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--danger-text);
+}
+
+.alert-warning {
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+  color: var(--warning-text);
+}
+
+.alert-success {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+  color: var(--success-text);
+}
+
+.alert-info {
+  background: var(--info-bg);
+  border-color: var(--info-border);
+  color: var(--info-text);
+}
+
+.input-error {
+  border-color: var(--danger-border) !important;
+  box-shadow: 0 0 0 2px var(--danger-bg) !important;
 }
 
 .btn-sm {
@@ -1710,12 +1787,22 @@ select option {
 .spinner-sm {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid var(--border-strong);
   border-top-color: currentColor;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   display: inline-block;
   vertical-align: middle;
+}
+
+.spinner-lg {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-strong);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+  display: inline-block;
 }
 
 @keyframes spin {

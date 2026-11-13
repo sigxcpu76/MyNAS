@@ -229,6 +229,7 @@ function copyLogs(task: TaskRecord) {
             :key="task.id"
             class="task-row"
             :class="{ 'row-error': task.status === 'ERROR', 'row-running': task.status === 'RUNNING' }"
+            @click="openTaskDetails(task)"
             @dblclick="openTaskDetails(task)"
           >
             <td class="mono font-sm">{{ task.startTime }}</td>

@@ -1,13 +1,21 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
+import { mdiEyeOffOutline, mdiEyeOutline } from '@mdi/js';
 import { services } from '../../container';
 import { nasState, notify, refreshAllData, startEventStream, startWatchStream } from '../store';
+import MdiIcon from './MdiIcon.vue';
 import NanLogo from './NanLogo.vue';
 
 const username = ref('');
 const password = ref('');
+const showPassword = ref(false);
 const submitting = ref(false);
 const errorMsg = ref('');
+const usernameInputRef = ref<HTMLInputElement | null>(null);
+
+onMounted(() => {
+  usernameInputRef.value?.focus();
+});
 
 async function handleLogin() {
   errorMsg.value = '';
@@ -49,7 +57,7 @@ async function handleLogin() {
           color: var(--text-secondary);
         "
       >
-        Sign in with your Linux system account.
+        Sign in with a Linux host administrator account (<code>root</code> or member of <code>sudo</code> / <code>wheel</code>).
       </div>
 
       <form
@@ -62,28 +70,43 @@ async function handleLogin() {
           <label for="login-username">Username</label>
           <input
             id="login-username"
+            ref="usernameInputRef"
             name="username"
             v-model="username"
             type="text"
             class="input mono"
             placeholder="e.g. root or your user"
             autocomplete="username"
+            autofocus
             required
           />
         </div>
 
         <div class="form-group">
           <label for="login-password">Password</label>
-          <input
-            id="login-password"
-            name="password"
-            v-model="password"
-            type="password"
-            class="input"
-            placeholder="••••••••"
-            autocomplete="current-password"
-            required
-          />
+          <div style="position: relative; display: flex; align-items: center">
+            <input
+              id="login-password"
+              name="password"
+              v-model="password"
+              :type="showPassword ? 'text' : 'password'"
+              class="input"
+              style="padding-right: 36px; width: 100%"
+              placeholder="••••••••"
+              autocomplete="current-password"
+              required
+            />
+            <button
+              type="button"
+              class="btn btn-xs btn-ghost"
+              :aria-label="showPassword ? 'Hide password' : 'Show password'"
+              :title="showPassword ? 'Hide password' : 'Show password'"
+              style="position: absolute; right: 6px; padding: 3px 5px; color: var(--text-secondary)"
+              @click="showPassword = !showPassword"
+            >
+              <MdiIcon :path="showPassword ? mdiEyeOffOutline : mdiEyeOutline" size="15" />
+            </button>
+          </div>
         </div>
 
         <div

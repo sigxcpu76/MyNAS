@@ -139,6 +139,7 @@ onUnmounted(() => {
             Until a main pool is selected, non-ZFS services (KVM, Docker, LXC, CIFS, WebDAV) remain paused.
             Selecting an imported pool that previously hosted NAS datasets (<code>.nas-system</code>) will
             <strong>automatically re-discover and restore</strong> all configuration.
+            <strong>Note:</strong> Once designated, the Main Storage Pool is permanently locked.
           </div>
         </div>
 

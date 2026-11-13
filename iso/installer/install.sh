@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# mynas Appliance Interactive TUI Installer
+# NaN Appliance Interactive TUI Installer
 # Debian 13 (Trixie) + Proxmox 7.0 Kernel + Root-on-ZFS + br0 Bridge
 # ==============================================================================
 
@@ -15,7 +15,7 @@ fi
 # Suppress kernel dmesg spam onto the console
 dmesg -n 1 2>/dev/null || true
 
-TITLE="mynas Appliance Installer"
+TITLE="NaN Appliance Installer"
 
 # ------------------------------------------------------------------------------
 # Helper: Check dependencies
@@ -40,7 +40,7 @@ fi
 # Step 1: Welcome Dialog
 # ------------------------------------------------------------------------------
 whiptail --title "$TITLE" --msgbox \
-"Welcome to the mynas Appliance Installer!
+"Welcome to the NaN Appliance Installer!
 
 This wizard will guide you through installing the appliance onto dedicated OS drive(s) with:
   • Debian 13 (Trixie) + Proxmox 7.0 OpenZFS Kernel
@@ -137,9 +137,9 @@ SECONDARY_DRIVE=""
 # Step 3: Hostname
 # ------------------------------------------------------------------------------
 HOSTNAME=$(whiptail --title "$TITLE: Hostname" --inputbox \
-"Enter the appliance system hostname:" 10 60 "mynas" 3>&1 1>&2 2>&3)
+"Enter the appliance system hostname:" 10 60 "nan-nas" 3>&1 1>&2 2>&3)
 if [ $? -ne 0 ] || [ -z "$HOSTNAME" ]; then
-    HOSTNAME="mynas"
+    HOSTNAME="nan-nas"
 fi
 
 # ------------------------------------------------------------------------------
@@ -230,7 +230,7 @@ fi
 POOL_TYPE="Single Drive"
 [ "$NUM_DRIVES" -eq 2 ] && POOL_TYPE="Mirror (2 Drives)"
 
-SUMMARY_TEXT="Ready to install mynas appliance with the following configuration:
+SUMMARY_TEXT="Ready to install NaN appliance with the following configuration:
 
   • Hostname:        $HOSTNAME
   • Target Drives:   ${DRIVE_ARRAY[*]}
@@ -251,7 +251,7 @@ fi
 # ------------------------------------------------------------------------------
 # Step 7: Execution Phase with Progress Gauge
 # ------------------------------------------------------------------------------
-INSTALL_LOG="/tmp/mynas-install.log"
+INSTALL_LOG="/tmp/nan-install.log"
 TARGET="/target"
 mkdir -p "$TARGET"
 
@@ -396,7 +396,7 @@ EOF
     fi
 
     cat <<EOF > "$TARGET/etc/network/interfaces"
-# Managed by mynas appliance installer
+# Managed by NaN appliance installer
 auto lo
 iface lo inet loopback
 
@@ -430,9 +430,10 @@ EOF
     rm -f "$TARGET/etc/systemd/system/getty@tty1.service.d/override.conf"
     rm -f "$TARGET/etc/systemd/system/serial-getty@ttyS0.service.d/override.conf"
     rm -rf "$TARGET/etc/systemd/system/networking.service.d"
-    rm -f "$TARGET/usr/local/bin/mynas-installer"
+    rm -f "$TARGET/usr/local/bin/nan-installer" "$TARGET/usr/local/bin/mynas-installer"
+    sed -i '/NAN_INSTALLER_RAN/,/fi/d' "$TARGET/root/.bashrc" 2>/dev/null || true
     sed -i '/MYNAS_INSTALLER_RAN/,/fi/d' "$TARGET/root/.bashrc" 2>/dev/null || true
-    sed -i '/mynas-installer/d' "$TARGET/root/.bashrc" 2>/dev/null || true
+    sed -i '/nan-installer/d;/mynas-installer/d' "$TARGET/root/.bashrc" 2>/dev/null || true
     cp /etc/resolv.conf "$TARGET/etc/resolv.conf" 2>/dev/null || echo "nameserver 1.1.1.1" > "$TARGET/etc/resolv.conf"
 
     # Compatibility symlink: libcrypt.so.1 to libcrypt.so.2
@@ -518,10 +519,10 @@ EOF
     run_step 90 "Installing UEFI & Legacy BIOS bootloaders..."
     # 0. Generate /etc/default/grub with ZFS boot parameters
     cat << 'EOF' > "$TARGET/etc/default/grub"
-# GRUB configuration for mynas appliance
+# GRUB configuration for NaN appliance
 GRUB_DEFAULT=0
 GRUB_TIMEOUT=5
-GRUB_DISTRIBUTOR="mynas"
+GRUB_DISTRIBUTOR="NaN"
 GRUB_CMDLINE_LINUX_DEFAULT="quiet console=tty0"
 GRUB_CMDLINE_LINUX="root=ZFS=rpool/ROOT/debian boot=zfs"
 GRUB_TERMINAL="console"
@@ -590,7 +591,7 @@ PIPE_STATUS="${PIPESTATUS[0]}"
 if [ "$PIPE_STATUS" -ne 0 ]; then
     whiptail --title "$TITLE: Installation Error" --msgbox \
 "An error occurred during installation (exit code $PIPE_STATUS).
-Please check /tmp/mynas-install.log for details." 10 60
+Please check /tmp/nan-install.log for details." 10 60
     exit 1
 fi
 
@@ -598,12 +599,12 @@ fi
 # Step 8: Completion Dialog
 # ------------------------------------------------------------------------------
 whiptail --title "$TITLE: Complete" --msgbox \
-"Congratulations! The mynas appliance has been installed successfully.
+"Congratulations! The NaN appliance has been installed successfully.
 
 Next Steps:
   1. Remove the installation media (USB/ISO).
   2. The system will now reboot into Debian 13 with OpenZFS.
-  3. Once booted, the console will display the Web UI access URL (http://<ip>:8080).
+  3. Once booted, the console will display the Web UI access URLs (https://<ip>:8443 and http://<ip>:8080).
   4. Log in via Web UI to configure bulk storage pools and file shares." 14 70
 
 whiptail --title "$TITLE" --yesno "Reboot the system now?" 8 40

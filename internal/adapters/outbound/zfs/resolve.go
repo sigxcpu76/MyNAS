@@ -7,38 +7,93 @@ import (
 	"strings"
 )
 
-// Resource IDs for nested datasets/volumes are derived by flattening the ZFS
-// path relative to the pool with '/' -> '-' (e.g. "tank/vms/debian-server"
-// becomes "vms-debian-server"). That mapping is lossy, so it cannot be reversed
-// by string replacement alone. These helpers resolve an ID back to the real ZFS
-// name by matching it against the names that actually exist on the host.
-
-// encodeZfsID flattens a full ZFS name into the resource ID used by the API.
+// encodeZfsID converts a full ZFS dataset/volume name (e.g. "tank/vms/debian-server")
+// into a single-segment AIP-122-safe resource ID using a prefix-free bijection:
+//   - "_e" -> "_ee"
+//   - "_s" -> "_es"
+//   - "/"  -> "_s"
+// Flat names that do not contain "/", "_e", or "_s" remain unchanged.
 func encodeZfsID(pool, fullName string) string {
-	return strings.ReplaceAll(strings.TrimPrefix(fullName, pool+"/"), "/", "-")
+	rel := strings.TrimPrefix(fullName, pool+"/")
+	if rel == fullName && fullName == pool {
+		return "root"
+	}
+	var b strings.Builder
+	b.Grow(len(rel) + 4)
+	for i := 0; i < len(rel); {
+		if rel[i] == '/' {
+			b.WriteString("_s")
+			i++
+		} else if rel[i] == '_' && i+1 < len(rel) && (rel[i+1] == 's' || rel[i+1] == 'e') {
+			b.WriteString("_e")
+			b.WriteByte(rel[i+1])
+			i += 2
+		} else {
+			b.WriteByte(rel[i])
+			i++
+		}
+	}
+	return b.String()
 }
 
-// matchZfsName picks the full ZFS name for id among existing names.
-// Exact relative-path matches win over flattened-ID matches; when several
-// names flatten to the same ID the shallowest (fewest '/') wins for stability.
-// Returns "" when nothing matches.
+// decodeZfsID reverses encodeZfsID back into the pool-relative ZFS path.
+func decodeZfsID(id string) string {
+	var b strings.Builder
+	b.Grow(len(id))
+	for i := 0; i < len(id); {
+		if id[i] == '_' && i+1 < len(id) {
+			if id[i+1] == 's' {
+				b.WriteByte('/')
+				i += 2
+				continue
+			}
+			if id[i+1] == 'e' && i+2 < len(id) && (id[i+2] == 's' || id[i+2] == 'e') {
+				b.WriteByte('_')
+				b.WriteByte(id[i+2])
+				i += 3
+				continue
+			}
+		}
+		b.WriteByte(id[i])
+		i++
+	}
+	return b.String()
+}
+
+// matchZfsName resolves an API resource ID back to an existing full ZFS name:
+//  1. Bijective encoded ID match (encodeZfsID(pool, name) == id).
+//  2. Exact relative name match (rel == id).
+//  3. Legacy '/' -> '-' match ONLY when unambiguous (exactly one candidate).
+//
+// Returns "" when nothing matches or when a legacy '-' ID is ambiguous.
 func matchZfsName(names []string, pool, id string) string {
-	best := ""
+	exactRel := ""
+	legacyMatch := ""
+	legacyCount := 0
+
 	for _, name := range names {
 		if !strings.HasPrefix(name, pool+"/") {
 			continue
 		}
 		rel := strings.TrimPrefix(name, pool+"/")
-		if rel == id {
+		if encodeZfsID(pool, name) == id {
 			return name
 		}
-		if encodeZfsID(pool, name) == id {
-			if best == "" || strings.Count(name, "/") < strings.Count(best, "/") {
-				best = name
-			}
+		if rel == id && exactRel == "" {
+			exactRel = name
+		}
+		if strings.ReplaceAll(rel, "/", "-") == id {
+			legacyMatch = name
+			legacyCount++
 		}
 	}
-	return best
+	if exactRel != "" {
+		return exactRel
+	}
+	if legacyCount == 1 {
+		return legacyMatch
+	}
+	return ""
 }
 
 // resolveZfsPath converts a dataset/volume resource ID into the full ZFS name.
@@ -62,5 +117,5 @@ func (a *Adapter) resolveZfsPath(ctx context.Context, cleanPool, id, zfsType str
 			return name
 		}
 	}
-	return fmt.Sprintf("%s/%s", cleanPool, id)
+	return fmt.Sprintf("%s/%s", cleanPool, decodeZfsID(id))
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# mynas Appliance ISO Master Build Script
+# NaN Appliance ISO Master Build Script
 # Creates a hybrid UEFI + Legacy BIOS bootable ISO with Debian 13 & OpenZFS
 # ==============================================================================
 
@@ -13,10 +13,10 @@ BUILD_DIR="$ISO_DIR/build"
 CHROOT_DIR="$BUILD_DIR/chroot"
 ISO_ROOT="$BUILD_DIR/iso_root"
 OUTPUT_DIR="$ISO_DIR/output"
-OUTPUT_ISO="$OUTPUT_DIR/mynas-appliance-amd64.iso"
+OUTPUT_ISO="$OUTPUT_DIR/nan-appliance-amd64.iso"
 
 echo "=============================================================="
-echo "          mynas Appliance ISO Build Pipeline                  "
+echo "           NaN Appliance ISO Build Pipeline                   "
 echo "=============================================================="
 echo "Base Directory: $BASE_DIR"
 echo "Output ISO:     $OUTPUT_ISO"
@@ -123,8 +123,8 @@ chroot "$CHROOT_DIR" ldconfig 2>/dev/null || true
 cp "$CONF_DIR/sysctl.d/"*.conf "$CHROOT_DIR/etc/sysctl.d/"
 
 # Installer script
-cp "$ISO_DIR/installer/install.sh" "$CHROOT_DIR/usr/local/bin/mynas-installer"
-chmod +x "$CHROOT_DIR/usr/local/bin/mynas-installer"
+cp "$ISO_DIR/installer/install.sh" "$CHROOT_DIR/usr/local/bin/nan-installer"
+chmod +x "$CHROOT_DIR/usr/local/bin/nan-installer"
 
 # Autostart installer on console boot via tty1 autologin / service
 mkdir -p "$CHROOT_DIR/etc/systemd/system/getty@tty1.service.d"
@@ -150,14 +150,14 @@ EOF
 
 # Launch installer automatically when logging into root shell in live mode
 cat << 'EOF' >> "$CHROOT_DIR/root/.bashrc"
-if [ -z "$MYNAS_INSTALLER_RAN" ] && [ -x /usr/local/bin/mynas-installer ]; then
-    export MYNAS_INSTALLER_RAN=1
-    /usr/local/bin/mynas-installer
+if [ -z "$NAN_INSTALLER_RAN" ] && [ -x /usr/local/bin/nan-installer ]; then
+    export NAN_INSTALLER_RAN=1
+    /usr/local/bin/nan-installer
 fi
 EOF
 
-# Ensure root password is set for rescue mode
-echo "root:mynas" | chroot "$CHROOT_DIR" chpasswd
+# Ensure root password is set for live rescue mode
+echo "root:nan" | chroot "$CHROOT_DIR" chpasswd
 
 # Strip consumer GPU/WiFi firmware, sound/media drivers, and documentation to optimize ISO size
 echo ">> [4b/7] Stripping consumer GPU/WiFi firmware and non-server kernel modules..."
@@ -269,7 +269,7 @@ mksquashfs "$CHROOT_DIR" "$ISO_ROOT/live/filesystem.squashfs" \
 echo ">> [6/7] Configuring bootloader menus for UEFI and BIOS..."
 mkdir -p "$ISO_ROOT/.disk" "$ISO_ROOT/EFI/boot" "$ISO_ROOT/EFI/BOOT" "$ISO_ROOT/EFI/debian" \
          "$ISO_ROOT/boot/grub/fonts" "$ISO_ROOT/boot/grub/x86_64-efi" "$ISO_ROOT/isolinux" "$BUILD_DIR/efi"
-echo "mynas Appliance Live Installer" > "$ISO_ROOT/.disk/info"
+echo "NaN Appliance Live Installer" > "$ISO_ROOT/.disk/info"
 touch "$ISO_ROOT/.disk/base_installable"
 
 cp "$ISO_DIR/boot/grub/grub.cfg" "$ISO_ROOT/boot/grub/grub.cfg"
@@ -357,7 +357,7 @@ ISOHDPFX="/usr/lib/ISOLINUX/isohdpfx.bin"
 [ -f "$ISOHDPFX" ] || ISOHDPFX="/usr/lib/syslinux/modules/bios/isohdpfx.bin"
 
 xorriso -as mkisofs \
-    -r -V "MYNAS_INSTALLER" \
+    -r -V "NAN_INSTALLER" \
     -J -joliet-long -l \
     -iso-level 3 \
     -isohybrid-mbr "$ISOHDPFX" \
@@ -380,7 +380,7 @@ xorriso -as mkisofs \
     "$ISO_ROOT"
 
 echo "=============================================================="
-echo ">> SUCCESS! mynas appliance ISO successfully built:"
+echo ">> SUCCESS! NaN appliance ISO successfully built:"
 echo "   Path:   $OUTPUT_ISO"
 echo "   Size:   $(du -h "$OUTPUT_ISO" | awk '{print $1}')"
 echo "   SHA256: $(sha256sum "$OUTPUT_ISO" | awk '{print $1}')"

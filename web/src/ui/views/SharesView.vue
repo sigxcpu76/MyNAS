@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import {
+  mdiAlert,
   mdiCheck,
   mdiClose,
   mdiCog,
@@ -155,8 +156,8 @@ const cifsForm = reactive({
   browseable: true,
   createMask: '0664',
   directoryMask: '0775',
-  forceCreateMode: '0000',
-  forceDirectoryMode: '0000',
+  forceCreateMode: '',
+  forceDirectoryMode: '',
   shadowCopy: true,
   timeMachine: false,
   recycleBin: true,
@@ -186,8 +187,8 @@ const editCifsForm = reactive({
   browseable: true,
   createMask: '0664',
   directoryMask: '0775',
-  forceCreateMode: '0000',
-  forceDirectoryMode: '0000',
+  forceCreateMode: '',
+  forceDirectoryMode: '',
   shadowCopy: false,
   timeMachine: false,
   recycleBin: false,
@@ -237,11 +238,58 @@ const currentHostname = computed(() =>
   typeof window !== 'undefined' ? window.location.hostname || 'localhost' : 'localhost'
 );
 
-function getWebdavMountUrl(share: WebdavShare): string {
+const isHttpsOrigin = computed(
+  () => typeof window !== 'undefined' && window.location.protocol === 'https:'
+);
+
+function getWebdavPort8081Url(share: WebdavShare): string {
   const host = currentHostname.value;
   const shortName = getWebdavShortName(share);
   return `http://${host}:8081/dav/${shortName}/`;
 }
+
+function getWebdavHttpsGatewayUrl(share: WebdavShare): string {
+  const shortName = getWebdavShortName(share);
+  if (typeof window !== 'undefined' && window.location.origin && window.location.protocol === 'https:') {
+    return `${window.location.origin}/dav/${shortName}/`;
+  }
+  return `https://${currentHostname.value}:8443/dav/${shortName}/`;
+}
+
+function getWebdavMountUrl(share: WebdavShare): string {
+  if (isHttpsOrigin.value) {
+    return getWebdavHttpsGatewayUrl(share);
+  }
+  return getWebdavPort8081Url(share);
+}
+
+function findUsersMissingSmb(texts: string[]): string[] {
+  const names = new Set<string>();
+  for (const t of texts) {
+    for (const raw of (t || '').split(',')) {
+      const clean = raw.trim().replace(/^@/, '');
+      if (clean && !raw.trim().startsWith('@')) {
+        names.add(clean);
+      }
+    }
+  }
+  const missing: string[] = [];
+  for (const uname of names) {
+    const u = nasState.users.find((usr) => usr.username === uname);
+    if (u && !u.smbEnabled) {
+      missing.push(uname);
+    }
+  }
+  return missing;
+}
+
+const createCifsMissingSmbUsers = computed(() =>
+  findUsersMissingSmb([cifsForm.validUsersText, cifsForm.readListText, cifsForm.writeListText, cifsForm.forceUser])
+);
+
+const editCifsMissingSmbUsers = computed(() =>
+  findUsersMissingSmb([editCifsForm.validUsersText, editCifsForm.readListText, editCifsForm.writeListText, editCifsForm.forceUser])
+);
 
 async function copyWebdavMountUrl(share: WebdavShare) {
   const url = getWebdavMountUrl(share);
@@ -292,8 +340,28 @@ async function refreshShares() {
   }
 }
 
+function handleSharesEscape(e: KeyboardEvent) {
+  if (e.key !== 'Escape') return;
+  if (showDatasetPicker.value) {
+    showDatasetPicker.value = false;
+  } else if (connectingWebdav.value) {
+    connectingWebdav.value = null;
+  } else if (showGlobalSettings.value) {
+    showGlobalSettings.value = false;
+  }
+}
+
 onMounted(() => {
   refreshShares();
+  if (typeof window !== 'undefined') {
+    window.addEventListener('keydown', handleSharesEscape);
+  }
+});
+
+onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('keydown', handleSharesEscape);
+  }
 });
 
 async function handleSaveGlobalSettings() {
@@ -386,8 +454,10 @@ function startEditCifs(share: CifsShare) {
   editCifsForm.browseable = share.browseable;
   editCifsForm.createMask = share.createMask || '0664';
   editCifsForm.directoryMask = share.directoryMask || '0775';
-  editCifsForm.forceCreateMode = share.forceCreateMode || '0000';
-  editCifsForm.forceDirectoryMode = share.forceDirectoryMode || '0000';
+  editCifsForm.forceCreateMode =
+    share.forceCreateMode && share.forceCreateMode !== '0000' ? share.forceCreateMode : '';
+  editCifsForm.forceDirectoryMode =
+    share.forceDirectoryMode && share.forceDirectoryMode !== '0000' ? share.forceDirectoryMode : '';
   editCifsForm.shadowCopy = share.shadowCopy;
   editCifsForm.timeMachine = share.timeMachine;
   editCifsForm.recycleBin = share.recycleBin;
@@ -734,6 +804,13 @@ async function handleDeleteWebdav(share: WebdavShare) {
             </div>
           </div>
           <div class="form-group">
+            <label>Force Create / Directory Mode</label>
+            <div style="display: flex; gap: 6px">
+              <input v-model="cifsForm.forceCreateMode" class="input mono" placeholder="optional, e.g. 0660" style="width: 50%" />
+              <input v-model="cifsForm.forceDirectoryMode" class="input mono" placeholder="optional, e.g. 0770" style="width: 50%" />
+            </div>
+          </div>
+          <div class="form-group">
             <label>Guest User Mapping</label>
             <UserGroupSelector
               v-model="cifsForm.guestAccount"
@@ -741,6 +818,21 @@ async function handleDeleteWebdav(share: WebdavShare) {
               placeholder="nobody"
             />
           </div>
+        </div>
+
+        <div
+          v-if="createCifsMissingSmbUsers.length > 0"
+          style="margin-top: 10px; padding: 10px 12px; border-radius: 6px; background: var(--warning-bg); border: 1px solid var(--warning-border); color: var(--warning-text); font-size: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap"
+        >
+          <div style="display: flex; align-items: center; gap: 8px">
+            <MdiIcon :path="mdiAlert" size="16" />
+            <span>
+              Selected user(s) <strong>{{ createCifsMissingSmbUsers.join(', ') }}</strong> do not have a Samba password enabled yet and cannot authenticate over SMB.
+            </span>
+          </div>
+          <button type="button" class="btn btn-xs" @click="navigateTo('identity')">
+            Set Samba Password in Identity
+          </button>
         </div>
 
         <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-color)">
@@ -883,6 +975,13 @@ async function handleDeleteWebdav(share: WebdavShare) {
             </div>
           </div>
           <div class="form-group">
+            <label>Force Create / Directory Mode</label>
+            <div style="display: flex; gap: 6px">
+              <input v-model="editCifsForm.forceCreateMode" class="input mono" placeholder="optional, e.g. 0660" style="width: 50%" />
+              <input v-model="editCifsForm.forceDirectoryMode" class="input mono" placeholder="optional, e.g. 0770" style="width: 50%" />
+            </div>
+          </div>
+          <div class="form-group">
             <label>Guest User Mapping</label>
             <UserGroupSelector
               v-model="editCifsForm.guestAccount"
@@ -890,6 +989,21 @@ async function handleDeleteWebdav(share: WebdavShare) {
               placeholder="nobody"
             />
           </div>
+        </div>
+
+        <div
+          v-if="editCifsMissingSmbUsers.length > 0"
+          style="margin-top: 10px; padding: 10px 12px; border-radius: 6px; background: var(--warning-bg); border: 1px solid var(--warning-border); color: var(--warning-text); font-size: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap"
+        >
+          <div style="display: flex; align-items: center; gap: 8px">
+            <MdiIcon :path="mdiAlert" size="16" />
+            <span>
+              Selected user(s) <strong>{{ editCifsMissingSmbUsers.join(', ') }}</strong> do not have a Samba password enabled yet and cannot authenticate over SMB.
+            </span>
+          </div>
+          <button type="button" class="btn btn-xs" @click="navigateTo('identity')">
+            Set Samba Password in Identity
+          </button>
         </div>
 
         <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(56, 189, 248, 0.2)">
@@ -1461,24 +1575,34 @@ async function handleDeleteWebdav(share: WebdavShare) {
       </div>
       <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px">
         <!-- Mount URL Banner -->
-        <div style="background: var(--bg-base); border: 1px solid var(--border-strong); border-radius: 8px; padding: 12px">
-          <div style="font-size: 11px; text-transform: uppercase; color: var(--text-secondary); font-weight: 600; margin-bottom: 4px">
-            Dedicated WebDAV Port 8081 Mount URL
-          </div>
-          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
-            <span class="mono" style="font-size: 13px; color: var(--accent-primary); word-break: break-all; font-weight: 600">
-              {{ getWebdavMountUrl(connectingWebdav) }}
-            </span>
-            <div style="display: flex; gap: 6px; flex-shrink: 0">
-              <button class="btn btn-sm" @click="copyWebdavMountUrl(connectingWebdav)">
-                <MdiIcon :path="copiedWebdavUrl === connectingWebdav.name ? mdiCheck : mdiContentCopy" size="14" style="margin-right: 4px" />
-                {{ copiedWebdavUrl === connectingWebdav.name ? 'Copied' : 'Copy' }}
-              </button>
-              <a :href="getWebdavMountUrl(connectingWebdav)" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-primary">
-                <MdiIcon :path="mdiOpenInNew" size="14" style="margin-right: 4px" />
-                Browse Auto-Index
-              </a>
+        <div style="background: var(--bg-base); border: 1px solid var(--border-strong); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+          <div>
+            <div style="font-size: 11px; text-transform: uppercase; color: var(--text-secondary); font-weight: 600; margin-bottom: 4px">
+              HTTPS TLS Gateway Endpoint (Recommended for Windows / macOS / Remote)
             </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+              <span class="mono" style="font-size: 13px; color: var(--accent-primary); word-break: break-all; font-weight: 600">
+                {{ getWebdavHttpsGatewayUrl(connectingWebdav) }}
+              </span>
+              <div style="display: flex; gap: 6px; flex-shrink: 0">
+                <button class="btn btn-sm" @click="copyWebdavMountUrl(connectingWebdav)">
+                  <MdiIcon :path="copiedWebdavUrl === connectingWebdav.name ? mdiCheck : mdiContentCopy" size="14" style="margin-right: 4px" />
+                  {{ copiedWebdavUrl === connectingWebdav.name ? 'Copied' : 'Copy' }}
+                </button>
+                <a :href="getWebdavMountUrl(connectingWebdav)" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-primary">
+                  <MdiIcon :path="mdiOpenInNew" size="14" style="margin-right: 4px" />
+                  Browse Auto-Index
+                </a>
+              </div>
+            </div>
+          </div>
+          <div style="border-top: 1px solid var(--border-subtle); padding-top: 8px">
+            <div style="font-size: 11px; text-transform: uppercase; color: var(--text-secondary); font-weight: 600; margin-bottom: 2px">
+              Dedicated WebDAV Port 8081 Mount URL (HTTP LAN Only)
+            </div>
+            <span class="mono" style="font-size: 12px; color: var(--text-secondary); word-break: break-all">
+              {{ getWebdavPort8081Url(connectingWebdav) }}
+            </span>
           </div>
         </div>
 

@@ -190,11 +190,12 @@ func (a *WebdavAdapter) isUserAuthorized(user *domain.User, share domain.WebdavS
 		}
 	}
 	for _, g := range share.AllowedGroups {
-		if g == user.PrimaryGroup {
+		cleanG := strings.TrimPrefix(g, "@")
+		if cleanG == user.PrimaryGroup {
 			return true
 		}
 		for _, sg := range user.SupplementaryGroups {
-			if g == sg {
+			if cleanG == sg {
 				return true
 			}
 		}
@@ -261,19 +262,18 @@ func (a *WebdavAdapter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			user = &domain.User{Username: username}
 		}
 
-		authorized := false
+		authorizedShares := make([]domain.WebdavShare, 0, len(sharesList))
 		for _, s := range sharesList {
 			if a.isUserAuthorized(user, s) {
-				authorized = true
-				break
+				authorizedShares = append(authorizedShares, s)
 			}
 		}
-		if !authorized {
+		if len(authorizedShares) == 0 {
 			http.Error(w, fmt.Sprintf("Forbidden: user %q not permitted to access any WebDAV share", username), http.StatusForbidden)
 			return
 		}
 
-		serveSharesIndex(w, r, sharesList)
+		serveSharesIndex(w, r, authorizedShares)
 		return
 	}
 
@@ -344,18 +344,15 @@ func (a *WebdavAdapter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			// If directory contains an index.html, serve it directly
-			indexPath := filepath.Join(diskPath, "index.html")
-			if indexFi, err := os.Stat(indexPath); err == nil && !indexFi.IsDir() {
-				http.ServeFile(w, r, indexPath)
-				return
-			}
-
-			// Render rich auto-index HTML
+			// Render rich auto-index HTML (never auto-execute raw index.html from user shares)
 			serveAutoIndex(w, r, share, cleanRel, diskPath)
 			return
 		}
 	}
+
+	// Isolate downloaded/inline shared files from executing scripts in the NAS Web UI origin
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'")
 
 	// Forward to webdav.Handler (normalize path prefix to /dav/{shareID} so Prefix stripping succeeds)
 	if !strings.HasPrefix(r.URL.Path, "/dav/") {

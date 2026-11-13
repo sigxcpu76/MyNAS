@@ -18,6 +18,7 @@ type Config struct {
 }
 
 type ServerConfig struct {
+	BindAddr    string `mapstructure:"bind_addr" json:"bind_addr" yaml:"bind_addr"`
 	HTTPPort    int    `mapstructure:"http_port" json:"http_port" yaml:"http_port"`
 	HTTPSPort   int    `mapstructure:"https_port" json:"https_port" yaml:"https_port"`
 	TLSCertFile string `mapstructure:"tls_cert_file" json:"tls_cert_file" yaml:"tls_cert_file"`
@@ -57,6 +58,7 @@ func DefaultConfig() *Config {
 
 	return &Config{
 		Server: ServerConfig{
+			BindAddr:    "0.0.0.0",
 			HTTPPort:    8080,
 			HTTPSPort:   8443,
 			TLSCertFile: "",
@@ -98,6 +100,7 @@ func Load(explicitPath string) (*Config, string, error) {
 
 	// Set defaults in viper
 	def := DefaultConfig()
+	v.SetDefault("server.bind_addr", def.Server.BindAddr)
 	v.SetDefault("server.http_port", def.Server.HTTPPort)
 	v.SetDefault("server.https_port", def.Server.HTTPSPort)
 	v.SetDefault("server.tls_cert_file", def.Server.TLSCertFile)

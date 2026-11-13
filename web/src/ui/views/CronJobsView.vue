@@ -43,7 +43,17 @@ const currentTime = ref(Date.now());
 let clockInterval: any = null;
 let watcherInterval: any = null;
 
+function handleModalKeydown(e: KeyboardEvent) {
+  if (e.key !== 'Escape') return;
+  if (isLogModalOpen.value) {
+    closeLogModal();
+  } else if (isEditModalOpen.value && !isSaving.value) {
+    isEditModalOpen.value = false;
+  }
+}
+
 onMounted(() => {
+  window.addEventListener('keydown', handleModalKeydown);
   refreshCronJobs();
   clockInterval = setInterval(() => {
     currentTime.value = Date.now();
@@ -56,6 +66,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  window.removeEventListener('keydown', handleModalKeydown);
   if (clockInterval) clearInterval(clockInterval);
   if (watcherInterval) clearInterval(watcherInterval);
   stopLogPolling();
@@ -352,7 +363,7 @@ const form = reactive({
   argsStr: '',
   enabled: true,
   concurrencyPolicy: 'Forbid',
-  restartPolicy: 'Never',
+  restartPolicy: 'no',
   timeoutPreset: '0',
   timeoutCustomMinutes: 60,
   volumes: [] as CronVolumeMount[],
@@ -484,7 +495,12 @@ function openEditModal(job: CronJob) {
   form.argsStr = (job.args || []).join('\n');
   form.enabled = job.enabled;
   form.concurrencyPolicy = job.concurrencyPolicy || 'Forbid';
-  form.restartPolicy = job.restartPolicy || 'no';
+  form.restartPolicy =
+    !job.restartPolicy || job.restartPolicy === 'Never'
+      ? 'no'
+      : job.restartPolicy === 'OnFailure'
+      ? 'on-failure'
+      : job.restartPolicy;
   const timeoutSec = job.timeoutSeconds || 0;
   const matchTimeout = TIMEOUT_PRESETS.find((p) => p.value === String(timeoutSec));
   if (matchTimeout) {
@@ -536,7 +552,12 @@ async function saveForm() {
   isSaving.value = true;
   try {
     const command = parseCommandStr(form.commandStr);
-    const args = tokenizeArgs(form.argsStr);
+    const isShellScriptCmd = command.length > 0 && command[command.length - 1] === '-c';
+    const args = isShellScriptCmd
+      ? form.argsStr.trim()
+        ? [form.argsStr]
+        : []
+      : tokenizeArgs(form.argsStr);
     const timeoutSeconds =
       form.timeoutPreset === 'custom'
         ? Math.max(1, Math.floor(Number(form.timeoutCustomMinutes) || 0)) * 60
@@ -641,15 +662,23 @@ async function saveForm() {
       style="text-align: center; padding: 48px 24px"
     >
       <div style="margin-bottom: 12px; color: var(--text-muted)">
-        <MdiIcon :path="mdiCalendarClock" size="44" />
+        <MdiIcon :path="searchQuery.trim() ? mdiMagnify : mdiCalendarClock" size="44" />
       </div>
       <h3 style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px">
-        No Scheduled Tasks
+        {{ searchQuery.trim() ? 'No Matching Tasks' : 'No Scheduled Tasks' }}
       </h3>
       <p style="font-size: 13px; color: var(--text-secondary); max-width: 440px; margin: 0 auto 18px">
-        Create automated backup syncs with <code>rclone</code>, data scrub scripts, or scheduled container workloads.
+        <template v-if="searchQuery.trim()">
+          No scheduled tasks match "{{ searchQuery.trim() }}".
+        </template>
+        <template v-else>
+          Create automated backup syncs with <code>rclone</code>, data scrub scripts, or scheduled container workloads.
+        </template>
       </p>
-      <button class="btn btn-primary" @click="openCreateModal">
+      <button v-if="searchQuery.trim()" class="btn btn-secondary" @click="searchQuery = ''">
+        Clear Filter
+      </button>
+      <button v-else class="btn btn-primary" @click="openCreateModal">
         <MdiIcon :path="mdiPlus" size="16" style="margin-right: 4px" />
         Create Scheduled Task
       </button>
@@ -886,7 +915,7 @@ async function saveForm() {
 
     <!-- Log Viewer Modal -->
     <div v-if="isLogModalOpen && logJob" class="modal-backdrop" @click="closeLogModal">
-      <div class="modal" style="max-width: 800px; width: 90%" @click.stop>
+      <div class="modal-card" style="max-width: 800px; width: 90%" @click.stop>
         <div class="modal-header">
           <div>
             <h3 class="modal-title" style="display: flex; align-items: center; gap: 8px">
@@ -938,7 +967,7 @@ async function saveForm() {
           <div
             ref="logContainerRef"
             class="mono"
-            style="background: var(--bg-canvas); color: var(--text-primary); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 12px; font-size: 11.5px; line-height: 1.5; max-height: 480px; overflow-y: auto; white-space: pre-wrap; word-break: break-all"
+            style="background: var(--bg-base); color: var(--text-primary); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 12px; font-size: 11.5px; line-height: 1.5; max-height: 480px; overflow-y: auto; white-space: pre-wrap; word-break: break-all"
             @scroll="onLogScroll"
           >
             <span v-if="isLoadingLogs" style="color: var(--text-muted)">Loading execution output...</span>
@@ -954,7 +983,7 @@ async function saveForm() {
 
     <!-- Create / Edit Modal -->
     <div v-if="isEditModalOpen" class="modal-backdrop" @click="isEditModalOpen = false">
-      <div class="modal" style="max-width: 720px; width: 92%" @click.stop>
+      <div class="modal-card" style="max-width: 720px; width: 92%" @click.stop>
         <div class="modal-header">
           <div>
             <h3 class="modal-title" style="display: flex; align-items: center; gap: 8px">
@@ -1024,7 +1053,7 @@ async function saveForm() {
           </div>
 
           <!-- Starter Templates Quick Bar -->
-          <div v-if="!isEditing" style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(255,255,255,0.03); border-radius: 6px; border: 1px solid var(--border-color, rgba(255,255,255,0.1))">
+          <div v-if="!isEditing" style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--bg-base); border-radius: 6px; border: 1px solid var(--border-subtle)">
             <span style="font-size: 11.5px; color: var(--text-secondary); font-weight: 500">Starter Templates:</span>
             <button type="button" class="btn btn-xs btn-secondary" @click="applyTemplate('empty')">Blank</button>
             <button type="button" class="btn btn-xs btn-secondary" @click="applyTemplate('shell')">Alpine Shell Script</button>
@@ -1074,7 +1103,7 @@ async function saveForm() {
               style="font-size: 11.5px; resize: vertical"
             ></textarea>
             <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 2px">
-              Arguments passed to the container command (e.g. rclone subcommands and remote targets).
+              {{ form.commandStr.trim().endsWith('-c') ? 'Passed as a single shell script string to -c.' : 'Arguments passed to the container command (e.g. rclone subcommands and remote targets).' }}
             </span>
           </div>
 

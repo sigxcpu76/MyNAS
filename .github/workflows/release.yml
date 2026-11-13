@@ -189,8 +189,10 @@ jobs:
           CGO_ENABLED: 1
         run: |
           TAG_NAME="${{ inputs.tag || github.ref_name }}"
+          BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          LDFLAGS="-s -w -X 'github.com/sigxcpu/nas/internal/version.Version=${TAG_NAME}' -X 'github.com/sigxcpu/nas/internal/version.GitCommit=${{ github.sha }}' -X 'github.com/sigxcpu/nas/internal/version.BuildDate=${BUILD_DATE}'"
           mkdir -p bin
-          go build -v -ldflags="-s -w -X main.version=${TAG_NAME}" -o bin/nasctl ./cmd/nasctl
+          go build -v -ldflags="${LDFLAGS}" -o bin/nasctl ./cmd/nasctl
 
       - name: Build Appliance ISO via Docker Builder
         run: |
@@ -200,8 +202,8 @@ jobs:
         run: |
           TAG_NAME="${{ inputs.tag || github.ref_name }}"
           mkdir -p release-iso
-          ISO_NAME="mynas-appliance-${TAG_NAME}-amd64.iso"
-          cp iso/output/mynas-appliance-amd64.iso "release-iso/${ISO_NAME}"
+          ISO_NAME="nan-appliance-${TAG_NAME}-amd64.iso"
+          cp iso/output/nan-appliance-amd64.iso "release-iso/${ISO_NAME}"
           cd release-iso
           sha256sum "${ISO_NAME}" > "${ISO_NAME}.sha256"
 

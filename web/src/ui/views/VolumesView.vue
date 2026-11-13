@@ -385,6 +385,7 @@ async function handleSaveEditVolume() {
         message: `Are you sure you want to shrink volume "${shortName}" from ${formatBytes(origSizeBytes)} to ${formatBytes(targetSize)}?`,
         details: 'Shrinking a ZVol block device can truncate and permanently corrupt an existing filesystem or VM disk stored on it.',
         confirmText: 'Shrink Volume',
+        confirmPhrase: shortName,
       });
       if (!confirmed) return;
     }
@@ -445,6 +446,18 @@ async function handleDeleteVolume(vol: ZfsVolume) {
     notify('error', err?.message || 'Failed to delete volume');
   }
 }
+
+watch(
+  hierarchyTree,
+  (roots) => {
+    if (props.autoExpandRoots) {
+      for (const r of roots) {
+        expandedPaths.value.add(r.id);
+      }
+    }
+  },
+  { immediate: true }
+);
 
 onMounted(async () => {
   for (const pool of nasState.pools) {

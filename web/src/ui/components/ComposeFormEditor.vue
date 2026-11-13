@@ -551,7 +551,16 @@ function schedulePortAvailabilityCheck() {
     const portEntries: Array<{ portNum: number; proto: string; key: string }> = [];
     const portCountByKey = new Map<string, number>();
 
-    for (const svc of form.services) {
+    let servicesToScan: ComposeServiceModel[] = form.services;
+    if (editorMode.value === 'raw') {
+      try {
+        servicesToScan = composeYamlToForm(rawYaml.value, form.appId, form.title).services;
+      } catch {
+        servicesToScan = [];
+      }
+    }
+
+    for (const svc of servicesToScan) {
       for (const p of svc.ports) {
         if (p.publishToHost !== false && p.hostPort && p.hostPort.trim()) {
           const num = parseInt(p.hostPort.trim(), 10);
@@ -616,11 +625,42 @@ function getHostPortStatus(p: ComposePortModel): PortCheckResult | null {
   return portCheckCache[key] || null;
 }
 
+const rawModePortConflicts = computed(() => {
+  if (editorMode.value !== 'raw') return [];
+  const warnings: string[] = [];
+  try {
+    const parsed = composeYamlToForm(rawYaml.value, form.appId, form.title);
+    const seen = new Set<string>();
+    for (const svc of parsed.services) {
+      for (const p of svc.ports) {
+        if (p.publishToHost === false || !p.hostPort?.trim()) continue;
+        const num = parseInt(p.hostPort.trim(), 10);
+        if (isNaN(num) || num <= 0 || num > 65535) continue;
+        const proto = p.protocol || 'tcp';
+        const key = `${num}/${proto}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const st = portCheckCache[key];
+        if (st?.isDuplicate) {
+          warnings.push(`Port ${key} is mapped more than once in this Compose YAML.`);
+        } else if (st && st.available === false) {
+          warnings.push(`Host port ${key} is already in use${st.inUseBy ? ` by ${st.inUseBy}` : ''}.`);
+        }
+      }
+    }
+  } catch {
+    // Syntax error is displayed by yamlParseError
+  }
+  return warnings;
+});
+
 watch(
   () =>
-    form.services
-      .map((s) => s.ports.map((p) => `${p.publishToHost}:${p.hostPort}:${p.protocol}`).join(','))
-      .join(';'),
+    editorMode.value === 'raw'
+      ? `raw:${rawYaml.value}`
+      : form.services
+          .map((s) => s.ports.map((p) => `${p.publishToHost}:${p.hostPort}:${p.protocol}`).join(','))
+          .join(';'),
   () => {
     schedulePortAvailabilityCheck();
   },
@@ -2298,6 +2338,15 @@ function copyYaml() {
       >
         <MdiIcon :path="mdiAlertCircle" size="16" style="flex-shrink: 0" />
         <span>{{ yamlParseError }} — Fix the YAML syntax below to save or switch back to Form mode.</span>
+      </div>
+      <div
+        v-else-if="rawModePortConflicts.length > 0"
+        style="margin-bottom: 12px; padding: 10px 12px; border-radius: 6px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); color: var(--warning-text, #f59e0b); font-size: 12.5px; display: flex; align-items: flex-start; gap: 8px"
+      >
+        <MdiIcon :path="mdiAlertCircle" size="16" style="flex-shrink: 0; margin-top: 1px" />
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span v-for="(conflictMsg, cIdx) in rawModePortConflicts" :key="cIdx">{{ conflictMsg }}</span>
+        </div>
       </div>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px">
         <div>

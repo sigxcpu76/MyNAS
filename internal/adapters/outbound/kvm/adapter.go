@@ -2669,7 +2669,7 @@ func buildVideoXML(displayType string) string {
 		switch displayType {
 		case "virtio-gpu", "virtio":
 			videoModel = "virtio"
-		case "vga":
+		case "vga", "std":
 			videoModel = "vga"
 		case "qxl":
 			videoModel = "qxl"

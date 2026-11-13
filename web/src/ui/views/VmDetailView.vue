@@ -291,11 +291,31 @@ const newDisk = reactive({
   discard: true,
 });
 
-function openAddDisk() {
-  const idx = (vm.value?.disks || []).length;
+function computeNextVmDiskSlot(): { id: string; diskPath: string } {
+  const existing = vm.value?.disks || [];
+  const usedIds = new Set(existing.map((d) => (d.id || '').toLowerCase()));
+  const usedPaths = new Set(existing.map((d) => d.diskPath || ''));
   const pool = (nasState.systemConfig?.mainPool || nasState.pools[0]?.poolName || 'tank').replace(/^zfsPools\//, '');
+  let idx = 0;
+  while (idx < 24) {
+    const id = `sd${String.fromCharCode(97 + idx)}`;
+    const path = `/dev/zvol/${pool}/vm-${cleanVmName.value}-disk-${idx}`;
+    if (!usedIds.has(id) && !usedPaths.has(path)) {
+      return { id, diskPath: path };
+    }
+    idx++;
+  }
+  const fallback = existing.length;
+  return {
+    id: `sd${String.fromCharCode(97 + (fallback % 24))}${fallback}`,
+    diskPath: `/dev/zvol/${pool}/vm-${cleanVmName.value}-disk-${fallback}`,
+  };
+}
+
+function openAddDisk() {
+  const slot = computeNextVmDiskSlot();
   newDisk.bus = 'scsi';
-  newDisk.diskPath = `/dev/zvol/${pool}/vm-${cleanVmName.value}-disk-${idx}`;
+  newDisk.diskPath = slot.diskPath;
   newDisk.sizeGib = 32;
   newDisk.cacheMode = 'none';
   newDisk.discard = true;
@@ -306,7 +326,7 @@ async function submitAddDisk() {
   if (!vm.value || !newDisk.diskPath.trim() || isBusy.value) return;
   isBusy.value = true;
   const existing = vm.value.disks || [];
-  const nextId = `sd${String.fromCharCode(97 + existing.length)}`;
+  const nextId = computeNextVmDiskSlot().id;
   const updated = [
     ...existing,
     {
@@ -511,10 +531,16 @@ async function submitAddNic() {
   if (!vm.value || isBusy.value) return;
   isBusy.value = true;
   const existing = vm.value.networkInterfaces || [];
+  const usedIds = new Set(existing.map((n) => (n.id || '').toLowerCase()));
+  let nicIdx = 0;
+  while (usedIds.has(`net${nicIdx}`)) {
+    nicIdx++;
+  }
+  const nextNicId = `net${nicIdx}`;
   const updated = [
     ...existing,
     {
-      id: `net${existing.length}`,
+      id: nextNicId,
       model: newNic.model,
       bridge: newNic.bridge.trim() || 'br0',
       vlanTag: newNic.vlanTag > 0 ? newNic.vlanTag : undefined,
@@ -524,7 +550,7 @@ async function submitAddNic() {
     await runTrackedTask(`VM "${cleanVmName.value}": Add NIC`, async () => {
       await services.kvm.updateVirtualMachine(vm.value!.name, { networkInterfaces: updated }, ['network_interfaces']);
     });
-    notify('success', `Added network interface net${existing.length}`);
+    notify('success', `Added network interface ${nextNicId}`);
     showAddNicModal.value = false;
     await refreshAllData();
   } catch (err: any) {
@@ -536,6 +562,16 @@ async function submitAddNic() {
 
 async function handleRemoveNic(idx: number) {
   if (!vm.value || isBusy.value) return;
+  const target = (vm.value.networkInterfaces || [])[idx];
+  const nicLabel = target?.id || `net${idx}`;
+  const confirmed = await confirmDelete({
+    kind: 'Network Interface',
+    name: `${nicLabel} (${target?.bridge || 'br0'})`,
+    details: 'This network adapter will be detached from the virtual machine.',
+    confirmText: 'Remove NIC',
+  });
+  if (!confirmed.confirmed) return;
+
   const updated = (vm.value.networkInterfaces || []).filter((_, i) => i !== idx);
   isBusy.value = true;
   try {
@@ -631,6 +667,14 @@ async function handleRollbackSnapshot(snap: VirtualMachineSnapshot) {
 
 async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
   if (!vm.value || isBusy.value) return;
+  const confirmed = await confirmDelete({
+    kind: 'VM Snapshot',
+    name: snap.snapshotId,
+    details: 'This snapshot point will be permanently deleted.',
+    confirmText: 'Delete Snapshot',
+  });
+  if (!confirmed.confirmed) return;
+
   isBusy.value = true;
   try {
     await runTrackedTask(`VM "${cleanVmName.value}": Delete Snapshot "${snap.snapshotId}"`, async () => {
@@ -809,6 +853,8 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
                   <select v-model="hwForm.cpuType" class="form-input">
                     <option value="host">host (Passthrough)</option>
                     <option value="kvm64">kvm64 (Compatible)</option>
+                    <option value="x86-64-v2-AES">x86-64-v2-AES</option>
+                    <option value="EPYC">EPYC</option>
                     <option value="max">max (All Features)</option>
                   </select>
                 </div>
@@ -835,7 +881,10 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
                   <select v-model="hwForm.bootOrder" class="form-input">
                     <option value="hd,cdrom">Hard Disk, then CD-ROM</option>
                     <option value="cdrom,hd">CD-ROM, then Hard Disk</option>
-                    <option value="network,hd,cdrom">Network (PXE), then Hard Disk</option>
+                    <option value="hd">Hard Disk Only</option>
+                    <option value="cdrom">CD-ROM Only</option>
+                    <option value="network,hd">Network (PXE), then Hard Disk</option>
+                    <option value="network,hd,cdrom">Network (PXE), then Hard Disk, then CD-ROM</option>
                   </select>
                 </div>
                 <div class="form-group">
@@ -844,6 +893,7 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
                     <option value="virtio-gpu">VirtIO-GPU</option>
                     <option value="std">Standard VGA</option>
                     <option value="qxl">SPICE QXL</option>
+                    <option value="cirrus">Cirrus (Legacy)</option>
                     <option value="none">Headless (Serial Only)</option>
                   </select>
                 </div>
@@ -1164,6 +1214,7 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
                 <option value="scsi">VirtIO SCSI</option>
                 <option value="virtio">VirtIO Block</option>
                 <option value="sata">SATA</option>
+                <option value="nvme">NVMe</option>
               </select>
             </div>
           </div>
@@ -1199,8 +1250,10 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
             <label class="form-label">Adapter Model</label>
             <select v-model="newNic.model" class="form-input">
               <option value="virtio">VirtIO (Paravirtualized)</option>
-              <option value="e1000e">Intel e1000e</option>
+              <option value="e1000">Intel E1000</option>
+              <option value="e1000e">Intel E1000e</option>
               <option value="rtl8139">Realtek RTL8139</option>
+              <option value="vmxnet3">VMware vmxnet3</option>
             </select>
           </div>
           <div class="form-group">
@@ -1275,6 +1328,7 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
               <option value="scsi">VirtIO SCSI</option>
               <option value="virtio">VirtIO Block</option>
               <option value="sata">SATA</option>
+              <option value="nvme">NVMe</option>
             </select>
           </div>
           <div class="form-group">
@@ -1283,6 +1337,7 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
               <option value="none">none (Direct I/O — Recommended)</option>
               <option value="writeback">writeback (Fast Async)</option>
               <option value="writethrough">writethrough (Safe Sync)</option>
+              <option value="unsafe">unsafe</option>
             </select>
           </div>
           <div class="form-group" style="display: flex; align-items: center; gap: 8px">
@@ -1321,8 +1376,10 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
             <label class="form-label">Adapter Model</label>
             <select v-model="editNicForm.model" class="form-input">
               <option value="virtio">VirtIO (Paravirtualized)</option>
-              <option value="e1000e">Intel e1000e</option>
+              <option value="e1000">Intel E1000</option>
+              <option value="e1000e">Intel E1000e</option>
               <option value="rtl8139">Realtek RTL8139</option>
+              <option value="vmxnet3">VMware vmxnet3</option>
             </select>
           </div>
           <div class="form-group">

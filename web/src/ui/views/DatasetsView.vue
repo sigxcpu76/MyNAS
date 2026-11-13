@@ -553,6 +553,18 @@ async function handleDeleteDataset(ds: ZfsDataset) {
   }
 }
 
+watch(
+  hierarchyTree,
+  (roots) => {
+    if (props.autoExpandRoots) {
+      for (const r of roots) {
+        expandedPaths.value.add(r.id);
+      }
+    }
+  },
+  { immediate: true }
+);
+
 onMounted(async () => {
   for (const pool of nasState.pools) {
     await refreshZfsSubresources(pool.name);

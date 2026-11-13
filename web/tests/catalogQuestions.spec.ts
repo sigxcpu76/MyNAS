@@ -374,4 +374,46 @@ services:
     // Must replace the stub /data
     expect(result).not.toContain(':/data');
   });
+
+  it('escapes dollar signs in existing composeYaml answers and isolates multi-instance container_name', () => {
+    const appWithCompose: CatalogApp = {
+      appId: 'immich-lite',
+      title: 'Immich Lite',
+      description: 'Photo server',
+      category: 'Media',
+      categories: ['Media'],
+      iconUrl: '',
+      train: 'casaos',
+      version: '1.0.0',
+      composeYaml: `name: immich-lite
+services:
+  immich:
+    image: ghcr.io/immich-app/immich-server:release
+    container_name: immich-lite
+    environment:
+      - DB_PASSWORD=changeme
+`,
+      questions: [
+        {
+          variable: 'config.db_password',
+          label: 'Database Password',
+          description: 'DB password',
+          type: 'string',
+          defaultValue: 'changeme',
+          required: true,
+          group: 'Application Configuration & Credentials',
+        },
+      ],
+    };
+
+    const yaml = generateComposeFromQuestions(
+      appWithCompose,
+      { 'config.db_password': 'p@ss$word$99' },
+      'tank',
+      'immich-lite-2'
+    );
+    expect(yaml).toContain('DB_PASSWORD=p@ss$$word$$99');
+    expect(yaml).toContain('container_name: immich-lite-2');
+    expect(yaml).toContain('name: immich-lite-2');
+  });
 });

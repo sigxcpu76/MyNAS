@@ -198,13 +198,43 @@ export function applyAnswersToCompose(
   rawYaml: string,
   app: CatalogApp,
   answers: Record<string, string>,
-  appsPool = 'tank'
+  appsPool = 'tank',
+  customAppId?: string
 ): string {
   try {
     const doc = YAML.parseDocument(rawYaml);
     const services = doc.get('services');
     if (!services || !YAML.isMap(services)) {
       return rawYaml;
+    }
+
+    const rawId = app.appId?.includes('.') ? app.appId.split('.').pop()! : (app.appId || 'app');
+    const defaultSlug = toZfsSafeSlug(app.title || rawId) || toZfsSafeSlug(rawId) || 'app';
+    const rawSlug = toZfsSafeSlug(rawId) || defaultSlug;
+    const instanceSlug = customAppId ? (toZfsSafeSlug(customAppId) || defaultSlug) : '';
+
+    if (instanceSlug && instanceSlug !== defaultSlug && instanceSlug !== rawSlug) {
+      const projName = doc.get('name');
+      if (typeof projName === 'string' && projName.trim()) {
+        doc.set('name', instanceSlug);
+      }
+      const totalSvcs = services.items.length;
+      for (const sEntry of services.items) {
+        const svc = sEntry.value;
+        if (!svc || !YAML.isMap(svc)) continue;
+        const cname = String(svc.get('container_name') ?? '').trim();
+        if (cname) {
+          if (totalSvcs === 1 || cname === defaultSlug || cname === rawSlug) {
+            svc.set('container_name', instanceSlug);
+          } else if (cname.startsWith(`${defaultSlug}-`)) {
+            svc.set('container_name', `${instanceSlug}-${cname.slice(defaultSlug.length + 1)}`);
+          } else if (cname.startsWith(`${rawSlug}-`)) {
+            svc.set('container_name', `${instanceSlug}-${cname.slice(rawSlug.length + 1)}`);
+          } else {
+            svc.set('container_name', `${instanceSlug}-${cname}`);
+          }
+        }
+      }
     }
 
     const flat = getAllAppQuestions(app);
@@ -351,7 +381,7 @@ export function applyAnswersToCompose(
     let outYaml = doc.toString();
     for (const [k, v] of Object.entries(answers)) {
       if (v && outYaml.includes(`\${${k}}`)) {
-        outYaml = outYaml.replaceAll(`\${${k}}`, v);
+        outYaml = outYaml.replaceAll(`\${${k}}`, escapeComposeEnvValue(String(v)));
       }
     }
     return outYaml;
@@ -362,6 +392,7 @@ export function applyAnswersToCompose(
 }
 
 function updateOrSetEnv(services: YAML.YAMLMap, key: string, val: string) {
+  const safeVal = escapeComposeEnvValue(val);
   for (const sEntry of services.items) {
     const svc = sEntry.value;
     if (!svc || !YAML.isMap(svc)) continue;
@@ -371,16 +402,16 @@ function updateOrSetEnv(services: YAML.YAMLMap, key: string, val: string) {
       for (let i = 0; i < env.items.length; i++) {
         const item = String((env.items[i] as any)?.value ?? env.items[i]);
         if (item.startsWith(`${key}=`)) {
-          env.set(i, `${key}=${val}`);
+          env.set(i, `${key}=${safeVal}`);
           found = true;
           break;
         }
       }
       if (!found) {
-        env.add(`${key}=${val}`);
+        env.add(`${key}=${safeVal}`);
       }
     } else if (env && YAML.isMap(env)) {
-      env.set(key, val);
+      env.set(key, safeVal);
     }
   }
 }
@@ -391,15 +422,17 @@ function updateOrSetEnv(services: YAML.YAMLMap, key: string, val: string) {
 export function generateComposeFromQuestions(
   app: CatalogApp,
   answers: Record<string, string>,
-  appsPool = 'tank'
+  appsPool = 'tank',
+  customAppId?: string
 ): string {
   const cleanAppsPool = appsPool.replace(/^zfsPools\//, '').trim() || 'tank';
   if (app.composeYaml && app.composeYaml.includes('services:')) {
-    return applyAnswersToCompose(app.composeYaml, app, answers, cleanAppsPool);
+    return applyAnswersToCompose(app.composeYaml, app, answers, cleanAppsPool, customAppId);
   }
 
   const rawId = app.appId?.includes('.') ? app.appId.split('.').pop()! : (app.appId || 'app');
   const serviceName = toZfsSafeSlug(rawId) || 'app';
+  const instanceSlug = customAppId ? (toZfsSafeSlug(customAppId) || serviceName) : serviceName;
   const image = app.containerImage || `${serviceName}:latest`;
   const appdataPath = `/mnt/${cleanAppsPool}/apps`;
 
@@ -485,7 +518,7 @@ export function generateComposeFromQuestions(
         if (name === 'host_path' || name === 'path') {
           name = parts.length > 1 ? parts[parts.length - 2] : 'data';
         }
-        hostPath = `${appdataPath}/${serviceName}/${name}`;
+        hostPath = `${appdataPath}/${instanceSlug}/${name}`;
       }
 
       const mapping = `"${hostPath}:${mountPath}"`;
@@ -547,7 +580,7 @@ export function generateComposeFromQuestions(
     const defaultMount = (app.appId === 'elastic-search' || app.appId.includes('elasticsearch'))
       ? '/usr/share/elasticsearch/data'
       : '/data';
-    volumes.push(`"${appdataPath}/${serviceName}/data:${defaultMount}"`);
+    volumes.push(`"${appdataPath}/${instanceSlug}/data:${defaultMount}"`);
   }
 
   // Build Compose YAML with x-portals
@@ -567,8 +600,8 @@ export function generateComposeFromQuestions(
   lines.push('services:');
   lines.push(`  ${serviceName}:`);
   lines.push(`    image: ${image}`);
-  lines.push(`    container_name: ${serviceName}`);
-  lines.push(`    hostname: ${serviceName}`);
+  lines.push(`    container_name: ${instanceSlug}`);
+  lines.push(`    hostname: ${instanceSlug}`);
   lines.push('    restart: unless-stopped');
 
   if (hasUserConfig && puid && pgid) {

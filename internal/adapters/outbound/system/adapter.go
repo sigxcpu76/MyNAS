@@ -126,6 +126,12 @@ func (a *Adapter) SelectMainPool(ctx context.Context, poolName string, autoImpor
 		return nil, fmt.Errorf("%w: pool name cannot be empty", domain.ErrInvalidArgument)
 	}
 
+	cfg := config.GetGlobal()
+	existingMain := strings.TrimPrefix(strings.TrimSpace(cfg.System.MainPool), "zfsPools/")
+	if existingMain != "" && existingMain != cleanPool {
+		return nil, fmt.Errorf("%w: main storage pool is permanently locked to %q and cannot be changed", domain.ErrFailedPrecondition, existingMain)
+	}
+
 	// Verify pool exists in ZFS (attempt import if autoImportExisting or not yet imported)
 	p, err := a.zfsPort.GetPool(ctx, cleanPool)
 	if err != nil {
@@ -140,7 +146,6 @@ func (a *Adapter) SelectMainPool(ctx context.Context, poolName string, autoImpor
 		}
 	}
 
-	cfg := config.GetGlobal()
 	dsName := cfg.System.SystemDataset
 	if dsName == "" {
 		dsName = ".nas-system"

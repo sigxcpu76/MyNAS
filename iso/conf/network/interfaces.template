@@ -1,4 +1,4 @@
-# /etc/network/interfaces managed by mynas appliance
+# /etc/network/interfaces managed by NaN appliance (nasctl)
 auto lo
 iface lo inet loopback
 

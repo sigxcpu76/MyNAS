@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -46,6 +47,7 @@ import (
 )
 
 type StartOptions struct {
+	BindAddr    string
 	HTTPPort    int
 	HTTPSPort   int
 	TLSCertFile string
@@ -78,8 +80,7 @@ func newStartCmd(rootOpts *RootOptions) *cobra.Command {
 	cmd.Flags().IntVar(&opts.HTTPSPort, "https-port", opts.HTTPSPort, "HTTPS/TLS listen port (default 8443, 0 to disable HTTPS)")
 	cmd.Flags().StringVar(&opts.TLSCertFile, "tls-cert", "", "Path to custom TLS certificate file (optional)")
 	cmd.Flags().StringVar(&opts.TLSKeyFile, "tls-key", "", "Path to custom TLS private key file (optional)")
-	var dummyBind string
-	cmd.Flags().StringVar(&dummyBind, "bind", "0.0.0.0", "Bind interface/address (default 0.0.0.0)")
+	cmd.Flags().StringVar(&opts.BindAddr, "bind", "", "Bind interface/address for HTTP, HTTPS, gRPC, and WebDAV listeners (default 0.0.0.0)")
 	cmd.Flags().IntVar(&opts.GRPCPort, "grpc-port", opts.GRPCPort, "Native gRPC API server listen port")
 	cmd.Flags().IntVar(&opts.WebdavPort, "webdav-port", opts.WebdavPort, "Dedicated WebDAV server listen port (default 8081, 0 to disable dedicated port)")
 	cmd.Flags().StringVar(&opts.StateDir, "state-dir", opts.StateDir, "Directory for NAS share & config state")
@@ -120,6 +121,12 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	}
 
 	// Override with CLI flags if explicitly provided
+	if strings.TrimSpace(opts.BindAddr) != "" {
+		cfg.Server.BindAddr = strings.TrimSpace(opts.BindAddr)
+	}
+	if strings.TrimSpace(cfg.Server.BindAddr) == "" {
+		cfg.Server.BindAddr = "0.0.0.0"
+	}
 	if opts.HTTPPort != 8080 || cfg.Server.HTTPPort == 0 {
 		cfg.Server.HTTPPort = opts.HTTPPort
 	}
@@ -413,11 +420,12 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 
 	step("http gateway created")
 
+	bindHost := cfg.Server.BindAddr
 	if cfg.Server.GRPCPort > 0 {
-		grpcAddr := fmt.Sprintf(":%d", cfg.Server.GRPCPort)
+		grpcAddr := net.JoinHostPort(bindHost, strconv.Itoa(cfg.Server.GRPCPort))
 		lis, err := net.Listen("tcp", grpcAddr)
 		if err != nil {
-			logger.Warn("could not bind gRPC port", "grpc_port", cfg.Server.GRPCPort, "error", err)
+			logger.Warn("could not bind gRPC port", "grpc_port", cfg.Server.GRPCPort, "addr", grpcAddr, "error", err)
 		} else {
 			go func() {
 				logger.Info("gRPC API server listening", "grpc_port", cfg.Server.GRPCPort, "addr", grpcAddr)
@@ -428,7 +436,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 		}
 	}
 
-	httpAddr := fmt.Sprintf(":%d", cfg.Server.HTTPPort)
+	httpAddr := net.JoinHostPort(bindHost, strconv.Itoa(cfg.Server.HTTPPort))
 	httpServer := &http.Server{
 		Addr:              httpAddr,
 		Handler:           gateway,
@@ -445,7 +453,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 			if len(caPEM) > 0 {
 				gateway.SetCACert(caPEM)
 			}
-			httpsAddr := fmt.Sprintf(":%d", cfg.Server.HTTPSPort)
+			httpsAddr := net.JoinHostPort(bindHost, strconv.Itoa(cfg.Server.HTTPSPort))
 			httpsServer = &http.Server{
 				Addr:              httpsAddr,
 				Handler:           gateway,
@@ -463,7 +471,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 
 	var webdavServer *http.Server
 	if cfg.Server.WebdavPort > 0 {
-		webdavAddr := fmt.Sprintf(":%d", cfg.Server.WebdavPort)
+		webdavAddr := net.JoinHostPort(bindHost, strconv.Itoa(cfg.Server.WebdavPort))
 		webdavServer = &http.Server{
 			Addr:              webdavAddr,
 			Handler:           webdavAdapter,
@@ -481,6 +489,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	go func() {
 		logger.Info("nasctl server started",
 			"startup_total", time.Since(startupBegin).Round(time.Millisecond).String(),
+			"bind_addr", bindHost,
 			"http_port", cfg.Server.HTTPPort,
 			"https_port", cfg.Server.HTTPSPort,
 			"grpc_port", cfg.Server.GRPCPort,

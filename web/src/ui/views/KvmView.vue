@@ -385,6 +385,7 @@ function onOsVariantChange() {
     wizardForm.biosType = 'ovmf';
     wizardForm.tpmVersion = 'v2.0';
     wizardForm.secureBoot = true;
+    wizardForm.showSecondaryCdrom = true;
   } else if (wizardForm.osVariant.startsWith('freebsd')) {
     wizardForm.machineType = 'q35';
     wizardForm.biosType = 'ovmf';
@@ -412,6 +413,15 @@ watch(
   }
 );
 
+watch(
+  () => wizardForm.bootIso,
+  (iso, prevIso) => {
+    if (iso && !prevIso && wizardForm.bootOrder === 'hd,cdrom') {
+      wizardForm.bootOrder = 'cdrom,hd';
+    }
+  }
+);
+
 function openCreateWizard() {
   wizardForm.vmName = 'Debian Server';
   wizardForm.vmId = toZfsSafeSlug(wizardForm.vmName);
@@ -425,6 +435,7 @@ function openCreateWizard() {
   wizardForm.tpmVersion = 'none';
   wizardForm.secureBoot = false;
   wizardForm.bootIso = nasState.isos.length > 0 ? nasState.isos[0].path : '';
+  wizardForm.bootOrder = wizardForm.bootIso ? 'cdrom,hd' : 'hd,cdrom';
   wizardForm.secondaryIso = '';
   wizardForm.showSecondaryCdrom = false;
   wizardForm.sockets = 1;
@@ -468,13 +479,28 @@ function openCreateWizard() {
   showCreateWizard.value = true;
 }
 
+function nextUnusedDiskSlot(existingDisks: Array<{ id?: string; diskPath?: string }>): { id: string; index: number } {
+  const usedIds = new Set(existingDisks.map((d) => (d.id || '').toLowerCase()));
+  const usedPaths = new Set(existingDisks.map((d) => d.diskPath || ''));
+  let index = 0;
+  while (index < 24) {
+    const candidateId = `sd${String.fromCharCode(97 + index)}`;
+    const candidatePath = generateZvolDiskPath(mainPool.value, wizardForm.vmId || 'vm', index);
+    if (!usedIds.has(candidateId) && !usedPaths.has(candidatePath)) {
+      return { id: candidateId, index };
+    }
+    index++;
+  }
+  const fallbackIdx = existingDisks.length;
+  return { id: `sd${String.fromCharCode(97 + (fallbackIdx % 24))}${fallbackIdx}`, index: fallbackIdx };
+}
+
 function addWizardDisk() {
-  const idx = wizardForm.disks.length;
-  const letter = String.fromCharCode(97 + (idx % 26));
+  const slot = nextUnusedDiskSlot(wizardForm.disks);
   wizardForm.disks.push({
-    id: `sd${letter}`,
+    id: slot.id,
     bus: 'scsi',
-    diskPath: generateZvolDiskPath(mainPool.value, wizardForm.vmId || 'vm', idx),
+    diskPath: generateZvolDiskPath(mainPool.value, wizardForm.vmId || 'vm', slot.index),
     sizeGib: 32,
     cacheMode: 'none',
     discard: true,
@@ -501,7 +527,11 @@ function saveEditWizardDisk() {
 }
 
 function addWizardNic() {
-  const idx = wizardForm.networkInterfaces.length;
+  const usedIds = new Set(wizardForm.networkInterfaces.map((n) => (n.id || '').toLowerCase()));
+  let idx = 0;
+  while (usedIds.has(`net${idx}`)) {
+    idx++;
+  }
   wizardForm.networkInterfaces.push({
     id: `net${idx}`,
     model: 'virtio',
@@ -738,7 +768,6 @@ async function handleWizardSubmit() {
 
   const hasCloudInit =
     wizardForm.ciEnabled ||
-    wizardForm.showCloudInit ||
     Boolean(wizardForm.ciPassword.trim()) ||
     sshKeys.length > 0;
 
@@ -1174,19 +1203,6 @@ async function handleWizardSubmit() {
               </tr>
             </thead>
             <tbody>
-              <!-- Active Upload Row -->
-              <tr v-if="isUploadingIso && isoUploadProgress">
-                <td colspan="4" style="padding: 14px 16px; background: rgba(59, 130, 246, 0.04)">
-                  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 12px">
-                    <span class="mono" style="font-weight: 600">{{ isoUploadProgress.filename }} (Uploading)</span>
-                    <span class="mono">{{ formatBytes(isoUploadProgress.loaded) }} / {{ formatBytes(isoUploadProgress.total) }} ({{ isoUploadProgress.percent }}%)</span>
-                  </div>
-                  <div class="progress-bar" style="height: 6px">
-                    <div class="progress-fill" :style="{ width: `${isoUploadProgress.percent}%` }"></div>
-                  </div>
-                </td>
-              </tr>
-
               <!-- Skeleton Placeholders when Loading -->
               <template v-if="nasState.loading && nasState.isos.length === 0">
                 <tr v-for="r in 2" :key="r">
@@ -1616,16 +1632,29 @@ async function handleWizardSubmit() {
           <!-- Cloud-Init Optional Collapsible -->
           <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 16px">
             <div
-              style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none"
-              @click="wizardForm.showCloudInit = !wizardForm.showCloudInit; wizardForm.ciEnabled = wizardForm.showCloudInit"
+              style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; gap: 10px"
+              @click="wizardForm.showCloudInit = !wizardForm.showCloudInit"
             >
               <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px">
                 <MdiIcon :path="mdiCog" size="16" style="color: var(--text-secondary)" />
                 <span>Cloud-Init Configuration (Optional)</span>
               </div>
-              <button type="button" class="btn btn-xs">
-                {{ wizardForm.showCloudInit ? 'Collapse' : 'Expand' }}
-              </button>
+              <div style="display: flex; align-items: center; gap: 12px">
+                <label
+                  style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; margin: 0; cursor: pointer"
+                  @click.stop
+                >
+                  <input
+                    v-model="wizardForm.ciEnabled"
+                    type="checkbox"
+                    @change="wizardForm.ciEnabled && (wizardForm.showCloudInit = true)"
+                  />
+                  <span>Enable Cloud-Init</span>
+                </label>
+                <button type="button" class="btn btn-xs">
+                  {{ wizardForm.showCloudInit ? 'Collapse' : 'Expand' }}
+                </button>
+              </div>
             </div>
             <div v-if="wizardForm.showCloudInit" class="form-grid" style="margin-top: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px">
               <div class="form-group">
@@ -1694,6 +1723,7 @@ async function handleWizardSubmit() {
               <option value="kvm64">kvm64 (Safe standard KVM)</option>
               <option value="x86-64-v2-AES">x86-64-v2-AES</option>
               <option value="EPYC">EPYC</option>
+              <option value="max">max (All Features)</option>
             </select>
           </div>
           <div class="form-group">
@@ -1729,8 +1759,8 @@ async function handleWizardSubmit() {
             <label>Hugepages</label>
             <select v-model="wizardForm.hugepages" class="select mono">
               <option value="off">Disabled (Standard 4KiB pages)</option>
-              <option value="2M">2 MiB Hugepages</option>
-              <option value="1G">1 GiB Hugepages</option>
+              <option value="2MB">2 MiB Hugepages</option>
+              <option value="1GB">1 GiB Hugepages</option>
             </select>
           </div>
         </div>
@@ -1895,7 +1925,9 @@ async function handleWizardSubmit() {
             <select v-model="editingNicBuffer.model" class="select mono">
               <option value="virtio">VirtIO (paravirtualized)</option>
               <option value="e1000">Intel E1000</option>
+              <option value="e1000e">Intel E1000e</option>
               <option value="rtl8139">Realtek RTL8139</option>
+              <option value="vmxnet3">VMware vmxnet3</option>
             </select>
           </div>
           <div class="form-group">
@@ -1938,6 +1970,7 @@ async function handleWizardSubmit() {
               <option value="qxl">qxl (SPICE / 2D optimized)</option>
               <option value="std">std (Standard VGA compatible)</option>
               <option value="cirrus">cirrus (Legacy)</option>
+              <option value="none">none (Headless / Serial Only)</option>
             </select>
           </div>
         </div>

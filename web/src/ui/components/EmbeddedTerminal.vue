@@ -27,7 +27,7 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  (e: 'popout'): void;
+  (e: 'popout', shell: string): void;
 }>();
 
 const selectedShell = ref(props.initialShell);
@@ -299,7 +299,7 @@ onBeforeUnmount(() => {
         <button
           class="btn btn-xs btn-primary"
           title="Open in Detached Pop-out Window"
-          @click="emit('popout')"
+          @click="emit('popout', selectedShell)"
         >
           <MdiIcon :path="mdiOpenInNew" size="13" />
           <span>Pop-out</span>

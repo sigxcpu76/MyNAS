@@ -10,6 +10,7 @@ export const LXC_DISTRO_ICONS: Record<string, string> = {
   archlinux: 'https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/arch-linux.png',
   fedora: 'https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/fedora.png',
   rocky: 'https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/rocky-linux.png',
+  rockylinux: 'https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/rocky-linux.png',
   almalinux: 'https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/almalinux.png',
 };
 
@@ -185,7 +186,7 @@ export function getLxcContainerIcon(lx: LxcContainer, lxcCatalogItems?: LxcCatal
   const cleanName = (lx.containerName || '').toLowerCase().replace(/^(ct|lxc)[-_]/, '');
   const isDistroNamed =
     distroKey &&
-    (cleanName.includes(distroKey) || ['debian', 'ubuntu', 'alpine', 'arch', 'archlinux', 'fedora', 'rocky', 'almalinux'].some((d) => cleanName.startsWith(d)));
+    (cleanName.includes(distroKey) || ['debian', 'ubuntu', 'alpine', 'arch', 'archlinux', 'fedora', 'rocky', 'rockylinux', 'almalinux'].some((d) => cleanName.startsWith(d)));
 
   // If container name explicitly indicates a distro container (e.g. ct-debian, debian-12)
   if (isDistroNamed && LXC_DISTRO_ICONS[distroKey]) {
@@ -194,7 +195,7 @@ export function getLxcContainerIcon(lx: LxcContainer, lxcCatalogItems?: LxcCatal
 
   // Check if container name matches a known service (e.g. pihole, plex, adguard, nextcloud)
   const slug = getAppSlug(cleanName || lx.containerName || '');
-  const isGeneric = ['container', 'debian', 'ubuntu', 'alpine', 'arch', 'archlinux', 'fedora', 'rocky', 'almalinux', 'ct', 'lxc'].includes(slug);
+  const isGeneric = ['container', 'debian', 'ubuntu', 'alpine', 'arch', 'archlinux', 'fedora', 'rocky', 'rockylinux', 'almalinux', 'ct', 'lxc'].includes(slug);
   if (slug && !isGeneric) {
     return `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${slug}.png`;
   }
@@ -214,6 +215,7 @@ export const VM_OS_ICONS: Record<string, string> = {
   arch: 'https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/arch-linux.png',
   fedora: 'https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/fedora.png',
   rocky: 'https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/rocky-linux.png',
+  rockylinux: 'https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/rocky-linux.png',
   almalinux: 'https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/almalinux.png',
   redhat: 'https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/redhat.png',
   freebsd: 'https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/freebsd.png',

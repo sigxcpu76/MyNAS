@@ -73,10 +73,17 @@ const isStorage = computed(() => {
   return (
     activeTab.value === 'storage-pools' ||
     activeTab.value === 'storage-disks' ||
+    activeTab.value === 'storage-datasets' ||
     activeTab.value === 'zfs'
   );
 });
 const isKvm = computed(() => activeTab.value === 'kvm' || activeTab.value === 'lxc');
+
+const isFaulted = computed(() => {
+  return (nasState.pools || []).some(
+    (p) => p.state && ['FAULTED', 'UNAVAIL', 'SUSPENDED'].includes(p.state.toUpperCase())
+  );
+});
 
 const isDegraded = computed(() => {
   return (nasState.pools || []).some((p) => p.state && p.state !== 'ONLINE');
@@ -90,7 +97,10 @@ const isDegraded = computed(() => {
       <div class="top-bar-left">
         <NanLogo :size="24" subtitle="Mobile" />
         <span class="host-pill">{{ nasState.systemTelemetry?.host?.hostname || 'nas01' }}</span>
-        <span class="health-indicator" :class="isDegraded ? 'health-warning' : 'health-ok'" />
+        <span
+          class="health-indicator"
+          :class="isFaulted ? 'health-danger' : isDegraded ? 'health-warning' : 'health-ok'"
+        />
       </div>
 
       <div class="top-bar-right">
@@ -143,10 +153,12 @@ const isDegraded = computed(() => {
 
       <!-- Fallback tab views wrapped for touch scrolling -->
       <div v-else class="mobile-fallback-wrap">
-        <SharesView v-if="activeTab === 'shares' || activeTab === 'shares-cifs' || activeTab === 'shares-webdav'" />
+        <SharesView
+          v-if="activeTab === 'shares' || activeTab === 'shares-cifs' || activeTab === 'shares-webdav'"
+          :active-subtab="activeTab === 'shares-webdav' ? 'webdav' : activeTab === 'shares-cifs' ? 'cifs' : 'all'"
+        />
         <IdentityView v-else-if="activeTab === 'identity'" />
         <CronJobsView v-else-if="activeTab === 'cron'" />
-        <DatasetsView v-else-if="activeTab === 'storage-datasets'" />
         <VolumesView v-else-if="activeTab === 'storage-volumes'" />
         <PrerequisitesView v-else-if="activeTab === 'prerequisites'" />
       </div>
@@ -287,6 +299,11 @@ const isDegraded = computed(() => {
 }
 
 .health-indicator.health-warning {
+  background: #f59e0b;
+  box-shadow: 0 0 6px #f59e0b;
+}
+
+.health-indicator.health-danger {
   background: #f87171;
   box-shadow: 0 0 6px #f87171;
 }

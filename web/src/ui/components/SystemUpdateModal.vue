@@ -199,7 +199,7 @@ function handleClose() {
             The updated binary was installed, but the daemon did not become reachable after 60 seconds of polling.
             Connect via SSH to check service status and logs:
           </p>
-          <pre class="mono font-xs" style="background: rgba(0,0,0,0.3); padding: 10px 14px; border-radius: 6px; user-select: all">systemctl status nasctl&#10;journalctl -u nasctl -n 50 --no-pager</pre>
+          <pre class="mono font-xs" style="background: var(--bg-elevated); border: 1px solid var(--border-subtle); padding: 10px 14px; border-radius: 6px; user-select: all">systemctl status nasctl&#10;journalctl -u nasctl -n 50 --no-pager</pre>
           <div style="display: flex; gap: 8px; margin-top: 16px">
             <button class="btn btn-sm btn-primary" @click="startReconnectPolling">Retry Reconnect</button>
             <button class="btn btn-sm btn-secondary" @click="emit('close')">Close Window</button>
@@ -406,7 +406,7 @@ function handleClose() {
 .details-card {
   padding: 10px 14px;
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--bg-elevated);
   border: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
@@ -439,7 +439,7 @@ function handleClose() {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-elevated);
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -517,14 +517,14 @@ function handleClose() {
 .markdown-body :deep(code) {
   font-family: var(--font-mono, monospace);
   font-size: 11px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-elevated);
   padding: 1px 5px;
   border-radius: 4px;
   border: 1px solid var(--border-subtle);
 }
 
 .markdown-body :deep(pre) {
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--bg-elevated);
   padding: 8px 12px;
   border-radius: 6px;
   overflow-x: auto;

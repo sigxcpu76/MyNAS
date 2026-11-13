@@ -48,6 +48,7 @@ export interface ComposeServiceModel {
   gpuEnabled: boolean;
   gpuCount: string; // 'all' | '1' | '2' | 'custom'
   gpuDeviceIds: string; // e.g. "0" or "0,1"
+  rawRuntime?: string;
   rawCommand?: string[];
   rawDependsOn?: Record<string, any>;
   rawNetworks?: Record<string, any>;
@@ -433,6 +434,7 @@ export function composeYamlToForm(
       gpuEnabled,
       gpuCount,
       gpuDeviceIds,
+      rawRuntime: typeof svc.runtime === 'string' && svc.runtime.trim() ? svc.runtime.trim() : undefined,
     };
 
     // Parse Ports
@@ -440,16 +442,40 @@ export function composeYamlToForm(
       for (const p of svc.ports) {
         if (typeof p === 'string' || typeof p === 'number') {
           const str = String(p).trim().replace(/^["']+|["']+$/g, '');
-          const parts = str.split(':');
-          let hostIp: string | undefined = undefined;
-          if (parts.length >= 2) {
-            let hostP = parts[0].replace(/^["']+|["']+$/g, '').trim();
-            let containerPart = parts[1];
-            if (parts.length === 3) {
-              hostIp = parts[0].replace(/^["']+|["']+$/g, '').trim();
-              hostP = parts[1].replace(/^["']+|["']+$/g, '').trim();
-              containerPart = parts[2];
+          const isSinglePort = !str.includes(':') || (str.startsWith('[') && str.endsWith(']'));
+          if (!isSinglePort) {
+            const lastColon = str.lastIndexOf(':');
+            const prefix = str.slice(0, lastColon).trim();
+            const containerPart = str.slice(lastColon + 1).trim();
+            let hostIp: string | undefined = undefined;
+            let hostP = '';
+
+            if (prefix.startsWith('[')) {
+              if (prefix.endsWith(']')) {
+                hostIp = prefix;
+                hostP = '';
+              } else {
+                const closeBracket = prefix.indexOf(']:');
+                if (closeBracket !== -1) {
+                  hostIp = prefix.slice(0, closeBracket + 1).trim();
+                  hostP = prefix.slice(closeBracket + 2).trim();
+                } else {
+                  hostP = prefix;
+                }
+              }
+            } else {
+              const prevColon = prefix.lastIndexOf(':');
+              if (prevColon === -1) {
+                hostP = prefix;
+              } else {
+                const rawIp = prefix.slice(0, prevColon).replace(/^["']+|["']+$/g, '').trim();
+                hostP = prefix.slice(prevColon + 1).replace(/^["']+|["']+$/g, '').trim();
+                if (rawIp) {
+                  hostIp = rawIp.includes(':') ? `[${rawIp}]` : rawIp;
+                }
+              }
             }
+
             const [contP, proto] = containerPart.split('/');
             let cleanHostP = hostP.replace(/^["']+|["']+$/g, '').trim();
             if (!cleanHostP) {
@@ -953,6 +979,8 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
   }
 
   rootObj.services = {};
+  const allServicesRestartNo =
+    form.services.length > 0 && form.services.every((s) => s.restart === 'no');
 
   for (const svc of form.services) {
     const svcKey = svc.name.trim() || 'app';
@@ -980,6 +1008,8 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
 
     if (form.autoStart === false) {
       svcObj.restart = 'no';
+    } else if (form.autoStart === true && allServicesRestartNo) {
+      svcObj.restart = 'unless-stopped';
     } else if (svc.restart) {
       svcObj.restart = svc.restart;
     } else {
@@ -1165,6 +1195,11 @@ export function formToComposeYaml(form: ComposeAppFormModel): string {
       if (Object.keys(svcObj.deploy.resources.limits).length === 0) {
         delete svcObj.deploy.resources.limits;
       }
+    }
+
+    // Preserve explicit container runtime (e.g. nvidia, sysbox-runc) unless GPU was disabled on nvidia runtime
+    if (svc.rawRuntime && (svc.rawRuntime !== 'nvidia' || svc.gpuEnabled)) {
+      svcObj.runtime = svc.rawRuntime;
     }
 
     // NVIDIA GPU Passthrough (deploy.resources.reservations.devices)

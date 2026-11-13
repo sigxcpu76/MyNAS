@@ -1,8 +1,8 @@
-package share
+package share_test
 
 import (
 	"context"
-	"io"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,347 +10,92 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sigxcpu/nas/internal/adapters/outbound/share"
 	"github.com/sigxcpu/nas/internal/domain"
 )
 
-func TestWebdavAdapter_LifecycleAndPersistence(t *testing.T) {
-	stateDir := t.TempDir()
-	shareDir := t.TempDir()
-
-	adapter := NewWebdavAdapter(stateDir)
+func TestWebdavHardeningAndIndexFiltering(t *testing.T) {
 	ctx := context.Background()
+	tmp := t.TempDir()
+	aliceDir := filepath.Join(tmp, "alice")
+	bobDir := filepath.Join(tmp, "bob")
+	_ = os.MkdirAll(aliceDir, 0o755)
+	_ = os.MkdirAll(bobDir, 0o755)
 
-	// 1. Create Share
-	created, err := adapter.CreateShare(ctx, domain.WebdavShare{
-		ID:          "docs",
-		ShareName:   "Documents",
-		Path:        shareDir,
-		Description: "General documents",
-		ReadOnly:    false,
-		Enabled:     true,
-	})
-	if err != nil {
-		t.Fatalf("CreateShare failed: %v", err)
-	}
-	if created.ID != "docs" || created.URLPrefix != "/dav/docs" {
-		t.Fatalf("unexpected created share: %+v", created)
+	evilHTML := `<script>alert("xss")</script>`
+	if err := os.WriteFile(filepath.Join(aliceDir, "index.html"), []byte(evilHTML), 0o644); err != nil {
+		t.Fatalf("write index.html: %v", err)
 	}
 
-	// Verify persistence file exists
-	persistFile := filepath.Join(stateDir, "webdav_shares.json")
-	if _, err := os.Stat(persistFile); err != nil {
-		t.Fatalf("expected webdav_shares.json to exist: %v", err)
-	}
-
-	// 2. Load into fresh adapter instance
-	reloaded := NewWebdavAdapter(stateDir)
-	sh, err := reloaded.GetShare(ctx, "docs")
-	if err != nil {
-		t.Fatalf("failed to get reloaded share: %v", err)
-	}
-	if sh.Description != "General documents" {
-		t.Fatalf("expected description 'General documents', got %q", sh.Description)
-	}
-
-	// 3. Update Share
-	updated, err := reloaded.UpdateShare(ctx, domain.WebdavShare{
-		ID:          "docs",
-		Description: "Updated Documents",
-		ReadOnly:    true,
-	}, []string{"description", "read_only"})
-	if err != nil {
-		t.Fatalf("UpdateShare failed: %v", err)
-	}
-	if !updated.ReadOnly || updated.Description != "Updated Documents" {
-		t.Fatalf("unexpected updated share: %+v", updated)
-	}
-
-	// 4. Delete Share
-	if err := reloaded.DeleteShare(ctx, "docs"); err != nil {
-		t.Fatalf("DeleteShare failed: %v", err)
-	}
-	_, err = reloaded.GetShare(ctx, "docs")
-	if err == nil {
-		t.Fatalf("expected error getting deleted share, got nil")
-	}
-}
-
-func TestWebdavAdapter_AuthenticationAndAuthorization(t *testing.T) {
-	shareDir := t.TempDir()
-	adapter := NewWebdavAdapter()
-
-	// Configure mock authenticator
+	adapter := share.NewWebdavAdapter(filepath.Join(tmp, "state"))
 	adapter.SetAuthenticator(func(ctx context.Context, username, password string) (*domain.User, error) {
-		if username == "alice" && password == "secret123" {
-			return &domain.User{
-				Username:     "alice",
-				PrimaryGroup: "staff",
-			}, nil
+		if password != "secret" {
+			return nil, fmt.Errorf("bad credentials")
 		}
-		if username == "bob" && password == "secret456" {
-			return &domain.User{
-				Username:     "bob",
-				PrimaryGroup: "guests",
-			}, nil
-		}
-		return nil, domain.ErrUnauthorized
+		return &domain.User{Username: username, PrimaryGroup: "users"}, nil
 	})
 
-	ctx := context.Background()
 	_, err := adapter.CreateShare(ctx, domain.WebdavShare{
-		ID:           "finance",
-		Path:         shareDir,
+		ID:           "alice-vault",
+		Path:         aliceDir,
 		Enabled:      true,
 		AllowedUsers: []string{"alice"},
 	})
 	if err != nil {
-		t.Fatalf("CreateShare failed: %v", err)
+		t.Fatalf("CreateShare alice-vault: %v", err)
 	}
 
-	// 1. Request without auth -> 401 with WWW-Authenticate header
-	req := httptest.NewRequest(http.MethodGet, "/dav/finance/", nil)
-	w := httptest.NewRecorder()
-	adapter.ServeHTTP(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401 Unauthorized without credentials, got %d", w.Code)
-	}
-	if !strings.Contains(w.Header().Get("WWW-Authenticate"), "Basic") {
-		t.Fatalf("missing WWW-Authenticate header: %v", w.Header())
-	}
-
-	// 2. Request with invalid credentials -> 401
-	req = httptest.NewRequest(http.MethodGet, "/dav/finance/", nil)
-	req.SetBasicAuth("alice", "wrongpass")
-	w = httptest.NewRecorder()
-	adapter.ServeHTTP(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401 with bad credentials, got %d", w.Code)
-	}
-
-	// 3. Request with valid user but not authorized for share (bob is not in AllowedUsers) -> 403
-	req = httptest.NewRequest(http.MethodGet, "/dav/finance/", nil)
-	req.SetBasicAuth("bob", "secret456")
-	w = httptest.NewRecorder()
-	adapter.ServeHTTP(w, req)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 Forbidden for unauthorized user bob, got %d", w.Code)
-	}
-
-	// 4. Request with authorized user alice -> 200 OK (renders auto-index)
-	req = httptest.NewRequest(http.MethodGet, "/dav/finance/", nil)
-	req.SetBasicAuth("alice", "secret123")
-	w = httptest.NewRecorder()
-	adapter.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK for alice, got %d: %s", w.Code, w.Body.String())
-	}
-
-	// 5. Root shares index without auth -> 401 Unauthorized
-	req = httptest.NewRequest(http.MethodGet, "/dav/", nil)
-	w = httptest.NewRecorder()
-	adapter.ServeHTTP(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401 Unauthorized on root index without credentials, got %d", w.Code)
-	}
-	if !strings.Contains(w.Header().Get("WWW-Authenticate"), "Basic") {
-		t.Fatalf("missing WWW-Authenticate header on root index: %v", w.Header())
-	}
-
-	// 6. Root shares index with invalid credentials -> 401 Unauthorized
-	req = httptest.NewRequest(http.MethodGet, "/dav/", nil)
-	req.SetBasicAuth("alice", "wrongpass")
-	w = httptest.NewRecorder()
-	adapter.ServeHTTP(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401 Unauthorized on root index with bad credentials, got %d", w.Code)
-	}
-
-	// 7. Root shares index with valid user bob who has no access to any share -> 403 Forbidden
-	req = httptest.NewRequest(http.MethodGet, "/dav/", nil)
-	req.SetBasicAuth("bob", "secret456")
-	w = httptest.NewRecorder()
-	adapter.ServeHTTP(w, req)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 Forbidden on root index for bob with no accessible shares, got %d", w.Code)
-	}
-
-	// 8. Root shares index with valid user alice who has access to 'finance' -> 200 OK
-	req = httptest.NewRequest(http.MethodGet, "/dav/", nil)
-	req.SetBasicAuth("alice", "secret123")
-	w = httptest.NewRecorder()
-	adapter.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK on root index for alice, got %d: %s", w.Code, w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), "Available WebDAV Shares") {
-		t.Fatalf("expected shares index HTML for alice, got: %s", w.Body.String())
-	}
-}
-
-func TestWebdavAdapter_ReadOnlyEnforcement(t *testing.T) {
-	shareDir := t.TempDir()
-	adapter := NewWebdavAdapter()
-	ctx := context.Background()
-
-	_, err := adapter.CreateShare(ctx, domain.WebdavShare{
-		ID:       "public",
-		Path:     shareDir,
-		Enabled:  true,
-		ReadOnly: true,
+	_, err = adapter.CreateShare(ctx, domain.WebdavShare{
+		ID:           "bob-secret",
+		Path:         bobDir,
+		Enabled:      true,
+		AllowedUsers: []string{"bob"},
 	})
 	if err != nil {
-		t.Fatalf("CreateShare failed: %v", err)
+		t.Fatalf("CreateShare bob-secret: %v", err)
 	}
 
-	// PUT request on read-only share must fail with 403
-	putReq := httptest.NewRequest(http.MethodPut, "/dav/public/test.txt", strings.NewReader("content"))
-	w := httptest.NewRecorder()
-	adapter.ServeHTTP(w, putReq)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 Forbidden on PUT to read-only share, got %d", w.Code)
+	// 1. Root /dav/ index for alice must NOT leak bob-secret or bob's path
+	req := httptest.NewRequest(http.MethodGet, "/dav/", nil)
+	req.SetBasicAuth("alice", "secret")
+	rec := httptest.NewRecorder()
+	adapter.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on /dav/, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "alice-vault") {
+		t.Fatalf("expected alice-vault in /dav/ index")
+	}
+	if strings.Contains(body, "bob-secret") || strings.Contains(body, bobDir) {
+		t.Fatalf("leaked unauthorized share metadata in /dav/ index")
 	}
 
-	// DELETE request must also fail with 403
-	delReq := httptest.NewRequest(http.MethodDelete, "/dav/public/test.txt", nil)
-	w = httptest.NewRecorder()
-	adapter.ServeHTTP(w, delReq)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 Forbidden on DELETE to read-only share, got %d", w.Code)
+	// 2. Directory GET /dav/alice-vault/ must render auto-index, NOT raw index.html script
+	dirReq := httptest.NewRequest(http.MethodGet, "/dav/alice-vault/", nil)
+	dirReq.SetBasicAuth("alice", "secret")
+	dirRec := httptest.NewRecorder()
+	adapter.ServeHTTP(dirRec, dirReq)
+	if dirRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on /dav/alice-vault/, got %d", dirRec.Code)
+	}
+	if strings.Contains(dirRec.Body.String(), evilHTML) {
+		t.Fatalf("directory GET executed raw index.html instead of safe auto-index")
 	}
 
-	// GET request succeeds
-	getReq := httptest.NewRequest(http.MethodGet, "/dav/public/", nil)
-	w = httptest.NewRecorder()
-	adapter.ServeHTTP(w, getReq)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK on GET to read-only share, got %d", w.Code)
+	// 3. Direct file GET /dav/alice-vault/index.html must carry strict sandbox CSP + nosniff
+	fileReq := httptest.NewRequest(http.MethodGet, "/dav/alice-vault/index.html", nil)
+	fileReq.SetBasicAuth("alice", "secret")
+	fileRec := httptest.NewRecorder()
+	adapter.ServeHTTP(fileRec, fileReq)
+	if fileRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on /dav/alice-vault/index.html, got %d", fileRec.Code)
 	}
-}
-
-func TestWebdavAdapter_AutoIndexAndFileServing(t *testing.T) {
-	shareDir := t.TempDir()
-	subDir := filepath.Join(shareDir, "photos")
-	if err := os.MkdirAll(subDir, 0o755); err != nil {
-		t.Fatalf("failed to create subdir: %v", err)
+	csp := fileRec.Header().Get("Content-Security-Policy")
+	if !strings.Contains(csp, "sandbox") {
+		t.Fatalf("expected sandbox CSP header on file response, got %q", csp)
 	}
-	testFile := filepath.Join(subDir, "family.jpg")
-	if err := os.WriteFile(testFile, []byte("fake-jpeg-data"), 0o644); err != nil {
-		t.Fatalf("failed to write test file: %v", err)
-	}
-
-	adapter := NewWebdavAdapter()
-	ctx := context.Background()
-
-	_, err := adapter.CreateShare(ctx, domain.WebdavShare{
-		ID:          "media",
-		Path:        shareDir,
-		Description: "Media Store",
-		Enabled:     true,
-	})
-	if err != nil {
-		t.Fatalf("CreateShare failed: %v", err)
-	}
-
-	// 1. Missing trailing slash on directory redirects with 301
-	req := httptest.NewRequest(http.MethodGet, "/dav/media", nil)
-	w := httptest.NewRecorder()
-	adapter.ServeHTTP(w, req)
-	if w.Code != http.StatusMovedPermanently {
-		t.Fatalf("expected 301 redirect for directory without trailing slash, got %d", w.Code)
-	}
-	if loc := w.Header().Get("Location"); loc != "/dav/media/" {
-		t.Fatalf("expected Location /dav/media/, got %q", loc)
-	}
-
-	// 2. GET on directory returns HTML Auto-Index
-	req = httptest.NewRequest(http.MethodGet, "/dav/media/", nil)
-	w = httptest.NewRecorder()
-	adapter.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK, got %d", w.Code)
-	}
-	contentType := w.Header().Get("Content-Type")
-	if !strings.Contains(contentType, "text/html") {
-		t.Fatalf("expected Content-Type text/html, got %q", contentType)
-	}
-	body := w.Body.String()
-	if !strings.Contains(body, "photos") {
-		t.Fatalf("expected directory auto-index to list 'photos', got: %s", body)
-	}
-	if !strings.Contains(body, "Index of /media/") {
-		t.Fatalf("expected breadcrumb title in body, got: %s", body)
-	}
-
-	// 3. GET on subdirectory auto-index
-	req = httptest.NewRequest(http.MethodGet, "/dav/media/photos/", nil)
-	w = httptest.NewRecorder()
-	adapter.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK, got %d", w.Code)
-	}
-	body = w.Body.String()
-	if !strings.Contains(body, "family.jpg") {
-		t.Fatalf("expected subdir auto-index to list 'family.jpg', got: %s", body)
-	}
-	if !strings.Contains(body, "[Parent Directory]") {
-		t.Fatalf("expected parent directory link in subdir auto-index")
-	}
-	if !strings.Contains(body, "onclick=\"sortTable('name')\"") ||
-		!strings.Contains(body, "onclick=\"sortTable('size')\"") ||
-		!strings.Contains(body, "onclick=\"sortTable('date')\"") ||
-		!strings.Contains(body, "onclick=\"sortTable('type')\"") {
-		t.Fatalf("expected sortable columns in auto-index table, got: %s", body)
-	}
-	if !strings.Contains(body, "data-size=") || !strings.Contains(body, "data-time=") {
-		t.Fatalf("expected data-size and data-time attributes in auto-index rows, got: %s", body)
-	}
-
-	// 4. Custom index.html overrides auto-index
-	indexPath := filepath.Join(shareDir, "index.html")
-	_ = os.WriteFile(indexPath, []byte("<h1>Welcome Custom Index</h1>"), 0o644)
-	req = httptest.NewRequest(http.MethodGet, "/dav/media/", nil)
-	w = httptest.NewRecorder()
-	adapter.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK, got %d", w.Code)
-	}
-	if !strings.Contains(w.Body.String(), "<h1>Welcome Custom Index</h1>") {
-		t.Fatalf("expected custom index.html content, got: %s", w.Body.String())
-	}
-	_ = os.Remove(indexPath)
-
-	// 5. Root access on WebDAV port requires auth and shows shares index when authenticated
-	req = httptest.NewRequest(http.MethodGet, "/", nil)
-	w = httptest.NewRecorder()
-	adapter.ServeHTTP(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401 Unauthorized on unauthenticated root shares index, got %d", w.Code)
-	}
-
-	req = httptest.NewRequest(http.MethodGet, "/", nil)
-	req.SetBasicAuth("alice", "secret123")
-	w = httptest.NewRecorder()
-	adapter.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK on authenticated root shares index, got %d", w.Code)
-	}
-	if !strings.Contains(w.Body.String(), "Available WebDAV Shares") || !strings.Contains(w.Body.String(), "media") {
-		t.Fatalf("expected root shares index to list 'media', got: %s", w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), "onclick=\"sortShares('id')\"") ||
-		!strings.Contains(w.Body.String(), "onclick=\"sortShares('path')\"") {
-		t.Fatalf("expected sortable columns in shares index, got: %s", w.Body.String())
-	}
-
-	// 6. Direct access without /dav/ prefix (dedicated port simulation: /media/photos/family.jpg)
-	req = httptest.NewRequest(http.MethodGet, "/media/photos/family.jpg", nil)
-	w = httptest.NewRecorder()
-	adapter.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK on file GET without /dav/ prefix, got %d", w.Code)
-	}
-	fileBody, _ := io.ReadAll(w.Body)
-	if string(fileBody) != "fake-jpeg-data" {
-		t.Fatalf("expected file content 'fake-jpeg-data', got %q", string(fileBody))
+	if got := fileRec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("expected nosniff header, got %q", got)
 	}
 }

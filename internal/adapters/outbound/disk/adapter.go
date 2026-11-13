@@ -234,7 +234,7 @@ func (a *Adapter) inspectSysfsDisk(devName string, poolMap map[string]string, de
 		PhysicalBlockSize:  physicalBlockSize,
 		TemperatureCelsius: temp,
 		SmartStatus:        "UNKNOWN",
-		HealthPercentage:   100,
+		HealthPercentage:   -1,
 		OwningZfsPool:      owningPool,
 		Partitions:         partitions,
 		Aliases:            diskAliases,
@@ -563,12 +563,8 @@ func (a *Adapter) enrichSmartData(devPath string, d *domain.Disk, readIOs, write
 		}
 	}
 
-	// If we got temperature or active state from sysfs, default to PASSED
-	if d.SmartStatus == "UNKNOWN" {
-		if d.TemperatureCelsius > 0 || d.State == "live" || d.State == "running" {
-			d.SmartStatus = "PASSED"
-		}
-	}
+	// Do not fabricate SmartStatus = "PASSED" from sysfs temperature or running state;
+	// keep "UNKNOWN" when neither smartctl nor nvme-cli returned a SMART health verdict.
 
 	// If no vendor SMART parameters could be extracted (e.g. unprivileged execution in container/shell),
 	// provide sysfs diagnostic parameters
@@ -715,6 +711,10 @@ func (a *Adapter) parseSmartctlJSON(data []byte, d *domain.Disk) bool {
 			case 194:
 				if d.TemperatureCelsius == 0 {
 					d.TemperatureCelsius = float64(attr.Raw.Value)
+				}
+			case 177, 202, 231, 233:
+				if !d.Rotational && attr.Value > 0 && attr.Value <= 100 && d.HealthPercentage < 0 {
+					d.HealthPercentage = int32(attr.Value)
 				}
 			}
 

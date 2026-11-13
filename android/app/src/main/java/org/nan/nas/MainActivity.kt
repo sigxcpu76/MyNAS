@@ -17,12 +17,14 @@ import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import org.json.JSONObject
 import org.nan.nas.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var prefsManager: PreferencesManager
     private var profile: ServerProfile? = null
+    private var shouldSeedProfileToken: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,8 +34,9 @@ class MainActivity : AppCompatActivity() {
         prefsManager = PreferencesManager(this)
 
         @Suppress("DEPRECATION")
-        profile = intent.getSerializableExtra("server_profile") as? ServerProfile
-            ?: prefsManager.getProfile()
+        val incomingProfile = intent.getSerializableExtra("server_profile") as? ServerProfile
+        shouldSeedProfileToken = incomingProfile != null && !incomingProfile.token.isNullOrEmpty()
+        profile = incomingProfile ?: prefsManager.getProfile()
 
         if (profile == null || profile?.host.isNullOrEmpty()) {
             redirectToLogin()
@@ -267,39 +270,54 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun injectTokenAndPreferences() {
-        val token = profile?.token ?: ""
-        val ver = getAppVersionName()
+        val tokenQuoted = JSONObject.quote(profile?.token ?: "")
+        val verQuoted = JSONObject.quote(getAppVersionName())
         val build = getAppVersionCode()
+        val forceSeed = shouldSeedProfileToken
+        val isTablet = resources.configuration.smallestScreenWidthDp >= 600
+        val defaultViewModeQuoted = JSONObject.quote(if (isTablet) "auto" else "mobile")
 
-        // Inject stored auth token, APK version metadata, and default mobile-specific layout if unset
+        // Inject stored auth token, APK version metadata, and default device layout if unset
         val js = """
             (function() {
                 try {
+                    var token = $tokenQuoted;
+                    var ver = $verQuoted;
+                    var defaultMode = $defaultViewModeQuoted;
                     window.nanNativeApp = {
                         platform: 'android',
-                        version: '$ver',
+                        version: ver,
                         build: $build
                     };
                     if (typeof window !== 'undefined' && window.localStorage) {
-                        window.localStorage.setItem('nan_apk_version', '$ver');
-                        window.localStorage.setItem('nan_apk_build', '$build');
-                        if ('$token'.length > 0) {
-                            if (!window.localStorage.getItem('nas_jwt_token')) {
-                                window.localStorage.setItem('nas_jwt_token', '$token');
+                        window.localStorage.setItem('nan_apk_version', ver);
+                        window.localStorage.setItem('nan_apk_build', String($build));
+                        var isHttpOrigin = window.location && /^https?:$/i.test(window.location.protocol);
+                        var seeded = false;
+                        if (token.length > 0 && isHttpOrigin) {
+                            if ($forceSeed || !window.localStorage.getItem('nas_jwt_token')) {
+                                window.localStorage.setItem('nas_jwt_token', token);
+                                seeded = true;
                             }
                         }
                         if (!window.localStorage.getItem('nas_device_view_mode')) {
-                            window.localStorage.setItem('nas_device_view_mode', 'mobile');
+                            window.localStorage.setItem('nas_device_view_mode', defaultMode);
                         }
                         if (!window.localStorage.getItem('device_ui_mode_override')) {
-                            window.localStorage.setItem('device_ui_mode_override', 'mobile');
+                            window.localStorage.setItem('device_ui_mode_override', defaultMode);
                         }
+                        return seeded ? 'seeded' : 'ok';
                     }
                 } catch(e) {}
+                return 'noop';
             })();
         """.trimIndent()
 
-        binding.webView.evaluateJavascript(js, null)
+        binding.webView.evaluateJavascript(js) { result ->
+            if (forceSeed && (result == "\"seeded\"" || result == "seeded")) {
+                shouldSeedProfileToken = false
+            }
+        }
     }
 
     private fun loadServerUrl() {

@@ -328,10 +328,11 @@ const activeConsoleContainerId = computed(() => {
   return running?.id || terminalContainerOptions.value[0]?.id || '';
 });
 
-function popoutDockerTerminal() {
+function popoutDockerTerminal(shellArg?: string) {
   const cid = activeConsoleContainerId.value;
   if (!cid) return;
-  const url = `/terminal?container=${encodeURIComponent(cid)}`;
+  const shell = typeof shellArg === 'string' && shellArg ? shellArg : '';
+  const url = `/terminal?container=${encodeURIComponent(cid)}${shell ? `&shell=${encodeURIComponent(shell)}` : ''}`;
   window.open(
     url,
     `docker_terminal_${cid}`,

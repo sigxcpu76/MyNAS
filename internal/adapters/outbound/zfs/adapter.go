@@ -72,6 +72,7 @@ type zpoolStatusPoolJSON struct {
 	Name       string                   `json:"name"`
 	State      string                   `json:"state"`
 	ErrorCount string                   `json:"error_count"`
+	ScanStats  map[string]any           `json:"scan_stats"`
 	Vdevs      map[string]zpoolVdevJSON `json:"vdevs"`
 }
 
@@ -158,6 +159,141 @@ func extractVdevInfo(vdevs map[string]zpoolVdevJSON) (layout string, devices []s
 		layout = "stripe"
 	}
 	return layout, devices
+}
+
+func scanStatStr(scan map[string]any, key string) string {
+	if len(scan) == 0 {
+		return ""
+	}
+	v, ok := scan[key]
+	if !ok || v == nil {
+		return ""
+	}
+	s := strings.TrimSpace(fmt.Sprintf("%v", v))
+	if s == "-" {
+		return ""
+	}
+	return s
+}
+
+func parseZfsSizeApprox(raw string) float64 {
+	s := strings.TrimSpace(strings.ToUpper(raw))
+	if s == "" || s == "-" {
+		return 0
+	}
+	mult := 1.0
+	switch {
+	case strings.HasSuffix(s, "K"):
+		mult = 1024
+		s = strings.TrimSuffix(s, "K")
+	case strings.HasSuffix(s, "M"):
+		mult = 1024 * 1024
+		s = strings.TrimSuffix(s, "M")
+	case strings.HasSuffix(s, "G"):
+		mult = 1024 * 1024 * 1024
+		s = strings.TrimSuffix(s, "G")
+	case strings.HasSuffix(s, "T"):
+		mult = 1024 * 1024 * 1024 * 1024
+		s = strings.TrimSuffix(s, "T")
+	case strings.HasSuffix(s, "P"):
+		mult = 1024 * 1024 * 1024 * 1024 * 1024
+		s = strings.TrimSuffix(s, "P")
+	case strings.HasSuffix(s, "B"):
+		s = strings.TrimSuffix(s, "B")
+	}
+	val, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil || val < 0 {
+		return 0
+	}
+	return val * mult
+}
+
+func formatScanStats(scan map[string]any) string {
+	if len(scan) == 0 {
+		return "Never scrubbed"
+	}
+	fn := strings.ToUpper(scanStatStr(scan, "function"))
+	state := strings.ToUpper(scanStatStr(scan, "state"))
+	if fn == "" && state == "" {
+		return "Never scrubbed"
+	}
+	label := "Scrub"
+	if strings.Contains(fn, "RESILVER") {
+		label = "Resilver"
+	}
+	errs := scanStatStr(scan, "errors")
+	if errs == "" {
+		errs = "0"
+	}
+	endTime := scanStatStr(scan, "end_time")
+
+	switch state {
+	case "SCANNING", "ISSUED":
+		examined := parseZfsSizeApprox(scanStatStr(scan, "examined"))
+		toExamine := parseZfsSizeApprox(scanStatStr(scan, "to_examine"))
+		if toExamine > 0 && examined >= 0 {
+			pct := (examined / toExamine) * 100
+			if pct > 100 {
+				pct = 100
+			}
+			return fmt.Sprintf("%s in progress (%.1f%%, %s errors)", label, pct, errs)
+		}
+		return fmt.Sprintf("%s in progress (%s errors)", label, errs)
+	case "CANCELED":
+		if endTime != "" {
+			return fmt.Sprintf("%s canceled on %s", label, endTime)
+		}
+		return fmt.Sprintf("%s canceled", label)
+	case "FINISHED":
+		suffix := ""
+		if endTime != "" {
+			suffix = " on " + endTime
+		}
+		return fmt.Sprintf("%s completed with %s errors%s", label, errs, suffix)
+	default:
+		return fmt.Sprintf("%s %s (%s errors)", label, strings.ToLower(state), errs)
+	}
+}
+
+func countNonHealthyLeafVdevs(vdevs []domain.ZfsVdev) int {
+	count := 0
+	for _, v := range vdevs {
+		if len(v.Children) > 0 {
+			count += countNonHealthyLeafVdevs(v.Children)
+			continue
+		}
+		st := strings.ToUpper(strings.TrimSpace(v.State))
+		if st != "" && st != "ONLINE" && st != "AVAIL" && st != "INUSE" {
+			count++
+		}
+	}
+	return count
+}
+
+func formatPoolHealth(poolState, errorCount string, vdevs []domain.ZfsVdev) string {
+	errs := strings.TrimSpace(errorCount)
+	if errs == "" {
+		errs = "0"
+	}
+	badVdevs := countNonHealthyLeafVdevs(vdevs)
+	st := strings.ToUpper(strings.TrimSpace(poolState))
+	if badVdevs > 0 {
+		return fmt.Sprintf("Pool %s: %d device(s) degraded/offline; %s data errors", st, badVdevs, errs)
+	}
+	if errs != "0" && !strings.EqualFold(errs, "No known data errors") {
+		return fmt.Sprintf("Pool reported %s errors", errs)
+	}
+	if st != "" && st != "ONLINE" {
+		return fmt.Sprintf("Pool state %s; 0 data errors", st)
+	}
+	return "All vdevs ONLINE; 0 pool errors"
+}
+
+func runZfsSet(ctx context.Context, propVal, targetPath string) error {
+	if out, err := exec.CommandContext(ctx, "zfs", "set", propVal, targetPath).CombinedOutput(); err != nil {
+		return fmt.Errorf("zfs set %s on %s failed: %v (%s)", propVal, targetPath, err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 func formatRecordsize(raw string) string {
@@ -263,14 +399,15 @@ func (a *Adapter) listHostPools(ctx context.Context) ([]domain.ZfsPool, error) {
 		var devices []string
 		layout := "stripe"
 		health := "All vdevs ONLINE; 0 pool errors"
-		scrubStatus := "No scrub errors recorded"
+		scrubStatus := "Never scrubbed"
 
 		if stPool, ok := statusData.Pools[poolName]; ok {
 			vdevs = buildVdevTree(stPool.Vdevs)
 			layout, devices = extractVdevInfo(stPool.Vdevs)
-			if stPool.ErrorCount != "" && stPool.ErrorCount != "0" {
-				health = fmt.Sprintf("Pool reported %s errors", stPool.ErrorCount)
-			}
+			health = formatPoolHealth(p.State, stPool.ErrorCount, vdevs)
+			scrubStatus = formatScanStats(stPool.ScanStats)
+		} else if p.State != "" && p.State != "ONLINE" {
+			health = fmt.Sprintf("Pool state %s", p.State)
 		}
 
 		pools = append(pools, domain.ZfsPool{
@@ -772,12 +909,7 @@ func (a *Adapter) listHostDatasets(ctx context.Context, poolID string) ([]domain
 		if name != poolID && !strings.HasPrefix(name, poolID+"/") {
 			continue
 		}
-		cleanID := strings.TrimPrefix(name, poolID+"/")
-		if name == poolID {
-			cleanID = "root"
-		} else {
-			cleanID = strings.ReplaceAll(cleanID, "/", "-")
-		}
+		cleanID := encodeZfsID(poolID, name)
 
 		used, _ := strconv.ParseInt(item.Properties["used"].Value, 10, 64)
 		avail, _ := strconv.ParseInt(item.Properties["available"].Value, 10, 64)
@@ -855,7 +987,7 @@ func (a *Adapter) GetDataset(ctx context.Context, poolID, datasetID string) (*do
 
 				return &domain.ZfsDataset{
 					PoolID:           cleanPool,
-					ID:               cleanDS,
+					ID:               encodeZfsID(cleanPool, targetPath),
 					DatasetPath:      targetPath,
 					Mountpoint:       mp,
 					UsedBytes:        used,
@@ -903,11 +1035,17 @@ func (a *Adapter) CreateDataset(ctx context.Context, dataset domain.ZfsDataset) 
 	if dataset.QuotaBytes > 0 {
 		args = append(args, "-o", fmt.Sprintf("quota=%d", dataset.QuotaBytes))
 	}
+	if dataset.ReservationBytes > 0 {
+		args = append(args, "-o", fmt.Sprintf("reservation=%d", dataset.ReservationBytes))
+	}
 	if dataset.Sync != "" {
 		args = append(args, "-o", "sync="+dataset.Sync)
 	}
 	if dataset.Readonly {
 		args = append(args, "-o", "readonly=on")
+	}
+	if dataset.Dedup {
+		args = append(args, "-o", "dedup=on")
 	}
 	if dataset.Atime {
 		args = append(args, "-o", "atime=on")
@@ -918,7 +1056,7 @@ func (a *Adapter) CreateDataset(ctx context.Context, dataset domain.ZfsDataset) 
 	if out, err := exec.CommandContext(ctx, "zfs", args...).CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("zfs create failed: %v (%s)", err, strings.TrimSpace(string(out)))
 	}
-	return a.GetDataset(ctx, cleanPool, dataset.ID)
+	return a.GetDataset(ctx, cleanPool, dataset.DatasetPath)
 }
 
 func (a *Adapter) UpdateDataset(ctx context.Context, dataset domain.ZfsDataset, fields []string) (*domain.ZfsDataset, error) {
@@ -946,47 +1084,65 @@ func (a *Adapter) UpdateDataset(ctx context.Context, dataset domain.ZfsDataset, 
 	}
 
 	if hasField("compression") && dataset.Compression != "" {
-		_ = exec.CommandContext(ctx, "zfs", "set", "compression="+dataset.Compression, targetPath).Run()
+		if err := runZfsSet(ctx, "compression="+dataset.Compression, targetPath); err != nil {
+			return nil, err
+		}
 	}
 	if hasField("quota_bytes") || hasField("quotaBytes") {
-		_ = exec.CommandContext(ctx, "zfs", "set", fmt.Sprintf("quota=%d", dataset.QuotaBytes), targetPath).Run()
+		if err := runZfsSet(ctx, fmt.Sprintf("quota=%d", dataset.QuotaBytes), targetPath); err != nil {
+			return nil, err
+		}
 	}
 	if hasField("readonly") {
 		val := "off"
 		if dataset.Readonly {
 			val = "on"
 		}
-		_ = exec.CommandContext(ctx, "zfs", "set", "readonly="+val, targetPath).Run()
+		if err := runZfsSet(ctx, "readonly="+val, targetPath); err != nil {
+			return nil, err
+		}
 	}
 	if hasField("atime") {
 		val := "off"
 		if dataset.Atime {
 			val = "on"
 		}
-		_ = exec.CommandContext(ctx, "zfs", "set", "atime="+val, targetPath).Run()
+		if err := runZfsSet(ctx, "atime="+val, targetPath); err != nil {
+			return nil, err
+		}
 	}
 	if hasField("recordsize") && dataset.Recordsize != "" {
-		_ = exec.CommandContext(ctx, "zfs", "set", "recordsize="+dataset.Recordsize, targetPath).Run()
+		if err := runZfsSet(ctx, "recordsize="+dataset.Recordsize, targetPath); err != nil {
+			return nil, err
+		}
 	}
 	if hasField("mountpoint") && dataset.Mountpoint != "" {
 		if mp := a.toStoredMountpoint(ctx, targetPath, dataset.Mountpoint); mp != "" {
-			_ = exec.CommandContext(ctx, "zfs", "set", "mountpoint="+mp, targetPath).Run()
+			if err := runZfsSet(ctx, "mountpoint="+mp, targetPath); err != nil {
+				return nil, err
+			}
 		}
 	}
 	if hasField("sync") && dataset.Sync != "" {
-		_ = exec.CommandContext(ctx, "zfs", "set", "sync="+dataset.Sync, targetPath).Run()
+		if err := runZfsSet(ctx, "sync="+dataset.Sync, targetPath); err != nil {
+			return nil, err
+		}
 	}
 	if hasField("reservation_bytes") || hasField("reservationBytes") {
-		_ = exec.CommandContext(ctx, "zfs", "set", fmt.Sprintf("reservation=%d", dataset.ReservationBytes), targetPath).Run()
+		if err := runZfsSet(ctx, fmt.Sprintf("reservation=%d", dataset.ReservationBytes), targetPath); err != nil {
+			return nil, err
+		}
 	}
 	if hasField("dedup") {
 		val := "off"
 		if dataset.Dedup {
 			val = "on"
 		}
-		_ = exec.CommandContext(ctx, "zfs", "set", "dedup="+val, targetPath).Run()
+		if err := runZfsSet(ctx, "dedup="+val, targetPath); err != nil {
+			return nil, err
+		}
 	}
-	return a.GetDataset(ctx, cleanPool, dataset.ID)
+	return a.GetDataset(ctx, cleanPool, targetPath)
 }
 
 func (a *Adapter) DeleteDataset(ctx context.Context, poolID, datasetID string, recursive bool) error {
@@ -1078,8 +1234,7 @@ func (a *Adapter) listHostVolumes(ctx context.Context, poolID string) ([]domain.
 		if !strings.HasPrefix(name, poolID+"/") {
 			continue
 		}
-		cleanID := strings.TrimPrefix(name, poolID+"/")
-		cleanID = strings.ReplaceAll(cleanID, "/", "-")
+		cleanID := encodeZfsID(poolID, name)
 
 		volSize, _ := strconv.ParseInt(item.Properties["volsize"].Value, 10, 64)
 		used, _ := strconv.ParseInt(item.Properties["used"].Value, 10, 64)
@@ -1136,7 +1291,7 @@ func (a *Adapter) GetVolume(ctx context.Context, poolID, volumeID string) (*doma
 
 				return &domain.ZfsVolume{
 					PoolID:          cleanPool,
-					ID:              cleanVol,
+					ID:              encodeZfsID(cleanPool, targetPath),
 					VolumePath:      targetPath,
 					DevicePath:      fmt.Sprintf("/dev/zvol/%s", targetPath),
 					SizeBytes:       volSize,
@@ -1193,14 +1348,14 @@ func (a *Adapter) CreateVolume(ctx context.Context, volume domain.ZfsVolume) (*d
 	if out, err := exec.CommandContext(ctx, "zfs", args...).CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("zfs create -V failed: %v (%s)", err, strings.TrimSpace(string(out)))
 	}
-	return a.GetVolume(ctx, cleanPool, volume.ID)
+	return a.GetVolume(ctx, cleanPool, volume.VolumePath)
 }
 
 func (a *Adapter) UpdateVolume(ctx context.Context, volume domain.ZfsVolume, fields []string) (*domain.ZfsVolume, error) {
 	cleanPool := strings.TrimPrefix(volume.PoolID, "zfsPools/")
 	targetPath := volume.VolumePath
 	if targetPath == "" {
-		targetPath = fmt.Sprintf("%s/%s", cleanPool, volume.ID)
+		targetPath = a.resolveVolumePath(cleanPool, volume.ID)
 	}
 
 	if !a.canUseHostZfs() {
@@ -1222,27 +1377,37 @@ func (a *Adapter) UpdateVolume(ctx context.Context, volume domain.ZfsVolume, fie
 
 	if hasField("size_bytes") || hasField("sizeBytes") || (applyAll && volume.SizeBytes > 0) {
 		if volume.SizeBytes > 0 {
-			_ = exec.CommandContext(ctx, "zfs", "set", fmt.Sprintf("volsize=%d", volume.SizeBytes), targetPath).Run()
+			if err := runZfsSet(ctx, fmt.Sprintf("volsize=%d", volume.SizeBytes), targetPath); err != nil {
+				return nil, err
+			}
 		}
 	}
 	if hasField("compression") && volume.Compression != "" {
-		_ = exec.CommandContext(ctx, "zfs", "set", "compression="+volume.Compression, targetPath).Run()
+		if err := runZfsSet(ctx, "compression="+volume.Compression, targetPath); err != nil {
+			return nil, err
+		}
 	}
 	if hasField("sync") && volume.Sync != "" {
-		_ = exec.CommandContext(ctx, "zfs", "set", "sync="+volume.Sync, targetPath).Run()
+		if err := runZfsSet(ctx, "sync="+volume.Sync, targetPath); err != nil {
+			return nil, err
+		}
 	}
 	if hasField("thin_provisioned") || hasField("thinProvisioned") {
 		if volume.ThinProvisioned {
-			_ = exec.CommandContext(ctx, "zfs", "set", "refreservation=none", targetPath).Run()
+			if err := runZfsSet(ctx, "refreservation=none", targetPath); err != nil {
+				return nil, err
+			}
 		} else {
 			volSize := volume.SizeBytes
 			if volSize <= 0 {
-				if existing, err := a.GetVolume(ctx, cleanPool, volume.ID); err == nil && existing != nil {
+				if existing, err := a.GetVolume(ctx, cleanPool, targetPath); err == nil && existing != nil {
 					volSize = existing.SizeBytes
 				}
 			}
 			if volSize > 0 {
-				_ = exec.CommandContext(ctx, "zfs", "set", fmt.Sprintf("refreservation=%d", volSize), targetPath).Run()
+				if err := runZfsSet(ctx, fmt.Sprintf("refreservation=%d", volSize), targetPath); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -1251,16 +1416,20 @@ func (a *Adapter) UpdateVolume(ctx context.Context, volume domain.ZfsVolume, fie
 		if volume.Readonly {
 			val = "on"
 		}
-		_ = exec.CommandContext(ctx, "zfs", "set", "readonly="+val, targetPath).Run()
+		if err := runZfsSet(ctx, "readonly="+val, targetPath); err != nil {
+			return nil, err
+		}
 	}
 	if hasField("dedup") {
 		val := "off"
 		if volume.Dedup {
 			val = "on"
 		}
-		_ = exec.CommandContext(ctx, "zfs", "set", "dedup="+val, targetPath).Run()
+		if err := runZfsSet(ctx, "dedup="+val, targetPath); err != nil {
+			return nil, err
+		}
 	}
-	return a.GetVolume(ctx, cleanPool, volume.ID)
+	return a.GetVolume(ctx, cleanPool, targetPath)
 }
 
 func (a *Adapter) DeleteVolume(ctx context.Context, poolID, volumeID string) error {

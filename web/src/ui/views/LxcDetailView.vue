@@ -234,6 +234,20 @@ const configForm = reactive({
   mountPoints: [] as LxcMountPoint[],
 });
 
+const hasUnsavedMountChanges = computed(() => {
+  const saved = (container.value?.mountPoints || []).map((m) => ({
+    hostPath: m.hostPath,
+    containerPath: m.containerPath,
+    readOnly: Boolean(m.readOnly),
+  }));
+  const current = configForm.mountPoints.map((m) => ({
+    hostPath: m.hostPath,
+    containerPath: m.containerPath,
+    readOnly: Boolean(m.readOnly),
+  }));
+  return JSON.stringify(saved) !== JSON.stringify(current);
+});
+
 watch(
   container,
   (newVal, oldVal) => {
@@ -252,6 +266,8 @@ watch(
         containerPath: m.containerPath,
         readOnly: Boolean(m.readOnly),
       }));
+    } else if (newVal && oldVal && newVal.name === oldVal.name && newVal.autostart !== oldVal.autostart) {
+      configForm.autostart = Boolean(newVal.autostart);
     }
   },
   { immediate: true }
@@ -262,7 +278,9 @@ async function handleSaveConfig() {
   isSavingConfig.value = true;
   const targetPool = (configForm.storagePool || mainPool.value).trim();
   const isMigratingPool = targetPool !== currentRootfsPool.value;
-  const targetRootfsPath = generateLxcRootfsPath(targetPool, technicalContainerId.value);
+  const targetRootfsPath = isMigratingPool
+    ? generateLxcRootfsPath(targetPool, technicalContainerId.value)
+    : container.value.rootfsPath || generateLxcRootfsPath(targetPool, technicalContainerId.value);
   const taskLabel = isMigratingPool
     ? `LXC "${cleanContainerName.value}": Migrate Rootfs to ${targetPool} & Save Config`
     : `LXC "${cleanContainerName.value}": Save Configuration`;
@@ -689,6 +707,13 @@ onBeforeUnmount(() => {
               </button>
             </div>
             <div class="card-body">
+              <div
+                v-if="hasUnsavedMountChanges"
+                style="margin-bottom: 12px; padding: 8px 12px; border-radius: 6px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); color: var(--warning-text, #f59e0b); font-size: 12px; display: flex; align-items: center; gap: 8px"
+              >
+                <MdiIcon :path="mdiAlertCircle" size="15" style="flex-shrink: 0" />
+                <span>Bind mount changes are staged. Click <strong>Save Configuration</strong> below to apply them.</span>
+              </div>
               <div v-if="configForm.mountPoints.length === 0" class="empty-state">
                 No bind mounts configured. Click "Add Mount Point" to map host storage.
               </div>
@@ -770,7 +795,7 @@ onBeforeUnmount(() => {
 
     <!-- Add Mount Point Modal -->
     <div v-if="showAddMountModal" class="modal-backdrop" @click.self="showAddMountModal = false">
-      <div class="modal card" style="max-width: 520px">
+      <div class="modal-card" style="max-width: 520px">
         <div class="modal-header">
           <h3 class="card-title">Add Storage Bind Mount</h3>
           <button class="btn btn-ghost btn-xs" @click="showAddMountModal = false">

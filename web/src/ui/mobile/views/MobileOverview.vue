@@ -124,7 +124,11 @@ const lxcTotalCount = computed(() => (nasState.lxcContainers || []).length);
 const diskHealthyCount = computed(() => {
   const disks = nasState.disks || [];
   if (disks.length === 0) return 0;
-  return disks.filter((d) => !d.smartStatus || d.smartStatus.toLowerCase().includes('pass') || d.smartStatus.toLowerCase().includes('ok')).length;
+  return disks.filter((d) => {
+    if (!d.smartStatus) return false;
+    const s = d.smartStatus.toLowerCase();
+    return s.includes('pass') || s.includes('ok');
+  }).length;
 });
 const diskTotalCount = computed(() => (nasState.disks || []).length);
 
@@ -133,7 +137,7 @@ const hasFailedDisks = computed(() => {
   return (nasState.disks || []).some((d) => {
     if (!d.smartStatus) return false;
     const s = d.smartStatus.toLowerCase();
-    return !s.includes('pass') && !s.includes('ok');
+    return !s.includes('pass') && !s.includes('ok') && s !== 'unknown';
   });
 });
 const hasDegradedPools = computed(() => {
@@ -208,7 +212,9 @@ const healthStatusText = computed(() => {
       <div class="hero-meta">
         <span>{{ telem?.host?.osName || 'Debian GNU/Linux' }}</span>
         <span v-if="telem?.host?.kernelVersion"> • {{ telem.host.kernelVersion }}</span>
-        <span> • nasctl {{ nasState.systemUpdate?.currentVersion || 'v1.6.12' }}</span>
+        <span v-if="nasState.systemUpdate?.currentVersion">
+          • nasctl {{ nasState.systemUpdate.currentVersion }}
+        </span>
       </div>
     </div>
 

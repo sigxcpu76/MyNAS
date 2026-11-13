@@ -65,7 +65,8 @@ function getTempClass(temp?: number): string {
             </span>
             <span
               v-if="disk.smartStatus && !['PASSED', 'OK'].includes(disk.smartStatus.toUpperCase())"
-              class="badge badge-danger mono"
+              class="badge mono"
+              :class="disk.smartStatus.toUpperCase() === 'UNKNOWN' ? 'badge-neutral' : 'badge-danger'"
               style="font-size: 10px; padding: 1px 5px"
             >
               {{ disk.smartStatus }}

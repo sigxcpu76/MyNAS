@@ -482,4 +482,48 @@ configs:
     const parsed = composeYamlToForm(generatedCustom, 'jellyfin', 'Jellyfin');
     expect(parsed.services[0].hostname).toBe('custom-jellyfin-host');
   });
+
+  it('parses and preserves IPv6 host port bindings on round-trip', () => {
+    const yaml = `services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "[::1]:8080:80"
+      - "[2001:db8::1]:8443:443/udp"
+      - ":::9090:90"
+`;
+    const form = composeYamlToForm(yaml, 'ipv6-web');
+    expect(form.services[0].ports).toEqual([
+      { hostIp: '[::1]', hostPort: '8080', containerPort: '80', protocol: 'tcp', publishToHost: true },
+      { hostIp: '[2001:db8::1]', hostPort: '8443', containerPort: '443', protocol: 'udp', publishToHost: true },
+      { hostIp: '[::]', hostPort: '9090', containerPort: '90', protocol: 'tcp', publishToHost: true },
+    ]);
+
+    const generated = formToComposeYaml(form);
+    expect(generated).toContain('"[::1]:8080:80"');
+    expect(generated).toContain('"[2001:db8::1]:8443:443/udp"');
+    expect(generated).toContain('"[::]:9090:90"');
+  });
+
+  it('preserves container runtime (nvidia / custom) and upgrades all-no restart when autoStart is re-enabled', () => {
+    const yaml = `services:
+  gpu-worker:
+    image: nvidia/cuda:12.4.0-base-ubuntu22.04
+    runtime: nvidia
+    restart: no
+`;
+    const form = composeYamlToForm(yaml, 'gpu-worker');
+    expect(form.services[0].gpuEnabled).toBe(true);
+    expect(form.services[0].rawRuntime).toBe('nvidia');
+    expect(form.autoStart).toBe(false);
+
+    form.autoStart = true;
+    const enabledYaml = formToComposeYaml(form);
+    expect(enabledYaml).toContain('runtime: nvidia');
+    expect(enabledYaml).toContain('restart: unless-stopped');
+
+    form.services[0].gpuEnabled = false;
+    const gpuOffYaml = formToComposeYaml(form);
+    expect(gpuOffYaml).not.toContain('runtime: nvidia');
+  });
 });

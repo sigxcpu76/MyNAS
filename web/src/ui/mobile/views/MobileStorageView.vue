@@ -22,8 +22,10 @@ import type { ZfsPool, Disk, ZfsDataset } from '../../../domain/models';
 
 const activeTab = ref<'pools' | 'disks' | 'datasets'>('pools');
 const selectedPool = ref<ZfsPool | null>(null);
+const selectedDisk = ref<Disk | null>(null);
 const selectedDataset = ref<ZfsDataset | null>(null);
 const isPoolSheetOpen = ref(false);
+const isDiskSheetOpen = ref(false);
 const isDatasetSheetOpen = ref(false);
 const scrubLoading = ref(false);
 const datasetsLoading = ref(false);
@@ -115,6 +117,23 @@ function getPoolUsagePercent(pool: ZfsPool): number {
 function openPoolSheet(pool: ZfsPool) {
   selectedPool.value = pool;
   isPoolSheetOpen.value = true;
+}
+
+function openDiskSheet(disk: Disk) {
+  selectedDisk.value = disk;
+  isDiskSheetOpen.value = true;
+}
+
+function isSmartFailed(disk: Disk): boolean {
+  if (!disk.smartStatus) return false;
+  const s = disk.smartStatus.toUpperCase();
+  return s !== 'PASSED' && s !== 'OK' && s !== 'UNKNOWN';
+}
+
+function isSmartHealthy(disk: Disk): boolean {
+  if (!disk.smartStatus) return false;
+  const s = disk.smartStatus.toUpperCase();
+  return s === 'PASSED' || s === 'OK';
 }
 
 function openDatasetSheet(ds: ZfsDataset) {
@@ -225,7 +244,12 @@ async function handleScrub() {
 
     <!-- Disks Tab Content -->
     <div v-else-if="activeTab === 'disks'" class="storage-list">
-      <div v-for="disk in disks" :key="disk.devicePath" class="disk-card">
+      <div
+        v-for="disk in disks"
+        :key="disk.devicePath"
+        class="disk-card"
+        @click="openDiskSheet(disk)"
+      >
         <div class="card-top-row">
           <div class="disk-title-group">
             <span class="disk-dev mono">{{ disk.devicePath }}</span>
@@ -238,17 +262,30 @@ async function handleScrub() {
         <div class="disk-meta-row">
           <div class="disk-smart-badge">
             <MdiIcon
-              :path="disk.smartStatus?.toLowerCase().includes('fail') ? mdiAlertCircle : mdiShieldCheck"
+              :path="isSmartFailed(disk) ? mdiAlertCircle : mdiShieldCheck"
               size="15"
-              :style="{ color: disk.smartStatus?.toLowerCase().includes('fail') ? '#ef4444' : '#4ade80' }"
+              :style="{
+                color: isSmartFailed(disk)
+                  ? '#ef4444'
+                  : isSmartHealthy(disk)
+                  ? '#4ade80'
+                  : 'var(--text-secondary)',
+              }"
             />
-            <span>SMART: {{ disk.smartStatus || 'OK' }}</span>
+            <span>SMART: {{ disk.smartStatus || 'UNKNOWN' }}</span>
           </div>
 
-          <div v-if="disk.temperatureCelsius" class="disk-temp-badge">
+          <div v-if="disk.temperatureCelsius && disk.temperatureCelsius > 0" class="disk-temp-badge">
             <MdiIcon :path="mdiThermometer" size="14" style="color: #fb923c" />
             <span>{{ disk.temperatureCelsius }}°C</span>
           </div>
+
+          <span
+            v-if="disk.healthPercentage !== undefined && disk.healthPercentage >= 0"
+            class="prop-chip"
+          >
+            Life: {{ disk.healthPercentage }}%
+          </span>
 
           <span v-if="disk.serial" class="disk-serial mono font-xs">{{ disk.serial }}</span>
         </div>
@@ -358,6 +395,62 @@ async function handleScrub() {
           <div class="spec-item">
             <span class="spec-label">Deduplication</span>
             <span class="spec-val">{{ selectedPool.dedupRatio ? `${selectedPool.dedupRatio.toFixed(2)}x` : '1.00x' }}</span>
+          </div>
+        </div>
+      </div>
+    </BottomSheet>
+
+    <!-- Disk Details Bottom Sheet -->
+    <BottomSheet
+      v-if="selectedDisk"
+      v-model="isDiskSheetOpen"
+      :title="`Disk: ${selectedDisk.devicePath}`"
+      :subtitle="`${selectedDisk.model || 'Unknown Model'} • ${formatBytes(selectedDisk.sizeBytes)}`"
+    >
+      <div class="sheet-pool-details">
+        <div class="details-spec-group">
+          <div class="spec-item">
+            <span class="spec-label">SMART Status</span>
+            <span
+              class="spec-val"
+              :style="{
+                color: isSmartFailed(selectedDisk)
+                  ? '#f87171'
+                  : isSmartHealthy(selectedDisk)
+                  ? '#4ade80'
+                  : 'var(--text-secondary)',
+              }"
+            >
+              {{ selectedDisk.smartStatus || 'UNKNOWN' }}
+            </span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-label">Temperature</span>
+            <span class="spec-val">
+              {{ selectedDisk.temperatureCelsius && selectedDisk.temperatureCelsius > 0 ? `${selectedDisk.temperatureCelsius}°C` : 'Not reported' }}
+            </span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-label">Wear / Life Remaining</span>
+            <span class="spec-val">
+              {{ selectedDisk.healthPercentage !== undefined && selectedDisk.healthPercentage >= 0 ? `${selectedDisk.healthPercentage}%` : 'Not reported' }}
+            </span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-label">Power-On Hours</span>
+            <span class="spec-val">
+              {{ selectedDisk.powerOnHours && selectedDisk.powerOnHours > 0 ? `${selectedDisk.powerOnHours.toLocaleString()} h` : 'Not reported' }}
+            </span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-label">Media Type</span>
+            <span class="spec-val">
+              {{ selectedDisk.type || (selectedDisk.rotational ? 'HDD' : 'SSD / NVMe') }}
+            </span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-label">Serial Number</span>
+            <span class="spec-val mono font-xs">{{ selectedDisk.serial || '—' }}</span>
           </div>
         </div>
       </div>

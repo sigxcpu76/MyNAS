@@ -179,10 +179,15 @@ async function handleExportPool() {
 
 async function handleDestroyPool() {
   if (!pool.value || isBusy.value) return;
+  const blast = computeStorageBlastRadius(cleanName.value);
+  const baseDetails = 'PERMANENT DATA LOSS: All datasets, snapshots, and volumes in this pool will be deleted permanently.';
+  const details = blast.hasDependencies
+    ? `${baseDetails}\n\nACTIVE DEPENDENCIES DETECTED:\n${blast.summaryWarning}`
+    : baseDetails;
   const confirmed = await confirmDelete({
     kind: 'Destroy Pool',
     name: cleanName.value,
-    details: 'PERMANENT DATA LOSS: All datasets, snapshots, and volumes in this pool will be deleted permanently.',
+    details,
     confirmText: 'Destroy Pool Permanently',
   });
   if (!confirmed.confirmed) return;
@@ -361,6 +366,40 @@ function getDiskByPath(path: string): Disk | undefined {
   return nasState.disks.find((d) => d.devicePath === path || d.diskId === path);
 }
 
+function appendDriveMixWarnings(
+  vdev: BuilderVdev,
+  base: { valid: boolean; message: string; state: 'ok' | 'warn' | 'info' }
+): { valid: boolean; message: string; state: 'ok' | 'warn' | 'info' } {
+  if (!base.valid || vdev.devicePaths.length < 2) return base;
+  const disks = vdev.devicePaths.map((p) => getDiskByPath(p)).filter(Boolean);
+  if (disks.length < 2) return base;
+
+  const warnings: string[] = [];
+  const hasRotational = disks.some((d) => Boolean(d?.rotational));
+  const hasSolidState = disks.some((d) => d && !d.rotational);
+  if (hasRotational && hasSolidState) {
+    warnings.push('Mixed HDD and SSD/NVMe drives in one VDEV degrades latency to HDD speed');
+  }
+
+  if (vdev.layout !== 'stripe') {
+    const sizes = disks.map((d) => d?.sizeBytes || 0).filter((s) => s > 0);
+    if (sizes.length >= 2) {
+      const minS = Math.min(...sizes);
+      const maxS = Math.max(...sizes);
+      if (maxS > minS * 1.1) {
+        warnings.push(`Mismatched drive sizes (${formatBytes(minS)} vs ${formatBytes(maxS)}): usable capacity capped by smallest drive`);
+      }
+    }
+  }
+
+  if (warnings.length === 0) return base;
+  return {
+    valid: base.valid,
+    state: 'warn',
+    message: `${base.message} ⚠ ${warnings.join(' · ')}`,
+  };
+}
+
 function getVdevValidation(vdev: BuilderVdev): { valid: boolean; message: string; state: 'ok' | 'warn' | 'info' } {
   const count = vdev.devicePaths.length;
   if (count === 0) {
@@ -369,26 +408,26 @@ function getVdevValidation(vdev: BuilderVdev): { valid: boolean; message: string
   if (vdev.type === 'data') {
     if (vdev.layout === 'mirror') {
       if (count < 2) return { valid: false, message: 'Mirror requires at least 2 drives (currently 1).', state: 'warn' };
-      return { valid: true, message: `✓ Valid ${count}-way Mirror. Tolerates ${count - 1} drive failure(s).`, state: 'ok' };
+      return appendDriveMixWarnings(vdev, { valid: true, message: `✓ Valid ${count}-way Mirror. Tolerates ${count - 1} drive failure(s).`, state: 'ok' });
     }
     if (vdev.layout === 'raidz1') {
       if (count < 3) return { valid: false, message: `RAIDZ1 requires at least 3 drives (currently ${count}).`, state: 'warn' };
-      return { valid: true, message: `✓ Valid RAIDZ1 (${count} drives, 1 parity disk).`, state: 'ok' };
+      return appendDriveMixWarnings(vdev, { valid: true, message: `✓ Valid RAIDZ1 (${count} drives, 1 parity disk).`, state: 'ok' });
     }
     if (vdev.layout === 'raidz2') {
       if (count < 4) return { valid: false, message: `RAIDZ2 requires at least 4 drives (currently ${count}).`, state: 'warn' };
-      return { valid: true, message: `✓ Valid RAIDZ2 (${count} drives, 2 parity disks).`, state: 'ok' };
+      return appendDriveMixWarnings(vdev, { valid: true, message: `✓ Valid RAIDZ2 (${count} drives, 2 parity disks).`, state: 'ok' });
     }
     if (vdev.layout === 'raidz3') {
       if (count < 5) return { valid: false, message: `RAIDZ3 requires at least 5 drives (currently ${count}).`, state: 'warn' };
-      return { valid: true, message: `✓ Valid RAIDZ3 (${count} drives, 3 parity disks).`, state: 'ok' };
+      return appendDriveMixWarnings(vdev, { valid: true, message: `✓ Valid RAIDZ3 (${count} drives, 3 parity disks).`, state: 'ok' });
     }
-    return { valid: true, message: `✓ Stripe layout (${count} concatenated drive(s), no parity).`, state: 'ok' };
+    return appendDriveMixWarnings(vdev, { valid: true, message: `⚠ Stripe layout (${count} concatenated drive(s), no parity — single drive failure destroys pool).`, state: 'warn' });
   }
   if (vdev.type === 'log') {
     if (vdev.layout === 'mirror') {
       if (count < 2) return { valid: false, message: 'Mirrored SLOG requires at least 2 drives.', state: 'warn' };
-      return { valid: true, message: `✓ Mirrored SLOG write accelerator (${count} drives).`, state: 'ok' };
+      return appendDriveMixWarnings(vdev, { valid: true, message: `✓ Mirrored SLOG write accelerator (${count} drives).`, state: 'ok' });
     }
     return { valid: true, message: `SLOG write accelerator (${count} drive(s)). Mirrored SLOG is recommended for write safety.`, state: 'ok' };
   }
@@ -402,7 +441,10 @@ function getVdevValidation(vdev: BuilderVdev): { valid: boolean; message: string
     if (vdev.layout === 'mirror' && count < 2) {
       return { valid: false, message: 'Special metadata vdev strongly recommends at least 2 drives in mirror.', state: 'warn' };
     }
-    return { valid: true, message: `✓ Special Metadata / Small-Blocks VDEV (${count} drive(s)).`, state: 'ok' };
+    if (vdev.layout === 'stripe') {
+      return { valid: true, message: `⚠ Unmirrored Special Metadata VDEV (${count} drive(s)): failure of a Special VDEV destroys the entire pool!`, state: 'warn' };
+    }
+    return appendDriveMixWarnings(vdev, { valid: true, message: `✓ Special Metadata / Small-Blocks VDEV (${count} drive(s)).`, state: 'ok' });
   }
   return { valid: true, message: 'Custom configuration', state: 'ok' };
 }
@@ -743,12 +785,142 @@ function getDiskState(d: Disk): string {
   return pool.value?.state || 'ONLINE';
 }
 
-function getDiskStateBadgeClass(d: Disk): string {
-  const st = getDiskState(d).toUpperCase();
+function getStateBadgeClass(state: string): string {
+  const st = (state || 'ONLINE').toUpperCase();
   if (st === 'ONLINE' || st === 'AVAIL' || st === 'INUSE') return 'badge-success';
   if (st === 'DEGRADED' || st === 'RESILVERING') return 'badge-warning';
   return 'badge-danger';
 }
+
+function getDiskStateBadgeClass(d: Disk): string {
+  return getStateBadgeClass(getDiskState(d));
+}
+
+function isNonZeroErr(v?: string | number): boolean {
+  if (v === undefined || v === null) return false;
+  const s = String(v).trim();
+  return s !== '' && s !== '0';
+}
+
+interface TopologyRow {
+  key: string;
+  label: string;
+  isGroup: boolean;
+  role: string;
+  model: string;
+  sizeBytes: number;
+  transport: string;
+  state: string;
+  readErrors: string;
+  writeErrors: string;
+  checksumErrors: string;
+  hasErrors: boolean;
+}
+
+const poolTopologyRows = computed<TopologyRow[]>(() => {
+  const rows: TopologyRow[] = [];
+  const p = pool.value;
+  if (!p) return rows;
+
+  if (p.vdevs && p.vdevs.length > 0) {
+    p.vdevs.forEach((v, idx) => {
+      const vType = v.type || 'data';
+      const vLayout = v.layout || p.vdevLayout || 'stripe';
+      const roleLabel = vType === 'data' ? vLayout : `${vType}${vLayout && vLayout !== 'stripe' ? ' (' + vLayout + ')' : ''}`;
+
+      if (v.children && v.children.length > 0) {
+        const vr = String(v.readErrors ?? '0');
+        const vw = String(v.writeErrors ?? '0');
+        const vc = String(v.checksumErrors ?? '0');
+        rows.push({
+          key: `vdev-${idx}-${v.name}`,
+          label: v.name || `${vType}-${idx}`,
+          isGroup: true,
+          role: roleLabel.toUpperCase(),
+          model: `${v.children.length} member drive(s)`,
+          sizeBytes: 0,
+          transport: '-',
+          state: v.state || p.state || 'ONLINE',
+          readErrors: vr,
+          writeErrors: vw,
+          checksumErrors: vc,
+          hasErrors: isNonZeroErr(vr) || isNonZeroErr(vw) || isNonZeroErr(vc),
+        });
+        v.children.forEach((c, cIdx) => {
+          const devKey = c.path || c.name || `dev-${idx}-${cIdx}`;
+          const disk = nasState.disks.find(
+            (d) => d.devicePath === devKey || d.diskId === devKey || d.name === devKey || (c.name && d.diskId === c.name)
+          );
+          const cr = String(c.readErrors ?? '0');
+          const cw = String(c.writeErrors ?? '0');
+          const cc = String(c.checksumErrors ?? '0');
+          rows.push({
+            key: `child-${idx}-${cIdx}-${devKey}`,
+            label: devKey,
+            isGroup: false,
+            role: roleLabel,
+            model: disk ? disk.model || disk.vendor || '-' : 'Missing / Detached Disk',
+            sizeBytes: disk?.sizeBytes || 0,
+            transport: disk?.transport || '-',
+            state: c.state || (disk ? getDiskState(disk) : 'UNAVAIL'),
+            readErrors: cr,
+            writeErrors: cw,
+            checksumErrors: cc,
+            hasErrors: isNonZeroErr(cr) || isNonZeroErr(cw) || isNonZeroErr(cc),
+          });
+        });
+      } else {
+        const devKey = v.path || v.name || `vdev-${idx}`;
+        const disk = nasState.disks.find(
+          (d) => d.devicePath === devKey || d.diskId === devKey || d.name === devKey
+        );
+        const vr = String(v.readErrors ?? '0');
+        const vw = String(v.writeErrors ?? '0');
+        const vc = String(v.checksumErrors ?? '0');
+        rows.push({
+          key: `leaf-${idx}-${devKey}`,
+          label: devKey,
+          isGroup: false,
+          role: roleLabel,
+          model: disk ? disk.model || disk.vendor || '-' : 'Missing / Detached Disk',
+          sizeBytes: disk?.sizeBytes || 0,
+          transport: disk?.transport || '-',
+          state: v.state || (disk ? getDiskState(disk) : p.state || 'ONLINE'),
+          readErrors: vr,
+          writeErrors: vw,
+          checksumErrors: vc,
+          hasErrors: isNonZeroErr(vr) || isNonZeroErr(vw) || isNonZeroErr(vc),
+        });
+      }
+    });
+    return rows;
+  }
+
+  for (const d of poolDisks.value) {
+    rows.push({
+      key: d.devicePath,
+      label: d.devicePath,
+      isGroup: false,
+      role: getDiskRole(d),
+      model: d.model || d.vendor || '-',
+      sizeBytes: d.sizeBytes,
+      transport: d.transport || 'SATA/NVMe',
+      state: getDiskState(d),
+      readErrors: '0',
+      writeErrors: '0',
+      checksumErrors: '0',
+      hasErrors: false,
+    });
+  }
+  return rows;
+});
+
+const poolLeafDriveRows = computed(() => poolTopologyRows.value.filter((r) => !r.isGroup));
+
+const scrubNeverRun = computed(() => {
+  const s = (pool.value?.lastScrubStatus || '').trim().toLowerCase();
+  return !s || s === 'never scrubbed' || s === 'none';
+});
 
 const scrubHasWarningOrError = computed(() => {
   const s = (pool.value?.lastScrubStatus || '').toLowerCase();
@@ -848,11 +1020,20 @@ const scrubHasWarningOrError = computed(() => {
             <div class="scrub-status-box">
               <div style="display: flex; align-items: center; gap: 8px">
                 <MdiIcon
-                  :path="scrubHasWarningOrError ? mdiAlertCircle : mdiCheckCircle"
+                  :path="scrubHasWarningOrError ? mdiAlertCircle : scrubNeverRun ? mdiInformationOutline : mdiCheckCircle"
                   size="20"
-                  :style="{ color: scrubHasWarningOrError ? 'var(--warning)' : 'var(--success)' }"
+                  :style="{
+                    color: scrubHasWarningOrError
+                      ? 'var(--warning)'
+                      : scrubNeverRun
+                      ? 'var(--text-secondary)'
+                      : 'var(--success)',
+                  }"
                 />
-                <span style="font-weight: 600">{{ pool?.lastScrubStatus || 'No scrub errors recorded' }}</span>
+                <span style="font-weight: 600">{{ pool?.lastScrubStatus || 'Never scrubbed' }}</span>
+              </div>
+              <div v-if="pool?.healthDetails" class="font-xs" style="margin-top: 6px; color: var(--text-secondary)">
+                Health details: <strong>{{ pool.healthDetails }}</strong>
               </div>
               <p class="font-sm text-secondary" style="margin-top: 8px">
                 ZFS scrubs verify checksum integrity on all data blocks to detect and heal silent bit rot.
@@ -867,7 +1048,7 @@ const scrubHasWarningOrError = computed(() => {
 
             <div style="margin-top: 20px">
               <h4 class="font-sm" style="font-weight: 600; margin-bottom: 8px">Physical Storage Drives</h4>
-              <div v-if="poolDisks.length === 0" class="text-muted font-sm">
+              <div v-if="poolLeafDriveRows.length === 0" class="text-muted font-sm">
                 No physical drive records linked.
               </div>
               <div v-else class="table-wrap">
@@ -877,16 +1058,23 @@ const scrubHasWarningOrError = computed(() => {
                       <th>Device</th>
                       <th>Model</th>
                       <th>Capacity</th>
+                      <th>Errors (R/W/C)</th>
                       <th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="d in poolDisks" :key="d.devicePath">
-                      <td class="mono font-sm" style="font-weight: 600">{{ d.devicePath }}</td>
-                      <td class="font-sm text-secondary">{{ d.model || d.vendor || 'Unknown' }}</td>
-                      <td class="font-sm">{{ formatBytes(d.sizeBytes) }}</td>
+                    <tr v-for="row in poolLeafDriveRows" :key="row.key">
+                      <td class="mono font-sm" style="font-weight: 600">{{ row.label }}</td>
+                      <td class="font-sm text-secondary">{{ row.model }}</td>
+                      <td class="font-sm">{{ row.sizeBytes > 0 ? formatBytes(row.sizeBytes) : '-' }}</td>
+                      <td
+                        class="mono font-xs"
+                        :class="row.hasErrors ? 'text-red' : 'text-muted'"
+                      >
+                        {{ row.readErrors }} / {{ row.writeErrors }} / {{ row.checksumErrors }}
+                      </td>
                       <td>
-                        <span class="badge font-xs" :class="getDiskStateBadgeClass(d)">{{ getDiskState(d) }}</span>
+                        <span class="badge font-xs" :class="getStateBadgeClass(row.state)">{{ row.state }}</span>
                       </td>
                     </tr>
                   </tbody>
@@ -900,12 +1088,12 @@ const scrubHasWarningOrError = computed(() => {
 
     <!-- Subtab 2: Pool Datasets -->
     <div v-else-if="props.activeSubTab === 'datasets'" class="pool-tab-content">
-      <DatasetsView :initial-pool="cleanName" :embedded="true" />
+      <DatasetsView :initial-pool="cleanName" :embedded="true" :auto-expand-roots="true" />
     </div>
 
     <!-- Subtab 3: Pool Volumes (ZVols) -->
     <div v-else-if="props.activeSubTab === 'volumes'" class="pool-tab-content">
-      <VolumesView :initial-pool="cleanName" :embedded="true" />
+      <VolumesView :initial-pool="cleanName" :embedded="true" :auto-expand-roots="true" />
     </div>
 
     <!-- Subtab 4: Topology & Disks -->
@@ -914,7 +1102,7 @@ const scrubHasWarningOrError = computed(() => {
         <div class="card-header">
           <div>
             <h3 class="card-title">VDEV Architecture & Physical Disk Topology</h3>
-            <p class="card-subtitle">Storage devices currently forming pool {{ cleanName }}</p>
+            <p class="card-subtitle">Storage devices and VDEV error counters currently forming pool {{ cleanName }}</p>
           </div>
         </div>
 
@@ -928,17 +1116,32 @@ const scrubHasWarningOrError = computed(() => {
                   <th>Model / Vendor</th>
                   <th>Capacity</th>
                   <th>Transport</th>
+                  <th>Errors (R / W / Cksum)</th>
                   <th>State</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="d in poolDisks" :key="d.devicePath">
-                  <td class="mono font-sm" style="font-weight: 600">{{ d.devicePath }}</td>
-                  <td class="font-sm"><span class="badge badge-neutral">{{ getDiskRole(d) }}</span></td>
-                  <td class="font-sm text-secondary">{{ d.model || d.vendor || '-' }}</td>
-                  <td class="font-sm">{{ formatBytes(d.sizeBytes) }}</td>
-                  <td class="font-xs text-muted">{{ d.transport || 'SATA/NVMe' }}</td>
-                  <td><span class="badge font-xs" :class="getDiskStateBadgeClass(d)">{{ getDiskState(d) }}</span></td>
+                <tr v-for="row in poolTopologyRows" :key="row.key">
+                  <td
+                    class="mono font-sm"
+                    :style="{
+                      fontWeight: row.isGroup ? 700 : 600,
+                      paddingLeft: row.isGroup ? '12px' : '28px',
+                    }"
+                  >
+                    {{ row.label }}
+                  </td>
+                  <td class="font-sm"><span class="badge" :class="row.isGroup ? 'badge-info' : 'badge-neutral'">{{ row.role }}</span></td>
+                  <td class="font-sm text-secondary">{{ row.model }}</td>
+                  <td class="font-sm">{{ row.sizeBytes > 0 ? formatBytes(row.sizeBytes) : '-' }}</td>
+                  <td class="font-xs text-muted">{{ row.transport }}</td>
+                  <td
+                    class="mono font-xs"
+                    :class="row.hasErrors ? 'text-red' : 'text-muted'"
+                  >
+                    {{ row.readErrors }} / {{ row.writeErrors }} / {{ row.checksumErrors }}
+                  </td>
+                  <td><span class="badge font-xs" :class="getStateBadgeClass(row.state)">{{ row.state }}</span></td>
                 </tr>
               </tbody>
             </table>
@@ -1086,7 +1289,12 @@ const scrubHasWarningOrError = computed(() => {
                     <div style="display: flex; gap: 4px; flex-wrap: wrap">
                       <span class="badge badge-neutral" style="font-size: 9.5px">{{ d.type }}</span>
                       <span class="badge badge-neutral" style="font-size: 9.5px">{{ (d.transport || 'disk').toUpperCase() }}</span>
-                      <span v-if="d.smartStatus" class="badge badge-success" style="font-size: 9.5px">{{ d.smartStatus }}</span>
+                      <span
+                        v-if="d.smartStatus"
+                        class="badge"
+                        :class="d.smartStatus === 'PASSED' ? 'badge-success' : d.smartStatus === 'FAILED' ? 'badge-danger' : 'badge-warning'"
+                        style="font-size: 9.5px"
+                      >{{ d.smartStatus }}</span>
                       <span
                         v-if="d.partitions && d.partitions.length > 0"
                         class="badge badge-warning"

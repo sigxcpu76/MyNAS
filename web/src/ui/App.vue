@@ -37,7 +37,9 @@ import {
   nasState,
   type NavTab,
   notify,
+  pauseToast,
   refreshAllData,
+  resumeToast,
   selectResource,
   startEventStream,
   stopEventStream,
@@ -121,7 +123,15 @@ const showUpdateModal = ref(false);
 const showHostTerminalModal = ref(false);
 const showCommandPalette = ref(false);
 const isMobileDrawerOpen = ref(false);
-const isSidebarCollapsed = ref(false);
+const isSidebarCollapsed = ref(
+  typeof window !== 'undefined' && window.innerWidth > 768 && window.innerWidth < 1024
+);
+
+function handleViewportResize() {
+  if (typeof window !== 'undefined' && window.innerWidth > 768 && window.innerWidth < 1024) {
+    isSidebarCollapsed.value = true;
+  }
+}
 
 function handleGlobalKeydown(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -133,12 +143,14 @@ function handleGlobalKeydown(e: KeyboardEvent) {
 onMounted(() => {
   if (typeof window !== 'undefined') {
     window.addEventListener('keydown', handleGlobalKeydown);
+    window.addEventListener('resize', handleViewportResize);
   }
 });
 
 onUnmounted(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('keydown', handleGlobalKeydown);
+    window.removeEventListener('resize', handleViewportResize);
   }
 });
 
@@ -397,19 +409,19 @@ onMounted(() => {
     const saved = nasState.selectedResourceId;
     if (saved) {
       if (saved.startsWith('vm:')) {
-        navigateTo('kvm');
+        navigateTo('kvm', true);
       } else if (saved.startsWith('lxc:')) {
-        navigateTo('lxc');
+        navigateTo('lxc', true);
       } else if (saved.startsWith('docker:')) {
-        navigateTo('docker');
+        navigateTo('docker', true);
       } else if (saved.startsWith('pool:')) {
-        navigateTo('storage-pools');
+        navigateTo('storage-pools', true);
       } else if (saved === 'node:disks') {
-        navigateTo('storage-disks');
+        navigateTo('storage-disks', true);
       } else if (saved === 'node:shares' || saved.startsWith('shares:')) {
-        navigateTo(saved === 'shares:webdav' ? 'shares-webdav' : 'shares-cifs');
+        navigateTo(saved === 'shares:webdav' ? 'shares-webdav' : 'shares-cifs', true);
       } else if (saved === 'node:identity') {
-        navigateTo('identity');
+        navigateTo('identity', true);
       }
     }
   }
@@ -823,7 +835,12 @@ onMounted(() => {
   <PwaInstallSheet />
 
   <!-- Toast Notifications Stack -->
-  <div class="toast-stack" :style="{ bottom: isMobile ? '76px' : '42px' }">
+  <div
+    class="toast-stack"
+    :style="{
+      bottom: isMobile ? '76px' : nasState.isTaskConsoleCollapsed ? '42px' : '187px',
+    }"
+  >
     <div
       v-for="t in nasState.toasts"
       :key="t.id"
@@ -831,6 +848,8 @@ onMounted(() => {
       :class="`toast-${t.type}`"
       role="status"
       aria-live="polite"
+      @mouseenter="pauseToast(t.id)"
+      @mouseleave="resumeToast(t.id)"
     >
       <span style="flex: 1">{{ t.message }}</span>
       <button

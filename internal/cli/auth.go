@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,37 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
+
+type savedSessionConfig struct {
+	ServerAddr  string `json:"server_addr,omitempty"`
+	TLS         bool   `json:"tls,omitempty"`
+	TLSCAFile   string `json:"tls_ca_file,omitempty"`
+	TLSInsecure bool   `json:"tls_insecure,omitempty"`
+}
+
+func sessionFilePath() (string, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "nasctl", "session.json"), nil
+}
+
+func loadSavedSession() (*savedSessionConfig, error) {
+	path, err := sessionFilePath()
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var cfg savedSessionConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
 
 // tokenFilePath is where `nasctl login` stores the session token for later commands.
 func tokenFilePath() (string, error) {
@@ -100,6 +132,17 @@ func newLoginCmd(opts *RootOptions) *cobra.Command {
 			if err := os.WriteFile(path, []byte(resp.GetAccessToken()+"\n"), 0o600); err != nil {
 				return err
 			}
+			if sessPath, sErr := sessionFilePath(); sErr == nil {
+				sess := savedSessionConfig{
+					ServerAddr:  opts.ServerAddr,
+					TLS:         opts.TLS,
+					TLSCAFile:   opts.TLSCAFile,
+					TLSInsecure: opts.TLSInsecure,
+				}
+				if sessBytes, mErr := json.MarshalIndent(sess, "", "  "); mErr == nil {
+					_ = os.WriteFile(sessPath, append(sessBytes, '\n'), 0o600)
+				}
+			}
 			_, _ = fmt.Fprintf(opts.Out, "Logged in as %s; token saved to %s\n", username, path)
 			return nil
 		},
@@ -119,6 +162,9 @@ func newLogoutCmd(opts *RootOptions) *cobra.Command {
 			}
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 				return err
+			}
+			if sessPath, sErr := sessionFilePath(); sErr == nil {
+				_ = os.Remove(sessPath)
 			}
 			_, _ = fmt.Fprintln(opts.Out, "Logged out")
 			return nil

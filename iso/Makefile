@@ -1,7 +1,7 @@
 .PHONY: all iso iso-docker iso-local clean
 
 REPO_ROOT := $(shell cd .. && pwd)
-IMAGE_NAME := mynas-iso-builder:latest
+IMAGE_NAME := nan-iso-builder:latest
 COMP ?= lz4
 
 all: iso

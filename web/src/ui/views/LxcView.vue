@@ -231,7 +231,28 @@ function computeSafeTemplateFilename(item: LxcCatalogItem, overrideUrl?: string)
 
 const { defaultBridge, bridgeOptionsFor } = useNetworkBridges();
 
-const lxcSort = useTableSort(() => nasState.lxcContainers, {
+const containerQuery = ref('');
+
+const filteredContainers = computed(() => {
+  const q = containerQuery.value.trim().toLowerCase();
+  if (!q) return nasState.lxcContainers;
+  return nasState.lxcContainers.filter((lx) => {
+    return (
+      (lx.containerName || '').toLowerCase().includes(q) ||
+      (lx.name || '').toLowerCase().includes(q) ||
+      (lx.distribution || '').toLowerCase().includes(q) ||
+      (lx.release || '').toLowerCase().includes(q) ||
+      (lx.ipv4Address || '').toLowerCase().includes(q) ||
+      (lx.description || '').toLowerCase().includes(q)
+    );
+  });
+});
+
+const runningContainersCount = computed(
+  () => nasState.lxcContainers.filter((lx) => lx.state === 'RUNNING').length
+);
+
+const lxcSort = useTableSort(() => filteredContainers.value, {
   name: (lx) => lx.containerName,
   distro: (lx) => `${lx.distribution} / ${lx.release} (${lx.architecture})`,
   ipv4: (lx) => ipv4ToNumber(lx.ipv4Address),
@@ -740,9 +761,35 @@ function copyTemplatePath(path: string) {
   <!-- ======================================================================= -->
   <div v-if="activeMainTab === 'containers'">
     <div class="card">
-      <div class="card-header">
+      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px">
         <div>
           <h2 class="card-title" style="font-size: 17px">LXC Containers</h2>
+          <span v-if="nasState.lxcContainers.length > 0" style="font-size: 12px; color: var(--text-secondary)">
+            {{ runningContainersCount }} running · {{ nasState.lxcContainers.length - runningContainersCount }} stopped
+          </span>
+        </div>
+        <div v-if="nasState.lxcContainers.length > 0" style="position: relative; display: flex; align-items: center">
+          <MdiIcon
+            :path="mdiMagnify"
+            size="15"
+            style="position: absolute; left: 9px; color: var(--text-muted); pointer-events: none"
+          />
+          <input
+            v-model="containerQuery"
+            type="text"
+            class="input"
+            placeholder="Filter containers..."
+            style="padding: 5px 28px 5px 30px; font-size: 12.5px; width: 220px"
+          />
+          <button
+            v-if="containerQuery"
+            type="button"
+            style="position: absolute; right: 6px; background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 2px; display: flex"
+            aria-label="Clear container filter"
+            @click="containerQuery = ''"
+          >
+            <MdiIcon :path="mdiClose" size="13" />
+          </button>
         </div>
       </div>
 
@@ -993,6 +1040,12 @@ function copyTemplatePath(path: string) {
             <tr v-else-if="nasState.lxcContainers.length === 0">
               <td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 36px">
                 No containers yet. Click "+ Create Container" above or browse the <strong>App Catalog</strong>.
+              </td>
+            </tr>
+
+            <tr v-else-if="lxcSort.sorted.value.length === 0">
+              <td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 36px">
+                No containers match "{{ containerQuery }}".
               </td>
             </tr>
 
@@ -1451,19 +1504,6 @@ function copyTemplatePath(path: string) {
             </tr>
           </thead>
           <tbody>
-            <!-- Active Upload Row -->
-            <tr v-if="isUploadingTemplate && templateUploadProgress">
-              <td colspan="4" style="padding: 14px 16px; background: rgba(59, 130, 246, 0.04)">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 12px">
-                  <span class="mono" style="font-weight: 600">{{ templateUploadProgress.filename }} (Uploading)</span>
-                  <span class="mono">{{ formatBytes(templateUploadProgress.loaded) }} / {{ formatBytes(templateUploadProgress.total) }} ({{ templateUploadProgress.percent }}%)</span>
-                </div>
-                <div class="progress-bar" style="height: 6px">
-                  <div class="progress-fill" :style="{ width: `${templateUploadProgress.percent}%` }"></div>
-                </div>
-              </td>
-            </tr>
-
             <!-- Skeleton Placeholders when Loading -->
             <template v-if="nasState.loading && nasState.lxcTemplates.length === 0">
               <tr v-for="r in 2" :key="r">

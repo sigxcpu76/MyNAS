@@ -120,6 +120,7 @@ function handleHeaderSelect(sec: string, resourceId: string, tab: NavTab) {
   if (isSectionSelected(sec)) {
     toggleSection(sec);
   } else {
+    (openSections.value as Record<string, boolean>)[sec] = true;
     handleSelect(resourceId, tab);
   }
 }
@@ -190,6 +191,23 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
   }
   return true;
 }
+
+const hasAnyVisibleSection = computed(() =>
+  (['storage', 'vms', 'lxc', 'docker', 'shares', 'cron', 'access'] as const).some((s) =>
+    isSectionVisible(s)
+  )
+);
+
+const nodeStatusDot = computed(() => {
+  const pools = nasState.pools || [];
+  if (pools.some((p) => p.state && p.state !== 'ONLINE' && p.state !== 'DEGRADED')) {
+    return { color: 'var(--danger)', title: 'Storage Pool Faulted / Offline' };
+  }
+  if (pools.some((p) => p.state === 'DEGRADED')) {
+    return { color: 'var(--warning)', title: 'Node Online (Pool Degraded)' };
+  }
+  return { color: 'var(--success)', title: 'Node Online' };
+});
 </script>
 
 <template>
@@ -235,8 +253,8 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
           <MdiIcon
             :path="mdiCircle"
             size="9"
-            style="color: var(--success); margin-left: auto"
-            title="Node Online"
+            :style="{ color: nodeStatusDot.color, marginLeft: 'auto' }"
+            :title="nodeStatusDot.title"
           />
         </div>
 
@@ -287,8 +305,13 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
                   :path="mdiCircle"
                   size="9"
                   :style="{
-                    color: p.state === 'ONLINE' ? 'var(--success)' : 'var(--danger)',
-                    opacity: p.state === 'ONLINE' ? 1 : 0.85,
+                    color:
+                      p.state === 'ONLINE'
+                        ? 'var(--success)'
+                        : p.state === 'DEGRADED'
+                        ? 'var(--warning)'
+                        : 'var(--danger)',
+                    opacity: p.state === 'ONLINE' ? 1 : 0.9,
                   }"
                   :title="`Status: ${(p.state || 'ONLINE').toLowerCase()}`"
                 />
@@ -648,7 +671,11 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
                 class="tree-row tree-leaf"
                 role="treeitem"
                 tabindex="0"
-                :class="{ selected: nasState.selectedResourceId === 'shares:cifs' && nasState.activeTab === 'shares-cifs' }"
+                :class="{
+                  selected:
+                    (nasState.selectedResourceId === 'shares:cifs' || nasState.selectedResourceId === 'node:shares') &&
+                    (nasState.activeTab === 'shares' || nasState.activeTab === 'shares-cifs')
+                }"
                 @click="handleSelect('shares:cifs', 'shares-cifs')"
                 @keydown.enter.prevent="handleSelect('shares:cifs', 'shares-cifs')"
                 @keydown.space.prevent="handleSelect('shares:cifs', 'shares-cifs')"
@@ -705,6 +732,10 @@ function isSectionVisible(section: 'storage' | 'vms' | 'lxc' | 'docker' | 'share
               <span class="tree-label">Users & Groups</span>
               <span class="nav-badge font-xs" style="margin-left: auto">{{ nasState.users.length }}</span>
             </div>
+          </div>
+
+          <div v-if="query && !hasAnyVisibleSection" class="tree-empty-hint" style="padding: 12px 10px">
+            No matching resources
           </div>
         </div>
       </div>

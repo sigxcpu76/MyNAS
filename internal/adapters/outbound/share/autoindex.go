@@ -831,8 +831,17 @@ func serveSharesIndex(w http.ResponseWriter, r *http.Request, shares []domain.We
 				modeLabel = "RO"
 			}
 			allowed := "all authenticated"
-			if len(s.AllowedUsers) > 0 {
-				allowed = strings.Join(s.AllowedUsers, ", ")
+			if len(s.AllowedUsers) > 0 || len(s.AllowedGroups) > 0 {
+				parts := make([]string, 0, len(s.AllowedUsers)+len(s.AllowedGroups))
+				parts = append(parts, s.AllowedUsers...)
+				for _, g := range s.AllowedGroups {
+					if strings.HasPrefix(g, "@") {
+						parts = append(parts, g)
+					} else {
+						parts = append(parts, "@"+g)
+					}
+				}
+				allowed = strings.Join(parts, ", ")
 			}
 			shareHref := fmt.Sprintf("/dav/%s/", s.ID)
 

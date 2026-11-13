@@ -374,6 +374,40 @@ const poolCapacitySummary = computed(() => {
   };
 });
 
+function appendDriveMixWarnings(
+  vdev: BuilderVdev,
+  base: { valid: boolean; message: string; state: 'ok' | 'warn' | 'info' }
+): { valid: boolean; message: string; state: 'ok' | 'warn' | 'info' } {
+  if (!base.valid || vdev.devicePaths.length < 2) return base;
+  const disks = vdev.devicePaths.map((p) => getDiskByPath(p)).filter(Boolean);
+  if (disks.length < 2) return base;
+
+  const warnings: string[] = [];
+  const hasRotational = disks.some((d) => Boolean(d?.rotational));
+  const hasSolidState = disks.some((d) => d && !d.rotational);
+  if (hasRotational && hasSolidState) {
+    warnings.push('Mixed HDD and SSD/NVMe drives in one VDEV degrades latency to HDD speed');
+  }
+
+  if (vdev.layout !== 'stripe') {
+    const sizes = disks.map((d) => d?.sizeBytes || 0).filter((s) => s > 0);
+    if (sizes.length >= 2) {
+      const minS = Math.min(...sizes);
+      const maxS = Math.max(...sizes);
+      if (maxS > minS * 1.1) {
+        warnings.push(`Mismatched drive sizes (${formatBytes(minS)} vs ${formatBytes(maxS)}): usable capacity is capped by smallest drive`);
+      }
+    }
+  }
+
+  if (warnings.length === 0) return base;
+  return {
+    valid: base.valid,
+    state: 'warn',
+    message: `${base.message} ⚠ ${warnings.join(' · ')}`,
+  };
+}
+
 function getVdevValidation(vdev: BuilderVdev): { valid: boolean; message: string; state: 'ok' | 'warn' | 'info' } {
   const count = vdev.devicePaths.length;
   if (count === 0) {
@@ -382,26 +416,26 @@ function getVdevValidation(vdev: BuilderVdev): { valid: boolean; message: string
   if (vdev.type === 'data') {
     if (vdev.layout === 'mirror') {
       if (count < 2) return { valid: false, message: 'Mirror requires at least 2 drives (currently 1).', state: 'warn' };
-      return { valid: true, message: `✓ Valid ${count}-way Mirror. Tolerates ${count - 1} drive failure(s).`, state: 'ok' };
+      return appendDriveMixWarnings(vdev, { valid: true, message: `✓ Valid ${count}-way Mirror. Tolerates ${count - 1} drive failure(s).`, state: 'ok' });
     }
     if (vdev.layout === 'raidz1') {
       if (count < 3) return { valid: false, message: `RAIDZ1 requires at least 3 drives (currently ${count}).`, state: 'warn' };
-      return { valid: true, message: `✓ Valid RAIDZ1 (${count} drives, 1 parity disk).`, state: 'ok' };
+      return appendDriveMixWarnings(vdev, { valid: true, message: `✓ Valid RAIDZ1 (${count} drives, 1 parity disk).`, state: 'ok' });
     }
     if (vdev.layout === 'raidz2') {
       if (count < 4) return { valid: false, message: `RAIDZ2 requires at least 4 drives (currently ${count}).`, state: 'warn' };
-      return { valid: true, message: `✓ Valid RAIDZ2 (${count} drives, 2 parity disks).`, state: 'ok' };
+      return appendDriveMixWarnings(vdev, { valid: true, message: `✓ Valid RAIDZ2 (${count} drives, 2 parity disks).`, state: 'ok' });
     }
     if (vdev.layout === 'raidz3') {
       if (count < 5) return { valid: false, message: `RAIDZ3 requires at least 5 drives (currently ${count}).`, state: 'warn' };
-      return { valid: true, message: `✓ Valid RAIDZ3 (${count} drives, 3 parity disks).`, state: 'ok' };
+      return appendDriveMixWarnings(vdev, { valid: true, message: `✓ Valid RAIDZ3 (${count} drives, 3 parity disks).`, state: 'ok' });
     }
-    return { valid: true, message: `✓ Stripe layout (${count} concatenated drive(s), no parity).`, state: 'ok' };
+    return appendDriveMixWarnings(vdev, { valid: true, message: `⚠ Stripe layout (${count} concatenated drive(s), no parity — single drive failure destroys pool).`, state: 'warn' });
   }
   if (vdev.type === 'log') {
     if (vdev.layout === 'mirror') {
       if (count < 2) return { valid: false, message: 'Mirrored SLOG requires at least 2 drives.', state: 'warn' };
-      return { valid: true, message: `✓ Mirrored SLOG write accelerator (${count} drives).`, state: 'ok' };
+      return appendDriveMixWarnings(vdev, { valid: true, message: `✓ Mirrored SLOG write accelerator (${count} drives).`, state: 'ok' });
     }
     return { valid: true, message: `SLOG write accelerator (${count} drive(s)). Mirrored SLOG is recommended for write safety.`, state: 'ok' };
   }
@@ -415,7 +449,10 @@ function getVdevValidation(vdev: BuilderVdev): { valid: boolean; message: string
     if (vdev.layout === 'mirror' && count < 2) {
       return { valid: false, message: 'Special metadata VDEV requires at least 2 drives for redundancy.', state: 'warn' };
     }
-    return { valid: true, message: `✓ Special Metadata & Small Files VDEV (${count} drive(s)).`, state: 'ok' };
+    if (vdev.layout === 'stripe') {
+      return { valid: true, message: `⚠ Unmirrored Special Metadata VDEV (${count} drive(s)): failure of a Special VDEV destroys the entire pool! Mirror strongly recommended.`, state: 'warn' };
+    }
+    return appendDriveMixWarnings(vdev, { valid: true, message: `✓ Redundant Special Metadata & Small Files VDEV (${count} drive(s)).`, state: 'ok' });
   }
   return { valid: true, message: `✓ ${(vdev.type as string).toUpperCase()} VDEV (${count} drive(s)).`, state: 'ok' };
 }
@@ -491,7 +528,7 @@ async function handleCreatePool() {
         poolForm.force
       );
 
-      if (poolForm.setAsMainPool || !nasState.systemConfig?.mainPool) {
+      if (!nasState.systemConfig?.mainPool && poolForm.setAsMainPool) {
         try {
           await services.system.selectMainPool(cleanId, true);
           notify('success', `Created pool "${cleanId}" and initialized as Main Storage Pool`);
@@ -1138,7 +1175,7 @@ function viewPoolDatasets(poolName: string) {
           <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0">
             <span
               class="badge mono"
-              :class="p.state === 'ONLINE' ? 'badge-success' : 'badge-danger'"
+              :class="p.state === 'ONLINE' ? 'badge-success' : p.state === 'DEGRADED' ? 'badge-warning' : 'badge-danger'"
               style="font-size: 11px; font-weight: 600"
             >
               {{ p.state }}
@@ -1449,10 +1486,20 @@ function viewPoolDatasets(poolName: string) {
             </div>
 
             <div class="form-group" style="grid-column: 1 / -1; margin-top: -4px">
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 13px; font-weight: 500">
+              <label
+                v-if="!nasState.systemConfig?.mainPool"
+                style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 13px; font-weight: 500"
+              >
                 <input v-model="poolForm.setAsMainPool" type="checkbox" style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--accent-primary)" />
                 <span>Designate as Main Storage Pool (Initializes system config, enables Docker appdata and LXC storage)</span>
               </label>
+              <div
+                v-else
+                style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary)"
+              >
+                <MdiIcon :path="mdiDatabaseCheck" size="15" style="color: var(--accent-primary)" />
+                <span>Main Storage Pool is permanently locked to <strong class="mono">{{ nasState.systemConfig.mainPool }}</strong>.</span>
+              </div>
             </div>
 
             <div class="form-group" style="grid-column: 1 / -1; margin-top: -8px">
@@ -1535,7 +1582,12 @@ function viewPoolDatasets(poolName: string) {
                     <div style="display: flex; gap: 4px; flex-wrap: wrap">
                       <span class="badge badge-neutral" style="font-size: 9.5px">{{ d.type }}</span>
                       <span class="badge badge-neutral" style="font-size: 9.5px">{{ (d.transport || 'disk').toUpperCase() }}</span>
-                      <span v-if="d.smartStatus" class="badge badge-success" style="font-size: 9.5px">{{ d.smartStatus }}</span>
+                      <span
+                        v-if="d.smartStatus"
+                        class="badge"
+                        :class="d.smartStatus === 'PASSED' ? 'badge-success' : d.smartStatus === 'FAILED' ? 'badge-danger' : 'badge-warning'"
+                        style="font-size: 9.5px"
+                      >{{ d.smartStatus }}</span>
                       <span
                         v-if="d.partitions && d.partitions.length > 0"
                         class="badge badge-warning"
@@ -1941,7 +1993,12 @@ function viewPoolDatasets(poolName: string) {
                     <div style="display: flex; gap: 4px; flex-wrap: wrap">
                       <span class="badge badge-neutral" style="font-size: 9.5px">{{ d.type }}</span>
                       <span class="badge badge-neutral" style="font-size: 9.5px">{{ (d.transport || 'disk').toUpperCase() }}</span>
-                      <span v-if="d.smartStatus" class="badge badge-success" style="font-size: 9.5px">{{ d.smartStatus }}</span>
+                      <span
+                        v-if="d.smartStatus"
+                        class="badge"
+                        :class="d.smartStatus === 'PASSED' ? 'badge-success' : d.smartStatus === 'FAILED' ? 'badge-danger' : 'badge-warning'"
+                        style="font-size: 9.5px"
+                      >{{ d.smartStatus }}</span>
                       <span
                         v-if="d.partitions && d.partitions.length > 0"
                         class="badge badge-warning"

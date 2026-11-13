@@ -14,6 +14,7 @@ import {
 } from '@mdi/js';
 import MdiIcon from '../../components/MdiIcon.vue';
 import { confirmModal, nasState, notify, refreshAllData } from '../../store';
+import { askModal } from '../../modal';
 import { services } from '../../../container';
 import { getLxcContainerIcon } from '../../utils/appIcons';
 import type { VirtualMachine, LxcContainer } from '../../../domain/models';
@@ -62,17 +63,23 @@ async function handleStartVm(vm: VirtualMachine) {
 
 async function handleStopVm(vm: VirtualMachine) {
   if (actionLoading.value) return;
-  const ok = await confirmModal({
+  const res = await askModal({
     title: `Stop VM "${vm.vmName}"?`,
     message: `Send an ACPI shutdown signal to virtual machine "${vm.vmName}"?`,
     tone: 'warning',
     confirmText: 'Stop VM',
+    checkbox: {
+      label: 'Force shutdown immediately (virsh destroy)',
+      checked: false,
+      hint: 'Use when guest OS does not respond to ACPI shutdown.',
+    },
   });
-  if (!ok) return;
+  if (!res.confirmed) return;
+  const force = Boolean(res.checkboxChecked);
   actionLoading.value = true;
   try {
-    await services.kvm.stopVirtualMachine(vm.name || vm.vmName, false);
-    notify('success', `Stopped VM ${vm.vmName}`);
+    await services.kvm.stopVirtualMachine(vm.name || vm.vmName, force);
+    notify('success', `${force ? 'Force-stopped' : 'Stopped'} VM ${vm.vmName}`);
     await refreshAllData();
   } catch (err: any) {
     notify('error', `Failed to stop VM: ${err.message || err}`);
@@ -83,17 +90,23 @@ async function handleStopVm(vm: VirtualMachine) {
 
 async function handleRebootVm(vm: VirtualMachine) {
   if (actionLoading.value) return;
-  const ok = await confirmModal({
+  const res = await askModal({
     title: `Reboot VM "${vm.vmName}"?`,
     message: `Send an ACPI reboot signal to virtual machine "${vm.vmName}"?`,
     tone: 'warning',
     confirmText: 'Reboot VM',
+    checkbox: {
+      label: 'Force hard reset',
+      checked: false,
+      hint: 'Immediate hardware reset without graceful guest OS shutdown.',
+    },
   });
-  if (!ok) return;
+  if (!res.confirmed) return;
+  const force = Boolean(res.checkboxChecked);
   actionLoading.value = true;
   try {
-    await services.kvm.rebootVirtualMachine(vm.name || vm.vmName, false);
-    notify('success', `Rebooting VM ${vm.vmName}`);
+    await services.kvm.rebootVirtualMachine(vm.name || vm.vmName, force);
+    notify('success', `${force ? 'Reset' : 'Rebooting'} VM ${vm.vmName}`);
     await refreshAllData();
   } catch (err: any) {
     notify('error', `Failed to reboot VM: ${err.message || err}`);

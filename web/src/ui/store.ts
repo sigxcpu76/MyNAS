@@ -306,15 +306,42 @@ export function getModuleAvailability(module: ManagedModule): ModuleStatus {
   };
 }
 
+const toastTimers = new Map<number, ReturnType<typeof setTimeout>>();
+
 export function notify(type: 'success' | 'error' | 'info' | 'warning', message: string): void {
   const id = nextToastId++;
   nasState.toasts.push({ id, type, message });
-  setTimeout(() => {
-    dismissToast(id);
-  }, 5000);
+  const durationMs = type === 'error' ? 10000 : type === 'warning' ? 7000 : 5000;
+  toastTimers.set(
+    id,
+    setTimeout(() => {
+      dismissToast(id);
+    }, durationMs)
+  );
+}
+
+export function pauseToast(id: number): void {
+  const timer = toastTimers.get(id);
+  if (timer) {
+    clearTimeout(timer);
+    toastTimers.delete(id);
+  }
+}
+
+export function resumeToast(id: number): void {
+  const toast = nasState.toasts.find((t) => t.id === id);
+  if (!toast || toastTimers.has(id)) return;
+  const durationMs = toast.type === 'error' ? 5000 : 3000;
+  toastTimers.set(
+    id,
+    setTimeout(() => {
+      dismissToast(id);
+    }, durationMs)
+  );
 }
 
 export function dismissToast(id: number): void {
+  pauseToast(id);
   const idx = nasState.toasts.findIndex((t) => t.id === id);
   if (idx !== -1) nasState.toasts.splice(idx, 1);
 }

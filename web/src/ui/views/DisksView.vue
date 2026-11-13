@@ -116,10 +116,19 @@ function getTempBadgeClass(temp: number) {
 }
 
 function getSmartBadgeClass(status: string) {
-  const s = status.toUpperCase();
+  const s = (status || '').toUpperCase();
   if (s === 'PASSED') return 'badge-success';
   if (s === 'FAILED') return 'badge-danger';
+  if (s === 'UNKNOWN') return 'badge-warning';
   return 'badge-neutral';
+}
+
+function getSmartTextClass(status: string) {
+  const s = (status || '').toUpperCase();
+  if (s === 'PASSED') return 'text-emerald';
+  if (s === 'FAILED') return 'text-red';
+  if (s === 'UNKNOWN') return 'text-amber';
+  return 'text-muted';
 }
 
 function getTypeBadgeClass(type: string) {
@@ -296,7 +305,7 @@ function goToPool(poolName: string) {
                   <span class="badge mono" :class="getSmartBadgeClass(d.smartStatus)" style="font-size: 11.5px">
                     {{ d.smartStatus }}
                   </span>
-                  <span v-if="d.healthPercentage > 0 && d.healthPercentage < 100" class="mono" style="font-size: 11px; color: var(--text-secondary)">
+                  <span v-if="d.healthPercentage >= 0" class="mono" style="font-size: 11px; color: var(--text-secondary)">
                     Health: {{ d.healthPercentage }}%
                   </span>
                 </div>
@@ -356,7 +365,7 @@ function goToPool(poolName: string) {
     </div>
 
     <!-- Disk Inspector Modal -->
-    <div v-if="selectedDisk" class="modal-overlay">
+    <div v-if="selectedDisk" class="modal-overlay" @click.self="selectedDisk = null">
       <div class="modal-container" style="max-width: 860px; width: 100%">
         <div class="modal-header">
           <div style="display: flex; align-items: center; gap: 10px">
@@ -422,9 +431,9 @@ function goToPool(poolName: string) {
             </div>
             <div class="stat-col">
               <span class="stat-label">S.M.A.R.T. Health</span>
-              <span class="stat-value mono" :class="selectedDisk.smartStatus === 'PASSED' ? 'text-emerald' : 'text-sky'">
+              <span class="stat-value mono" :class="getSmartTextClass(selectedDisk.smartStatus)">
                 {{ selectedDisk.smartStatus }}
-                <span v-if="selectedDisk.healthPercentage > 0 && selectedDisk.healthPercentage < 100" style="font-size: 11px; color: var(--text-secondary)">
+                <span v-if="selectedDisk.healthPercentage >= 0" style="font-size: 11px; color: var(--text-secondary)">
                   ({{ selectedDisk.healthPercentage }}%)
                 </span>
               </span>
@@ -447,10 +456,40 @@ function goToPool(poolName: string) {
                 {{ formatBytes(selectedDisk.totalBytesWritten) }}
               </span>
             </div>
+            <div v-if="selectedDisk.totalBytesRead" class="stat-col">
+              <span class="stat-label">Total Read</span>
+              <span class="stat-value mono" style="font-size: 13px">
+                {{ formatBytes(selectedDisk.totalBytesRead) }}
+              </span>
+            </div>
             <div v-if="selectedDisk.powerCycleCount" class="stat-col">
               <span class="stat-label">Power Cycles</span>
               <span class="stat-value mono" style="font-size: 13px">
                 {{ selectedDisk.powerCycleCount }}
+              </span>
+            </div>
+            <div v-if="selectedDisk.unsafeShutdowns !== undefined && selectedDisk.unsafeShutdowns > 0" class="stat-col">
+              <span class="stat-label">Unsafe Shutdowns</span>
+              <span class="stat-value mono text-amber" style="font-size: 13px">
+                {{ selectedDisk.unsafeShutdowns }}
+              </span>
+            </div>
+            <div v-if="selectedDisk.reallocatedSectors !== undefined" class="stat-col">
+              <span class="stat-label">Reallocated Sectors</span>
+              <span class="stat-value mono" :class="selectedDisk.reallocatedSectors > 0 ? 'text-red' : ''" style="font-size: 13px">
+                {{ selectedDisk.reallocatedSectors }}
+              </span>
+            </div>
+            <div v-if="selectedDisk.pendingSectors !== undefined" class="stat-col">
+              <span class="stat-label">Pending Sectors</span>
+              <span class="stat-value mono" :class="selectedDisk.pendingSectors > 0 ? 'text-amber' : ''" style="font-size: 13px">
+                {{ selectedDisk.pendingSectors }}
+              </span>
+            </div>
+            <div v-if="selectedDisk.mediaErrors !== undefined" class="stat-col">
+              <span class="stat-label">Media Errors</span>
+              <span class="stat-value mono" :class="selectedDisk.mediaErrors > 0 ? 'text-red' : ''" style="font-size: 13px">
+                {{ selectedDisk.mediaErrors }}
               </span>
             </div>
           </div>

@@ -170,16 +170,15 @@ export function applyResolvedRoute(route: ResolvedRoute): void {
   nasState.activeTab = route.tab;
   if (route.resourceId) {
     nasState.selectedResourceId = route.resourceId;
-    if (route.subTab) {
-      if (route.tab === 'storage-pools' || route.tab === 'zfs') {
-        nasState.poolSubTab = route.subTab as any;
-      } else if (route.tab === 'kvm') {
-        nasState.vmSubTab = route.subTab as any;
-      } else if (route.tab === 'docker') {
-        nasState.dockerSubTab = route.subTab as any;
-      } else if (route.tab === 'lxc') {
-        nasState.lxcSubTab = route.subTab as any;
-      }
+    const targetSub = route.subTab || 'summary';
+    if (route.tab === 'storage-pools' || route.tab === 'zfs') {
+      nasState.poolSubTab = targetSub as any;
+    } else if (route.tab === 'kvm') {
+      nasState.vmSubTab = targetSub as any;
+    } else if (route.tab === 'docker') {
+      nasState.dockerSubTab = targetSub as any;
+    } else if (route.tab === 'lxc') {
+      nasState.lxcSubTab = targetSub as any;
     }
   } else {
     // When navigating to a top-level view without a child resource, reset selectedResourceId to match the destination tab

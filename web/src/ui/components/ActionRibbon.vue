@@ -3,7 +3,9 @@ import { computed, reactive, ref } from 'vue';
 import {
   mdiAccountGroup,
   mdiArrowLeft,
+  mdiCalendarClock,
   mdiCamera,
+  mdiCheckDecagram,
   mdiCircle,
   mdiClose,
   mdiCogOutline,
@@ -51,6 +53,7 @@ import { computeStorageBlastRadius } from '../utils/storageBlastRadius';
 import { toZfsSafeSlug } from '../../domain/id';
 import type { VirtualMachine, LxcContainer, ZfsPool, DockerApp } from '../../domain/models';
 import { getDockerAppIcon, getLxcContainerIcon, getVmIcon } from '../utils/appIcons';
+import { resolveWebUrl } from '../dashboard/webAppsHelper';
 
 const failedVmIcons = ref<Record<string, boolean>>({});
 const failedDockerIcons = ref<Record<string, boolean>>({});
@@ -153,6 +156,13 @@ async function startVm() {
 async function shutdownVm() {
   if (!currentVm.value || isBusy.value) return;
   const vm = currentVm.value;
+  const ok = await confirmModal({
+    title: `Shutdown "${vm.vmName}"?`,
+    message: `Send an ACPI shutdown signal to "${vm.vmName}"?`,
+    tone: 'warning',
+    confirmText: 'Shutdown VM',
+  });
+  if (!ok) return;
   isBusy.value = true;
   try {
     await runTrackedTask(`VM "${vm.vmName}": ACPI Shutdown`, async () => {
@@ -194,6 +204,13 @@ async function forceStopVm() {
 async function rebootVm() {
   if (!currentVm.value || isBusy.value) return;
   const vm = currentVm.value;
+  const ok = await confirmModal({
+    title: `Reboot "${vm.vmName}"?`,
+    message: `Send a reboot signal to "${vm.vmName}"? Active guest sessions will be interrupted.`,
+    tone: 'warning',
+    confirmText: 'Reboot VM',
+  });
+  if (!ok) return;
   isBusy.value = true;
   try {
     await runTrackedTask(`VM "${vm.vmName}": Reboot`, async () => {
@@ -365,12 +382,20 @@ async function startLxc() {
 async function stopLxc() {
   if (!currentLxc.value || isBusy.value) return;
   const ct = currentLxc.value;
+  const label = ct.containerName || ct.name.replace(/^lxcContainers\//, '');
+  const ok = await confirmModal({
+    title: `Stop Container "${label}"?`,
+    message: `Gracefully stop LXC container "${label}"?`,
+    tone: 'warning',
+    confirmText: 'Stop Container',
+  });
+  if (!ok) return;
   isBusy.value = true;
   try {
-    await runTrackedTask(`LXC "${ct.containerName || ct.name}": Stop`, async () => {
+    await runTrackedTask(`LXC "${label}": Stop`, async () => {
       await services.lxc.stopContainer(ct.name);
     });
-    notify('info', `Container "${ct.containerName || ct.name}" stopped`);
+    notify('info', `Container "${label}" stopped`);
     await refreshAllData();
   } catch (err: any) {
     notify('error', `Failed to stop container: ${err.message}`);
@@ -382,12 +407,20 @@ async function stopLxc() {
 async function restartLxc() {
   if (!currentLxc.value || isBusy.value) return;
   const ct = currentLxc.value;
+  const label = ct.containerName || ct.name.replace(/^lxcContainers\//, '');
+  const ok = await confirmModal({
+    title: `Reboot Container "${label}"?`,
+    message: `Restart LXC container "${label}"? Running services inside the container will briefly stop.`,
+    tone: 'warning',
+    confirmText: 'Reboot Container',
+  });
+  if (!ok) return;
   isBusy.value = true;
   try {
-    await runTrackedTask(`LXC "${ct.containerName || ct.name}": Reboot`, async () => {
+    await runTrackedTask(`LXC "${label}": Reboot`, async () => {
       await services.lxc.restartContainer(ct.name);
     });
-    notify('info', `Container "${ct.containerName || ct.name}" restarted`);
+    notify('info', `Container "${label}" restarted`);
     await refreshAllData();
   } catch (err: any) {
     notify('error', `Failed to restart container: ${err.message}`);
@@ -469,6 +502,13 @@ async function stopDocker() {
   if (!currentDocker.value || isBusy.value) return;
   const app = currentDocker.value;
   const appDisplayName = app.title || app.appId || app.name.replace(/^dockerApps\//, '');
+  const ok = await confirmModal({
+    title: `Stop "${appDisplayName}"?`,
+    message: `Stop all containers in application stack "${appDisplayName}"?`,
+    tone: 'warning',
+    confirmText: 'Stop App',
+  });
+  if (!ok) return;
   isBusy.value = true;
   try {
     await runTrackedTask(`App "${appDisplayName}": Stop`, async () => {
@@ -487,6 +527,13 @@ async function restartDocker() {
   if (!currentDocker.value || isBusy.value) return;
   const app = currentDocker.value;
   const appDisplayName = app.title || app.appId || app.name.replace(/^dockerApps\//, '');
+  const ok = await confirmModal({
+    title: `Restart "${appDisplayName}"?`,
+    message: `Restart all containers in application stack "${appDisplayName}"?`,
+    tone: 'warning',
+    confirmText: 'Restart App',
+  });
+  if (!ok) return;
   isBusy.value = true;
   try {
     await runTrackedTask(`App "${appDisplayName}": Restart`, async () => {
@@ -569,12 +616,20 @@ const isMainPool = computed(() => {
 async function scrubPool() {
   if (!currentPool.value || isBusy.value) return;
   const pool = currentPool.value;
+  const label = pool.poolName || pool.name.replace(/^zfsPools\//, '');
+  const ok = await confirmModal({
+    title: `Start Scrub on "${label}"?`,
+    message: `Verify all data checksums across pool "${label}"? Disk I/O may increase while the scrub runs.`,
+    tone: 'info',
+    confirmText: 'Start Scrub',
+  });
+  if (!ok) return;
   isBusy.value = true;
   try {
-    await runTrackedTask(`ZFS Pool "${pool.poolName || pool.name}": Start Scrub`, async () => {
+    await runTrackedTask(`ZFS Pool "${label}": Start Scrub`, async () => {
       await services.zfs.scrubPool(pool.name);
     });
-    notify('success', `Scrub started on pool "${pool.poolName || pool.name}"`);
+    notify('success', `Scrub started on pool "${label}"`);
     await refreshAllData();
   } catch (err: any) {
     notify('error', `Failed to scrub pool: ${err.message}`);
@@ -689,11 +744,12 @@ function popoutHostTerminal() {
       <!-- VM Identity -->
       <template v-if="currentVm">
         <button
-          class="btn btn-xs btn-ghost ribbon-back-btn"
-          title="Back to Virtual Machines"
+          class="btn btn-xs btn-ghost ribbon-back-btn has-tooltip tooltip-left"
+          data-tooltip="Back to Virtual Machines"
+          aria-label="Back to Virtual Machines"
           @click="selectResource('node:vms'); handleNav('kvm')"
         >
-          <MdiIcon :path="mdiArrowLeft" size="15" />
+          <MdiIcon :path="mdiArrowLeft" size="16" />
         </button>
         <div class="ribbon-icon-avatar">
           <img
@@ -719,28 +775,17 @@ function popoutHostTerminal() {
           :title="`Status: ${(currentVm.state || 'STOPPED').toLowerCase()}`"
         />
         <span class="ribbon-name">{{ currentVm.vmName }}</span>
-        <span
-          v-if="currentVm.state === 'RUNNING' && currentVm.guestCpuPercent !== undefined"
-          class="ribbon-metric font-xs"
-        >
-          CPU: {{ currentVm.guestCpuPercent.toFixed(1) }}%
-        </span>
-        <span
-          v-if="currentVm.state === 'RUNNING' && currentVm.guestMemoryUsedMib"
-          class="ribbon-metric font-xs"
-        >
-          RAM: {{ currentVm.guestMemoryUsedMib >= 1024 ? (currentVm.guestMemoryUsedMib / 1024).toFixed(2) + ' GiB' : currentVm.guestMemoryUsedMib + ' MiB' }}
-        </span>
       </template>
 
       <!-- LXC Identity -->
       <template v-else-if="currentLxc">
         <button
-          class="btn btn-xs btn-ghost ribbon-back-btn"
-          title="Back to LXC Containers"
+          class="btn btn-xs btn-ghost ribbon-back-btn has-tooltip tooltip-left"
+          data-tooltip="Back to LXC Containers"
+          aria-label="Back to LXC Containers"
           @click="selectResource('node:lxc'); handleNav('lxc')"
         >
-          <MdiIcon :path="mdiArrowLeft" size="15" />
+          <MdiIcon :path="mdiArrowLeft" size="16" />
         </button>
         <div class="ribbon-icon-avatar">
           <img
@@ -769,35 +814,29 @@ function popoutHostTerminal() {
           :title="`Status: ${(currentLxc.state || 'STOPPED').toLowerCase()}`"
         />
         <span class="ribbon-name">{{ currentLxc.containerName || currentLxc.name.replace('lxcContainers/', '') }}</span>
-        <span
-          v-if="currentLxc.state === 'RUNNING' && currentLxc.cpuPercent !== undefined"
-          class="ribbon-metric font-xs"
-        >
-          CPU: {{ currentLxc.cpuPercent.toFixed(1) }}%
-        </span>
-        <span
-          v-if="currentLxc.state === 'RUNNING' && currentLxc.memoryUsedMib"
-          class="ribbon-metric font-xs"
-        >
-          RAM: {{ currentLxc.memoryUsedMib >= 1024 ? (currentLxc.memoryUsedMib / 1024).toFixed(2) + ' GiB' : currentLxc.memoryUsedMib + ' MiB' }}
-        </span>
       </template>
 
       <!-- Pool Identity -->
       <template v-else-if="currentPool">
         <button
-          class="btn btn-xs btn-ghost ribbon-back-btn"
-          title="Back to Storage Pools"
+          class="btn btn-xs btn-ghost ribbon-back-btn has-tooltip tooltip-left"
+          data-tooltip="Back to Storage Pools"
+          aria-label="Back to Storage Pools"
           @click="selectResource('node:pools'); handleNav('storage-pools')"
         >
-          <MdiIcon :path="mdiArrowLeft" size="15" />
+          <MdiIcon :path="mdiArrowLeft" size="16" />
         </button>
         <MdiIcon :path="mdiDatabase" size="16" style="color: var(--warning-text)" />
         <MdiIcon
           :path="mdiCircle"
           size="9"
           :style="{
-            color: currentPool.state === 'ONLINE' ? 'var(--success)' : 'var(--danger)',
+            color:
+              currentPool.state === 'ONLINE'
+                ? 'var(--success)'
+                : currentPool.state === 'DEGRADED'
+                ? 'var(--warning)'
+                : 'var(--danger)',
           }"
           :title="`Status: ${(currentPool.state || 'ONLINE').toLowerCase()}`"
         />
@@ -807,11 +846,12 @@ function popoutHostTerminal() {
       <!-- Docker Identity -->
       <template v-else-if="currentDocker">
         <button
-          class="btn btn-xs btn-ghost ribbon-back-btn"
-          title="Back to Docker Applications"
+          class="btn btn-xs btn-ghost ribbon-back-btn has-tooltip tooltip-left"
+          data-tooltip="Back to Docker Applications"
+          aria-label="Back to Docker Applications"
           @click="selectResource('node:docker'); handleNav('docker')"
         >
-          <MdiIcon :path="mdiArrowLeft" size="15" />
+          <MdiIcon :path="mdiArrowLeft" size="16" />
         </button>
         <div class="ribbon-icon-avatar">
           <img
@@ -837,18 +877,6 @@ function popoutHostTerminal() {
           :title="`Status: ${(currentDocker.state || 'STOPPED').toLowerCase()}`"
         />
         <span class="ribbon-name">{{ currentDocker.title || currentDocker.appId || currentDocker.name.replace(/^dockerApps\//, '') }}</span>
-        <span
-          v-if="currentDocker.state === 'RUNNING' && currentDocker.totalCpuPercent !== undefined"
-          class="ribbon-metric font-xs"
-        >
-          CPU: {{ currentDocker.totalCpuPercent.toFixed(1) }}%
-        </span>
-        <span
-          v-if="currentDocker.state === 'RUNNING' && currentDocker.totalMemoryMib"
-          class="ribbon-metric font-xs"
-        >
-          RAM: {{ currentDocker.totalMemoryMib >= 1024 ? (currentDocker.totalMemoryMib / 1024).toFixed(2) + ' GiB' : currentDocker.totalMemoryMib + ' MiB' }}
-        </span>
       </template>
 
       <!-- Collection / Node Section Identity -->
@@ -890,12 +918,17 @@ function popoutHostTerminal() {
         <MdiIcon :path="mdiAccountGroup" size="16" style="color: var(--accent-secondary)" />
         <span class="ribbon-name">Users & Groups</span>
       </template>
+      <template v-else-if="nasState.activeTab === 'cron'">
+        <MdiIcon :path="mdiCalendarClock" size="16" style="color: var(--accent-primary)" />
+        <span class="ribbon-name">Scheduled Tasks</span>
+      </template>
+      <template v-else-if="nasState.activeTab === 'prerequisites'">
+        <MdiIcon :path="mdiCheckDecagram" size="16" style="color: var(--accent-primary)" />
+        <span class="ribbon-name">System Prerequisites</span>
+      </template>
       <template v-else>
         <MdiIcon :path="mdiServer" size="16" style="color: var(--accent-primary)" />
         <span class="ribbon-name">{{ nasState.systemTelemetry?.host?.hostname || 'nas01' }}</span>
-        <span v-if="nasState.systemTelemetry?.host?.uptimeSeconds" class="ribbon-metric font-xs">
-          Uptime: {{ Math.floor(nasState.systemTelemetry.host.uptimeSeconds / 86400) }}d {{ Math.floor((nasState.systemTelemetry.host.uptimeSeconds % 86400) / 3600) }}h
-        </span>
       </template>
     </div>
 
@@ -1126,102 +1159,104 @@ function popoutHostTerminal() {
       </template>
     </div>
 
-    <!-- Ribbon Right: Unified Contextual Action Buttons (Icon-Only with Tooltips) -->
+    <!-- Ribbon Right: Unified Contextual Icon Action Buttons -->
     <div class="ribbon-actions">
       <!-- VM Action Buttons -->
       <template v-if="currentVm">
         <button
           v-if="currentVm.state === 'PAUSED'"
-          class="btn btn-sm btn-icon btn-success"
+          class="btn btn-icon-action btn-success has-tooltip"
           :disabled="isBusy"
-          title="Resume Virtual Machine"
+          data-tooltip="Resume Virtual Machine"
           aria-label="Resume"
           @click="resumeVm"
         >
-          <MdiIcon :path="mdiPlay" size="15" />
+          <MdiIcon :path="mdiPlay" size="18" />
         </button>
         <button
           v-else-if="currentVm.state !== 'RUNNING'"
-          class="btn btn-sm btn-icon btn-success"
+          class="btn btn-icon-action btn-success has-tooltip"
           :disabled="isBusy"
-          title="Start Virtual Machine"
+          data-tooltip="Start Virtual Machine"
           aria-label="Start"
           @click="startVm"
         >
-          <MdiIcon :path="mdiPlay" size="15" />
+          <MdiIcon :path="mdiPlay" size="18" />
         </button>
 
         <button
           v-if="currentVm.state === 'RUNNING'"
-          class="btn btn-sm btn-icon btn-secondary"
+          class="btn btn-icon-action btn-secondary has-tooltip"
           :disabled="isBusy"
-          title="Pause Virtual Machine"
+          data-tooltip="Pause Virtual Machine"
           aria-label="Pause"
           @click="pauseVm"
         >
-          <MdiIcon :path="mdiPause" size="15" />
+          <MdiIcon :path="mdiPause" size="18" />
         </button>
 
         <button
           v-if="currentVm.state === 'RUNNING'"
-          class="btn btn-sm btn-icon btn-secondary"
+          class="btn btn-icon-action btn-secondary has-tooltip"
           :disabled="isBusy"
-          title="Shutdown (Send ACPI Signal)"
+          data-tooltip="Shutdown (ACPI)"
           aria-label="Shutdown"
           @click="shutdownVm"
         >
-          <MdiIcon :path="mdiPower" size="15" />
+          <MdiIcon :path="mdiPower" size="18" />
         </button>
 
         <button
           v-if="currentVm.state === 'RUNNING'"
-          class="btn btn-sm btn-icon btn-secondary"
+          class="btn btn-icon-action btn-secondary has-tooltip"
           :disabled="isBusy"
-          title="Stop (Force Power Off)"
+          data-tooltip="Force Power Off"
           aria-label="Stop"
           @click="forceStopVm"
         >
-          <MdiIcon :path="mdiStop" size="15" />
+          <MdiIcon :path="mdiStop" size="18" />
         </button>
 
         <button
           v-if="currentVm.state === 'RUNNING'"
-          class="btn btn-sm btn-icon btn-secondary"
+          class="btn btn-icon-action btn-secondary has-tooltip"
           :disabled="isBusy"
-          title="Reboot Virtual Machine"
+          data-tooltip="Reboot Virtual Machine"
           aria-label="Reboot"
           @click="rebootVm"
         >
-          <MdiIcon :path="mdiRestart" size="15" />
+          <MdiIcon :path="mdiRestart" size="18" />
         </button>
 
         <button
-          class="btn btn-sm btn-icon btn-secondary"
+          class="btn btn-icon-action btn-secondary has-tooltip"
           :disabled="isBusy"
-          title="Clone Virtual Machine"
+          data-tooltip="Clone Virtual Machine"
           aria-label="Clone"
           @click="openCloneVm"
         >
-          <MdiIcon :path="mdiContentCopy" size="15" />
+          <MdiIcon :path="mdiContentCopy" size="18" />
         </button>
 
         <button
-          class="btn btn-sm btn-icon btn-secondary"
-          title="Console Pop-out (Open Live noVNC in New Window)"
+          class="btn btn-icon-action btn-secondary has-tooltip tooltip-right"
+          data-tooltip="Open Console in New Window"
           aria-label="Console Pop-out"
           @click="popoutVmConsole"
         >
-          <MdiIcon :path="mdiOpenInNew" size="15" />
+          <MdiIcon :path="mdiOpenInNew" size="18" />
         </button>
 
+        <span class="ribbon-action-divider" aria-hidden="true" />
+
         <button
-          class="btn btn-sm btn-icon btn-danger"
+          class="btn btn-icon-action btn-danger has-tooltip tooltip-right"
           :disabled="isBusy"
-          title="Delete Virtual Machine"
+          data-tooltip="Delete Virtual Machine"
           aria-label="Delete"
           @click="deleteVm"
         >
-          <MdiIcon :path="mdiTrashCanOutline" size="15" />
+          <MdiIcon :path="mdiTrashCanOutline" size="18" />
         </button>
       </template>
 
@@ -1229,110 +1264,114 @@ function popoutHostTerminal() {
       <template v-else-if="currentLxc">
         <button
           v-if="currentLxc.state !== 'RUNNING' && currentLxc.state !== 'FROZEN'"
-          class="btn btn-sm btn-icon btn-success"
+          class="btn btn-icon-action btn-success has-tooltip"
           :disabled="isBusy"
-          title="Start LXC Container"
+          data-tooltip="Start Container"
           aria-label="Start"
           @click="startLxc"
         >
-          <MdiIcon :path="mdiPlay" size="15" />
+          <MdiIcon :path="mdiPlay" size="18" />
         </button>
 
         <button
           v-if="currentLxc.state === 'RUNNING' || currentLxc.state === 'FROZEN'"
-          class="btn btn-sm btn-icon btn-secondary"
+          class="btn btn-icon-action btn-secondary has-tooltip"
           :disabled="isBusy"
-          :title="currentLxc.state === 'FROZEN' ? 'Unfreeze Container' : 'Freeze Container'"
+          :data-tooltip="currentLxc.state === 'FROZEN' ? 'Unfreeze Container' : 'Freeze Container'"
           :aria-label="currentLxc.state === 'FROZEN' ? 'Unfreeze' : 'Freeze'"
           @click="toggleFreezeLxc"
         >
-          <MdiIcon :path="currentLxc.state === 'FROZEN' ? mdiPlay : mdiPause" size="15" />
+          <MdiIcon :path="currentLxc.state === 'FROZEN' ? mdiPlay : mdiSnowflake" size="18" />
         </button>
 
         <button
           v-if="currentLxc.state === 'RUNNING' || currentLxc.state === 'FROZEN'"
-          class="btn btn-sm btn-icon btn-secondary"
+          class="btn btn-icon-action btn-secondary has-tooltip"
           :disabled="isBusy"
-          title="Stop LXC Container"
+          data-tooltip="Stop Container"
           aria-label="Stop"
           @click="stopLxc"
         >
-          <MdiIcon :path="mdiStop" size="15" />
+          <MdiIcon :path="mdiStop" size="18" />
         </button>
 
         <button
           v-if="currentLxc.state === 'RUNNING'"
-          class="btn btn-sm btn-icon btn-secondary"
+          class="btn btn-icon-action btn-secondary has-tooltip"
           :disabled="isBusy"
-          title="Reboot LXC Container"
+          data-tooltip="Reboot Container"
           aria-label="Reboot"
           @click="restartLxc"
         >
-          <MdiIcon :path="mdiRestart" size="15" />
+          <MdiIcon :path="mdiRestart" size="18" />
         </button>
 
         <button
           v-if="currentLxc.state === 'RUNNING'"
-          class="btn btn-sm btn-icon btn-secondary"
-          title="Console Pop-out (Open Detached Shell Terminal Window)"
+          class="btn btn-icon-action btn-secondary has-tooltip tooltip-right"
+          data-tooltip="Open Shell in New Window"
           aria-label="Console Pop-out"
           @click="popoutLxcTerminal"
         >
-          <MdiIcon :path="mdiOpenInNew" size="15" />
+          <MdiIcon :path="mdiOpenInNew" size="18" />
         </button>
 
+        <span class="ribbon-action-divider" aria-hidden="true" />
+
         <button
-          class="btn btn-sm btn-icon btn-danger"
+          class="btn btn-icon-action btn-danger has-tooltip tooltip-right"
           :disabled="isBusy"
-          title="Delete LXC Container"
+          data-tooltip="Delete Container"
           aria-label="Delete"
           @click="deleteLxc"
         >
-          <MdiIcon :path="mdiTrashCanOutline" size="15" />
+          <MdiIcon :path="mdiTrashCanOutline" size="18" />
         </button>
       </template>
 
       <!-- Storage Pool Action Buttons -->
       <template v-else-if="currentPool">
         <button
-          class="btn btn-sm btn-icon btn-secondary"
+          class="btn btn-icon-action btn-secondary has-tooltip"
           :disabled="isBusy"
-          title="Scrub Pool (Start Data Integrity Scrub)"
+          data-tooltip="Start ZFS Scrub"
           aria-label="Scrub"
           @click="scrubPool"
         >
-          <MdiIcon :path="mdiDatabaseSync" size="15" />
+          <MdiIcon :path="mdiDatabaseSync" size="18" />
         </button>
 
         <button
           v-if="!isMainPool && !nasState.systemConfig?.mainPool"
-          class="btn btn-sm btn-icon btn-secondary"
+          class="btn btn-icon-action btn-secondary has-tooltip"
           :disabled="isBusy"
-          title="Set as Main Pool"
+          data-tooltip="Set as Main Pool"
           aria-label="Set Main Pool"
           @click="setMainPool"
         >
-          <MdiIcon :path="mdiDatabaseCheck" size="15" />
+          <MdiIcon :path="mdiDatabaseCheck" size="18" />
         </button>
 
         <button
-          class="btn btn-sm btn-icon btn-secondary"
+          class="btn btn-icon-action btn-secondary has-tooltip tooltip-right"
           :disabled="isBusy"
-          title="Export Pool (Safely Unmount and Export)"
+          data-tooltip="Export Pool"
           aria-label="Export"
           @click="exportPool"
         >
-          <MdiIcon :path="mdiExport" size="15" />
+          <MdiIcon :path="mdiExport" size="18" />
         </button>
 
+        <span class="ribbon-action-divider" aria-hidden="true" />
+
         <button
-          class="btn btn-sm btn-icon btn-danger"
+          class="btn btn-icon-action btn-danger has-tooltip tooltip-right"
           :disabled="isBusy"
-          title="Destroy Pool Permanently"
+          data-tooltip="Destroy Pool"
           aria-label="Destroy"
           @click="destroyPool"
         >
-          <MdiIcon :path="mdiTrashCanOutline" size="15" />
+          <MdiIcon :path="mdiTrashCanOutline" size="18" />
         </button>
       </template>
 
@@ -1340,67 +1379,69 @@ function popoutHostTerminal() {
       <template v-else-if="currentDocker">
         <button
           v-if="currentDocker.state !== 'RUNNING'"
-          class="btn btn-sm btn-icon btn-success"
+          class="btn btn-icon-action btn-success has-tooltip"
           :disabled="isBusy"
-          title="Start Application Stack"
+          data-tooltip="Start Application"
           aria-label="Start"
           @click="startDocker"
         >
-          <MdiIcon :path="mdiPlay" size="15" />
+          <MdiIcon :path="mdiPlay" size="18" />
         </button>
 
         <button
           v-if="currentDocker.state === 'RUNNING' || currentDocker.state === 'PARTIALLY_RUNNING'"
-          class="btn btn-sm btn-icon btn-secondary"
+          class="btn btn-icon-action btn-secondary has-tooltip"
           :disabled="isBusy"
-          title="Stop Application Stack"
+          data-tooltip="Stop Application"
           aria-label="Stop"
           @click="stopDocker"
         >
-          <MdiIcon :path="mdiStop" size="15" />
+          <MdiIcon :path="mdiStop" size="18" />
         </button>
 
         <button
           v-if="currentDocker.state === 'RUNNING' || currentDocker.state === 'PARTIALLY_RUNNING'"
-          class="btn btn-sm btn-icon btn-secondary"
+          class="btn btn-icon-action btn-secondary has-tooltip"
           :disabled="isBusy"
-          title="Restart Application Stack"
+          data-tooltip="Restart Application"
           aria-label="Restart"
           @click="restartDocker"
         >
-          <MdiIcon :path="mdiRestart" size="15" />
+          <MdiIcon :path="mdiRestart" size="18" />
         </button>
 
         <a
           v-if="currentDocker.webUiUrl"
-          :href="currentDocker.webUiUrl"
+          :href="resolveWebUrl(currentDocker.webUiUrl)"
           target="_blank"
           rel="noopener noreferrer"
-          class="btn btn-sm btn-icon btn-primary"
-          title="Open Web UI Portal"
+          class="btn btn-icon-action btn-primary has-tooltip"
+          data-tooltip="Open Web UI"
           aria-label="Web UI"
         >
-          <MdiIcon :path="mdiOpenInNew" size="15" />
+          <MdiIcon :path="mdiOpenInNew" size="18" />
         </a>
 
         <button
-          class="btn btn-sm btn-icon btn-secondary"
+          class="btn btn-icon-action btn-secondary has-tooltip tooltip-right"
           :disabled="isBusy"
-          title="Upgrade Application (Pull Latest Images & Redeploy)"
+          data-tooltip="Upgrade Application"
           aria-label="Upgrade"
           @click="upgradeDocker"
         >
-          <MdiIcon :path="mdiUpdate" size="15" />
+          <MdiIcon :path="mdiUpdate" size="18" />
         </button>
 
+        <span class="ribbon-action-divider" aria-hidden="true" />
+
         <button
-          class="btn btn-sm btn-icon btn-danger"
+          class="btn btn-icon-action btn-danger has-tooltip tooltip-right"
           :disabled="isBusy"
-          title="Delete Application Stack"
+          data-tooltip="Delete Application"
           aria-label="Delete"
           @click="deleteDocker"
         >
-          <MdiIcon :path="mdiTrashCanOutline" size="15" />
+          <MdiIcon :path="mdiTrashCanOutline" size="18" />
         </button>
       </template>
     </div>
@@ -1443,7 +1484,9 @@ function popoutHostTerminal() {
 
 <style scoped>
 .action-ribbon {
-  min-height: 44px;
+  position: relative;
+  z-index: 30;
+  min-height: 48px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
@@ -1452,7 +1495,7 @@ function popoutHostTerminal() {
   padding: 0 16px;
   flex-shrink: 0;
   gap: 14px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .ribbon-identity {
@@ -1460,10 +1503,17 @@ function popoutHostTerminal() {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  flex-shrink: 0;
 }
 
 .ribbon-back-btn {
-  padding: 3px 5px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-secondary);
 }
 
@@ -1471,6 +1521,7 @@ function popoutHostTerminal() {
   font-weight: 700;
   font-size: 14.5px;
   color: var(--text-primary);
+  max-width: 240px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1482,9 +1533,22 @@ function popoutHostTerminal() {
   border: 1px solid var(--border-subtle);
   border-radius: 4px;
   padding: 1px 7px;
-  font-size: 11.5px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+@media (max-width: 1180px) {
+  .ribbon-metric {
+    display: none;
+  }
+}
+
+@media (max-width: 820px) {
+  .action-ribbon {
+    flex-wrap: wrap;
+    padding: 6px 12px;
+  }
 }
 
 .ribbon-tabs {
@@ -1492,22 +1556,30 @@ function popoutHostTerminal() {
   align-items: center;
   gap: 4px;
   overflow-x: auto;
+  min-width: 0;
   flex: 1;
+  scrollbar-width: none;
+}
+
+.ribbon-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .ribbon-tab-btn {
   background: transparent;
-  border: 1px solid transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
-  padding: 5px 11px;
-  border-radius: 5px;
+  height: 48px;
+  padding: 0 12px;
+  border-radius: 0;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: all 0.12s ease;
+  transition: color 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
   white-space: nowrap;
 }
 
@@ -1517,38 +1589,46 @@ function popoutHostTerminal() {
 }
 
 .ribbon-tab-btn.active {
-  background: var(--accent-bg-subtle);
+  background: transparent;
   color: var(--accent-primary);
-  border-color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
   font-weight: 600;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .ribbon-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
   margin-left: auto;
-  padding: 2px 4px;
+  padding: 2px 0;
 }
 
-.ribbon-actions .btn {
-  height: 28px;
-  padding: 0 10px;
-  font-size: 12px;
-  font-weight: 600;
-  border-radius: 5px;
+.ribbon-action-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-subtle);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.ribbon-actions .btn-icon-action {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0;
+  border-radius: 8px;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
+  text-decoration: none !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-  transition: all 0.12s ease;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
 }
 
-.ribbon-actions .btn:hover:not(:disabled) {
+.ribbon-actions .btn-icon-action:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.22);
 }
 
 .ribbon-actions .btn-success {
@@ -1558,7 +1638,7 @@ function popoutHostTerminal() {
 }
 
 .ribbon-actions .btn-danger {
-  background: rgba(239, 68, 68, 0.15);
+  background: rgba(239, 68, 68, 0.14);
   color: var(--danger);
   border-color: rgba(239, 68, 68, 0.35);
 }
@@ -1566,6 +1646,7 @@ function popoutHostTerminal() {
 .ribbon-actions .btn-danger:hover:not(:disabled) {
   background: var(--danger);
   color: #fff;
+  border-color: var(--danger);
 }
 
 .ribbon-actions .btn-secondary {
@@ -1576,7 +1657,61 @@ function popoutHostTerminal() {
 
 .ribbon-actions .btn-secondary:hover:not(:disabled) {
   background: var(--bg-hover);
-  border-color: var(--border-hover, var(--text-muted));
+  border-color: var(--border-strong);
+}
+
+/* Instant Crisp Hover Tooltips */
+.has-tooltip {
+  position: relative;
+}
+
+.has-tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-3px);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 60;
+  transition: opacity 0.12s ease 0.08s, transform 0.12s ease 0.08s, visibility 0.12s ease 0.08s;
+}
+
+.has-tooltip.tooltip-right::after {
+  left: auto;
+  right: 0;
+  transform: translateY(-3px);
+}
+
+.has-tooltip.tooltip-left::after {
+  left: 0;
+  right: auto;
+  transform: translateY(-3px);
+}
+
+.has-tooltip:hover::after,
+.has-tooltip:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.has-tooltip.tooltip-right:hover::after,
+.has-tooltip.tooltip-right:focus-visible::after,
+.has-tooltip.tooltip-left:hover::after,
+.has-tooltip.tooltip-left:focus-visible::after {
+  transform: translateY(0);
 }
 
 .font-xs {

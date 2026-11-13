@@ -121,6 +121,12 @@ func TestSystemAdapterPoolSelectionAndRecovery(t *testing.T) {
 		t.Fatalf("expected Docker to be enabled after selecting main pool")
 	}
 
+	// 3b. Verify Main Pool is permanently locked once set
+	zfsAdapter.pools["otherpool"] = domain.ZfsPool{ID: "otherpool", PoolName: "otherpool", State: "ONLINE", Mountpoint: "/mnt/otherpool"}
+	if _, lockErr := adapter.SelectMainPool(ctx, "otherpool", false); lockErr == nil {
+		t.Fatalf("expected SelectMainPool to reject switching away from locked main pool")
+	}
+
 	// 4. Test Reinstall / Discovery scenario:
 	// Reset local config MainPool to "" as if the OS was reinstalled
 	cfg.System.MainPool = ""
