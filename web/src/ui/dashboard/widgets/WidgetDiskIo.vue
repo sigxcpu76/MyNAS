@@ -209,13 +209,13 @@ const diskIoChartOptions = computed<echarts.EChartsOption>(() => {
 
     <div v-else style="display: flex; flex-direction: column; gap: 12px">
       <div class="io-summary-header">
-        <div>
-          <strong class="mono" style="font-size: 15px; color: var(--accent-primary)">
+        <div class="io-summary-top">
+          <strong class="mono" style="font-size: 14px; color: var(--accent-primary)">
             {{ activeStats.label }}
           </strong>
-          <div class="mono" style="font-size: 11.5px; color: var(--text-secondary); margin-top: 4px">
-            Queue: {{ activeStats.ioInProgress }} active · Peak Util: {{ activeStats.utilPercent.toFixed(1) }}%
-          </div>
+          <span class="mono" style="font-size: 11px; color: var(--text-secondary)">
+            Q: {{ activeStats.ioInProgress }} · Util: {{ activeStats.utilPercent.toFixed(1) }}%
+          </span>
         </div>
 
         <div class="system-throughput-pills mono">
@@ -224,14 +224,14 @@ const diskIoChartOptions = computed<echarts.EChartsOption>(() => {
             <strong class="pill-rate" style="color: var(--success)">
               {{ formatBytes(activeStats.readRate) }}/s
             </strong>
-            <span class="pill-total">{{ activeStats.readIops }} IOPS · Total {{ formatBytes(activeStats.readBytes) }}</span>
+            <span class="pill-total">{{ activeStats.readIops }} IOPS · {{ formatBytes(activeStats.readBytes) }}</span>
           </div>
           <div class="throughput-pill">
             <span class="pill-label">Write</span>
             <strong class="pill-rate" style="color: var(--accent-primary)">
               {{ formatBytes(activeStats.writeRate) }}/s
             </strong>
-            <span class="pill-total">{{ activeStats.writeIops }} IOPS · Total {{ formatBytes(activeStats.writeBytes) }}</span>
+            <span class="pill-total">{{ activeStats.writeIops }} IOPS · {{ formatBytes(activeStats.writeBytes) }}</span>
           </div>
         </div>
       </div>
@@ -315,31 +315,37 @@ const diskIoChartOptions = computed<echarts.EChartsOption>(() => {
 
 .io-summary-header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 14px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 8px;
   background: var(--bg-base);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  padding: 12px 14px;
+  padding: 10px 12px;
+}
+
+.io-summary-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .system-throughput-pills {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .throughput-pill {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  padding: 8px 12px;
+  padding: 6px 10px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  min-width: 145px;
+  gap: 1px;
+  min-width: 0;
 }
 
 .pill-label {

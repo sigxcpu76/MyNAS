@@ -43,45 +43,29 @@ const ramChartOptions = computed<echarts.EChartsOption>(() => {
       },
     },
     legend: {
-      orient: 'vertical',
-      right: '4%',
-      top: 'middle',
-      icon: 'circle',
-      textStyle: {
-        color: p.textColor,
-        fontSize: 12,
-      },
-      formatter: (name: string) => {
-        let val = 0;
-        if (name === 'Services & Apps') val = servicesBytes;
-        else if (name === 'ZFS ARC Cache') val = zfsArcBytes;
-        else if (name === 'Buffers & Cache') val = buffersAndCache;
-        else if (name === 'Free RAM') val = freeBytes;
-        const pct = Math.round((val / total) * 100);
-        return `${name}: ${formatBytes(val)} (${pct}%)`;
-      },
+      show: false,
     },
     title: {
       text: formatBytes(total),
       subtext: 'Total RAM',
-      left: '30%',
-      top: '40%',
+      left: 'center',
+      top: '35%',
       textStyle: {
         color: p.textColor,
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: 'bold',
       },
       subtextStyle: {
         color: p.subtextColor,
-        fontSize: 11,
+        fontSize: 10.5,
       },
     },
     series: [
       {
         name: 'Memory Breakdown',
         type: 'pie',
-        radius: ['52%', '78%'],
-        center: ['30%', '50%'],
+        radius: ['58%', '86%'],
+        center: ['50%', '50%'],
         avoidLabelOverlap: false,
         label: { show: false },
         labelLine: { show: false },
@@ -131,35 +115,47 @@ const ramChartOptions = computed<echarts.EChartsOption>(() => {
       </span>
     </div>
 
-    <!-- RAM Breakdown EChart with Legend -->
+    <!-- Centered RAM Breakdown Donut -->
     <EChart
       :options="ramChartOptions"
-      height="220px"
+      height="155px"
     />
 
-    <!-- Memory Summary Footer -->
+    <!-- Clean 2x2 Memory Breakdown Grid -->
     <div class="ram-summary-footer">
       <div class="ram-summary-item">
-        <span class="detail-name">Services & Apps</span>
-        <strong class="mono" style="color: var(--accent-primary)">
+        <span class="detail-name">
+          <span class="legend-dot" :style="{ background: chartPalette.ramServices }"></span>
+          Services & Apps
+        </span>
+        <strong class="mono detail-val" style="color: var(--accent-primary)">
           {{ formatBytes(telemetry?.memory?.servicesBytes || Math.max(0, (telemetry?.memory?.usedBytes || 0) - (telemetry?.memory?.zfsArcBytes || 0))) }}
         </strong>
       </div>
       <div class="ram-summary-item">
-        <span class="detail-name">ZFS ARC Cache</span>
-        <strong class="mono" style="color: var(--info)">
+        <span class="detail-name">
+          <span class="legend-dot" :style="{ background: chartPalette.ramArc }"></span>
+          ZFS ARC Cache
+        </span>
+        <strong class="mono detail-val" style="color: var(--info)">
           {{ formatBytes(telemetry?.memory?.zfsArcBytes || 0) }}
         </strong>
       </div>
       <div class="ram-summary-item">
-        <span class="detail-name">Buffers / Cache</span>
-        <strong class="mono" style="color: var(--warning)">
+        <span class="detail-name">
+          <span class="legend-dot" :style="{ background: chartPalette.ramBuffers }"></span>
+          Buffers / Cache
+        </span>
+        <strong class="mono detail-val" style="color: var(--warning)">
           {{ formatBytes(Math.max(0, (telemetry?.memory?.buffersBytes || 0) + (telemetry?.memory?.cachedBytes || 0) - (telemetry?.memory?.zfsArcBytes || 0))) }}
         </strong>
       </div>
       <div class="ram-summary-item">
-        <span class="detail-name">Free RAM</span>
-        <strong class="mono" style="color: var(--success)">
+        <span class="detail-name">
+          <span class="legend-dot" :style="{ background: chartPalette.ramFree }"></span>
+          Free RAM
+        </span>
+        <strong class="mono detail-val" style="color: var(--success)">
           {{ formatBytes(telemetry?.memory?.freeBytes || 0) }}
         </strong>
       </div>
@@ -176,9 +172,9 @@ const ramChartOptions = computed<echarts.EChartsOption>(() => {
 
 .ram-summary-footer {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 8px;
   padding-top: 10px;
   border-top: 1px solid var(--border-subtle);
 }
@@ -187,20 +183,41 @@ const ramChartOptions = computed<echarts.EChartsOption>(() => {
   background: var(--bg-base);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  padding: 8px;
+  padding: 7px 10px;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
 }
 
 .detail-name {
-  font-size: 10.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
   color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-@media (max-width: 480px) {
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.detail-val {
+  font-size: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+@media (max-width: 420px) {
   .ram-summary-footer {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr;
   }
 }
 </style>

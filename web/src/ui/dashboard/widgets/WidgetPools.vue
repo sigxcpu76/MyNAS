@@ -149,13 +149,6 @@ function getPoolFragChartOptions(fragPercent: number): echarts.EChartsOption {
 
 <template>
   <div class="pools-widget">
-    <div class="pools-header">
-      <h2 style="font-size: 18px; font-weight: 700; margin: 0">Pools</h2>
-      <button class="btn btn-sm btn-primary" @click="navigateTo('storage-pools')">
-        Manage Pools
-      </button>
-    </div>
-
     <!-- Moving Skeleton Placeholders for Storage Pools when Loading -->
     <div v-if="nasState.loading && nasState.pools.length === 0" class="pool-cards-grid">
       <div v-for="p in 2" :key="p" class="card pool-telemetry-card">
@@ -292,13 +285,6 @@ function getPoolFragChartOptions(fragPercent: number): echarts.EChartsOption {
 <style scoped>
 .pools-widget {
   width: 100%;
-}
-
-.pools-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
 }
 
 .pool-cards-grid {
