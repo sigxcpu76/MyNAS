@@ -725,7 +725,7 @@ describe('Overview Dashboard & Telemetry', () => {
       expect(wrapper.findComponent(WidgetShares).exists()).toBe(true);
     });
 
-    it('renders WidgetDiskIo with /proc/diskstats throughput, IOPS, and device table', () => {
+    it('renders WidgetDiskIo with /proc/diskstats throughput, IOPS, and collapsible device list', async () => {
       const wrapper = mount(WidgetDiskIo);
       expect(wrapper.text()).toContain('Disk I/O');
       expect(wrapper.text()).toContain('nvme0n1');
@@ -733,9 +733,14 @@ describe('Overview Dashboard & Telemetry', () => {
       expect(wrapper.text()).toContain('25 MiB/s');
       expect(wrapper.text()).toContain('450 IOPS');
       expect(wrapper.text()).toContain('220 IOPS');
+      expect(wrapper.find('.io-rows').exists()).toBe(false);
+
+      await wrapper.find('.io-list-toggle').trigger('click');
+      expect(wrapper.find('.io-rows').exists()).toBe(true);
+      expect(wrapper.find('.io-rows').text()).toContain('nvme0n1');
     });
 
-    it('renders WidgetZpoolIo with zpool kstat iostat throughput, IOPS, and queues', () => {
+    it('renders WidgetZpoolIo with zpool kstat iostat throughput, IOPS, and collapsible pool list', async () => {
       const wrapper = mount(WidgetZpoolIo);
       expect(wrapper.text()).toContain('Zpool IOStat');
       expect(wrapper.text()).toContain('tank');
@@ -743,7 +748,11 @@ describe('Overview Dashboard & Telemetry', () => {
       expect(wrapper.text()).toContain('50 MiB/s');
       expect(wrapper.text()).toContain('800 IOPS');
       expect(wrapper.text()).toContain('400 IOPS');
-      expect(wrapper.text()).toContain('Q 1/4');
+      expect(wrapper.find('.io-rows').exists()).toBe(false);
+
+      await wrapper.find('.io-list-toggle').trigger('click');
+      expect(wrapper.find('.io-rows').exists()).toBe(true);
+      expect(wrapper.find('.io-rows').text()).toContain('Q 1/4');
     });
   });
 });

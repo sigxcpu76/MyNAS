@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type * as echarts from 'echarts';
+import { mdiChevronDown, mdiChevronUp } from '@mdi/js';
 import { formatBytes, type DiskIoTelemetry } from '../../../domain/models';
 import { nasState, type IoRatePoint } from '../../store';
 import { useChartPalette } from '../chartPalette';
 import EChart from '../../components/EChart.vue';
+import MdiIcon from '../../components/MdiIcon.vue';
 
 const props = defineProps<{
   ioHistory?: IoRatePoint[];
 }>();
 
 const selectedDisk = ref<string>('__all__');
+const showDevices = ref(false);
 const telemetry = computed(() => nasState.systemTelemetry);
 const chartPalette = useChartPalette();
 
@@ -247,37 +250,49 @@ const diskIoChartOptions = computed<echarts.EChartsOption>(() => {
         />
       </div>
 
-      <div class="io-rows">
+      <div class="io-list-section">
         <button
-          v-for="d in disks"
-          :key="d.name"
           type="button"
-          class="io-row mono"
-          :class="{ active: selectedDisk === d.name }"
-          @click="selectedDisk = selectedDisk === d.name ? '__all__' : d.name"
+          class="io-list-toggle"
+          :aria-expanded="showDevices"
+          @click="showDevices = !showDevices"
         >
-          <div class="io-row-left">
-            <span class="dev-name">{{ d.name }}</span>
-            <span
-              class="util-badge"
-              :class="d.utilizationPercent >= 80 ? 'util-high' : d.utilizationPercent >= 40 ? 'util-med' : ''"
-            >
-              {{ d.utilizationPercent.toFixed(0) }}%
-            </span>
-          </div>
-          <div class="io-row-metrics">
-            <span class="metric-item">
-              <span class="metric-dir">R</span>
-              <span class="metric-val" style="color: var(--success)">{{ formatBytes(d.readRateBytesPerSec) }}/s</span>
-              <span class="metric-iops">({{ d.readIops }})</span>
-            </span>
-            <span class="metric-item">
-              <span class="metric-dir">W</span>
-              <span class="metric-val" style="color: var(--accent-primary)">{{ formatBytes(d.writeRateBytesPerSec) }}/s</span>
-              <span class="metric-iops">({{ d.writeIops }})</span>
-            </span>
-          </div>
+          <span>Devices ({{ disks.length }})</span>
+          <MdiIcon :path="showDevices ? mdiChevronUp : mdiChevronDown" size="16" />
         </button>
+
+        <div v-if="showDevices" class="io-rows">
+          <button
+            v-for="d in disks"
+            :key="d.name"
+            type="button"
+            class="io-row mono"
+            :class="{ active: selectedDisk === d.name }"
+            @click="selectedDisk = selectedDisk === d.name ? '__all__' : d.name"
+          >
+            <div class="io-row-left">
+              <span class="dev-name">{{ d.name }}</span>
+              <span
+                class="util-badge"
+                :class="d.utilizationPercent >= 80 ? 'util-high' : d.utilizationPercent >= 40 ? 'util-med' : ''"
+              >
+                {{ d.utilizationPercent.toFixed(0) }}%
+              </span>
+            </div>
+            <div class="io-row-metrics">
+              <span class="metric-item">
+                <span class="metric-dir">R</span>
+                <span class="metric-val" style="color: var(--success)">{{ formatBytes(d.readRateBytesPerSec) }}/s</span>
+                <span class="metric-iops">({{ d.readIops }})</span>
+              </span>
+              <span class="metric-item">
+                <span class="metric-dir">W</span>
+                <span class="metric-val" style="color: var(--accent-primary)">{{ formatBytes(d.writeRateBytesPerSec) }}/s</span>
+                <span class="metric-iops">({{ d.writeIops }})</span>
+              </span>
+            </div>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -383,6 +398,35 @@ const diskIoChartOptions = computed<echarts.EChartsOption>(() => {
   border-radius: 50%;
   background: var(--success);
   box-shadow: 0 0 6px var(--success);
+}
+
+.io-list-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.io-list-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.io-list-toggle:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
 }
 
 .io-rows {

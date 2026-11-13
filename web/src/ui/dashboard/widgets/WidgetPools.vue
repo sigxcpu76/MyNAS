@@ -39,26 +39,26 @@ function getPoolUsageChartOptions(allocated: number, free: number, total: number
         return `<strong>${params.name}</strong><br/>${formatBytes(params.value)} (${params.percent}%)`;
       },
     },
-    title: {
-      text: `${pct}%`,
-      subtext: 'Used',
-      left: 'center',
-      top: '30%',
-      textStyle: {
-        color: p.textColor,
-        fontSize: 15,
-        fontWeight: 'bold',
+      title: {
+        text: `${pct}%`,
+        subtext: 'Used',
+        left: 'center',
+        top: '26%',
+        textStyle: {
+          color: p.textColor,
+          fontSize: 13,
+          fontWeight: 'bold',
+        },
+        subtextStyle: {
+          color: p.subtextColor,
+          fontSize: 9,
+        },
       },
-      subtextStyle: {
-        color: p.subtextColor,
-        fontSize: 10,
-      },
-    },
-    series: [
-      {
-        name: 'Pool Usage',
-        type: 'pie',
-        radius: ['52%', '76%'],
+      series: [
+        {
+          name: 'Pool Usage',
+          type: 'pie',
+          radius: ['56%', '84%'],
         center: ['50%', '50%'],
         avoidLabelOverlap: false,
         label: { show: false },
@@ -105,22 +105,22 @@ function getPoolFragChartOptions(fragPercent: number): echarts.EChartsOption {
       text: `${frag}%`,
       subtext: 'Frag',
       left: 'center',
-      top: '30%',
+      top: '26%',
       textStyle: {
         color: fragColor,
-        fontSize: 15,
+        fontSize: 13,
         fontWeight: 'bold',
       },
       subtextStyle: {
         color: p.subtextColor,
-        fontSize: 10,
+        fontSize: 9,
       },
     },
     series: [
       {
         name: 'Fragmentation',
         type: 'pie',
-        radius: ['52%', '76%'],
+        radius: ['56%', '84%'],
         center: ['50%', '50%'],
         avoidLabelOverlap: false,
         label: { show: false },
@@ -199,11 +199,11 @@ function getPoolFragChartOptions(fragPercent: number): echarts.EChartsOption {
         <!-- Pool Card Header -->
         <div
           class="card-header"
-          style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px; margin-bottom: 10px; cursor: pointer"
+          style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 6px; margin-bottom: 8px; cursor: pointer"
           @click="openPool(pool)"
         >
-          <div style="display: flex; align-items: center; gap: 8px">
-            <strong class="mono" style="font-size: 15px; color: var(--accent-primary)">
+          <div style="display: flex; align-items: center; gap: 6px; min-width: 0">
+            <strong class="mono" style="font-size: 14px; color: var(--accent-primary)">
               {{ pool.poolName || pool.name.replace(/^zfsPools\//, '') }}
             </strong>
             <span class="mono font-xs" style="color: var(--text-secondary); opacity: 0.85">{{ pool.vdevLayout || 'stripe' }}</span>
@@ -211,37 +211,38 @@ function getPoolFragChartOptions(fragPercent: number): echarts.EChartsOption {
           <span
             class="badge mono"
             :class="pool.state === 'ONLINE' ? 'badge-success' : 'badge-warning'"
-            style="font-size: 10.5px; font-weight: 600; padding: 2px 7px"
+            style="font-size: 10px; font-weight: 600; padding: 1px 6px"
           >
             {{ pool.state }}
           </span>
         </div>
 
-        <!-- Pool Compact Body: Left Half Info, Right Half Chart -->
+        <!-- Pool Compact Body: Left Info, Right Mini Donut -->
         <div class="pool-compact-body">
-          <!-- Left Half: Pool Info & Key Metrics -->
           <div class="pool-info-col">
-            <div class="pool-stat-row">
-              <span class="stat-label">Total Size</span>
-              <span class="stat-value mono">{{ formatBytes(pool.sizeBytes) }}</span>
+            <div class="pool-cap-line mono">
+              <span style="color: var(--accent-primary); font-weight: 600">{{ formatBytes(pool.allocatedBytes) }}</span>
+              <span style="color: var(--text-muted)"> / {{ formatBytes(pool.sizeBytes) }}</span>
+              <span class="pool-free-chip">{{ formatBytes(pool.freeBytes) }} free</span>
             </div>
-            <div class="pool-stat-row">
-              <span class="stat-label">Allocated</span>
-              <span class="stat-value mono" style="color: var(--accent-primary)">{{ formatBytes(pool.allocatedBytes) }}</span>
-            </div>
-            <div class="pool-stat-row">
-              <span class="stat-label">Free Space</span>
-              <span class="stat-value mono" style="color: var(--text-secondary)">{{ formatBytes(pool.freeBytes) }}</span>
-            </div>
-            <div class="pool-stat-row">
-              <span class="stat-label">Fragmentation</span>
-              <span class="stat-value mono" :style="{ color: (pool.fragmentationPercent || 0) > 40 ? 'var(--danger)' : (pool.fragmentationPercent || 0) > 20 ? 'var(--warning)' : 'var(--success)' }">
-                {{ pool.fragmentationPercent || 0 }}%
+
+            <div class="pool-meta-chips mono">
+              <span
+                class="meta-chip"
+                :style="{ color: (pool.fragmentationPercent || 0) > 40 ? 'var(--danger)' : (pool.fragmentationPercent || 0) > 20 ? 'var(--warning)' : 'var(--success)' }"
+              >
+                Frag {{ pool.fragmentationPercent || 0 }}%
+              </span>
+              <span class="meta-chip">
+                Dedup {{ pool.dedupRatio ? `${pool.dedupRatio}x` : '1x' }}
               </span>
             </div>
+
             <div class="pool-stat-row">
-              <span class="stat-label">Dedup Ratio</span>
-              <span class="stat-value mono">{{ pool.dedupRatio ? `${pool.dedupRatio}x` : '1.00x' }}</span>
+              <span class="stat-label">Mount</span>
+              <span class="stat-value mono stat-truncate" :title="pool.mountpoint || `/mnt/${pool.poolName || pool.name.replace(/^zfsPools\//, '')}`">
+                {{ pool.mountpoint || `/mnt/${pool.poolName || pool.name.replace(/^zfsPools\//, '')}` }}
+              </span>
             </div>
             <div class="pool-stat-row">
               <span class="stat-label">Scrub</span>
@@ -249,76 +250,38 @@ function getPoolFragChartOptions(fragPercent: number): echarts.EChartsOption {
                 {{ pool.lastScrubStatus || 'No errors' }}
               </span>
             </div>
-            <div class="pool-stat-row">
-              <span class="stat-label">Mount</span>
-              <span class="stat-value mono stat-truncate" :title="pool.mountpoint || `/mnt/${pool.poolName || pool.name.replace(/^zfsPools\//, '')}`">
-                {{ pool.mountpoint || `/mnt/${pool.poolName || pool.name.replace(/^zfsPools\//, '')}` }}
-              </span>
-            </div>
           </div>
 
-          <!-- Vertical Subtle Divider -->
-          <div class="pool-col-divider"></div>
-
-          <!-- Right Half: Pie / Donut Chart with Usage/Frag Toggle -->
           <div class="pool-chart-col">
-            <div class="chart-header-row">
-              <div class="mini-pill-toggle">
-                <button
-                  type="button"
-                  class="pill-btn"
-                  :class="{ active: getPoolChartMode(pool.name) === 'usage' }"
-                  @click="setPoolChartMode(pool.name, 'usage')"
-                >
-                  Usage
-                </button>
-                <button
-                  type="button"
-                  class="pill-btn"
-                  :class="{ active: getPoolChartMode(pool.name) === 'frag' }"
-                  @click="setPoolChartMode(pool.name, 'frag')"
-                >
-                  Frag
-                </button>
-              </div>
+            <div class="mini-pill-toggle">
+              <button
+                type="button"
+                class="pill-btn"
+                :class="{ active: getPoolChartMode(pool.name) === 'usage' }"
+                @click="setPoolChartMode(pool.name, 'usage')"
+              >
+                Usage
+              </button>
+              <button
+                type="button"
+                class="pill-btn"
+                :class="{ active: getPoolChartMode(pool.name) === 'frag' }"
+                @click="setPoolChartMode(pool.name, 'frag')"
+              >
+                Frag
+              </button>
             </div>
 
-            <div style="width: 100%; display: flex; flex-direction: column; align-items: center">
-              <EChart
-                v-if="getPoolChartMode(pool.name) === 'usage'"
-                :options="getPoolUsageChartOptions(pool.allocatedBytes || 0, pool.freeBytes || 0, pool.sizeBytes || 0)"
-                height="115px"
-              />
-              <EChart
-                v-else
-                :options="getPoolFragChartOptions(pool.fragmentationPercent || 0)"
-                height="115px"
-              />
-
-              <div v-if="getPoolChartMode(pool.name) === 'usage'" class="pool-chart-legend">
-                <span class="legend-item">
-                  <span class="dot" style="background: var(--accent-primary)"></span>
-                  {{ formatBytes(pool.allocatedBytes) }}
-                </span>
-                <span class="legend-item">
-                  <span class="dot" style="background: var(--border-strong)"></span>
-                  {{ formatBytes(pool.freeBytes) }}
-                </span>
-              </div>
-              <div v-else class="pool-chart-legend">
-                <span class="legend-item">
-                  <span
-                    class="dot"
-                    :style="{ background: (pool.fragmentationPercent || 0) > 30 ? 'var(--warning)' : 'var(--info)' }"
-                  ></span>
-                  {{ pool.fragmentationPercent || 0 }}%
-                </span>
-                <span class="legend-item">
-                  <span class="dot" style="background: var(--success)"></span>
-                  {{ 100 - (pool.fragmentationPercent || 0) }}%
-                </span>
-              </div>
-            </div>
+            <EChart
+              v-if="getPoolChartMode(pool.name) === 'usage'"
+              :options="getPoolUsageChartOptions(pool.allocatedBytes || 0, pool.freeBytes || 0, pool.sizeBytes || 0)"
+              height="84px"
+            />
+            <EChart
+              v-else
+              :options="getPoolFragChartOptions(pool.fragmentationPercent || 0)"
+              height="84px"
+            />
           </div>
         </div>
       </div>
@@ -341,19 +304,19 @@ function getPoolFragChartOptions(fragPercent: number): echarts.EChartsOption {
 .pool-cards-grid {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
 .pool-telemetry-card {
   display: flex;
   flex-direction: column;
-  padding: 14px 16px;
+  padding: 10px 12px;
 }
 
 .pool-compact-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 1px 180px;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) 104px;
+  gap: 10px;
   align-items: center;
 }
 
@@ -362,6 +325,36 @@ function getPoolFragChartOptions(fragPercent: number): echarts.EChartsOption {
   flex-direction: column;
   gap: 5px;
   min-width: 0;
+}
+
+.pool-cap-line {
+  font-size: 12px;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pool-free-chip {
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  margin-left: auto;
+}
+
+.pool-meta-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.meta-chip {
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
 }
 
 .pool-stat-row {
@@ -403,7 +396,8 @@ function getPoolFragChartOptions(fragPercent: number): echarts.EChartsOption {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-width: 170px;
+  gap: 2px;
+  width: 104px;
 }
 
 .chart-header-row {

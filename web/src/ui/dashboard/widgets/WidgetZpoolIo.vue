@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type * as echarts from 'echarts';
+import { mdiChevronDown, mdiChevronUp } from '@mdi/js';
 import { formatBytes, type ZpoolIoTelemetry } from '../../../domain/models';
 import { nasState, type IoRatePoint } from '../../store';
 import { useChartPalette } from '../chartPalette';
 import EChart from '../../components/EChart.vue';
+import MdiIcon from '../../components/MdiIcon.vue';
 
 const props = defineProps<{
   ioHistory?: IoRatePoint[];
 }>();
 
 const selectedPool = ref<string>('__all__');
+const showPools = ref(false);
 const telemetry = computed(() => nasState.systemTelemetry);
 const chartPalette = useChartPalette();
 
@@ -254,37 +257,49 @@ const zpoolIoChartOptions = computed<echarts.EChartsOption>(() => {
         />
       </div>
 
-      <div class="io-rows">
+      <div class="io-list-section">
         <button
-          v-for="z in zpools"
-          :key="z.poolName"
           type="button"
-          class="io-row mono"
-          :class="{ active: selectedPool === z.poolName }"
-          @click="selectedPool = selectedPool === z.poolName ? '__all__' : z.poolName"
+          class="io-list-toggle"
+          :aria-expanded="showPools"
+          @click="showPools = !showPools"
         >
-          <div class="io-row-left">
-            <span class="pool-name">{{ z.poolName }}</span>
-            <span v-if="poolCapacityMap.has(z.poolName)" class="cap-badge">
-              {{ formatBytes(poolCapacityMap.get(z.poolName)!.alloc) }} / {{ formatBytes(poolCapacityMap.get(z.poolName)!.free) }} free
-            </span>
-            <span class="queue-badge">
-              Q {{ z.waitQueue }}/{{ z.activeQueue }}
-            </span>
-          </div>
-          <div class="io-row-metrics">
-            <span class="metric-item">
-              <span class="metric-dir">R</span>
-              <span class="metric-val" style="color: var(--success)">{{ formatBytes(z.readRateBytesPerSec) }}/s</span>
-              <span class="metric-iops">({{ z.readIops }})</span>
-            </span>
-            <span class="metric-item">
-              <span class="metric-dir">W</span>
-              <span class="metric-val" style="color: var(--accent-primary)">{{ formatBytes(z.writeRateBytesPerSec) }}/s</span>
-              <span class="metric-iops">({{ z.writeIops }})</span>
-            </span>
-          </div>
+          <span>Pools ({{ zpools.length }})</span>
+          <MdiIcon :path="showPools ? mdiChevronUp : mdiChevronDown" size="16" />
         </button>
+
+        <div v-if="showPools" class="io-rows">
+          <button
+            v-for="z in zpools"
+            :key="z.poolName"
+            type="button"
+            class="io-row mono"
+            :class="{ active: selectedPool === z.poolName }"
+            @click="selectedPool = selectedPool === z.poolName ? '__all__' : z.poolName"
+          >
+            <div class="io-row-left">
+              <span class="pool-name">{{ z.poolName }}</span>
+              <span v-if="poolCapacityMap.has(z.poolName)" class="cap-badge">
+                {{ formatBytes(poolCapacityMap.get(z.poolName)!.alloc) }} / {{ formatBytes(poolCapacityMap.get(z.poolName)!.free) }} free
+              </span>
+              <span class="queue-badge">
+                Q {{ z.waitQueue }}/{{ z.activeQueue }}
+              </span>
+            </div>
+            <div class="io-row-metrics">
+              <span class="metric-item">
+                <span class="metric-dir">R</span>
+                <span class="metric-val" style="color: var(--success)">{{ formatBytes(z.readRateBytesPerSec) }}/s</span>
+                <span class="metric-iops">({{ z.readIops }})</span>
+              </span>
+              <span class="metric-item">
+                <span class="metric-dir">W</span>
+                <span class="metric-val" style="color: var(--accent-primary)">{{ formatBytes(z.writeRateBytesPerSec) }}/s</span>
+                <span class="metric-iops">({{ z.writeIops }})</span>
+              </span>
+            </div>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -390,6 +405,35 @@ const zpoolIoChartOptions = computed<echarts.EChartsOption>(() => {
   border-radius: 50%;
   background: var(--success);
   box-shadow: 0 0 6px var(--success);
+}
+
+.io-list-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.io-list-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.io-list-toggle:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
 }
 
 .io-rows {
