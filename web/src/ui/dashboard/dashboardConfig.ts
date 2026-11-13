@@ -56,6 +56,22 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
     category: 'storage',
   },
   {
+    type: 'disk_io',
+    name: 'Disk I/O Throughput & IOPS',
+    description: 'Live block device read/write throughput, IOPS, queue depth, and utilization from /proc/diskstats.',
+    icon: mdiHarddisk,
+    defaultLane: 1,
+    category: 'storage',
+  },
+  {
+    type: 'zpool_io',
+    name: 'Zpool IOStat',
+    description: 'Live ZFS pool read/write bandwidth, IOPS, and wait/active queues from /proc/spl/kstat/zfs.',
+    icon: mdiDatabase,
+    defaultLane: 0,
+    category: 'storage',
+  },
+  {
     type: 'network',
     name: 'Network Throughput & Traffic',
     description: 'Active network adapter status, IP/MAC addresses, live transfer rates, and rolling throughput history graph.',
@@ -140,15 +156,19 @@ export const WIDGET_CATALOG: WidgetCatalogItem[] = [
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardWidgetConfig[] = [
   { id: 'widget-kpis', type: 'kpis', lane: -1 },
   { id: 'widget-pools', type: 'pools', lane: 0 },
+  { id: 'widget-zpool-io', type: 'zpool_io', lane: 0 },
   { id: 'widget-network', type: 'network', lane: 1 },
+  { id: 'widget-disk-io', type: 'disk_io', lane: 1 },
   { id: 'widget-sensors', type: 'sensors', lane: 2 },
 ];
 
 export const BALANCED_DASHBOARD_LAYOUT: DashboardWidgetConfig[] = [
   { id: 'widget-kpis', type: 'kpis', lane: -1 },
   { id: 'widget-pools', type: 'pools', lane: 0 },
+  { id: 'widget-zpool-io', type: 'zpool_io', lane: 0 },
   { id: 'widget-disks', type: 'disks', lane: 0 },
   { id: 'widget-network', type: 'network', lane: 1 },
+  { id: 'widget-disk-io', type: 'disk_io', lane: 1 },
   { id: 'widget-apps', type: 'apps', lane: 1 },
   { id: 'widget-sensors', type: 'sensors', lane: 2 },
   { id: 'widget-system', type: 'system', lane: 2 },

@@ -192,12 +192,38 @@ export interface HardwareSensorsTelemetry {
   fans: HardwareSensorItem[];
 }
 
+export interface DiskIoTelemetry {
+  name: string;
+  readBytes: number;
+  writeBytes: number;
+  readRateBytesPerSec: number;
+  writeRateBytesPerSec: number;
+  readIops: number;
+  writeIops: number;
+  ioInProgress: number;
+  utilizationPercent: number;
+}
+
+export interface ZpoolIoTelemetry {
+  poolName: string;
+  readBytes: number;
+  writeBytes: number;
+  readRateBytesPerSec: number;
+  writeRateBytesPerSec: number;
+  readIops: number;
+  writeIops: number;
+  waitQueue: number;
+  activeQueue: number;
+}
+
 export interface SystemTelemetry {
   cpu: CpuTelemetry;
   memory: MemoryTelemetry;
   host: HostHardwareInfo;
   network: NetworkInterfaceTelemetry[];
   sensors?: HardwareSensorsTelemetry;
+  diskIo?: DiskIoTelemetry[];
+  zpoolIo?: ZpoolIoTelemetry[];
 }
 
 // ---------------------------------------------------------------------------

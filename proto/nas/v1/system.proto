@@ -150,12 +150,38 @@ message HardwareSensorsTelemetry {
   repeated HardwareSensorItem fans = 5;
 }
 
+message DiskIoTelemetry {
+  string name = 1;
+  int64 read_bytes = 2;
+  int64 write_bytes = 3;
+  int64 read_rate_bytes_per_sec = 4;
+  int64 write_rate_bytes_per_sec = 5;
+  int64 read_iops = 6;
+  int64 write_iops = 7;
+  int64 io_in_progress = 8;
+  double utilization_percent = 9;
+}
+
+message ZpoolIoTelemetry {
+  string pool_name = 1;
+  int64 read_bytes = 2;
+  int64 write_bytes = 3;
+  int64 read_rate_bytes_per_sec = 4;
+  int64 write_rate_bytes_per_sec = 5;
+  int64 read_iops = 6;
+  int64 write_iops = 7;
+  int64 wait_queue = 8;
+  int64 active_queue = 9;
+}
+
 message SystemTelemetry {
   CpuTelemetry cpu = 1;
   MemoryTelemetry memory = 2;
   HostHardwareInfo host = 3;
   repeated NetworkInterfaceTelemetry network = 4;
   HardwareSensorsTelemetry sensors = 5;
+  repeated DiskIoTelemetry disk_io = 6;
+  repeated ZpoolIoTelemetry zpool_io = 7;
 }
 
 message GetSystemTelemetryRequest {}

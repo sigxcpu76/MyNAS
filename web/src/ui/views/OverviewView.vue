@@ -38,6 +38,8 @@ import WidgetMemory from '../dashboard/widgets/WidgetMemory.vue';
 import WidgetSystem from '../dashboard/widgets/WidgetSystem.vue';
 import WidgetNetwork from '../dashboard/widgets/WidgetNetwork.vue';
 import WidgetDisks from '../dashboard/widgets/WidgetDisks.vue';
+import WidgetDiskIo from '../dashboard/widgets/WidgetDiskIo.vue';
+import WidgetZpoolIo from '../dashboard/widgets/WidgetZpoolIo.vue';
 import WidgetWorkloads from '../dashboard/widgets/WidgetWorkloads.vue';
 import WidgetVms from '../dashboard/widgets/WidgetVms.vue';
 import WidgetApps from '../dashboard/widgets/WidgetApps.vue';
@@ -171,6 +173,10 @@ function getWidgetComponent(type: string) {
       return WidgetNetwork;
     case 'disks':
       return WidgetDisks;
+    case 'disk_io':
+      return WidgetDiskIo;
+    case 'zpool_io':
+      return WidgetZpoolIo;
     case 'workloads':
       return WidgetWorkloads;
     case 'vms':

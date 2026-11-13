@@ -190,3 +190,61 @@ func TestCpuInfo_MultiSocketPhysicalCores(t *testing.T) {
 		t.Errorf("expected 40 physical cores across 2 sockets, got %d", len(physicalMap))
 	}
 }
+
+func TestParseProcDiskstats(t *testing.T) {
+	sample := `   8       0 sda 372 0 100 147 50 0 200 10 2 81 147 0 0 0 0 0 0
+   8       1 sda1 121 0 50 66 0 0 0 0 0 50 66 0 0 0 0 0 0
+ 259       0 nvme0n1 1000 10 4096 500 2000 20 8192 600 1 900 1100 0 0 0 0 0 0
+`
+	stats := parseProcDiskstats(sample, func(name string) bool {
+		return name == "sda" || name == "nvme0n1"
+	})
+	if len(stats) != 2 {
+		t.Fatalf("expected 2 whole disk entries, got %d", len(stats))
+	}
+	if stats[0].name != "sda" || stats[0].reads != 372 || stats[0].readBytes != 100*512 || stats[0].writes != 50 || stats[0].writeBytes != 200*512 || stats[0].ioInProgress != 2 || stats[0].ioTimeMs != 81 {
+		t.Errorf("unexpected sda stats: %+v", stats[0])
+	}
+	if stats[1].name != "nvme0n1" || stats[1].reads != 1000 || stats[1].readBytes != 4096*512 || stats[1].writes != 2000 || stats[1].writeBytes != 8192*512 || stats[1].ioInProgress != 1 || stats[1].ioTimeMs != 900 {
+		t.Errorf("unexpected nvme0n1 stats: %+v", stats[1])
+	}
+}
+
+func TestParseZpoolKstatIO(t *testing.T) {
+	sample := `31 1 0x01 1 192 524288 123456789
+nread    nwritten reads    writes   wtime    wlentime wupdate  rtime    rlentime rupdate  wcnt     rcnt
+1048576  2097152  128      256      1000     2000     3000     4000     5000     6000     3        7
+`
+	stat, ok := parseZpoolKstatIO("tank", sample)
+	if !ok {
+		t.Fatalf("expected zpool kstat io to parse")
+	}
+	if stat.poolName != "tank" || stat.nread != 1048576 || stat.nwritten != 2097152 || stat.reads != 128 || stat.writes != 256 || stat.wcnt != 3 || stat.rcnt != 7 {
+		t.Errorf("unexpected zpool io stat: %+v", stat)
+	}
+}
+
+func TestParseZpoolKstatIOStats(t *testing.T) {
+	sample := `428 1 0x01 26 7072 6349198886 676910813623990
+name                            type data
+arc_read_count                  4    1946460
+arc_read_bytes                  4    37815981056
+arc_write_count                 4    9984639
+arc_write_bytes                 4    75464344979
+direct_read_count               4    10
+direct_read_bytes               4    40960
+direct_write_count              4    20
+direct_write_bytes              4    81920
+`
+	stat, ok := parseZpoolKstatIOStats("fast", sample)
+	if !ok {
+		t.Fatalf("expected zpool kstat iostats to parse")
+	}
+	if stat.poolName != "fast" ||
+		stat.nread != 37815981056+40960 ||
+		stat.nwritten != 75464344979+81920 ||
+		stat.reads != 1946460+10 ||
+		stat.writes != 9984639+20 {
+		t.Errorf("unexpected zpool iostats: %+v", stat)
+	}
+}

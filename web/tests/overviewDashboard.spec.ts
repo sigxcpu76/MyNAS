@@ -9,6 +9,8 @@ import WidgetVms from '../src/ui/dashboard/widgets/WidgetVms.vue';
 import WidgetApps from '../src/ui/dashboard/widgets/WidgetApps.vue';
 import WidgetShares from '../src/ui/dashboard/widgets/WidgetShares.vue';
 import WidgetWorkloads from '../src/ui/dashboard/widgets/WidgetWorkloads.vue';
+import WidgetDiskIo from '../src/ui/dashboard/widgets/WidgetDiskIo.vue';
+import WidgetZpoolIo from '../src/ui/dashboard/widgets/WidgetZpoolIo.vue';
 import SystemDetailsTopBarButton from '../src/ui/components/SystemDetailsTopBarButton.vue';
 import SystemDetailsModal from '../src/ui/components/SystemDetailsModal.vue';
 import { nasState } from '../src/ui/store';
@@ -126,6 +128,32 @@ describe('Overview Dashboard & Telemetry', () => {
           rxRateBytesPerSec: 0,
           txRateBytesPerSec: 0,
           isDefault: false,
+        },
+      ],
+      diskIo: [
+        {
+          name: 'nvme0n1',
+          readBytes: 1073741824,
+          writeBytes: 2147483648,
+          readRateBytesPerSec: 52428800,
+          writeRateBytesPerSec: 26214400,
+          readIops: 450,
+          writeIops: 220,
+          ioInProgress: 2,
+          utilizationPercent: 34.5,
+        },
+      ],
+      zpoolIo: [
+        {
+          poolName: 'tank',
+          readBytes: 4294967296,
+          writeBytes: 8589934592,
+          readRateBytesPerSec: 104857600,
+          writeRateBytesPerSec: 52428800,
+          readIops: 800,
+          writeIops: 400,
+          waitQueue: 1,
+          activeQueue: 4,
         },
       ],
     };
@@ -319,10 +347,10 @@ describe('Overview Dashboard & Telemetry', () => {
       await disksCard!.find('button.btn').trigger('click');
       await wrapper.find('.modal-footer button').trigger('click');
 
-      // Column 1 now has 2 widgets
+      // Column 1 now has 3 widgets
       const lanes = wrapper.findAll('.dashboard-lane');
       const lane0Widgets = lanes[0].findAll('.lane-widget-card');
-      expect(lane0Widgets.length).toBe(2);
+      expect(lane0Widgets.length).toBe(3);
 
       const firstLabel = lane0Widgets[0].find('.widget-type-name').text();
       const secondLabel = lane0Widgets[1].find('.widget-type-name').text();
@@ -341,7 +369,7 @@ describe('Overview Dashboard & Telemetry', () => {
       await wrapper.find('.edit-dashboard-btn').trigger('click');
 
       const initialCount = wrapper.findAll('.widget-wrapper').length;
-      expect(initialCount).toBe(4);
+      expect(initialCount).toBe(6);
 
       // Remove the first lane widget
       const removeBtn = wrapper.find('.remove-btn');
@@ -387,14 +415,14 @@ describe('Overview Dashboard & Telemetry', () => {
 
       // Remove a widget
       await wrapper.find('.remove-btn').trigger('click');
-      expect(wrapper.findAll('.widget-wrapper').length).toBe(3);
+      expect(wrapper.findAll('.widget-wrapper').length).toBe(5);
 
       // Click Reset Default and confirm modal
       const clickPromise = wrapper.find('.reset-layout-btn').trigger('click');
       closeActiveModal(true);
       await clickPromise;
       await wrapper.vm.$nextTick();
-      expect(wrapper.findAll('.widget-wrapper').length).toBe(4);
+      expect(wrapper.findAll('.widget-wrapper').length).toBe(6);
     });
 
     it('allows switching between 2 Columns and 3 Columns in edit mode', async () => {
@@ -425,7 +453,7 @@ describe('Overview Dashboard & Telemetry', () => {
       await wrapper.vm.$nextTick();
 
       const widgets = wrapper.findAll('.widget-wrapper');
-      expect(widgets.length).toBe(7);
+      expect(widgets.length).toBe(9);
 
       expect(store.get('nas_dashboard_layout_v4')).toContain('widget-pools');
       expect(store.get('nas_dashboard_layout_v4')).toContain('widget-disks');
@@ -695,6 +723,27 @@ describe('Overview Dashboard & Telemetry', () => {
       expect(wrapper.findComponent(WidgetVms).exists()).toBe(true);
       expect(wrapper.findComponent(WidgetApps).exists()).toBe(true);
       expect(wrapper.findComponent(WidgetShares).exists()).toBe(true);
+    });
+
+    it('renders WidgetDiskIo with /proc/diskstats throughput, IOPS, and device table', () => {
+      const wrapper = mount(WidgetDiskIo);
+      expect(wrapper.text()).toContain('Disk I/O');
+      expect(wrapper.text()).toContain('nvme0n1');
+      expect(wrapper.text()).toContain('50 MiB/s');
+      expect(wrapper.text()).toContain('25 MiB/s');
+      expect(wrapper.text()).toContain('450 IOPS');
+      expect(wrapper.text()).toContain('220 IOPS');
+    });
+
+    it('renders WidgetZpoolIo with zpool kstat iostat throughput, IOPS, and queues', () => {
+      const wrapper = mount(WidgetZpoolIo);
+      expect(wrapper.text()).toContain('Zpool IOStat');
+      expect(wrapper.text()).toContain('tank');
+      expect(wrapper.text()).toContain('100 MiB/s');
+      expect(wrapper.text()).toContain('50 MiB/s');
+      expect(wrapper.text()).toContain('800 IOPS');
+      expect(wrapper.text()).toContain('400 IOPS');
+      expect(wrapper.text()).toContain('Q 1/4');
     });
   });
 });

@@ -126,11 +126,37 @@ type HardwareSensorsTelemetry struct {
 	Fans               []HardwareSensorItem `json:"fans"`
 }
 
+type DiskIoTelemetry struct {
+	Name                string  `json:"name"`
+	ReadBytes           int64   `json:"readBytes"`
+	WriteBytes          int64   `json:"writeBytes"`
+	ReadRateBytesPerSec int64   `json:"readRateBytesPerSec"`
+	WriteRateBytesPerSec int64  `json:"writeRateBytesPerSec"`
+	ReadIops            int64   `json:"readIops"`
+	WriteIops           int64   `json:"writeIops"`
+	IoInProgress        int64   `json:"ioInProgress"`
+	UtilizationPercent  float64 `json:"utilizationPercent"`
+}
+
+type ZpoolIoTelemetry struct {
+	PoolName             string `json:"poolName"`
+	ReadBytes            int64  `json:"readBytes"`
+	WriteBytes           int64  `json:"writeBytes"`
+	ReadRateBytesPerSec  int64  `json:"readRateBytesPerSec"`
+	WriteRateBytesPerSec int64  `json:"writeRateBytesPerSec"`
+	ReadIops             int64  `json:"readIops"`
+	WriteIops            int64  `json:"writeIops"`
+	WaitQueue            int64  `json:"waitQueue"`
+	ActiveQueue          int64  `json:"activeQueue"`
+}
+
 type SystemTelemetry struct {
 	Cpu     CpuTelemetry                `json:"cpu"`
 	Memory  MemoryTelemetry             `json:"memory"`
 	Host    HostHardwareInfo            `json:"host"`
 	Network []NetworkInterfaceTelemetry `json:"network"`
 	Sensors HardwareSensorsTelemetry    `json:"sensors"`
+	DiskIo  []DiskIoTelemetry           `json:"diskIo"`
+	ZpoolIo []ZpoolIoTelemetry          `json:"zpoolIo"`
 }
 

@@ -32,10 +32,29 @@ type netSample struct {
 	time    time.Time
 }
 
+type diskSample struct {
+	reads      uint64
+	writes     uint64
+	readBytes  uint64
+	writeBytes uint64
+	ioTimeMs   uint64
+	time       time.Time
+}
+
+type zpoolSample struct {
+	nread    uint64
+	nwritten uint64
+	reads    uint64
+	writes   uint64
+	time     time.Time
+}
+
 type TelemetryCollector struct {
 	mu          sync.Mutex
 	lastCpu     *cpuSample
 	lastNet     map[string]netSample
+	lastDisk    map[string]diskSample
+	lastZpool   map[string]zpoolSample
 	cachedGpus  []string
 	gpuScanTime time.Time
 
@@ -48,7 +67,9 @@ type TelemetryCollector struct {
 
 func NewTelemetryCollector() *TelemetryCollector {
 	return &TelemetryCollector{
-		lastNet: make(map[string]netSample),
+		lastNet:   make(map[string]netSample),
+		lastDisk:  make(map[string]diskSample),
+		lastZpool: make(map[string]zpoolSample),
 	}
 }
 
@@ -61,6 +82,8 @@ func (c *TelemetryCollector) Collect(ctx context.Context) (*domain.SystemTelemet
 	host := c.collectHost(ctx)
 	netIfaces := c.collectNetwork()
 	sensors := c.collectSensors(ctx)
+	diskIo := c.collectDiskIO()
+	zpoolIo := c.collectZpoolIO()
 
 	c.enrichCpuTemperatures(&cpu, &sensors)
 
@@ -70,6 +93,8 @@ func (c *TelemetryCollector) Collect(ctx context.Context) (*domain.SystemTelemet
 		Host:    host,
 		Network: netIfaces,
 		Sensors: sensors,
+		DiskIo:  diskIo,
+		ZpoolIo: zpoolIo,
 	}, nil
 }
 
@@ -1140,4 +1165,286 @@ func extractCoreIndex(label string) int {
 		}
 	}
 	return 9999
+}
+
+type rawDiskStat struct {
+	name         string
+	reads        uint64
+	readBytes    uint64
+	writes       uint64
+	writeBytes   uint64
+	ioInProgress uint64
+	ioTimeMs     uint64
+}
+
+type rawZpoolStat struct {
+	poolName string
+	nread    uint64
+	nwritten uint64
+	reads    uint64
+	writes   uint64
+	wcnt     uint64
+	rcnt     uint64
+}
+
+func isWholeBlockDevice(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, prefix := range []string{"loop", "ram", "zram", "zd", "sr", "dm-", "nbd"} {
+		if strings.HasPrefix(name, prefix) {
+			return false
+		}
+	}
+	// Whole block devices appear directly under /sys/block/<name>; partitions do not.
+	_, err := os.Stat(filepath.Join("/sys/block", name))
+	return err == nil
+}
+
+func parseProcDiskstats(data string, filter func(string) bool) []rawDiskStat {
+	var stats []rawDiskStat
+	scanner := bufio.NewScanner(strings.NewReader(data))
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 14 {
+			continue
+		}
+		name := fields[2]
+		if filter != nil && !filter(name) {
+			continue
+		}
+		reads, err1 := strconv.ParseUint(fields[3], 10, 64)
+		sectorsRead, err2 := strconv.ParseUint(fields[5], 10, 64)
+		writes, err3 := strconv.ParseUint(fields[7], 10, 64)
+		sectorsWritten, err4 := strconv.ParseUint(fields[9], 10, 64)
+		ioInProgress, err5 := strconv.ParseUint(fields[11], 10, 64)
+		ioTimeMs, err6 := strconv.ParseUint(fields[12], 10, 64)
+		if err1 != nil || err2 != nil || err3 != nil || err4 != nil || err5 != nil || err6 != nil {
+			continue
+		}
+		stats = append(stats, rawDiskStat{
+			name:         name,
+			reads:        reads,
+			readBytes:    sectorsRead * 512,
+			writes:       writes,
+			writeBytes:   sectorsWritten * 512,
+			ioInProgress: ioInProgress,
+			ioTimeMs:     ioTimeMs,
+		})
+	}
+	return stats
+}
+
+func (c *TelemetryCollector) collectDiskIO() []domain.DiskIoTelemetry {
+	data, err := os.ReadFile("/proc/diskstats")
+	if err != nil {
+		return nil
+	}
+	now := time.Now()
+	raw := parseProcDiskstats(string(data), isWholeBlockDevice)
+	results := make([]domain.DiskIoTelemetry, 0, len(raw))
+
+	for _, s := range raw {
+		var readRate, writeRate, readIops, writeIops int64
+		var utilPct float64
+
+		if prev, ok := c.lastDisk[s.name]; ok && now.After(prev.time) {
+			elapsedSec := now.Sub(prev.time).Seconds()
+			if elapsedSec > 0.05 {
+				if s.readBytes >= prev.readBytes {
+					readRate = int64(float64(s.readBytes-prev.readBytes) / elapsedSec)
+				}
+				if s.writeBytes >= prev.writeBytes {
+					writeRate = int64(float64(s.writeBytes-prev.writeBytes) / elapsedSec)
+				}
+				if s.reads >= prev.reads {
+					readIops = int64(float64(s.reads-prev.reads) / elapsedSec)
+				}
+				if s.writes >= prev.writes {
+					writeIops = int64(float64(s.writes-prev.writes) / elapsedSec)
+				}
+				if s.ioTimeMs >= prev.ioTimeMs {
+					utilPct = (float64(s.ioTimeMs-prev.ioTimeMs) / (elapsedSec * 1000.0)) * 100.0
+					if utilPct > 100.0 {
+						utilPct = 100.0
+					}
+				}
+			}
+		}
+
+		c.lastDisk[s.name] = diskSample{
+			reads:      s.reads,
+			writes:     s.writes,
+			readBytes:  s.readBytes,
+			writeBytes: s.writeBytes,
+			ioTimeMs:   s.ioTimeMs,
+			time:       now,
+		}
+
+		results = append(results, domain.DiskIoTelemetry{
+			Name:                 s.name,
+			ReadBytes:            int64(s.readBytes),
+			WriteBytes:           int64(s.writeBytes),
+			ReadRateBytesPerSec:  readRate,
+			WriteRateBytesPerSec: writeRate,
+			ReadIops:             readIops,
+			WriteIops:            writeIops,
+			IoInProgress:         int64(s.ioInProgress),
+			UtilizationPercent:   utilPct,
+		})
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Name < results[j].Name
+	})
+	return results
+}
+
+func parseZpoolKstatIO(poolName, data string) (rawZpoolStat, bool) {
+	scanner := bufio.NewScanner(strings.NewReader(data))
+	var headers []string
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(headers) == 0 {
+			// Look for the kstat header line containing "nread" and "nwritten"
+			for _, f := range fields {
+				if f == "nread" {
+					headers = fields
+					break
+				}
+			}
+			continue
+		}
+		if len(fields) < len(headers) {
+			continue
+		}
+		colIdx := make(map[string]int, len(headers))
+		for idx, h := range headers {
+			colIdx[h] = idx
+		}
+		parseCol := func(col string) uint64 {
+			idx, ok := colIdx[col]
+			if !ok || idx >= len(fields) {
+				return 0
+			}
+			v, _ := strconv.ParseUint(fields[idx], 10, 64)
+			return v
+		}
+		return rawZpoolStat{
+			poolName: poolName,
+			nread:    parseCol("nread"),
+			nwritten: parseCol("nwritten"),
+			reads:    parseCol("reads"),
+			writes:   parseCol("writes"),
+			wcnt:     parseCol("wcnt"),
+			rcnt:     parseCol("rcnt"),
+		}, true
+	}
+	return rawZpoolStat{}, false
+}
+
+func parseZpoolKstatIOStats(poolName, data string) (rawZpoolStat, bool) {
+	scanner := bufio.NewScanner(strings.NewReader(data))
+	kv := make(map[string]uint64)
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		// Key-value kstat lines have 3 fields: <name> <type> <value>
+		if len(fields) == 3 {
+			if v, err := strconv.ParseUint(fields[2], 10, 64); err == nil {
+				kv[fields[0]] = v
+			}
+		}
+	}
+	if _, ok := kv["arc_read_bytes"]; !ok {
+		if _, ok2 := kv["direct_read_bytes"]; !ok2 {
+			return rawZpoolStat{}, false
+		}
+	}
+	return rawZpoolStat{
+		poolName: poolName,
+		nread:    kv["arc_read_bytes"] + kv["direct_read_bytes"],
+		nwritten: kv["arc_write_bytes"] + kv["direct_write_bytes"],
+		reads:    kv["arc_read_count"] + kv["direct_read_count"],
+		writes:   kv["arc_write_count"] + kv["direct_write_count"],
+	}, true
+}
+
+func (c *TelemetryCollector) collectZpoolIO() []domain.ZpoolIoTelemetry {
+	entries, err := os.ReadDir("/proc/spl/kstat/zfs")
+	if err != nil {
+		return nil
+	}
+	now := time.Now()
+	var results []domain.ZpoolIoTelemetry
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		poolName := entry.Name()
+		var s rawZpoolStat
+		var ok bool
+
+		ioPath := filepath.Join("/proc/spl/kstat/zfs", poolName, "io")
+		if data, err := os.ReadFile(ioPath); err == nil {
+			s, ok = parseZpoolKstatIO(poolName, string(data))
+		}
+		if !ok {
+			iostatsPath := filepath.Join("/proc/spl/kstat/zfs", poolName, "iostats")
+			if data, err := os.ReadFile(iostatsPath); err == nil {
+				s, ok = parseZpoolKstatIOStats(poolName, string(data))
+			}
+		}
+		if !ok {
+			continue
+		}
+
+		var readRate, writeRate, readIops, writeIops int64
+		if prev, exists := c.lastZpool[poolName]; exists && now.After(prev.time) {
+			elapsedSec := now.Sub(prev.time).Seconds()
+			if elapsedSec > 0.05 {
+				if s.nread >= prev.nread {
+					readRate = int64(float64(s.nread-prev.nread) / elapsedSec)
+				}
+				if s.nwritten >= prev.nwritten {
+					writeRate = int64(float64(s.nwritten-prev.nwritten) / elapsedSec)
+				}
+				if s.reads >= prev.reads {
+					readIops = int64(float64(s.reads-prev.reads) / elapsedSec)
+				}
+				if s.writes >= prev.writes {
+					writeIops = int64(float64(s.writes-prev.writes) / elapsedSec)
+				}
+			}
+		}
+
+		c.lastZpool[poolName] = zpoolSample{
+			nread:    s.nread,
+			nwritten: s.nwritten,
+			reads:    s.reads,
+			writes:   s.writes,
+			time:     now,
+		}
+
+		results = append(results, domain.ZpoolIoTelemetry{
+			PoolName:             poolName,
+			ReadBytes:            int64(s.nread),
+			WriteBytes:           int64(s.nwritten),
+			ReadRateBytesPerSec:  readRate,
+			WriteRateBytesPerSec: writeRate,
+			ReadIops:             readIops,
+			WriteIops:            writeIops,
+			WaitQueue:            int64(s.wcnt),
+			ActiveQueue:          int64(s.rcnt),
+		})
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].PoolName < results[j].PoolName
+	})
+	return results
 }

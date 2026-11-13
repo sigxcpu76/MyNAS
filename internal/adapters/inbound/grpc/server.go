@@ -3325,6 +3325,36 @@ func toProtoSystemTelemetry(t *domain.SystemTelemetry) *nasv1.SystemTelemetry {
 		})
 	}
 
+	var diskIo []*nasv1.DiskIoTelemetry
+	for _, d := range t.DiskIo {
+		diskIo = append(diskIo, &nasv1.DiskIoTelemetry{
+			Name:                 d.Name,
+			ReadBytes:            d.ReadBytes,
+			WriteBytes:           d.WriteBytes,
+			ReadRateBytesPerSec:  d.ReadRateBytesPerSec,
+			WriteRateBytesPerSec: d.WriteRateBytesPerSec,
+			ReadIops:             d.ReadIops,
+			WriteIops:            d.WriteIops,
+			IoInProgress:         d.IoInProgress,
+			UtilizationPercent:   d.UtilizationPercent,
+		})
+	}
+
+	var zpoolIo []*nasv1.ZpoolIoTelemetry
+	for _, z := range t.ZpoolIo {
+		zpoolIo = append(zpoolIo, &nasv1.ZpoolIoTelemetry{
+			PoolName:             z.PoolName,
+			ReadBytes:            z.ReadBytes,
+			WriteBytes:           z.WriteBytes,
+			ReadRateBytesPerSec:  z.ReadRateBytesPerSec,
+			WriteRateBytesPerSec: z.WriteRateBytesPerSec,
+			ReadIops:             z.ReadIops,
+			WriteIops:            z.WriteIops,
+			WaitQueue:            z.WaitQueue,
+			ActiveQueue:          z.ActiveQueue,
+		})
+	}
+
 	return &nasv1.SystemTelemetry{
 		Cpu: &nasv1.CpuTelemetry{
 			Model:              t.Cpu.Model,
@@ -3366,6 +3396,8 @@ func toProtoSystemTelemetry(t *domain.SystemTelemetry) *nasv1.SystemTelemetry {
 		},
 		Network: netIfaces,
 		Sensors: toProtoSensorsTelemetry(t.Sensors),
+		DiskIo:  diskIo,
+		ZpoolIo: zpoolIo,
 	}
 }
 

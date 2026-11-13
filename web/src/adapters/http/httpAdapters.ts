@@ -230,6 +230,8 @@ export function mapSystemTelemetry(raw: any): SystemTelemetry {
   const mem = raw?.memory ?? {};
   const host = raw?.host ?? {};
   const network = Array.isArray(raw?.network) ? raw.network : [];
+  const diskIo = Array.isArray(raw?.diskIo ?? raw?.disk_io) ? (raw.diskIo ?? raw.disk_io) : [];
+  const zpoolIo = Array.isArray(raw?.zpoolIo ?? raw?.zpool_io) ? (raw.zpoolIo ?? raw.zpool_io) : [];
 
   return {
     cpu: {
@@ -338,6 +340,28 @@ export function mapSystemTelemetry(raw: any): SystemTelemetry {
         alarm: Boolean(f.alarm),
       })) : [],
     } : undefined,
+    diskIo: diskIo.map((d: any) => ({
+      name: d.name ?? '',
+      readBytes: normalizeInt64(d.readBytes ?? d.read_bytes),
+      writeBytes: normalizeInt64(d.writeBytes ?? d.write_bytes),
+      readRateBytesPerSec: normalizeInt64(d.readRateBytesPerSec ?? d.read_rate_bytes_per_sec),
+      writeRateBytesPerSec: normalizeInt64(d.writeRateBytesPerSec ?? d.write_rate_bytes_per_sec),
+      readIops: normalizeInt64(d.readIops ?? d.read_iops),
+      writeIops: normalizeInt64(d.writeIops ?? d.write_iops),
+      ioInProgress: normalizeInt64(d.ioInProgress ?? d.io_in_progress),
+      utilizationPercent: Number(d.utilizationPercent ?? d.utilization_percent ?? 0),
+    })),
+    zpoolIo: zpoolIo.map((z: any) => ({
+      poolName: z.poolName ?? z.pool_name ?? '',
+      readBytes: normalizeInt64(z.readBytes ?? z.read_bytes),
+      writeBytes: normalizeInt64(z.writeBytes ?? z.write_bytes),
+      readRateBytesPerSec: normalizeInt64(z.readRateBytesPerSec ?? z.read_rate_bytes_per_sec),
+      writeRateBytesPerSec: normalizeInt64(z.writeRateBytesPerSec ?? z.write_rate_bytes_per_sec),
+      readIops: normalizeInt64(z.readIops ?? z.read_iops),
+      writeIops: normalizeInt64(z.writeIops ?? z.write_iops),
+      waitQueue: normalizeInt64(z.waitQueue ?? z.wait_queue),
+      activeQueue: normalizeInt64(z.activeQueue ?? z.active_queue),
+    })),
   };
 }
 

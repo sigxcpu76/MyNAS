@@ -112,6 +112,15 @@ export interface TrafficPoint {
   txRate: number;
 }
 
+export interface IoRatePoint {
+  time: string;
+  readRate: number;
+  writeRate: number;
+  readIops: number;
+  writeIops: number;
+  byKey: Record<string, { readRate: number; writeRate: number; readIops: number; writeIops: number }>;
+}
+
 let nextToastId = 1;
 
 interface LocalCachePayload {
@@ -250,6 +259,8 @@ export const nasState = reactive({
   includeSystemAccounts: false,
   includeSystemGroups: false,
   networkTrafficHistory: [] as TrafficPoint[],
+  diskIoHistory: [] as IoRatePoint[],
+  zpoolIoHistory: [] as IoRatePoint[],
 
   systemUpdate: null as SystemUpdateInfo | null,
   isCheckingUpdate: false,
@@ -813,12 +824,76 @@ export function recordNetworkTrafficSample(telem?: SystemTelemetry | null): void
   }
 }
 
+export function recordDiskIoSample(telem?: SystemTelemetry | null): void {
+  const current = telem || nasState.systemTelemetry;
+  const list = current?.diskIo;
+  if (!list || list.length === 0) return;
+
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  let readRate = 0;
+  let writeRate = 0;
+  let readIops = 0;
+  let writeIops = 0;
+  const byKey: IoRatePoint['byKey'] = {};
+
+  for (const d of list) {
+    const r = d.readRateBytesPerSec || 0;
+    const w = d.writeRateBytesPerSec || 0;
+    const ri = d.readIops || 0;
+    const wi = d.writeIops || 0;
+    readRate += r;
+    writeRate += w;
+    readIops += ri;
+    writeIops += wi;
+    byKey[d.name] = { readRate: r, writeRate: w, readIops: ri, writeIops: wi };
+  }
+
+  nasState.diskIoHistory.push({ time: timeStr, readRate, writeRate, readIops, writeIops, byKey });
+  if (nasState.diskIoHistory.length > MAX_TRAFFIC_HISTORY_POINTS) {
+    nasState.diskIoHistory.shift();
+  }
+}
+
+export function recordZpoolIoSample(telem?: SystemTelemetry | null): void {
+  const current = telem || nasState.systemTelemetry;
+  const list = current?.zpoolIo;
+  if (!list || list.length === 0) return;
+
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  let readRate = 0;
+  let writeRate = 0;
+  let readIops = 0;
+  let writeIops = 0;
+  const byKey: IoRatePoint['byKey'] = {};
+
+  for (const z of list) {
+    const r = z.readRateBytesPerSec || 0;
+    const w = z.writeRateBytesPerSec || 0;
+    const ri = z.readIops || 0;
+    const wi = z.writeIops || 0;
+    readRate += r;
+    writeRate += w;
+    readIops += ri;
+    writeIops += wi;
+    byKey[z.poolName] = { readRate: r, writeRate: w, readIops: ri, writeIops: wi };
+  }
+
+  nasState.zpoolIoHistory.push({ time: timeStr, readRate, writeRate, readIops, writeIops, byKey });
+  if (nasState.zpoolIoHistory.length > MAX_TRAFFIC_HISTORY_POINTS) {
+    nasState.zpoolIoHistory.shift();
+  }
+}
+
 export async function refreshTelemetry(): Promise<void> {
   try {
     const telem = await services.system.getTelemetry();
     if (telem) {
       nasState.systemTelemetry = telem;
       recordNetworkTrafficSample(telem);
+      recordDiskIoSample(telem);
+      recordZpoolIoSample(telem);
     }
   } catch {
     // ignore
@@ -904,6 +979,8 @@ export function handleWatchResourceChange(msg: {
         const mapped = mapSystemTelemetry(payload);
         nasState.systemTelemetry = mapped;
         recordNetworkTrafficSample(mapped);
+        recordDiskIoSample(mapped);
+        recordZpoolIoSample(mapped);
         break;
       }
     }
@@ -1006,6 +1083,8 @@ export function handleWatchResourceChange(msg: {
         const mapped = mapSystemTelemetry(payload);
         nasState.systemTelemetry = mapped;
         recordNetworkTrafficSample(mapped);
+        recordDiskIoSample(mapped);
+        recordZpoolIoSample(mapped);
       }
       break;
     }
