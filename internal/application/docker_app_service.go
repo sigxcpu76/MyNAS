@@ -153,20 +153,26 @@ func (s *DockerAppService) RestartApp(ctx context.Context, name string) (*domain
 
 // UpgradeApp triggers an update and redeploy of the application stack, optionally taking a pre-upgrade ZFS snapshot.
 func (s *DockerAppService) UpgradeApp(ctx context.Context, name string, takeSnapshot bool) (*domain.DockerApp, error) {
+	return s.UpgradeAppWithTransform(ctx, name, takeSnapshot, nil)
+}
+
+// UpgradeAppWithTransform triggers an update and redeploy of the application stack, pulling images
+// before applying transform to compose.yaml.
+func (s *DockerAppService) UpgradeAppWithTransform(ctx context.Context, name string, takeSnapshot bool, transform domain.DockerAppComposeTransform) (*domain.DockerApp, error) {
 	appID := strings.TrimPrefix(name, "dockerApps/")
 	if appID == "" {
 		return nil, fmt.Errorf("invalid app name %q: empty app ID", name)
 	}
-	return s.port.UpgradeApp(ctx, appID, takeSnapshot)
+	return s.port.UpgradeAppWithTransform(ctx, appID, takeSnapshot, transform)
 }
 
 // UpgradeAppStream performs a synchronous upgrade of the application stack while streaming progress updates.
-func (s *DockerAppService) UpgradeAppStream(ctx context.Context, name string, takeSnapshot bool, onProgress domain.DockerAppUpgradeProgressCallback) (*domain.DockerApp, error) {
+func (s *DockerAppService) UpgradeAppStream(ctx context.Context, name string, takeSnapshot bool, transform domain.DockerAppComposeTransform, onProgress domain.DockerAppUpgradeProgressCallback) (*domain.DockerApp, error) {
 	appID := strings.TrimPrefix(name, "dockerApps/")
 	if appID == "" {
 		return nil, fmt.Errorf("invalid app name %q: empty app ID", name)
 	}
-	return s.port.UpgradeAppStream(ctx, appID, takeSnapshot, onProgress)
+	return s.port.UpgradeAppStream(ctx, appID, takeSnapshot, transform, onProgress)
 }
 
 // GetAppLogs retrieves aggregated logs for a Docker Compose Application.

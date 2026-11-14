@@ -131,25 +131,25 @@ func NewGateway(
 		shutdownCh:    make(chan struct{}),
 	}
 
-	// 1. Storage Repositories (ISOs & LXC Templates)
-	mux.Handle("/v1/storage/isos/upload", g.requireAuth(http.HandlerFunc(g.handleUploadISO)))
-	mux.Handle("/v1/storage/isos", g.requireAuth(http.HandlerFunc(g.handleISOs)))
-	mux.Handle("/v1/storage/isos/", g.requireAuth(http.HandlerFunc(g.handleISOs)))
-	mux.Handle("/v1/storage/lxc-templates/upload", g.requireAuth(http.HandlerFunc(g.handleUploadLxcTemplate)))
-	mux.Handle("/v1/storage/lxc-templates", g.requireAuth(http.HandlerFunc(g.handleLxcTemplates)))
-	mux.Handle("/v1/storage/lxc-templates/", g.requireAuth(http.HandlerFunc(g.handleLxcTemplates)))
+	// 1. Storage Repositories (ISOs & LXC Templates - admin only, header bearer token)
+	mux.Handle("/v1/storage/isos/upload", g.requireAuth(g.requireAdmin(http.HandlerFunc(g.handleUploadISO))))
+	mux.Handle("/v1/storage/isos", g.requireAuth(g.requireAdmin(http.HandlerFunc(g.handleISOs))))
+	mux.Handle("/v1/storage/isos/", g.requireAuth(g.requireAdmin(http.HandlerFunc(g.handleISOs))))
+	mux.Handle("/v1/storage/lxc-templates/upload", g.requireAuth(g.requireAdmin(http.HandlerFunc(g.handleUploadLxcTemplate))))
+	mux.Handle("/v1/storage/lxc-templates", g.requireAuth(g.requireAdmin(http.HandlerFunc(g.handleLxcTemplates))))
+	mux.Handle("/v1/storage/lxc-templates/", g.requireAuth(g.requireAdmin(http.HandlerFunc(g.handleLxcTemplates))))
 
-	// 2. Real-Time System Notification Stream (Server-Sent Events)
-	mux.Handle("/v1/events", g.requireAuth(http.HandlerFunc(g.handleEventsSSE)))
-	mux.Handle("/events", g.requireAuth(http.HandlerFunc(g.handleEventsSSE)))
+	// 2. Real-Time System Notification Stream (Server-Sent Events - admin only)
+	mux.Handle("/v1/events", g.requireStreamAuth(g.requireAdmin(http.HandlerFunc(g.handleEventsSSE))))
+	mux.Handle("/events", g.requireStreamAuth(g.requireAdmin(http.HandlerFunc(g.handleEventsSSE))))
 
-	// 2b. Reactive gRPC Server-Side Streaming / Watch Handlers over HTTP
-	mux.Handle("/v1/dockerApps:watch", g.requireAuth(http.HandlerFunc(g.handleWatchDockerApps)))
-	mux.Handle("/v1/dockerContainers:watch", g.requireAuth(http.HandlerFunc(g.handleWatchDockerContainers)))
-	mux.Handle("/v1/virtualMachines:watch", g.requireAuth(http.HandlerFunc(g.handleWatchVirtualMachines)))
-	mux.Handle("/v1/lxcContainers:watch", g.requireAuth(http.HandlerFunc(g.handleWatchLxcContainers)))
-	mux.Handle("/v1/system:telemetryStream", g.requireAuth(http.HandlerFunc(g.handleStreamSystemTelemetry)))
-	mux.Handle("/v1/resources:watch", g.requireAuth(http.HandlerFunc(g.handleWatchResources)))
+	// 2b. Reactive gRPC Server-Side Streaming / Watch Handlers over HTTP (admin only, header bearer token)
+	mux.Handle("/v1/dockerApps:watch", g.requireAuth(g.requireAdmin(http.HandlerFunc(g.handleWatchDockerApps))))
+	mux.Handle("/v1/dockerContainers:watch", g.requireAuth(g.requireAdmin(http.HandlerFunc(g.handleWatchDockerContainers))))
+	mux.Handle("/v1/virtualMachines:watch", g.requireAuth(g.requireAdmin(http.HandlerFunc(g.handleWatchVirtualMachines))))
+	mux.Handle("/v1/lxcContainers:watch", g.requireAuth(g.requireAdmin(http.HandlerFunc(g.handleWatchLxcContainers))))
+	mux.Handle("/v1/system:telemetryStream", g.requireAuth(g.requireAdmin(http.HandlerFunc(g.handleStreamSystemTelemetry))))
+	mux.Handle("/v1/resources:watch", g.requireAuth(g.requireAdmin(http.HandlerFunc(g.handleWatchResources))))
 
 	// 3. Google AIP REST/JSON API via gRPC-Gateway (authenticated by the gRPC interceptors)
 	mux.Handle("/v1/", noStoreMiddleware(gwMux))
@@ -163,23 +163,23 @@ func NewGateway(
 	})
 
 	// 5. Docker Container Interactive Terminal WebSocket (/ws/docker/terminal/{containerId}?shell=/bin/sh&access_token=...)
-	mux.Handle("/ws/docker/terminal/", g.requireAuth(websocket.Server{
+	mux.Handle("/ws/docker/terminal/", g.requireStreamAuth(g.requireAdmin(websocket.Server{
 		Handshake: sameOriginHandshake,
 		Handler:   g.handleDockerTerminalWebSocket,
-	}))
+	})))
 
 	// 6. LXC Container Interactive Terminal WebSocket (/ws/lxc/terminal/{containerId}?shell=/bin/sh&access_token=...)
-	mux.Handle("/ws/lxc/terminal/", g.requireAuth(websocket.Server{
+	mux.Handle("/ws/lxc/terminal/", g.requireStreamAuth(g.requireAdmin(websocket.Server{
 		Handshake: sameOriginHandshake,
 		Handler:   g.handleLxcTerminalWebSocket,
-	}))
+	})))
 
 	// 7. Host Interactive Terminal WebSocket (/ws/host/terminal?access_token=...)
-	mux.Handle("/ws/host/terminal", g.requireAuth(websocket.Server{
+	mux.Handle("/ws/host/terminal", g.requireStreamAuth(websocket.Server{
 		Handshake: sameOriginHandshake,
 		Handler:   g.handleHostTerminalWebSocket,
 	}))
-	mux.Handle("/ws/host/terminal/", g.requireAuth(websocket.Server{
+	mux.Handle("/ws/host/terminal/", g.requireStreamAuth(websocket.Server{
 		Handshake: sameOriginHandshake,
 		Handler:   g.handleHostTerminalWebSocket,
 	}))
@@ -674,13 +674,21 @@ func noStoreMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// requireAuth rejects requests without a valid bearer token. Browsers cannot set
-// headers on EventSource or WebSocket requests, so GET requests may instead pass
-// the token as the access_token query parameter.
+// requireAuth rejects requests without a valid Authorization bearer token header.
 func (g *Gateway) requireAuth(next http.Handler) http.Handler {
+	return g.requireAuthWithOptions(next, false)
+}
+
+// requireStreamAuth is for EventSource and WebSocket endpoints where browsers cannot
+// set custom Authorization headers and therefore pass ?access_token= on GET requests.
+func (g *Gateway) requireStreamAuth(next http.Handler) http.Handler {
+	return g.requireAuthWithOptions(next, true)
+}
+
+func (g *Gateway) requireAuthWithOptions(next http.Handler, allowQueryToken bool) http.Handler {
 	return noStoreMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("Authorization")
-		if token == "" && r.Method == http.MethodGet {
+		if token == "" && allowQueryToken && r.Method == http.MethodGet {
 			token = r.URL.Query().Get("access_token")
 		}
 		if token == "" || g.verifier == nil {
@@ -695,6 +703,19 @@ func (g *Gateway) requireAuth(next http.Handler) http.Handler {
 		ctx := grpcadapter.WithCaller(r.Context(), user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}))
+}
+
+func (g *Gateway) requireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		caller := grpcadapter.CallerFromContext(r.Context())
+		if caller == nil || !caller.IsAdmin {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"code":7,"message":"administrator privileges required"}`))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // SetPasswdPathsForTest overrides the passwd and group file paths used for host terminal lookups.

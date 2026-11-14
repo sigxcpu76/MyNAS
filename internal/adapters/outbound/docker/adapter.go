@@ -1635,6 +1635,12 @@ func (a *Adapter) RestartApp(ctx context.Context, id string) (*domain.DockerApp,
 // UpgradeApp pulls latest images for all services in the compose stack and redeploys with --remove-orphans in the background.
 // If takeSnapshot is true and a ZFS engine port is configured, it automatically takes a ZFS snapshot of any matching app datasets before upgrading.
 func (a *Adapter) UpgradeApp(ctx context.Context, id string, takeSnapshot bool) (*domain.DockerApp, error) {
+	return a.UpgradeAppWithTransform(ctx, id, takeSnapshot, nil)
+}
+
+// UpgradeAppWithTransform pulls latest images (using registry credentials) before mutating compose.yaml,
+// then redeploys with --remove-orphans in the background.
+func (a *Adapter) UpgradeAppWithTransform(ctx context.Context, id string, takeSnapshot bool, transform domain.DockerAppComposeTransform) (*domain.DockerApp, error) {
 	a.mu.Lock()
 
 	appDir := filepath.Join(a.unitsDir, id)
@@ -1659,21 +1665,18 @@ func (a *Adapter) UpgradeApp(ctx context.Context, id string, takeSnapshot bool) 
 		return nil, fmt.Errorf("failed to read compose.yaml: %w", err)
 	}
 
-	// Normalize compose volumes & environment to ensure health before upgrade
-	normalized := a.NormalizeComposeVolumes(id, string(content))
-	normalized = NormalizeComposeEnvironment(normalized)
-	if normalized != string(content) {
-		_ = os.WriteFile(composePath, []byte(normalized), 0644)
-		content = []byte(normalized)
+	// Compute target compose.yaml in memory; do not write compose.yaml until images are pulled.
+	origYAML := string(content)
+	targetYAML := origYAML
+	if transform != nil {
+		if updated := transform(targetYAML); updated != "" {
+			targetYAML = updated
+		}
 	}
+	targetYAML = a.NormalizeComposeVolumes(id, targetYAML)
+	targetYAML = NormalizeComposeEnvironment(targetYAML)
 
-	_, _, vols, _, _, _, _, _, _, _, _ := parseComposeYAML(string(content))
-
-	if takeSnapshot {
-		a.snapshotAppVolumes(ctx, id, vols)
-	}
-
-	a.startUpgradeLocked(appDir, id, "Upgrading stack (pulling latest images & restarting containers)...")
+	a.startUpgradeLocked(appDir, id, "Upgrading stack (pulling latest images & restarting containers)...", origYAML, targetYAML, takeSnapshot)
 
 	liveContainers := a.fetchLiveContainers(ctx)
 	built, err := a.buildApp(ctx, id, liveContainers)
@@ -3443,10 +3446,10 @@ func (a *Adapter) startDeploymentLocked(dir, id, msg string) {
 	}()
 }
 
-// startUpgradeLocked marks the app as deploying, pulls latest images with `docker compose pull`,
-// and runs `docker compose up -d --remove-orphans` in the background.
+// startUpgradeLocked marks the app as deploying, pulls latest images (using registry credentials)
+// before mutating compose.yaml, optionally snapshots volumes, and runs `docker compose up -d --remove-orphans`.
 // Caller must hold a.mu.
-func (a *Adapter) startUpgradeLocked(dir, id, msg string) {
+func (a *Adapter) startUpgradeLocked(dir, id, msg, origYAML, targetYAML string, takeSnapshot bool) {
 	if _, busy := a.deployingApps[id]; busy {
 		return
 	}
@@ -3462,8 +3465,25 @@ func (a *Adapter) startUpgradeLocked(dir, id, msg string) {
 
 	go func() {
 		defer cancel()
-		_ = a.runCompose(bgCtx, dir, id, "pull")
-		runErr := a.runCompose(bgCtx, dir, id, "up", "-d", "--remove-orphans")
+		composeChanged := targetYAML != origYAML
+		_, pullErr := a.pullStackImagesWithProgress(bgCtx, dir, id, targetYAML, composeChanged, func(domain.DockerAppUpgradeProgress) {})
+		var runErr error
+		if pullErr != nil {
+			runErr = pullErr
+		} else {
+			if composeChanged {
+				if writeErr := os.WriteFile(filepath.Join(dir, "compose.yaml"), []byte(targetYAML), 0644); writeErr != nil {
+					runErr = writeErr
+				}
+			}
+			if runErr == nil {
+				if takeSnapshot {
+					_, _, vols, _, _, _, _, _, _, _, _ := parseComposeYAML(targetYAML)
+					a.snapshotAppVolumes(bgCtx, id, vols)
+				}
+				runErr = a.runCompose(bgCtx, dir, id, "up", "-d", "--remove-orphans")
+			}
+		}
 		a.mu.Lock()
 		delete(a.deployCancel, id)
 		if _, stillDeploying := a.deployingApps[id]; !stillDeploying {
@@ -3476,7 +3496,11 @@ func (a *Adapter) startUpgradeLocked(dir, id, msg string) {
 		}
 		a.mu.Unlock()
 
-		a.emitEvent(domain.NewEvent("docker", "MODIFIED", "dockerApps/"+id, "Upgrade completed"))
+		statusMsg := "Upgrade completed"
+		if runErr != nil {
+			statusMsg = "Upgrade failed"
+		}
+		a.emitEvent(domain.NewEvent("docker", "MODIFIED", "dockerApps/"+id, statusMsg))
 	}()
 }
 

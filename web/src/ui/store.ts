@@ -1096,6 +1096,7 @@ export function handleWatchResourceChange(msg: {
 
 export function startWatchStream(): void {
   if (typeof window === 'undefined') return;
+  if (nasState.currentUser && !nasState.currentUser.isAdmin) return;
   if (watchAbortController) return;
 
   watchAbortController = new AbortController();
@@ -1129,6 +1130,7 @@ export function stopWatchStream(): void {
 
 export function startEventStream(): void {
   if (typeof window === 'undefined' || !window.EventSource) return;
+  if (nasState.currentUser && !nasState.currentUser.isAdmin) return;
   if (eventSource) return;
 
   const token = aipClient.getToken();

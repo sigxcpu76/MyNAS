@@ -1441,7 +1441,7 @@ onUnmounted(() => {
               Upgrade: {{ upgradingApp.title || upgradingApp.appId }}
             </h3>
           </div>
-          <button class="btn btn-sm btn-icon" @click="isUpgradeModalOpen = false">
+          <button class="btn btn-sm btn-icon" :disabled="isUpgradingApp" @click="isUpgradeModalOpen = false">
             <MdiIcon :path="mdiClose" size="18" />
           </button>
         </div>

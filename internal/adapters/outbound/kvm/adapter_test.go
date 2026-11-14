@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sigxcpu/nas/internal/domain"
 )
@@ -514,6 +515,68 @@ Domain: 'windows-10'
 	}
 	if win.hasRSS {
 		t.Errorf("windows-10 has no balloon.rss, expected hasRSS=false")
+	}
+}
+
+func TestBuildDomainXML_EscapesSpecialCharacters(t *testing.T) {
+	vm := domain.VirtualMachine{
+		ID:          "vm-xml-escape",
+		VMName:      "Escape Test",
+		Description: "Test </description><hostdev/><description> & 'quotes' \"double\"",
+		OSVariant:   "debian12' evil='1",
+		MemoryMiB:   2048,
+		VCPUs:       2,
+		QemuCommandlineArgs: []string{
+			"-smbios",
+			"type=1,product=My'NAS<Box>&Co",
+		},
+	}
+
+	xmlStr := buildDomainXML(vm)
+	var parsed domainXML
+	if err := xml.Unmarshal([]byte(xmlStr), &parsed); err != nil {
+		t.Fatalf("generated domain XML is malformed after escaping: %v\nXML:\n%s", err, xmlStr)
+	}
+	if parsed.Description != vm.Description {
+		t.Errorf("round-trip description mismatch: got %q, want %q", parsed.Description, vm.Description)
+	}
+	if strings.Contains(xmlStr, "<hostdev/>") {
+		t.Fatalf("injected <hostdev/> tag survived in domain XML:\n%s", xmlStr)
+	}
+}
+
+func TestOpenConsole_UsesVMIDAndPrunesExpiredTickets(t *testing.T) {
+	ctx := context.Background()
+	a := NewAdapterWithStateDir(t.TempDir())
+	a.vms["prod-db-01"] = domain.VirtualMachine{
+		ID:      "prod-db-01",
+		VMName:  "Production Database 01",
+		State:   "RUNNING",
+		VNCPort: 5901,
+	}
+	// Seed an expired ticket to verify pruning
+	a.tickets["expired-token"] = consoleTicket{
+		VMID:      "prod-db-01",
+		Token:     "expired-token",
+		ExpiresAt: time.Now().UTC().Add(-time.Minute),
+	}
+
+	sess, err := a.OpenConsole(ctx, "prod-db-01")
+	if err != nil {
+		t.Fatalf("OpenConsole failed: %v", err)
+	}
+	if sess.VMName != "prod-db-01" {
+		t.Errorf("expected session VMName to be VM ID 'prod-db-01', got %q", sess.VMName)
+	}
+	wantPrefix := "/ws/novnc/prod-db-01?token="
+	if !strings.HasPrefix(sess.WebsocketURL, wantPrefix) {
+		t.Errorf("expected WebsocketURL prefix %q, got %q", wantPrefix, sess.WebsocketURL)
+	}
+	if _, exists := a.tickets["expired-token"]; exists {
+		t.Errorf("expected expired console ticket to be pruned during OpenConsole")
+	}
+	if _, err := a.ValidateConsoleToken(ctx, "prod-db-01", sess.Token); err != nil {
+		t.Errorf("ValidateConsoleToken failed for freshly minted token: %v", err)
 	}
 }
 

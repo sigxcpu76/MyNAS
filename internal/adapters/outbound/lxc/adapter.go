@@ -1463,7 +1463,16 @@ func (a *Adapter) ensureTemplateArchive(ctx context.Context, sourceURL, targetPa
 		return destPath, nil
 	}
 
-	_ = os.MkdirAll(filepath.Dir(destPath), 0755)
+	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+		return "", fmt.Errorf("create template directory: %w", err)
+	}
+	partPath := destPath + ".download"
+	probe, err := os.OpenFile(partPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return "", fmt.Errorf("create download file: %w", err)
+	}
+	_ = probe.Close()
+	_ = os.Remove(partPath)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
@@ -1486,7 +1495,6 @@ func (a *Adapter) ensureTemplateArchive(ctx context.Context, sourceURL, targetPa
 		return "", fmt.Errorf("download template from %s failed with HTTP status %d", sourceURL, resp.StatusCode)
 	}
 
-	partPath := destPath + ".download"
 	out, err := os.Create(partPath)
 	if err != nil {
 		return "", fmt.Errorf("create download file: %w", err)

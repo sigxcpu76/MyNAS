@@ -116,6 +116,10 @@ type DockerAppUpgradeProgress struct {
 // DockerAppUpgradeProgressCallback receives incremental progress updates during an upgrade.
 type DockerAppUpgradeProgressCallback func(DockerAppUpgradeProgress)
 
+// DockerAppComposeTransform transforms raw compose.yaml content in memory
+// (e.g. applying catalog image/version updates) after images are pulled.
+type DockerAppComposeTransform func(composeYAML string) string
+
 // DockerAppName constructs an AIP resource name "dockerApps/{app_id}".
 func DockerAppName(appID string) string {
 	return fmt.Sprintf("dockerApps/%s", appID)

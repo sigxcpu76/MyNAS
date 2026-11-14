@@ -9,15 +9,31 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sigxcpu/nas/internal/domain"
 	"github.com/sigxcpu/nas/internal/ports"
 )
 
+const (
+	loginMaxFailures   = 5
+	loginFailureWindow = 5 * time.Minute
+	loginBlockDuration = 1 * time.Minute
+)
+
+type loginAttemptState struct {
+	failures     int
+	windowStart  time.Time
+	blockedUntil time.Time
+}
+
 type IdentityService struct {
 	identity  ports.LinuxIdentityPort
 	jwtSecret []byte
+
+	loginMu       sync.Mutex
+	loginAttempts map[string]*loginAttemptState
 }
 
 // NewIdentityService signs tokens with jwtSecret. An empty secret gets a random
@@ -31,8 +47,9 @@ func NewIdentityService(identity ports.LinuxIdentityPort, jwtSecret string) *Ide
 		}
 	}
 	return &IdentityService{
-		identity:  identity,
-		jwtSecret: secret,
+		identity:      identity,
+		jwtSecret:     secret,
+		loginAttempts: make(map[string]*loginAttemptState),
 	}
 }
 
@@ -43,11 +60,31 @@ type jwtClaims struct {
 	Iat     int64  `json:"iat"`
 }
 
-func (s *IdentityService) Login(ctx context.Context, username, password string) (string, int64, *domain.User, error) {
-	if strings.TrimSpace(username) == "" || password == "" {
-		return "", 0, nil, fmt.Errorf("%w: username and password are required", domain.ErrInvalidArgument)
+// AuthenticateUser validates credentials with per-username brute-force rate limiting
+// and rejects locked accounts.
+func (s *IdentityService) AuthenticateUser(ctx context.Context, username, password string) (*domain.User, error) {
+	cleanUser := strings.TrimSpace(username)
+	if cleanUser == "" || password == "" {
+		return nil, fmt.Errorf("%w: username and password are required", domain.ErrInvalidArgument)
+	}
+	if err := s.checkLoginRateLimit(cleanUser); err != nil {
+		return nil, err
 	}
 	user, err := s.identity.Authenticate(ctx, username, password)
+	if err != nil {
+		s.recordLoginFailure(cleanUser)
+		return nil, err
+	}
+	if user.Locked {
+		s.recordLoginFailure(cleanUser)
+		return nil, fmt.Errorf("%w: account is locked", domain.ErrUnauthorized)
+	}
+	s.clearLoginFailures(cleanUser)
+	return user, nil
+}
+
+func (s *IdentityService) Login(ctx context.Context, username, password string) (string, int64, *domain.User, error) {
+	user, err := s.AuthenticateUser(ctx, username, password)
 	if err != nil {
 		return "", 0, nil, err
 	}
@@ -89,7 +126,58 @@ func (s *IdentityService) VerifyToken(ctx context.Context, token string) (*domai
 	if time.Now().Unix() > claims.Exp {
 		return nil, fmt.Errorf("%w: token expired", domain.ErrUnauthorized)
 	}
-	return s.identity.GetUser(ctx, claims.Sub)
+	user, err := s.identity.GetUser(ctx, claims.Sub)
+	if err != nil {
+		return nil, err
+	}
+	if user.Locked {
+		return nil, fmt.Errorf("%w: account is locked", domain.ErrUnauthorized)
+	}
+	return user, nil
+}
+
+func (s *IdentityService) checkLoginRateLimit(username string) error {
+	s.loginMu.Lock()
+	defer s.loginMu.Unlock()
+	if s.loginAttempts == nil {
+		return nil
+	}
+	st, ok := s.loginAttempts[username]
+	if !ok {
+		return nil
+	}
+	now := time.Now()
+	if !st.blockedUntil.IsZero() && now.Before(st.blockedUntil) {
+		return fmt.Errorf("%w: too many failed login attempts; please try again later", domain.ErrResourceExhausted)
+	}
+	if now.Sub(st.windowStart) > loginFailureWindow {
+		delete(s.loginAttempts, username)
+	}
+	return nil
+}
+
+func (s *IdentityService) recordLoginFailure(username string) {
+	s.loginMu.Lock()
+	defer s.loginMu.Unlock()
+	if s.loginAttempts == nil {
+		s.loginAttempts = make(map[string]*loginAttemptState)
+	}
+	now := time.Now()
+	st, ok := s.loginAttempts[username]
+	if !ok || now.Sub(st.windowStart) > loginFailureWindow {
+		st = &loginAttemptState{windowStart: now}
+		s.loginAttempts[username] = st
+	}
+	st.failures++
+	if st.failures >= loginMaxFailures {
+		st.blockedUntil = now.Add(loginBlockDuration)
+	}
+}
+
+func (s *IdentityService) clearLoginFailures(username string) {
+	s.loginMu.Lock()
+	defer s.loginMu.Unlock()
+	delete(s.loginAttempts, username)
 }
 
 func (s *IdentityService) signJWT(claims jwtClaims) (string, error) {

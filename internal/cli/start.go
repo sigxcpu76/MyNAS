@@ -47,15 +47,16 @@ import (
 )
 
 type StartOptions struct {
-	BindAddr    string
-	HTTPPort    int
-	HTTPSPort   int
-	TLSCertFile string
-	TLSKeyFile  string
-	GRPCPort    int
-	WebdavPort  int
-	StateDir    string
-	JWTSecret   string
+	BindAddr     string
+	GRPCBindAddr string
+	HTTPPort     int
+	HTTPSPort    int
+	TLSCertFile  string
+	TLSKeyFile   string
+	GRPCPort     int
+	WebdavPort   int
+	StateDir     string
+	JWTSecret    string
 }
 
 func newStartCmd(rootOpts *RootOptions) *cobra.Command {
@@ -64,7 +65,7 @@ func newStartCmd(rootOpts *RootOptions) *cobra.Command {
 		HTTPSPort:  -1,
 		GRPCPort:   9090,
 		WebdavPort: 8081,
-		StateDir:   "/tmp/nas-state",
+		StateDir:   "",
 	}
 
 	cmd := &cobra.Command{
@@ -80,7 +81,8 @@ func newStartCmd(rootOpts *RootOptions) *cobra.Command {
 	cmd.Flags().IntVar(&opts.HTTPSPort, "https-port", opts.HTTPSPort, "HTTPS/TLS listen port (default 8443, 0 to disable HTTPS)")
 	cmd.Flags().StringVar(&opts.TLSCertFile, "tls-cert", "", "Path to custom TLS certificate file (optional)")
 	cmd.Flags().StringVar(&opts.TLSKeyFile, "tls-key", "", "Path to custom TLS private key file (optional)")
-	cmd.Flags().StringVar(&opts.BindAddr, "bind", "", "Bind interface/address for HTTP, HTTPS, gRPC, and WebDAV listeners (default 0.0.0.0)")
+	cmd.Flags().StringVar(&opts.BindAddr, "bind", "", "Bind interface/address for HTTP, HTTPS, and WebDAV listeners (default 0.0.0.0)")
+	cmd.Flags().StringVar(&opts.GRPCBindAddr, "grpc-bind", "", "Bind interface/address for plaintext native gRPC listener (default 127.0.0.1)")
 	cmd.Flags().IntVar(&opts.GRPCPort, "grpc-port", opts.GRPCPort, "Native gRPC API server listen port")
 	cmd.Flags().IntVar(&opts.WebdavPort, "webdav-port", opts.WebdavPort, "Dedicated WebDAV server listen port (default 8081, 0 to disable dedicated port)")
 	cmd.Flags().StringVar(&opts.StateDir, "state-dir", opts.StateDir, "Directory for NAS share & config state")
@@ -90,22 +92,25 @@ func newStartCmd(rootOpts *RootOptions) *cobra.Command {
 }
 
 func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOptions) error {
-	ctx, stop := signal.NotifyContext(parentCtx, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
-	defer stop()
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
 
 	logger := rootOpts.Logger
 
-	// Dedicated signal listener for secondary force-shutdown
+	// Single signal listener: first signal triggers graceful shutdown; second forces exit.
 	sigCh := make(chan os.Signal, 2)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 	defer signal.Stop(sigCh)
 
 	go func() {
 		count := 0
-		for range sigCh {
+		for sig := range sigCh {
 			count++
-			if count >= 2 {
-				logger.Warn("forcing immediate termination on secondary signal")
+			if count == 1 {
+				logger.Info("received termination signal, shutting down nasctl server", "signal", sig.String())
+				cancel()
+			} else {
+				logger.Warn("forcing immediate termination on secondary signal", "signal", sig.String())
 				os.Exit(1)
 			}
 		}
@@ -145,7 +150,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	if opts.WebdavPort != 8081 || cfg.Server.WebdavPort == 0 {
 		cfg.Server.WebdavPort = opts.WebdavPort
 	}
-	if opts.StateDir != "/tmp/nas-state" && opts.StateDir != "" {
+	if opts.StateDir != "" {
 		cfg.Server.StateDir = opts.StateDir
 	}
 	if opts.JWTSecret != "" {
@@ -278,11 +283,11 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	vmUnitsDir := filepath.Join(stateDir, "vm")
 	sharesDir := filepath.Join(stateDir, "shares")
 	cronUnitsDir := filepath.Join(stateDir, "cron")
-	_ = os.MkdirAll(dockerUnitsDir, 0755)
-	_ = os.MkdirAll(lxcUnitsDir, 0755)
-	_ = os.MkdirAll(vmUnitsDir, 0755)
-	_ = os.MkdirAll(sharesDir, 0755)
-	_ = os.MkdirAll(cronUnitsDir, 0755)
+	_ = os.MkdirAll(dockerUnitsDir, 0o700)
+	_ = os.MkdirAll(lxcUnitsDir, 0o700)
+	_ = os.MkdirAll(vmUnitsDir, 0o700)
+	_ = os.MkdirAll(sharesDir, 0o700)
+	_ = os.MkdirAll(cronUnitsDir, 0o700)
 
 	logger.Info("filesystem unit state store initialized", "path", stateDir)
 
@@ -306,7 +311,6 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	step("cifs adapter initialized (samba config load)")
 	webdavAdapter := share.NewWebdavAdapter(sharesDir)
 	identityAdapter := identity.NewAdapter()
-	webdavAdapter.SetAuthenticator(identityAdapter.Authenticate)
 	step("webdav and identity adapters initialized")
 	catalogCacheDir := filepath.Join(stateDir, "catalog")
 	catalogAdapter := catalog.NewAdapter(catalogCacheDir)
@@ -356,6 +360,7 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 		return fmt.Errorf("resolving JWT secret: %w", err)
 	}
 	identitySvc := application.NewIdentityService(identityAdapter, jwtSecret)
+	webdavAdapter.SetAuthenticator(identitySvc.AuthenticateUser)
 	if !identity.PAMSupported {
 		logger.Warn("this build has no PAM support (CGO disabled); web UI and API logins will be rejected")
 	}
@@ -422,7 +427,15 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 
 	bindHost := cfg.Server.BindAddr
 	if cfg.Server.GRPCPort > 0 {
-		grpcAddr := net.JoinHostPort(bindHost, strconv.Itoa(cfg.Server.GRPCPort))
+		grpcBindHost := strings.TrimSpace(opts.GRPCBindAddr)
+		if grpcBindHost == "" {
+			if bindHost == "" || bindHost == "0.0.0.0" || bindHost == "::" {
+				grpcBindHost = "127.0.0.1"
+			} else {
+				grpcBindHost = bindHost
+			}
+		}
+		grpcAddr := net.JoinHostPort(grpcBindHost, strconv.Itoa(cfg.Server.GRPCPort))
 		lis, err := net.Listen("tcp", grpcAddr)
 		if err != nil {
 			logger.Warn("could not bind gRPC port", "grpc_port", cfg.Server.GRPCPort, "addr", grpcAddr, "error", err)
@@ -472,6 +485,9 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	var webdavServer *http.Server
 	if cfg.Server.WebdavPort > 0 {
 		webdavAddr := net.JoinHostPort(bindHost, strconv.Itoa(cfg.Server.WebdavPort))
+		if bindHost != "127.0.0.1" && bindHost != "::1" && !strings.EqualFold(bindHost, "localhost") {
+			logger.Warn("dedicated WebDAV listener uses plaintext HTTP Basic Auth; use HTTPS /dav/ or --webdav-port 0 on untrusted networks", "addr", webdavAddr)
+		}
 		webdavServer = &http.Server{
 			Addr:              webdavAddr,
 			Handler:           webdavAdapter,
@@ -504,8 +520,6 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	select {
 	case <-ctx.Done():
 		logger.Info("shutting down nasctl server")
-	case sig := <-sigCh:
-		logger.Info("received termination signal, shutting down nasctl server", "signal", sig.String())
 	case err := <-errCh:
 		logger.Error("server encountered fatal error", "error", err)
 		return err
@@ -545,22 +559,38 @@ func runServer(parentCtx context.Context, rootOpts *RootOptions, opts *StartOpti
 	return nil
 }
 
+func ensureSafeStateDir(dir string) bool {
+	if dir == "" {
+		return false
+	}
+	if fi, err := os.Lstat(dir); err == nil {
+		if fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+			return false
+		}
+		return true
+	}
+	return os.MkdirAll(dir, 0o700) == nil
+}
+
 func resolveStateDir(preferred string) string {
 	if preferred == "" {
-		preferred = "/var/lib/nasctl"
+		if os.Geteuid() == 0 {
+			preferred = "/var/lib/nas"
+		}
 	}
-	if err := os.MkdirAll(preferred, 0755); err == nil {
+	if ensureSafeStateDir(preferred) {
 		return preferred
 	}
-	if home, err := os.UserHomeDir(); err == nil {
-		userDir := filepath.Join(home, ".local", "share", "nasctl")
-		if err := os.MkdirAll(userDir, 0755); err == nil {
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		userDir := filepath.Join(home, ".local", "share", "nas")
+		if ensureSafeStateDir(userDir) {
 			return userDir
 		}
 	}
-	tmpDir := filepath.Join(os.TempDir(), "nasctl-state")
-	_ = os.MkdirAll(tmpDir, 0755)
-	return tmpDir
+	if tmpDir, err := os.MkdirTemp("", "nasctl-state-*"); err == nil {
+		return tmpDir
+	}
+	return preferred
 }
 
 // legacyJWTSecrets were hardcoded defaults in earlier releases and may still be
@@ -577,9 +607,14 @@ func resolveJWTSecret(configured, stateDir string) (string, error) {
 		return configured, nil
 	}
 	path := filepath.Join(stateDir, "jwt.secret")
-	if data, err := os.ReadFile(path); err == nil {
-		if secret := strings.TrimSpace(string(data)); len(secret) >= 32 {
-			return secret, nil
+	if fi, err := os.Lstat(path); err == nil {
+		if fi.Mode()&os.ModeSymlink != 0 || !fi.Mode().IsRegular() {
+			return "", fmt.Errorf("refusing unsafe jwt.secret path %q", path)
+		}
+		if data, readErr := os.ReadFile(path); readErr == nil {
+			if secret := strings.TrimSpace(string(data)); len(secret) >= 32 {
+				return secret, nil
+			}
 		}
 	}
 	buf := make([]byte, 32)

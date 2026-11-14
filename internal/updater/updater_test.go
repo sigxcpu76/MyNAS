@@ -163,3 +163,70 @@ func (b *bytesBuffer) Write(p []byte) (n int, err error) {
 func (b *bytesBuffer) Bytes() []byte {
 	return b.data
 }
+
+func TestUpdaterSecurityHardening(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. fetchReleaseByTag must reject path traversal in tag
+	u := New("sigxcpu76/MyNAS")
+	if _, err := u.fetchReleaseByTag(ctx, "../../users/evil"); err == nil {
+		t.Fatalf("expected fetchReleaseByTag to reject path traversal tag")
+	}
+
+	// 2. Apply must refuse when release has no SHA-256 checksum asset
+	version.Version = "v1.5.0"
+	noShaSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rel := GitHubRelease{
+			TagName:     "v1.6.0",
+			PublishedAt: time.Now(),
+			Assets: []GitHubAsset{
+				{
+					Name:               "nasctl-v1.6.0-" + runtime.GOOS + "-" + runtime.GOARCH + ".tar.gz",
+					Size:               128,
+					BrowserDownloadURL: "http://" + r.Host + "/asset.tar.gz",
+				},
+			},
+		}
+		_ = json.NewEncoder(w).Encode(rel)
+	}))
+	defer noShaSrv.Close()
+
+	u.apiBaseURL = noShaSrv.URL
+	if _, err := u.Apply(ctx, "", false); err == nil {
+		t.Fatalf("expected Apply to refuse update when SHA-256 checksum is missing")
+	}
+
+	// 3. downloadAndExtract must ignore README-nasctl.md and extract exact basename bin/nasctl
+	var gzBuf bytesBuffer
+	gw := gzip.NewWriter(&gzBuf)
+	tw := tar.NewWriter(gw)
+	writeEntry := func(name, body string) {
+		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o755, Size: int64(len(body))}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tw.Write([]byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeEntry("README-nasctl.md", "documentation, not a binary")
+	writeEntry("bin/nasctl", "#!/bin/sh\necho real-binary\n")
+	_ = tw.Close()
+	_ = gw.Close()
+
+	tarSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(gzBuf.Bytes())
+	}))
+	defer tarSrv.Close()
+
+	dest := filepath.Join(t.TempDir(), "nasctl-out")
+	if _, err := u.downloadAndExtract(ctx, tarSrv.URL+"/release.tar.gz", dest); err != nil {
+		t.Fatalf("downloadAndExtract failed: %v", err)
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("read extracted binary: %v", err)
+	}
+	if string(got) != "#!/bin/sh\necho real-binary\n" {
+		t.Fatalf("extracted wrong archive member: %q", string(got))
+	}
+}

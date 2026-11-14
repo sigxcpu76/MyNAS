@@ -24,6 +24,17 @@ var publicMethods = map[string]bool{
 	nasv1.NasService_Login_FullMethodName: true,
 }
 
+// nonAdminMethods are authenticated RPCs that non-admin users are permitted to invoke.
+// All other authenticated RPCs require caller.IsAdmin == true.
+var nonAdminMethods = map[string]bool{
+	nasv1.NasService_Login_FullMethodName:                 true,
+	nasv1.NasService_GetCurrentUser_FullMethodName:        true,
+	nasv1.NasService_GetUserPreferences_FullMethodName:    true,
+	nasv1.NasService_UpdateUserPreferences_FullMethodName: true,
+	nasv1.NasService_ListCifsShares_FullMethodName:        true,
+	nasv1.NasService_GetCifsShare_FullMethodName:          true,
+}
+
 type callerKey struct{}
 
 // CallerFromContext returns the user authenticated by the auth interceptor, if any.
@@ -95,6 +106,9 @@ func authenticate(ctx context.Context, verifier TokenVerifier, method string) (c
 	user, err := verifier.VerifyToken(ctx, vals[0])
 	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "invalid or expired token")
+	}
+	if !user.IsAdmin && !nonAdminMethods[method] {
+		return nil, status.Error(codes.PermissionDenied, "administrator privileges required")
 	}
 	return context.WithValue(ctx, callerKey{}, user), nil
 }

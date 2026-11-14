@@ -3,9 +3,11 @@ package share
 import (
 	"fmt"
 	"html"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -13,6 +15,23 @@ import (
 
 	"github.com/sigxcpu/nas/internal/domain"
 )
+
+const autoIndexCSP = "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; form-action 'none'; base-uri 'none'"
+
+func sanitizeHostHeader(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "localhost"
+	}
+	for _, r := range raw {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') ||
+			r == '.' || r == '-' || r == ':' || r == '[' || r == ']' {
+			continue
+		}
+		return "localhost"
+	}
+	return raw
+}
 
 type fileItem struct {
 	Name    string
@@ -61,9 +80,20 @@ func getFileIconAndType(name string, isDir bool) (string, string) {
 }
 
 func serveAutoIndex(w http.ResponseWriter, r *http.Request, share domain.WebdavShare, relPath, diskPath string) {
-	entries, err := os.ReadDir(diskPath)
+	root, err := os.OpenRoot(share.Path)
 	if err != nil {
-		http.Error(w, "Could not read directory: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Could not open share directory", http.StatusInternalServerError)
+		return
+	}
+	defer root.Close()
+
+	fsRel := strings.Trim(path.Clean("/"+filepath.ToSlash(relPath)), "/")
+	if fsRel == "" {
+		fsRel = "."
+	}
+	entries, err := fs.ReadDir(root.FS(), fsRel)
+	if err != nil {
+		http.Error(w, "Could not read directory", http.StatusInternalServerError)
 		return
 	}
 
@@ -72,11 +102,29 @@ func serveAutoIndex(w http.ResponseWriter, r *http.Request, share domain.WebdavS
 	var totalSize int64
 
 	for _, entry := range entries {
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
+		var info fs.FileInfo
 		isDir := entry.IsDir()
+		if entry.Type()&os.ModeSymlink != 0 {
+			entryRel := entry.Name()
+			if fsRel != "." {
+				entryRel = filepath.Join(filepath.FromSlash(fsRel), entry.Name())
+			} else {
+				entryRel = entry.Name()
+			}
+			targetInfo, statErr := root.Stat(entryRel)
+			if statErr != nil {
+				// Skip broken symlinks and symlinks pointing outside the share root
+				continue
+			}
+			info = targetInfo
+			isDir = targetInfo.IsDir()
+		} else {
+			var infoErr error
+			info, infoErr = entry.Info()
+			if infoErr != nil {
+				continue
+			}
+		}
 		var size int64
 		if isDir {
 			totalDirs++
@@ -131,17 +179,17 @@ func serveAutoIndex(w http.ResponseWriter, r *http.Request, share domain.WebdavS
 	isRoot := (cleanRel == "" || cleanRel == ".")
 	parentURL := "../"
 
-	host := r.Host
-	if host == "" {
-		host = "localhost"
-	}
+	host := sanitizeHostHeader(r.Host)
 	scheme := "http"
 	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
 		scheme = "https"
 	}
-	mountURL := fmt.Sprintf("%s://%s/dav/%s/", scheme, host, share.ID)
+	mountURL := fmt.Sprintf("%s://%s/dav/%s/", scheme, host, url.PathEscape(share.ID))
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("Content-Security-Policy", autoIndexCSP)
 	w.WriteHeader(http.StatusOK)
 
 	// Stream HTML Auto-Index
@@ -445,7 +493,7 @@ func serveAutoIndex(w http.ResponseWriter, r *http.Request, share domain.WebdavS
       <input type="text" id="filter" class="filter-input" placeholder="Filter files..." oninput="filterItems(this.value)">
       <div class="mount-hint">
         <span>Mount URL: <strong>%s</strong></span>
-        <button class="copy-btn" onclick="(function(btn, text){ if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text); } else { var ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch(e) {} document.body.removeChild(ta); } btn.innerText='Copied!'; setTimeout(function(){ btn.innerText='Copy'; }, 1500); })(this, '%s')">Copy</button>
+        <button class="copy-btn" data-mount-url="%s" onclick="copyMountURL(this)">Copy</button>
       </div>
     </div>
 
@@ -624,6 +672,24 @@ function updateSortIcons() {
   }
 }
 
+function copyMountURL(btn) {
+  var text = btn.getAttribute('data-mount-url') || '';
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text);
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch(e) {}
+    document.body.removeChild(ta);
+  }
+  btn.innerText = 'Copied!';
+  setTimeout(function() { btn.innerText = 'Copy'; }, 1500);
+}
+
 function filterItems(q) {
   var rows = document.querySelectorAll('#file-list tr.item-row');
   var query = q.trim().toLowerCase();
@@ -641,12 +707,10 @@ function filterItems(q) {
 
 func serveSharesIndex(w http.ResponseWriter, r *http.Request, shares []domain.WebdavShare) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("Content-Security-Policy", autoIndexCSP)
 	w.WriteHeader(http.StatusOK)
-
-	host := r.Host
-	if host == "" {
-		host = "localhost"
-	}
 
 	fmt.Fprintf(w, `<!DOCTYPE html>
 <html lang="en">

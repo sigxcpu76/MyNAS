@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -1883,22 +1882,30 @@ func (s *Server) RestartDockerApp(ctx context.Context, req *nasv1.RestartDockerA
 	return protoApp, nil
 }
 
-func (s *Server) applyCatalogUpgradeIfAvailable(ctx context.Context, id string) {
+func (s *Server) catalogUpgradeTransform(ctx context.Context, id string) domain.DockerAppComposeTransform {
 	// If the app is backed by a catalog entry with a newer version/image tag,
-	// update pinned image references and x-nas-catalog-version in compose.yaml before pulling.
-	if currentApp, getErr := s.dockerApp.GetApp(ctx, id); getErr == nil && currentApp != nil && currentApp.ComposeFilePath != "" {
-		protoCurrent := dockerAppToProto(currentApp)
-		s.enrichDockerAppsWithCatalog(ctx, []*nasv1.DockerApp{protoCurrent}, []domain.DockerApp{*currentApp})
-		if protoCurrent.UpdateAvailable && (protoCurrent.LatestImage != "" || protoCurrent.LatestVersion != "") {
-			if rawBytes, readErr := os.ReadFile(currentApp.ComposeFilePath); readErr == nil {
-				updatedYAML := applyCatalogUpgradeToComposeYAML(string(rawBytes), protoCurrent.LatestImage, protoCurrent.LatestVersion)
-				if updatedYAML != string(rawBytes) {
-					if writeErr := os.WriteFile(currentApp.ComposeFilePath, []byte(updatedYAML), 0644); writeErr == nil {
-						slog.Info("[app] updated compose.yaml for catalog upgrade", "app_id", id, "latest_image", protoCurrent.LatestImage, "latest_version", protoCurrent.LatestVersion)
-					}
-				}
-			}
+	// return a transform that updates pinned image references and x-nas-catalog-version
+	// in memory so the upgrade can pull images first before mutating compose.yaml.
+	currentApp, getErr := s.dockerApp.GetApp(ctx, id)
+	if getErr != nil || currentApp == nil || currentApp.ComposeFilePath == "" {
+		return nil
+	}
+	if strings.EqualFold(currentApp.State, "DEPLOYING") {
+		return nil
+	}
+	protoCurrent := dockerAppToProto(currentApp)
+	s.enrichDockerAppsWithCatalog(ctx, []*nasv1.DockerApp{protoCurrent}, []domain.DockerApp{*currentApp})
+	if !protoCurrent.UpdateAvailable || (protoCurrent.LatestImage == "" && protoCurrent.LatestVersion == "") {
+		return nil
+	}
+	latestImage := protoCurrent.LatestImage
+	latestVersion := protoCurrent.LatestVersion
+	return func(composeYAML string) string {
+		updated := applyCatalogUpgradeToComposeYAML(composeYAML, latestImage, latestVersion)
+		if updated != composeYAML {
+			slog.Info("[app] applying catalog upgrade to compose.yaml", "app_id", id, "latest_image", latestImage, "latest_version", latestVersion)
 		}
+		return updated
 	}
 }
 
@@ -1912,9 +1919,9 @@ func (s *Server) UpgradeDockerApp(ctx context.Context, req *nasv1.UpgradeDockerA
 	}
 	slog.Info("[app] upgrade requested", "app_id", id, "take_snapshot", req.GetTakeSnapshot())
 
-	s.applyCatalogUpgradeIfAvailable(ctx, id)
+	transform := s.catalogUpgradeTransform(ctx, id)
 
-	app, err := s.dockerApp.UpgradeApp(ctx, id, req.GetTakeSnapshot())
+	app, err := s.dockerApp.UpgradeAppWithTransform(ctx, id, req.GetTakeSnapshot(), transform)
 	if err != nil {
 		slog.Error("[app] upgrade failed", "app_id", id, "error", err)
 		return nil, ToGRPCError(err)
@@ -1944,10 +1951,10 @@ func (s *Server) StreamUpgradeDockerApp(req *nasv1.UpgradeDockerAppRequest, stre
 		Percent: 1,
 	})
 
-	s.applyCatalogUpgradeIfAvailable(ctx, id)
+	transform := s.catalogUpgradeTransform(ctx, id)
 
 	var sentTerminal bool
-	_, upgradeErr := s.dockerApp.UpgradeAppStream(ctx, id, req.GetTakeSnapshot(), func(p domain.DockerAppUpgradeProgress) {
+	_, upgradeErr := s.dockerApp.UpgradeAppStream(ctx, id, req.GetTakeSnapshot(), transform, func(p domain.DockerAppUpgradeProgress) {
 		msg := &nasv1.UpgradeDockerAppProgress{
 			Stage:           p.Stage,
 			Message:         p.Message,
@@ -3187,7 +3194,17 @@ func (s *Server) GetUser(ctx context.Context, req *nasv1.GetUserRequest) (*nasv1
 	return toProtoUser(*u), nil
 }
 
+func requireAdminCaller(ctx context.Context) error {
+	if caller := CallerFromContext(ctx); caller != nil && !caller.IsAdmin {
+		return status.Error(codes.PermissionDenied, "administrator privileges required")
+	}
+	return nil
+}
+
 func (s *Server) CreateUser(ctx context.Context, req *nasv1.CreateUserRequest) (*nasv1.User, error) {
+	if err := requireAdminCaller(ctx); err != nil {
+		return nil, err
+	}
 	id := req.GetUserId()
 	in := req.GetUser()
 	if id == "" && in != nil {
@@ -3217,6 +3234,9 @@ func (s *Server) CreateUser(ctx context.Context, req *nasv1.CreateUserRequest) (
 }
 
 func (s *Server) UpdateUser(ctx context.Context, req *nasv1.UpdateUserRequest) (*nasv1.User, error) {
+	if err := requireAdminCaller(ctx); err != nil {
+		return nil, err
+	}
 	in := req.GetUser()
 	id, err := ParseSingleResourceID(patternUser, in.GetName())
 	if err != nil {
@@ -3245,6 +3265,9 @@ func (s *Server) UpdateUser(ctx context.Context, req *nasv1.UpdateUserRequest) (
 }
 
 func (s *Server) DeleteUser(ctx context.Context, req *nasv1.DeleteUserRequest) (*emptypb.Empty, error) {
+	if err := requireAdminCaller(ctx); err != nil {
+		return nil, err
+	}
 	id, err := ParseSingleResourceID(patternUser, req.GetName())
 	if err != nil {
 		return nil, err
@@ -3289,6 +3312,9 @@ func (s *Server) GetGroup(ctx context.Context, req *nasv1.GetGroupRequest) (*nas
 }
 
 func (s *Server) CreateGroup(ctx context.Context, req *nasv1.CreateGroupRequest) (*nasv1.Group, error) {
+	if err := requireAdminCaller(ctx); err != nil {
+		return nil, err
+	}
 	id := req.GetGroupId()
 	in := req.GetGroup()
 	if id == "" && in != nil {
@@ -3306,6 +3332,9 @@ func (s *Server) CreateGroup(ctx context.Context, req *nasv1.CreateGroupRequest)
 }
 
 func (s *Server) UpdateGroup(ctx context.Context, req *nasv1.UpdateGroupRequest) (*nasv1.Group, error) {
+	if err := requireAdminCaller(ctx); err != nil {
+		return nil, err
+	}
 	in := req.GetGroup()
 	id, err := ParseSingleResourceID(patternGroup, in.GetName())
 	if err != nil {

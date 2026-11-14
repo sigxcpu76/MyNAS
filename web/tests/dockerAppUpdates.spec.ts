@@ -223,4 +223,23 @@ services:
     await nextTick();
     await nextTick();
   });
+
+  it('throws when upgradeStream ends unexpectedly without a terminal done event', async () => {
+    const mockClient = {
+      streamCustomMethod: vi.fn().mockImplementation(async (_name, _verb, _body, onMsg) => {
+        onMsg({
+          stage: 'pulling',
+          message: 'Pulling ghcr.io/esphome/esphome:2026.11.0...',
+          percent: 50,
+          done: false,
+        });
+      }),
+      get: vi.fn(),
+    } as unknown as AipClient;
+
+    const adapter = new HttpDockerAppAdapter(mockClient);
+    await expect(adapter.upgradeApp('dockerApps/esphome', true)).rejects.toThrow(
+      'Upgrade stream ended unexpectedly before completion'
+    );
+  });
 });

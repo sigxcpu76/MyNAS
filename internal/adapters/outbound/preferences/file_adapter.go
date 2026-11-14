@@ -2,7 +2,11 @@ package preferences
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	osuser "os/user"
 	"path/filepath"
@@ -77,26 +81,64 @@ func (a *FileAdapter) resolveHomeDir(user *domain.User) (string, error) {
 	return "/root", nil
 }
 
-func (a *FileAdapter) getPreferencesFilePath(user *domain.User) (string, error) {
+func (a *FileAdapter) openHomeRoot(user *domain.User, createIfMissing bool) (*os.Root, error) {
 	homeDir, err := a.resolveHomeDir(user)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return filepath.Join(homeDir, ".config", PreferencesFileName), nil
+	fi, lstatErr := os.Lstat(homeDir)
+	if lstatErr != nil {
+		if errors.Is(lstatErr, fs.ErrNotExist) && createIfMissing {
+			if mkErr := os.MkdirAll(homeDir, 0o750); mkErr != nil {
+				return nil, fmt.Errorf("creating home directory: %w", mkErr)
+			}
+			if os.Geteuid() == 0 && user != nil && user.UID > 0 {
+				_ = os.Lchown(homeDir, int(user.UID), int(user.PrimaryGID))
+			}
+		} else {
+			return nil, lstatErr
+		}
+	} else if fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+		return nil, fmt.Errorf("refusing unsafe home directory %q", homeDir)
+	}
+	return os.OpenRoot(homeDir)
 }
 
 func (a *FileAdapter) GetPreferences(ctx context.Context, user *domain.User) (*domain.UserPreferences, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	filePath, err := a.getPreferencesFilePath(user)
+	root, err := a.openHomeRoot(user, false)
 	if err != nil {
-		return nil, fmt.Errorf("resolving preferences path: %w", err)
+		if errors.Is(err, fs.ErrNotExist) {
+			return DefaultUserPreferences(), nil
+		}
+		return nil, fmt.Errorf("resolving preferences root: %w", err)
+	}
+	defer root.Close()
+
+	if cfgInfo, err := root.Lstat(".config"); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return DefaultUserPreferences(), nil
+		}
+		return nil, fmt.Errorf("checking preferences directory: %w", err)
+	} else if cfgInfo.Mode()&os.ModeSymlink != 0 || !cfgInfo.IsDir() {
+		return nil, fmt.Errorf("refusing symlinked or non-directory .config")
 	}
 
-	data, err := os.ReadFile(filePath)
+	relPath := filepath.Join(".config", PreferencesFileName)
+	if fileInfo, err := root.Lstat(relPath); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return DefaultUserPreferences(), nil
+		}
+		return nil, fmt.Errorf("checking preferences file: %w", err)
+	} else if fileInfo.Mode()&os.ModeSymlink != 0 || !fileInfo.Mode().IsRegular() {
+		return nil, fmt.Errorf("refusing symlinked or non-regular preferences file")
+	}
+
+	data, err := root.ReadFile(relPath)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return DefaultUserPreferences(), nil
 		}
 		return nil, fmt.Errorf("reading preferences file: %w", err)
@@ -133,19 +175,38 @@ func (a *FileAdapter) UpdatePreferences(ctx context.Context, user *domain.User, 
 		prefs.Dashboard.ColumnCount = 3
 	}
 
-	filePath, err := a.getPreferencesFilePath(user)
+	root, err := a.openHomeRoot(user, a.baseHomeOverride != "")
 	if err != nil {
-		return nil, fmt.Errorf("resolving preferences path: %w", err)
+		return nil, fmt.Errorf("opening user home directory: %w", err)
 	}
+	defer root.Close()
 
-	configDir := filepath.Dir(filePath)
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := root.Mkdir(".config", 0o755); err != nil && !errors.Is(err, fs.ErrExist) {
 		return nil, fmt.Errorf("creating config directory: %w", err)
 	}
+	cfgInfo, err := root.Lstat(".config")
+	if err != nil {
+		return nil, fmt.Errorf("stat config directory: %w", err)
+	}
+	if cfgInfo.Mode()&os.ModeSymlink != 0 || !cfgInfo.IsDir() {
+		return nil, fmt.Errorf("refusing symlinked or non-directory .config")
+	}
 
-	// Chown configDir if created as root for non-root user
+	// Chown .config via an open file descriptor inside os.Root so symlinks can never be followed
 	if os.Geteuid() == 0 && user != nil && user.UID > 0 {
-		_ = os.Chown(configDir, int(user.UID), int(user.PrimaryGID))
+		if dirFile, openErr := root.Open(".config"); openErr == nil {
+			_ = dirFile.Chown(int(user.UID), int(user.PrimaryGID))
+			_ = dirFile.Close()
+		}
+	}
+
+	relTarget := filepath.Join(".config", PreferencesFileName)
+	if targetInfo, err := root.Lstat(relTarget); err == nil {
+		if targetInfo.Mode()&os.ModeSymlink != 0 || targetInfo.IsDir() {
+			return nil, fmt.Errorf("refusing symlinked or directory preferences target")
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("checking preferences target: %w", err)
 	}
 
 	data, err := yaml.Marshal(prefs)
@@ -153,14 +214,16 @@ func (a *FileAdapter) UpdatePreferences(ctx context.Context, user *domain.User, 
 		return nil, fmt.Errorf("marshaling preferences: %w", err)
 	}
 
-	// Atomic write via temporary file
-	tmpFile, err := os.CreateTemp(configDir, "nas_preferences.*.tmp")
+	var randBytes [8]byte
+	_, _ = rand.Read(randBytes[:])
+	tmpRel := filepath.Join(".config", fmt.Sprintf(".nas_preferences.%s.tmp", hex.EncodeToString(randBytes[:])))
+
+	tmpFile, err := root.OpenFile(tmpRel, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 	if err != nil {
 		return nil, fmt.Errorf("creating temp file: %w", err)
 	}
-	tmpName := tmpFile.Name()
 	defer func() {
-		_ = os.Remove(tmpName)
+		_ = root.Remove(tmpRel)
 	}()
 
 	if _, err := tmpFile.Write(data); err != nil {
@@ -171,19 +234,14 @@ func (a *FileAdapter) UpdatePreferences(ctx context.Context, user *domain.User, 
 		_ = tmpFile.Close()
 		return nil, fmt.Errorf("syncing preferences: %w", err)
 	}
+	if os.Geteuid() == 0 && user != nil && user.UID > 0 {
+		_ = tmpFile.Chown(int(user.UID), int(user.PrimaryGID))
+	}
 	if err := tmpFile.Close(); err != nil {
 		return nil, fmt.Errorf("closing temp file: %w", err)
 	}
 
-	if err := os.Chmod(tmpName, 0644); err != nil {
-		return nil, fmt.Errorf("chmod preferences file: %w", err)
-	}
-
-	if os.Geteuid() == 0 && user != nil && user.UID > 0 {
-		_ = os.Chown(tmpName, int(user.UID), int(user.PrimaryGID))
-	}
-
-	if err := os.Rename(tmpName, filePath); err != nil {
+	if err := root.Rename(tmpRel, relTarget); err != nil {
 		return nil, fmt.Errorf("renaming temp file to target: %w", err)
 	}
 

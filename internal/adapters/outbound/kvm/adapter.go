@@ -2368,25 +2368,37 @@ func bootOrderToHMP(bootOrder string) string {
 	return res
 }
 
+var xmlEscapeReplacer = strings.NewReplacer(
+	"&", "&amp;",
+	"<", "&lt;",
+	">", "&gt;",
+	"'", "&apos;",
+	"\"", "&quot;",
+)
+
+func xmlEscape(s string) string {
+	return xmlEscapeReplacer.Replace(s)
+}
+
 func buildDomainXML(vm domain.VirtualMachine) string {
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf(`<domain type='%s' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
   <name>%s</name>
-`, ForcedDomainType, vm.ID))
+`, xmlEscape(ForcedDomainType), xmlEscape(vm.ID)))
 	if vm.UUID != "" {
 		sb.WriteString(fmt.Sprintf(`  <uuid>%s</uuid>
-`, vm.UUID))
+`, xmlEscape(vm.UUID)))
 	}
 	if vm.Description != "" {
 		sb.WriteString(fmt.Sprintf(`  <description>%s</description>
-`, vm.Description))
+`, xmlEscape(vm.Description)))
 	}
 	if vm.OSVariant != "" {
 		sb.WriteString(fmt.Sprintf(`  <metadata>
     <nasctl:os xmlns:nasctl='https://mynas.local/xmlns/kvm/1.0' variant='%s'/>
   </metadata>
-`, vm.OSVariant))
+`, xmlEscape(vm.OSVariant)))
 	}
 	sb.WriteString(fmt.Sprintf(`  <memory unit='MiB'>%d</memory>
   <currentMemory unit='MiB'>%d</currentMemory>
@@ -2423,7 +2435,7 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 `, cpuMode, sockets, cores))
 	if cpuMode == "custom" {
 		sb.WriteString(fmt.Sprintf(`    <model fallback='allow'>%s</model>
-`, vm.CPUType))
+`, xmlEscape(vm.CPUType)))
 	}
 	sb.WriteString(`  </cpu>
 `)
@@ -2435,10 +2447,10 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 	}
 	sb.WriteString(">\n")
 	sb.WriteString(fmt.Sprintf(`    <type arch='x86_64' machine='%s'>hvm</type>
-`, mach))
+`, xmlEscape(mach)))
 	bootDevs := parseBootOrder(vm.BootOrder, vm.CdromIsoImage != "" || len(vm.Cdroms) > 0)
 	for _, dev := range bootDevs {
-		sb.WriteString(fmt.Sprintf("    <boot dev='%s'/>\n", dev))
+		sb.WriteString(fmt.Sprintf("    <boot dev='%s'/>\n", xmlEscape(dev)))
 	}
 	sb.WriteString(`  </os>
   <features>
@@ -2449,7 +2461,7 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 `)
 	if emu := findQemuEmulator(); emu != "" {
 		sb.WriteString(fmt.Sprintf(`    <emulator>%s</emulator>
-`, emu))
+`, xmlEscape(emu)))
 	}
 	sb.WriteString(`    <controller type='scsi' model='virtio-scsi'/>
 `)
@@ -2495,7 +2507,7 @@ func buildDomainXML(vm domain.VirtualMachine) string {
       <source %s='%s'/>
       <target dev='%s%c' bus='%s'/>
     </disk>
-`, diskKind, driverType, cacheMode, discardMode, sourceAttr, d.DiskPath, targetPrefix, diskLetter, bus))
+`, diskKind, driverType, xmlEscape(cacheMode), discardMode, sourceAttr, xmlEscape(d.DiskPath), targetPrefix, diskLetter, xmlEscape(bus)))
 		diskLetter++
 	}
 
@@ -2516,14 +2528,14 @@ func buildDomainXML(vm domain.VirtualMachine) string {
       <target dev='%s' bus='%s'/>
       <readonly/>
     </disk>
-`, cd.IsoPath, targetDev, bus))
+`, xmlEscape(cd.IsoPath), xmlEscape(targetDev), xmlEscape(bus)))
 			} else {
 				sb.WriteString(fmt.Sprintf(`    <disk type='file' device='cdrom'>
       <driver name='qemu' type='raw'/>
       <target dev='%s' bus='%s'/>
       <readonly/>
     </disk>
-`, targetDev, bus))
+`, xmlEscape(targetDev), xmlEscape(bus)))
 			}
 		}
 	} else if vm.CdromIsoImage != "" {
@@ -2533,7 +2545,7 @@ func buildDomainXML(vm domain.VirtualMachine) string {
       <target dev='sdz' bus='sata'/>
       <readonly/>
     </disk>
-`, vm.CdromIsoImage))
+`, xmlEscape(vm.CdromIsoImage)))
 	} else {
 		sb.WriteString(`    <disk type='file' device='cdrom'>
       <driver name='qemu' type='raw'/>
@@ -2555,21 +2567,21 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 			sb.WriteString(fmt.Sprintf(`    <interface type='bridge'>
       <source bridge='%s'/>
       <model type='%s'/>
-`, dev, model))
+`, xmlEscape(dev), xmlEscape(model)))
 		case "direct":
 			sb.WriteString(fmt.Sprintf(`    <interface type='direct'>
       <source dev='%s' mode='bridge'/>
       <model type='%s'/>
-`, dev, model))
+`, xmlEscape(dev), xmlEscape(model)))
 		default:
 			sb.WriteString(fmt.Sprintf(`    <interface type='user'>
       <model type='%s'/>
-`, model))
+`, xmlEscape(model)))
 		}
 
 		if iface.MacAddress != "" {
 			sb.WriteString(fmt.Sprintf(`      <mac address='%s'/>
-`, iface.MacAddress))
+`, xmlEscape(iface.MacAddress)))
 		}
 		if iface.VlanTag > 0 && netType == "bridge" {
 			sb.WriteString(fmt.Sprintf(`      <vlan><tag id='%d'/></vlan>
@@ -2600,7 +2612,7 @@ func buildDomainXML(vm domain.VirtualMachine) string {
         <address domain='0x%s' bus='0x%s' slot='0x%s' function='0x%s'/>
       </source>
     </hostdev>
-`, domainStr, busStr, slotFunc[0], slotFunc[1]))
+`, xmlEscape(domainStr), xmlEscape(busStr), xmlEscape(slotFunc[0]), xmlEscape(slotFunc[1])))
 			}
 		}
 	}
@@ -2614,7 +2626,7 @@ func buildDomainXML(vm domain.VirtualMachine) string {
         <product id='0x%s'/>
       </source>
     </hostdev>
-`, ids[0], ids[1]))
+`, xmlEscape(ids[0]), xmlEscape(ids[1])))
 		}
 	}
 
@@ -2642,7 +2654,7 @@ func buildDomainXML(vm domain.VirtualMachine) string {
 `)
 		for _, arg := range vm.QemuCommandlineArgs {
 			sb.WriteString(fmt.Sprintf(`    <qemu:arg value='%s'/>
-`, arg))
+`, xmlEscape(arg)))
 		}
 		sb.WriteString(`  </qemu:commandline>
 `)
@@ -2684,7 +2696,7 @@ func buildVideoXML(displayType string) string {
 	return fmt.Sprintf(`    <video>
       <model type='%s'/>
     </video>
-`, videoModel)
+`, xmlEscape(videoModel))
 }
 
 func generateMAC() string {
@@ -2696,7 +2708,13 @@ func generateMAC() string {
 func (a *Adapter) OpenConsole(ctx context.Context, id string) (*domain.ConsoleSession, error) {
 	vm, err := a.GetVM(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, id)
+		a.mu.RLock()
+		cached, ok := a.vms[id]
+		a.mu.RUnlock()
+		if !ok {
+			return nil, fmt.Errorf("%w: virtual machine %q", domain.ErrNotFound, id)
+		}
+		vm = &cached
 	}
 	if vm.State != "RUNNING" {
 		return nil, fmt.Errorf("%w: virtual machine %q must be RUNNING to open noVNC console", domain.ErrFailedPrecondition, id)
@@ -2705,9 +2723,15 @@ func (a *Adapter) OpenConsole(ctx context.Context, id string) (*domain.ConsoleSe
 	tokenBytes := make([]byte, 16)
 	_, _ = rand.Read(tokenBytes)
 	token := hex.EncodeToString(tokenBytes)
-	exp := time.Now().UTC().Add(30 * time.Minute)
+	now := time.Now().UTC()
+	exp := now.Add(5 * time.Minute)
 
 	a.mu.Lock()
+	for k, t := range a.tickets {
+		if !now.Before(t.ExpiresAt) {
+			delete(a.tickets, k)
+		}
+	}
 	a.tickets[token] = consoleTicket{
 		VMID:      id,
 		Token:     token,
@@ -2716,9 +2740,9 @@ func (a *Adapter) OpenConsole(ctx context.Context, id string) (*domain.ConsoleSe
 	a.mu.Unlock()
 
 	return &domain.ConsoleSession{
-		VMName:       vm.VMName,
+		VMName:       id,
 		Token:        token,
-		WebsocketURL: fmt.Sprintf("/ws/novnc/%s?token=%s", vm.VMName, token),
+		WebsocketURL: fmt.Sprintf("/ws/novnc/%s?token=%s", id, token),
 		VNCPort:      vm.VNCPort,
 		Resolution:   "800x480",
 		ExpiresAt:    exp.Format(time.RFC3339),

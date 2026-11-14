@@ -42,11 +42,40 @@ type Adapter struct {
 	started     bool
 }
 
-func NewAdapter(stateDir string) *Adapter {
-	if stateDir == "" {
-		stateDir = "/tmp/nas-cron"
+func resolveCronStateDir(preferred string) string {
+	tryDir := func(dir string) bool {
+		if dir == "" {
+			return false
+		}
+		if fi, err := os.Lstat(dir); err == nil {
+			if fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+				return false
+			}
+			return true
+		}
+		return os.MkdirAll(dir, 0o700) == nil
 	}
-	_ = os.MkdirAll(stateDir, 0755)
+
+	if tryDir(preferred) {
+		return preferred
+	}
+	if os.Geteuid() == 0 && tryDir("/var/lib/nas/cron") {
+		return "/var/lib/nas/cron"
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		userDir := filepath.Join(home, ".local", "share", "nas", "cron")
+		if tryDir(userDir) {
+			return userDir
+		}
+	}
+	if tmpDir, err := os.MkdirTemp("", "nas-cron-*"); err == nil {
+		return tmpDir
+	}
+	return preferred
+}
+
+func NewAdapter(stateDir string) *Adapter {
+	stateDir = resolveCronStateDir(stateDir)
 
 	a := &Adapter{
 		stateDir:    stateDir,

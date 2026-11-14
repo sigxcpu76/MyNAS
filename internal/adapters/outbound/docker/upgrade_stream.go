@@ -2,6 +2,7 @@ package docker
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -32,11 +34,13 @@ type dockerPullProgressEvent struct {
 }
 
 // UpgradeAppStream performs a synchronous upgrade of the Docker Compose stack while
-// streaming incremental progress updates (snapshot, image layer download bytes, container recreation).
+// streaming incremental progress updates (image layer download bytes with registry credentials,
+// compose mutation, snapshot, container recreation).
 func (a *Adapter) UpgradeAppStream(
 	ctx context.Context,
 	id string,
 	takeSnapshot bool,
+	transform domain.DockerAppComposeTransform,
 	onProgress domain.DockerAppUpgradeProgressCallback,
 ) (*domain.DockerApp, error) {
 	emit := func(p domain.DockerAppUpgradeProgress) {
@@ -72,16 +76,6 @@ func (a *Adapter) UpgradeAppStream(
 		return nil, fmt.Errorf("failed to read compose.yaml: %w", err)
 	}
 
-	// Normalize compose volumes & environment to ensure health before upgrade.
-	normalized := a.NormalizeComposeVolumes(id, string(content))
-	normalized = NormalizeComposeEnvironment(normalized)
-	if normalized != string(content) {
-		_ = os.WriteFile(composePath, []byte(normalized), 0644)
-		content = []byte(normalized)
-	}
-
-	_, _, vols, _, _, _, _, _, _, _, _ := parseComposeYAML(string(content))
-
 	if a.deployCancel == nil {
 		a.deployCancel = make(map[string]context.CancelFunc)
 	}
@@ -102,105 +96,54 @@ func (a *Adapter) UpgradeAppStream(
 		Percent: 2,
 	})
 
+	// Compute the target compose.yaml in memory first; do not mutate compose.yaml
+	// on disk until all target images have been pulled successfully.
+	origYAML := string(content)
+	targetYAML := origYAML
+	if transform != nil {
+		if updated := transform(targetYAML); updated != "" {
+			targetYAML = updated
+		}
+	}
+	targetYAML = a.NormalizeComposeVolumes(id, targetYAML)
+	targetYAML = NormalizeComposeEnvironment(targetYAML)
+	composeChanged := targetYAML != origYAML
+
+	// Step 1: Pull images first (using registry credentials) before mutating compose.yaml.
+	totalImages, pullErr := a.pullStackImagesWithProgress(bgCtx, appDir, id, targetYAML, composeChanged, emit)
+	if pullErr != nil {
+		a.failUpgrade(id, pullErr, fmt.Sprintf("Image pull failed: %v", pullErr), 0, emit)
+		return nil, pullErr
+	}
+
+	// Step 2: Now that images are pulled, persist compose.yaml mutations if any.
+	if composeChanged {
+		if writeErr := os.WriteFile(composePath, []byte(targetYAML), 0644); writeErr != nil {
+			a.failUpgrade(id, writeErr, fmt.Sprintf("Failed to update compose.yaml: %v", writeErr), 80, emit)
+			return nil, writeErr
+		}
+	}
+
+	_, _, vols, _, _, _, _, _, _, _, _ := parseComposeYAML(targetYAML)
 	if takeSnapshot {
 		emit(domain.DockerAppUpgradeProgress{
-			Stage:   "snapshot",
-			Message: "Creating pre-upgrade ZFS snapshot...",
-			Percent: 5,
+			Stage:           "snapshot",
+			Message:         "Creating pre-upgrade ZFS snapshot...",
+			Percent:         82,
+			CompletedImages: totalImages,
+			TotalImages:     totalImages,
 		})
 		a.snapshotAppVolumes(bgCtx, id, vols)
 		emit(domain.DockerAppUpgradeProgress{
-			Stage:   "snapshot",
-			Message: "Pre-upgrade ZFS snapshot complete",
-			Percent: 10,
+			Stage:           "snapshot",
+			Message:         "Pre-upgrade ZFS snapshot complete",
+			Percent:         84,
+			CompletedImages: totalImages,
+			TotalImages:     totalImages,
 		})
 	}
 
-	// Step 1: Pull images with byte-level progress via Docker Engine API, falling back to `docker compose pull` if needed.
-	images := a.extractStackImages(bgCtx, appDir, id, string(content))
-	totalImages := len(images)
-	if totalImages > 0 {
-		pullFallbackNeeded := false
-		for idx, img := range images {
-			basePct := 10 + (idx*75)/totalImages
-			emit(domain.DockerAppUpgradeProgress{
-				Stage:           "pulling",
-				Message:         fmt.Sprintf("Pulling %s (%d/%d)...", img, idx+1, totalImages),
-				Percent:         basePct,
-				CurrentImage:    img,
-				CompletedImages: idx,
-				TotalImages:     totalImages,
-			})
-
-			pullErr := a.pullImageWithProgress(bgCtx, img, func(curBytes, totBytes int64) {
-				imgFrac := 0.0
-				if totBytes > 0 {
-					imgFrac = float64(curBytes) / float64(totBytes)
-					if imgFrac > 1.0 {
-						imgFrac = 1.0
-					}
-				}
-				pct := 10 + int(((float64(idx)+imgFrac)/float64(totalImages))*75.0)
-				if pct > 84 {
-					pct = 84
-				}
-				emit(domain.DockerAppUpgradeProgress{
-					Stage:           "pulling",
-					Message:         fmt.Sprintf("Pulling %s (%d/%d)...", img, idx+1, totalImages),
-					Percent:         pct,
-					CurrentBytes:    curBytes,
-					TotalBytes:      totBytes,
-					CurrentImage:    img,
-					CompletedImages: idx,
-					TotalImages:     totalImages,
-				})
-			})
-			if pullErr != nil {
-				slog.Warn("[docker] direct image pull failed, falling back to docker compose pull", "app", id, "image", img, "error", pullErr)
-				pullFallbackNeeded = true
-				break
-			}
-		}
-
-		if pullFallbackNeeded {
-			emit(domain.DockerAppUpgradeProgress{
-				Stage:       "pulling",
-				Message:     "Pulling images via Docker Compose...",
-				Percent:     40,
-				TotalImages: totalImages,
-			})
-			if pullErr := a.runCompose(bgCtx, appDir, id, "pull"); pullErr != nil {
-				a.finishUpgradeState(id, pullErr)
-				emit(domain.DockerAppUpgradeProgress{
-					Stage:   "error",
-					Message: fmt.Sprintf("Image pull failed: %v", pullErr),
-					Percent: 0,
-					Done:    true,
-					Error:   pullErr.Error(),
-				})
-				return nil, pullErr
-			}
-		}
-	} else {
-		emit(domain.DockerAppUpgradeProgress{
-			Stage:   "pulling",
-			Message: "Pulling latest images...",
-			Percent: 25,
-		})
-		if pullErr := a.runCompose(bgCtx, appDir, id, "pull"); pullErr != nil {
-			a.finishUpgradeState(id, pullErr)
-			emit(domain.DockerAppUpgradeProgress{
-				Stage:   "error",
-				Message: fmt.Sprintf("Image pull failed: %v", pullErr),
-				Percent: 0,
-				Done:    true,
-				Error:   pullErr.Error(),
-			})
-			return nil, pullErr
-		}
-	}
-
-	// Step 2: Recreate containers with zero orphaned containers.
+	// Step 3: Recreate containers with zero orphaned containers.
 	emit(domain.DockerAppUpgradeProgress{
 		Stage:           "recreating",
 		Message:         "Recreating containers with zero orphaned containers...",
@@ -246,6 +189,104 @@ func (a *Adapter) UpgradeAppStream(
 	return built, buildErr
 }
 
+func (a *Adapter) pullStackImagesWithProgress(
+	ctx context.Context,
+	appDir, id, targetYAML string,
+	composeChanged bool,
+	emit func(domain.DockerAppUpgradeProgress),
+) (int, error) {
+	var images []string
+	if composeChanged {
+		images = a.extractStackImagesFromYAML(ctx, appDir, id, targetYAML)
+	} else {
+		images = a.extractStackImages(ctx, appDir, id, targetYAML)
+	}
+
+	totalImages := len(images)
+	if totalImages > 0 {
+		pullFallbackNeeded := false
+		for idx, img := range images {
+			basePct := 5 + (idx*75)/totalImages
+			emit(domain.DockerAppUpgradeProgress{
+				Stage:           "pulling",
+				Message:         fmt.Sprintf("Pulling %s (%d/%d)...", img, idx+1, totalImages),
+				Percent:         basePct,
+				CurrentImage:    img,
+				CompletedImages: idx,
+				TotalImages:     totalImages,
+			})
+
+			pullErr := a.pullImageWithProgress(ctx, img, func(curBytes, totBytes int64) {
+				imgFrac := 0.0
+				if totBytes > 0 {
+					imgFrac = float64(curBytes) / float64(totBytes)
+					if imgFrac > 1.0 {
+						imgFrac = 1.0
+					}
+				}
+				pct := 5 + int(((float64(idx)+imgFrac)/float64(totalImages))*75.0)
+				if pct > 80 {
+					pct = 80
+				}
+				emit(domain.DockerAppUpgradeProgress{
+					Stage:           "pulling",
+					Message:         fmt.Sprintf("Pulling %s (%d/%d)...", img, idx+1, totalImages),
+					Percent:         pct,
+					CurrentBytes:    curBytes,
+					TotalBytes:      totBytes,
+					CurrentImage:    img,
+					CompletedImages: idx,
+					TotalImages:     totalImages,
+				})
+			})
+			if pullErr != nil {
+				slog.Warn("[docker] direct image pull failed, falling back to docker compose pull", "app", id, "image", img, "error", pullErr)
+				pullFallbackNeeded = true
+				break
+			}
+		}
+
+		if pullFallbackNeeded {
+			emit(domain.DockerAppUpgradeProgress{
+				Stage:       "pulling",
+				Message:     "Pulling images via Docker Compose...",
+				Percent:     40,
+				TotalImages: totalImages,
+			})
+			if composeChanged {
+				if err := a.runComposeWithYAML(ctx, appDir, id, targetYAML, "pull"); err != nil {
+					return totalImages, err
+				}
+			} else if err := a.runCompose(ctx, appDir, id, "pull"); err != nil {
+				return totalImages, err
+			}
+		}
+		return totalImages, nil
+	}
+
+	emit(domain.DockerAppUpgradeProgress{
+		Stage:   "pulling",
+		Message: "Pulling latest images...",
+		Percent: 25,
+	})
+	if composeChanged {
+		return 0, a.runComposeWithYAML(ctx, appDir, id, targetYAML, "pull")
+	}
+	return 0, a.runCompose(ctx, appDir, id, "pull")
+}
+
+func (a *Adapter) failUpgrade(id string, err error, message string, percent int, emit func(domain.DockerAppUpgradeProgress)) {
+	a.finishUpgradeState(id, err)
+	emit(domain.DockerAppUpgradeProgress{
+		Stage:   "error",
+		Message: message,
+		Percent: percent,
+		Done:    true,
+		Error:   err.Error(),
+	})
+	a.emitEvent(domain.NewEvent("docker", "MODIFIED", "dockerApps/"+id, "Upgrade failed"))
+}
+
 func (a *Adapter) finishUpgradeState(id string, runErr error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -273,6 +314,55 @@ func (a *Adapter) extractStackImages(ctx context.Context, unitDir, projectName, 
 		}
 	}
 	return extractComposeImagesFromYAML(composeContent)
+}
+
+func (a *Adapter) extractStackImagesFromYAML(ctx context.Context, unitDir, projectName, composeContent string) []string {
+	if a.hasCompose && len(a.composeCmd) > 0 {
+		if out, err := a.runComposeOutputWithYAML(ctx, unitDir, projectName, composeContent, "config", "--images"); err == nil {
+			seen := make(map[string]bool)
+			var images []string
+			for _, line := range strings.Split(out, "\n") {
+				img := strings.TrimSpace(line)
+				if img != "" && !seen[img] {
+					seen[img] = true
+					images = append(images, img)
+				}
+			}
+			if len(images) > 0 {
+				return images
+			}
+		}
+	}
+	return extractComposeImagesFromYAML(composeContent)
+}
+
+func (a *Adapter) runComposeOutputWithYAML(ctx context.Context, unitDir, projectName, composeContent string, args ...string) (string, error) {
+	if !a.hasCompose || len(a.composeCmd) == 0 {
+		return "", fmt.Errorf("docker compose CLI is not available on host")
+	}
+	var cmdArgs []string
+	if len(a.composeCmd) > 1 {
+		cmdArgs = append([]string{a.composeCmd[1], "--project-directory", unitDir, "-f", "-", "-p", projectName}, args...)
+	} else {
+		cmdArgs = append([]string{"--project-directory", unitDir, "-f", "-", "-p", projectName}, args...)
+	}
+
+	cmd := exec.CommandContext(ctx, a.composeCmd[0], cmdArgs...)
+	cmd.Dir = unitDir
+	cmd.Env = a.dockerCLIEnv()
+	cmd.Stdin = strings.NewReader(composeContent)
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+	if err := cmd.Run(); err != nil {
+		return outBuf.String(), fmt.Errorf("docker compose %s failed: %w (details: %s)", strings.Join(args, " "), err, filterComposeOutput(errBuf.String()))
+	}
+	return outBuf.String(), nil
+}
+
+func (a *Adapter) runComposeWithYAML(ctx context.Context, unitDir, projectName, composeContent string, args ...string) error {
+	_, err := a.runComposeOutputWithYAML(ctx, unitDir, projectName, composeContent, args...)
+	return err
 }
 
 func extractComposeImagesFromYAML(composeContent string) []string {
@@ -326,6 +416,9 @@ func (a *Adapter) pullImageWithProgress(
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://unix/images/create?"+q.Encode(), nil)
 	if err != nil {
 		return err
+	}
+	if auth := a.registryAuthHeader(image); auth != "" {
+		req.Header.Set("X-Registry-Auth", auth)
 	}
 
 	resp, err := a.client.Do(req)

@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,8 +25,9 @@ import (
 )
 
 const (
-	DefaultGitHubRepo = "sigxcpu76/MyNAS"
-	DefaultCacheTTL   = 10 * time.Minute
+	DefaultGitHubRepo    = "sigxcpu76/MyNAS"
+	DefaultCacheTTL      = 10 * time.Minute
+	maxUpdateBinaryBytes = 512 << 20 // 512 MiB upper bound on release archive & extracted binary
 )
 
 // GitHubAsset represents a downloadable release file from GitHub Releases API.
@@ -192,6 +194,10 @@ func (u *Updater) Apply(ctx context.Context, targetVersion string, restartServic
 		return nil, fmt.Errorf("no compatible release asset found for %s/%s in release %s",
 			runtime.GOOS, runtime.GOARCH, checkRes.LatestVersion)
 	}
+	expected := strings.ToLower(strings.TrimSpace(checkRes.ExpectedSHA256))
+	if expected == "" {
+		return nil, fmt.Errorf("refusing to apply update %s: release is missing a valid SHA-256 checksum", checkRes.LatestVersion)
+	}
 
 	execPath, err := os.Executable()
 	if err != nil {
@@ -210,22 +216,18 @@ func (u *Updater) Apply(ctx context.Context, targetVersion string, restartServic
 		"url", checkRes.DownloadURL,
 		"target_path", tempPath)
 
-	// Download to temp file and compute checksum
+	// Download to non-executable temp file and compute checksum before chmod/execution
 	computedSHA, err := u.downloadAndExtract(ctx, checkRes.DownloadURL, tempPath)
 	if err != nil {
 		_ = os.Remove(tempPath)
 		return nil, fmt.Errorf("download/extraction failed: %w", err)
 	}
 
-	// Verify SHA256 checksum if one was provided in the release
-	if checkRes.ExpectedSHA256 != "" {
-		expected := strings.ToLower(strings.TrimSpace(checkRes.ExpectedSHA256))
-		if computedSHA != expected {
-			_ = os.Remove(tempPath)
-			return nil, fmt.Errorf("checksum mismatch: expected %s, got %s", expected, computedSHA)
-		}
-		slog.Info("[updater] binary checksum verified successfully", "sha256", computedSHA)
+	if computedSHA != expected {
+		_ = os.Remove(tempPath)
+		return nil, fmt.Errorf("checksum mismatch: expected %s, got %s", expected, computedSHA)
 	}
+	slog.Info("[updater] binary checksum verified successfully", "sha256", computedSHA)
 
 	// Set executable bit
 	if err := os.Chmod(tempPath, 0755); err != nil {
@@ -311,11 +313,12 @@ func (u *Updater) downloadAndExtract(ctx context.Context, downloadURL, destPath 
 	}
 
 	hasher := sha256.New()
-	tee := io.TeeReader(resp.Body, hasher)
+	limitedBody := io.LimitReader(resp.Body, maxUpdateBinaryBytes+1)
+	tee := io.TeeReader(limitedBody, hasher)
 
 	isTarGz := strings.HasSuffix(downloadURL, ".tar.gz") || strings.HasSuffix(downloadURL, ".tgz")
 
-	out, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+	out, err := os.OpenFile(destPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", err
 	}
@@ -338,9 +341,14 @@ func (u *Updater) downloadAndExtract(ctx context.Context, downloadURL, destPath 
 			if err != nil {
 				return "", fmt.Errorf("tar reading error: %w", err)
 			}
-			if hdr.Typeflag == tar.TypeReg && (strings.Contains(hdr.Name, "nasctl") || strings.HasSuffix(hdr.Name, "nasctl")) {
-				if _, err := io.Copy(out, tr); err != nil {
+			base := filepath.Base(filepath.Clean(hdr.Name))
+			if hdr.Typeflag == tar.TypeReg && (base == "nasctl" || base == "nasctl.exe") {
+				n, err := io.Copy(out, io.LimitReader(tr, maxUpdateBinaryBytes+1))
+				if err != nil {
 					return "", fmt.Errorf("failed to extract binary from tar: %w", err)
+				}
+				if n > maxUpdateBinaryBytes {
+					return "", fmt.Errorf("extracted binary exceeds maximum size (%d bytes)", maxUpdateBinaryBytes)
 				}
 				found = true
 				break
@@ -351,11 +359,18 @@ func (u *Updater) downloadAndExtract(ctx context.Context, downloadURL, destPath 
 		}
 
 		// Drain remaining gzip stream to finish checksum computation
-		_, _ = io.Copy(io.Discard, gzr)
-		_, _ = io.Copy(io.Discard, tee)
+		_, _ = io.Copy(io.Discard, io.LimitReader(gzr, maxUpdateBinaryBytes))
+		nDrain, _ := io.Copy(io.Discard, tee)
+		if nDrain > maxUpdateBinaryBytes {
+			return "", fmt.Errorf("release archive exceeds maximum size (%d bytes)", maxUpdateBinaryBytes)
+		}
 	} else {
-		if _, err := io.Copy(out, tee); err != nil {
+		n, err := io.Copy(out, tee)
+		if err != nil {
 			return "", fmt.Errorf("failed to save binary: %w", err)
+		}
+		if n > maxUpdateBinaryBytes {
+			return "", fmt.Errorf("downloaded binary exceeds maximum size (%d bytes)", maxUpdateBinaryBytes)
 		}
 	}
 
@@ -369,11 +384,14 @@ func (u *Updater) fetchLatestRelease(ctx context.Context) (*GitHubRelease, error
 
 func (u *Updater) fetchReleaseByTag(ctx context.Context, tag string) (*GitHubRelease, error) {
 	clean := strings.TrimSpace(tag)
+	if clean == "" || strings.Contains(clean, "/") || strings.Contains(clean, `\`) || strings.Contains(clean, "..") {
+		return nil, fmt.Errorf("invalid release tag %q", tag)
+	}
 	if !strings.HasPrefix(clean, "v") && !strings.HasPrefix(clean, "V") {
 		clean = "v" + clean
 	}
-	url := fmt.Sprintf("%s/repos/%s/releases/tags/%s", u.apiBaseURL, u.repo, clean)
-	return u.doReleaseRequest(ctx, url)
+	reqURL := fmt.Sprintf("%s/repos/%s/releases/tags/%s", u.apiBaseURL, u.repo, url.PathEscape(clean))
+	return u.doReleaseRequest(ctx, reqURL)
 }
 
 func (u *Updater) doReleaseRequest(ctx context.Context, url string) (*GitHubRelease, error) {

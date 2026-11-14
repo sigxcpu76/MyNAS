@@ -456,6 +456,27 @@ func TestIdentityAndPrerequisites(t *testing.T) {
 		t.Fatalf("expected ErrFailedPrecondition when deleting root, got: %v", err)
 	}
 
+	// Locked user's existing JWT must be rejected
+	_, _ = idAdapter.CreateUser(ctx, domain.User{ID: "lockeduser", Username: "lockeduser", Password: "unit-test-password"})
+	lockedTok, _, _, err := idSvc.Login(ctx, "lockeduser", "unit-test-password")
+	if err != nil || lockedTok == "" {
+		t.Fatalf("Login lockeduser failed: %v", err)
+	}
+	_, _ = idAdapter.UpdateUser(ctx, domain.User{ID: "lockeduser", Username: "lockeduser", Locked: true}, []string{"locked"})
+	if _, err := idSvc.VerifyToken(ctx, "Bearer "+lockedTok); !errors.Is(err, domain.ErrUnauthorized) {
+		t.Fatalf("expected ErrUnauthorized for locked user token, got: %v", err)
+	}
+
+	// Login rate limiting after 5 consecutive failures
+	for i := 0; i < 5; i++ {
+		if _, _, _, err := idSvc.Login(ctx, testUser, "wrong-password"); err == nil {
+			t.Fatalf("expected failed login on attempt %d", i+1)
+		}
+	}
+	if _, _, _, err := idSvc.Login(ctx, testUser, "unit-test-password"); !errors.Is(err, domain.ErrResourceExhausted) {
+		t.Fatalf("expected ErrResourceExhausted after 5 failed logins, got: %v", err)
+	}
+
 	shareSvc := application.NewShareService(share.NewCifsAdapter(t.TempDir()), share.NewWebdavAdapter())
 	cifsShare, err := shareSvc.CreateCifsShare(ctx, domain.CifsShare{
 		ID:      "projects",

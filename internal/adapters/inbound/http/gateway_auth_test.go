@@ -4,12 +4,28 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/sigxcpu/nas"
+	httpadapter "github.com/sigxcpu/nas/internal/adapters/inbound/http"
+	grpcadapter "github.com/sigxcpu/nas/internal/adapters/inbound/grpc"
+	"github.com/sigxcpu/nas/internal/adapters/outbound/catalog"
+	"github.com/sigxcpu/nas/internal/adapters/outbound/disk"
+	"github.com/sigxcpu/nas/internal/adapters/outbound/docker"
+	"github.com/sigxcpu/nas/internal/adapters/outbound/identity"
+	"github.com/sigxcpu/nas/internal/adapters/outbound/kvm"
+	"github.com/sigxcpu/nas/internal/adapters/outbound/lxc"
+	"github.com/sigxcpu/nas/internal/adapters/outbound/prereq"
+	"github.com/sigxcpu/nas/internal/adapters/outbound/share"
+	"github.com/sigxcpu/nas/internal/adapters/outbound/system"
+	"github.com/sigxcpu/nas/internal/application"
+	"github.com/sigxcpu/nas/internal/domain"
 	"golang.org/x/net/websocket"
 )
 
@@ -170,5 +186,113 @@ func TestGatewayRejectsUnsafeIDs(t *testing.T) {
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Errorf("%s: expected 400, got %d", tc.name, resp.StatusCode)
 		}
+	}
+}
+
+func TestGatewayRejectsQueryTokenOnRESTEndpoints(t *testing.T) {
+	srv := setupTestServer(t)
+	defer srv.Close()
+	token := login(t, srv)
+
+	resp, err := srv.Client().Get(srv.URL + "/v1/storage/isos?access_token=" + token)
+	if err != nil {
+		t.Fatalf("GET isos with query token: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("GET /v1/storage/isos with access_token query param: expected 401, got %d", resp.StatusCode)
+	}
+}
+
+func TestGatewayEnforcesAdminRBAC(t *testing.T) {
+	ctx := t.Context()
+	zfsAdapter := &stubZfsPort{
+		pools:    make(map[string]domain.ZfsPool),
+		datasets: make(map[string]domain.ZfsDataset),
+	}
+	prereqChecker := prereq.NewSystemChecker()
+	prereqChecker.SetAllModulesInstalledForTest()
+	prereqChecker.SetMainPool("tank")
+	sysSvc := application.NewSystemService(system.NewAdapter(zfsAdapter, prereqChecker))
+	prereqSvc := application.NewPrerequisiteService(prereqChecker)
+	diskSvc := application.NewDiskService(disk.NewAdapter(zfsAdapter))
+	zfsSvc := application.NewZfsService(zfsAdapter)
+	kvmSvc := application.NewKvmService(kvm.NewAdapter())
+	dockerAdapter := docker.NewAdapterFull("/nonexistent/docker.sock", t.TempDir())
+	dockerSvc := application.NewDockerService(dockerAdapter)
+	dockerAppSvc := application.NewDockerAppService(dockerAdapter)
+	lxcSvc := application.NewLxcService(lxc.NewAdapter())
+	webdavAdapter := share.NewWebdavAdapter()
+	shareSvc := application.NewShareService(share.NewCifsAdapter(t.TempDir()), webdavAdapter)
+
+	identAdapter := identity.NewAdapter()
+	identAdapter.SetPasswordVerifier(func(_, password string) error {
+		if password != testPassword {
+			return fmt.Errorf("bad password")
+		}
+		return nil
+	})
+	_, _ = identAdapter.CreateUser(ctx, domain.User{ID: "alice", Username: "alice", IsAdmin: false, Password: testPassword})
+	identSvc := application.NewIdentityService(identAdapter, "rbac-test-secret")
+	catalogSvc := application.NewCatalogService(catalog.NewAdapter(t.TempDir()))
+	grpcSrv := grpcadapter.NewServer(sysSvc, prereqSvc, diskSvc, zfsSvc, kvmSvc, dockerSvc, dockerAppSvc, lxcSvc, shareSvc, identSvc, catalogSvc)
+	uiFS, err := nas.WebUIFS()
+	if err != nil {
+		t.Fatalf("WebUIFS: %v", err)
+	}
+	gw, err := httpadapter.NewGateway(ctx, grpcSrv, identSvc, kvmSvc, dockerSvc, lxcSvc, application.NewStorageRepoService(nil, t.TempDir()), webdavAdapter, uiFS, application.NewEventBus())
+	if err != nil {
+		t.Fatalf("NewGateway: %v", err)
+	}
+	srv := httptest.NewServer(gw)
+	defer srv.Close()
+
+	// Log in as non-admin alice
+	resp, err := srv.Client().Post(srv.URL+"/v1/auth:login", "application/json", strings.NewReader(fmt.Sprintf(`{"username":"alice","password":%q}`, testPassword)))
+	if err != nil {
+		t.Fatalf("login alice: %v", err)
+	}
+	var loginData struct {
+		AccessToken string `json:"accessToken"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&loginData)
+	_ = resp.Body.Close()
+	if loginData.AccessToken == "" {
+		t.Fatal("expected alice accessToken")
+	}
+
+	client := &http.Client{Transport: &bearerTransport{token: loginData.AccessToken, base: srv.Client().Transport}}
+
+	// Allowed for non-admin: /v1/auth:me and /v1/cifsShares
+	for _, path := range []string{"/v1/auth:me", "/v1/cifsShares"} {
+		r, err := client.Get(srv.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		_ = r.Body.Close()
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("non-admin GET %s: expected 200, got %d", path, r.StatusCode)
+		}
+	}
+
+	// Forbidden for non-admin: admin-only gRPC and HTTP endpoints
+	for _, path := range []string{"/v1/zfsPools", "/v1/dockerApps", "/v1/storage/isos", "/v1/events", "/events"} {
+		r, err := client.Get(srv.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		_ = r.Body.Close()
+		if r.StatusCode != http.StatusForbidden {
+			t.Errorf("non-admin GET %s: expected 403, got %d", path, r.StatusCode)
+		}
+	}
+
+	postResp, err := client.Post(srv.URL+"/v1/users", "application/json", strings.NewReader(`{"userId":"evil","user":{"isAdmin":true}}`))
+	if err != nil {
+		t.Fatalf("POST /v1/users: %v", err)
+	}
+	_ = postResp.Body.Close()
+	if postResp.StatusCode != http.StatusForbidden {
+		t.Errorf("non-admin POST /v1/users: expected 403, got %d", postResp.StatusCode)
 	}
 }

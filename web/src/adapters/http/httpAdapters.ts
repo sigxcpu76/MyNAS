@@ -1677,6 +1677,7 @@ export class HttpDockerAppAdapter implements DockerAppPort {
   ): Promise<DockerApp> {
     let finalApp: DockerApp | null = null;
     let streamError: string | null = null;
+    let sawDone = false;
 
     await this.client.streamCustomMethod<any>(
       name,
@@ -1691,6 +1692,10 @@ export class HttpDockerAppAdapter implements DockerAppPort {
         if (errText) {
           streamError = errText;
         }
+        const done = Boolean(raw.done);
+        if (done) {
+          sawDone = true;
+        }
         const progress: DockerAppUpgradeProgress = {
           stage: String(raw.stage ?? ''),
           message: String(raw.message ?? ''),
@@ -1700,7 +1705,7 @@ export class HttpDockerAppAdapter implements DockerAppPort {
           currentImage: String(raw.currentImage ?? raw.current_image ?? ''),
           completedImages: Number(raw.completedImages ?? raw.completed_images ?? 0),
           totalImages: Number(raw.totalImages ?? raw.total_images ?? 0),
-          done: Boolean(raw.done),
+          done,
           error: errText,
           app: mappedApp,
         };
@@ -1710,6 +1715,9 @@ export class HttpDockerAppAdapter implements DockerAppPort {
 
     if (streamError) {
       throw new Error(streamError);
+    }
+    if (!sawDone) {
+      throw new Error('Upgrade stream ended unexpectedly before completion');
     }
     if (finalApp) {
       return finalApp;

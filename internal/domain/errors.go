@@ -14,6 +14,7 @@ var (
 	ErrUnauthorized       = errors.New("unauthorized")
 	ErrPermissionDenied   = errors.New("permission denied")
 	ErrFailedPrecondition = errors.New("failed precondition")
+	ErrResourceExhausted  = errors.New("resource exhausted")
 )
 
 var resourceIDRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
