@@ -209,7 +209,7 @@ func TestUpdaterSecurityHardening(t *testing.T) {
 		}
 	}
 	writeEntry("README-nasctl.md", "documentation, not a binary")
-	writeEntry("bin/nasctl", "#!/bin/sh\necho real-binary\n")
+	writeEntry("nasctl-v1.6.42-linux-amd64", "#!/bin/sh\necho real-binary\n")
 	_ = tw.Close()
 	_ = gw.Close()
 

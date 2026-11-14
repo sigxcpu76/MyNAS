@@ -342,7 +342,7 @@ func (u *Updater) downloadAndExtract(ctx context.Context, downloadURL, destPath 
 				return "", fmt.Errorf("tar reading error: %w", err)
 			}
 			base := filepath.Base(filepath.Clean(hdr.Name))
-			if hdr.Typeflag == tar.TypeReg && (base == "nasctl" || base == "nasctl.exe") {
+			if hdr.Typeflag == tar.TypeReg && isReleaseBinaryEntry(base) {
 				n, err := io.Copy(out, io.LimitReader(tr, maxUpdateBinaryBytes+1))
 				if err != nil {
 					return "", fmt.Errorf("failed to extract binary from tar: %w", err)
@@ -375,6 +375,22 @@ func (u *Updater) downloadAndExtract(ctx context.Context, downloadURL, destPath 
 	}
 
 	return hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+func isReleaseBinaryEntry(base string) bool {
+	if base == "nasctl" || base == "nasctl.exe" {
+		return true
+	}
+	if !strings.HasPrefix(base, "nasctl-") {
+		return false
+	}
+	lower := strings.ToLower(base)
+	for _, ext := range []string{".md", ".txt", ".sha256", ".sig", ".asc", ".deb", ".rpm", ".tar", ".gz", ".zip", ".yaml", ".yml", ".json"} {
+		if strings.HasSuffix(lower, ext) {
+			return false
+		}
+	}
+	return true
 }
 
 func (u *Updater) fetchLatestRelease(ctx context.Context) (*GitHubRelease, error) {
