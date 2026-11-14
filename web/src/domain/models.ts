@@ -378,6 +378,22 @@ export interface UploadProgress {
 
 export type UploadProgressCallback = (progress: UploadProgress) => void;
 
+export interface DockerAppUpgradeProgress {
+  stage: string;
+  message: string;
+  percent: number;
+  currentBytes: number;
+  totalBytes: number;
+  currentImage: string;
+  completedImages: number;
+  totalImages: number;
+  done: boolean;
+  error?: string;
+  app?: DockerApp;
+}
+
+export type DockerAppUpgradeProgressCallback = (progress: DockerAppUpgradeProgress) => void;
+
 // ---------------------------------------------------------------------------
 // KVM Virtual Machines (`virtualMachines/{virtual_machine}`)
 // ---------------------------------------------------------------------------

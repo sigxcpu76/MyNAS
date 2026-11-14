@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   mdiAspectRatio,
   mdiChevronDown,
@@ -255,6 +255,19 @@ onMounted(() => {
   initAdapter(props.token, props.websocketUrl);
   fetchVmState();
 });
+
+watch(
+  [() => props.vmName, () => props.token, () => props.websocketUrl],
+  ([newVm, newToken, newWsUrl], [oldVm, oldToken, oldWsUrl]) => {
+    if (newVm === oldVm && newToken === oldToken && newWsUrl === oldWsUrl) return;
+    adapter?.disconnect();
+    adapter = null;
+    statusText.value = 'CONNECTING';
+    statusDetail.value = 'Connecting to live QEMU VNC server...';
+    initAdapter(newToken, newWsUrl);
+    fetchVmState();
+  }
+);
 
 onBeforeUnmount(() => {
   document.removeEventListener('fullscreenchange', handleFullscreenChange);

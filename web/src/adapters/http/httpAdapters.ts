@@ -22,6 +22,8 @@ import type {
   DiscoveredPool,
   DockerApp,
   DockerAppContainer,
+  DockerAppUpgradeProgress,
+  DockerAppUpgradeProgressCallback,
   DockerConfig,
   DockerContainer,
   DockerNetworkInfo,
@@ -1668,11 +1670,51 @@ export class HttpDockerAppAdapter implements DockerAppPort {
     return mapDockerApp(raw);
   }
 
-  async upgradeApp(name: string, takeSnapshot = true): Promise<DockerApp> {
-    const raw = await this.client.customMethod<any>(name, 'upgrade', {
-      take_snapshot: takeSnapshot,
-    });
-    return mapDockerApp(raw);
+  async upgradeApp(
+    name: string,
+    takeSnapshot = true,
+    onProgress?: DockerAppUpgradeProgressCallback
+  ): Promise<DockerApp> {
+    let finalApp: DockerApp | null = null;
+    let streamError: string | null = null;
+
+    await this.client.streamCustomMethod<any>(
+      name,
+      'upgradeStream',
+      { take_snapshot: takeSnapshot },
+      (raw) => {
+        const mappedApp = raw.app ? mapDockerApp(raw.app) : undefined;
+        if (mappedApp) {
+          finalApp = mappedApp;
+        }
+        const errText = raw.error ? String(raw.error) : undefined;
+        if (errText) {
+          streamError = errText;
+        }
+        const progress: DockerAppUpgradeProgress = {
+          stage: String(raw.stage ?? ''),
+          message: String(raw.message ?? ''),
+          percent: Number(raw.percent ?? 0),
+          currentBytes: normalizeInt64(raw.currentBytes ?? raw.current_bytes),
+          totalBytes: normalizeInt64(raw.totalBytes ?? raw.total_bytes),
+          currentImage: String(raw.currentImage ?? raw.current_image ?? ''),
+          completedImages: Number(raw.completedImages ?? raw.completed_images ?? 0),
+          totalImages: Number(raw.totalImages ?? raw.total_images ?? 0),
+          done: Boolean(raw.done),
+          error: errText,
+          app: mappedApp,
+        };
+        onProgress?.(progress);
+      }
+    );
+
+    if (streamError) {
+      throw new Error(streamError);
+    }
+    if (finalApp) {
+      return finalApp;
+    }
+    return this.getApp(name);
   }
 
   async getAppLogs(name: string, tail = 100, serviceName?: string): Promise<{ logs: string; lineCount: number }> {

@@ -352,6 +352,70 @@ export class AipClient {
       throw new AipHttpError(response.status, `Failed to connect to watch stream: ${response.statusText}`);
     }
 
+    await this.readNdjsonStream<T>(response, onMessage, signal);
+  }
+
+  /**
+   * Invokes a POST custom method that returns a gRPC-Gateway server-side NDJSON stream
+   * (e.g. `dockerApps/{id}:upgradeStream`) with no short request timeout.
+   */
+  async streamCustomMethod<T = any>(
+    resourcePath: string,
+    customVerb: string,
+    body: unknown = {},
+    onMessage: (msg: T) => void,
+    signal?: AbortSignal
+  ): Promise<void> {
+    const cleanPath = resourcePath.replace(/^\/+/, '');
+    const url = `${this.baseUrl}/${cleanPath}:${customVerb}`;
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache',
+      Pragma: 'no-cache',
+    };
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    const response = await this.fetchImpl(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal,
+    });
+
+    if (response.status === 401 && this.token) {
+      this.onUnauthorized?.();
+    }
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      let parsed: any = {};
+      if (text) {
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          parsed = { message: text };
+        }
+      }
+      const payload = parsed as AipErrorPayload;
+      const errMsg =
+        payload?.error?.message ||
+        payload?.message ||
+        `HTTP ${response.status} (${response.statusText})`;
+      const errStatus = payload?.error?.status || payload?.status;
+      throw new AipHttpError(response.status, errMsg, errStatus);
+    }
+
+    await this.readNdjsonStream<T>(response, onMessage, signal);
+  }
+
+  private async readNdjsonStream<T>(
+    response: Response,
+    onMessage: (msg: T) => void,
+    signal?: AbortSignal
+  ): Promise<void> {
     if (!response.body) {
       return;
     }
@@ -374,11 +438,37 @@ export class AipClient {
           if (!trimmed) continue;
           try {
             const parsed = JSON.parse(trimmed);
+            if (parsed?.error) {
+              throw new AipHttpError(
+                parsed.error.httpCode || 500,
+                parsed.error.message || 'Streaming request failed',
+                parsed.error.status
+              );
+            }
             const data = parsed.result !== undefined ? parsed.result : parsed;
             onMessage(data as T);
-          } catch {
+          } catch (err) {
+            if (err instanceof AipHttpError) throw err;
             // ignore non-json chunk/heartbeat
           }
+        }
+      }
+
+      const trailing = buffer.trim();
+      if (trailing) {
+        try {
+          const parsed = JSON.parse(trailing);
+          if (parsed?.error) {
+            throw new AipHttpError(
+              parsed.error.httpCode || 500,
+              parsed.error.message || 'Streaming request failed',
+              parsed.error.status
+            );
+          }
+          const data = parsed.result !== undefined ? parsed.result : parsed;
+          onMessage(data as T);
+        } catch (err) {
+          if (err instanceof AipHttpError) throw err;
         }
       }
     } finally {

@@ -624,6 +624,13 @@ service NasService {
     };
   }
 
+  rpc StreamUpgradeDockerApp(UpgradeDockerAppRequest) returns (stream UpgradeDockerAppProgress) {
+    option (google.api.http) = {
+      post: "/v1/{name=dockerApps/*}:upgradeStream"
+      body: "*"
+    };
+  }
+
   rpc GetDockerAppLogs(GetDockerAppLogsRequest) returns (GetDockerAppLogsResponse) {
     option (google.api.http) = {
       get: "/v1/{name=dockerApps/*}:logs"

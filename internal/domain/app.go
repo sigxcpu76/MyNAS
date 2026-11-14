@@ -98,6 +98,24 @@ func ParseDockerAppName(name string) (string, error) {
 	return parts[1], nil
 }
 
+// DockerAppUpgradeProgress represents an incremental progress update during a Docker App upgrade.
+type DockerAppUpgradeProgress struct {
+	Stage           string
+	Message         string
+	Percent         int
+	CurrentBytes    int64
+	TotalBytes      int64
+	CurrentImage    string
+	CompletedImages int
+	TotalImages     int
+	Done            bool
+	Error           string
+	App             *DockerApp
+}
+
+// DockerAppUpgradeProgressCallback receives incremental progress updates during an upgrade.
+type DockerAppUpgradeProgressCallback func(DockerAppUpgradeProgress)
+
 // DockerAppName constructs an AIP resource name "dockerApps/{app_id}".
 func DockerAppName(appID string) string {
 	return fmt.Sprintf("dockerApps/%s", appID)

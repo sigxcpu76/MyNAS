@@ -707,6 +707,7 @@ onMounted(() => {
                 class="embedded-vnc-container"
               >
                 <VncConsole
+                  :key="`${embeddedConsoleSession.vmName}-${embeddedConsoleSession.token}`"
                   :vm-name="embeddedConsoleSession.vmName"
                   :token="embeddedConsoleSession.token"
                   :vnc-port="embeddedConsoleSession.vncPort"

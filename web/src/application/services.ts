@@ -12,6 +12,7 @@ import {
   type Disk,
   type DockerApp,
   type DockerAppContainer,
+  type DockerAppUpgradeProgressCallback,
   type DockerConfig,
   type DockerContainer,
   type DockerNetworkInfo,
@@ -636,8 +637,12 @@ export class DockerAppService {
     return this.appPort.restartApp(ResourceNames.dockerApp(idOrName));
   }
 
-  async upgradeApp(idOrName: string, takeSnapshot = true): Promise<DockerApp> {
-    return this.appPort.upgradeApp(ResourceNames.dockerApp(idOrName), takeSnapshot);
+  async upgradeApp(
+    idOrName: string,
+    takeSnapshot = true,
+    onProgress?: DockerAppUpgradeProgressCallback
+  ): Promise<DockerApp> {
+    return this.appPort.upgradeApp(ResourceNames.dockerApp(idOrName), takeSnapshot, onProgress);
   }
 
   async getAppLogs(idOrName: string, tail = 100, serviceName?: string): Promise<{ logs: string; lineCount: number }> {

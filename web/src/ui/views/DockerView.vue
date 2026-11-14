@@ -39,6 +39,7 @@ import {
   type AppCatalogTemplate,
   type CatalogApp,
   type DockerApp,
+  type DockerAppUpgradeProgress,
   isDotDataset,
 } from '../../domain/models';
 import { composeYamlToForm, formToComposeYaml } from '../../domain/composeModel';
@@ -550,27 +551,47 @@ const isUpgradeModalOpen = ref(false);
 const upgradingApp = ref<DockerApp | null>(null);
 const upgradeTakeSnapshot = ref(true);
 const isUpgradingApp = ref(false);
+const upgradeProgress = ref<DockerAppUpgradeProgress | null>(null);
+const upgradeError = ref<string | null>(null);
 
 function openUpgradeModal(app: DockerApp) {
   upgradingApp.value = app;
   upgradeTakeSnapshot.value = true;
+  upgradeProgress.value = null;
+  upgradeError.value = null;
   isUpgradeModalOpen.value = true;
 }
 
 async function handleConfirmUpgrade() {
   if (!upgradingApp.value || isUpgradingApp.value) return;
   isUpgradingApp.value = true;
+  upgradeError.value = null;
+  upgradeProgress.value = {
+    stage: 'preparing',
+    message: 'Starting upgrade...',
+    percent: 0,
+    currentBytes: 0,
+    totalBytes: 0,
+    currentImage: '',
+    completedImages: 0,
+    totalImages: 0,
+    done: false,
+  };
   const app = upgradingApp.value;
   try {
-    await services.apps.upgradeApp(app.name, upgradeTakeSnapshot.value);
+    await services.apps.upgradeApp(app.name, upgradeTakeSnapshot.value, (progress) => {
+      upgradeProgress.value = progress;
+    });
     notify(
-      'info',
-      `Upgrade initiated for "${app.title || app.appId}". Pulling latest images & recreating containers...`
+      'success',
+      `Upgrade completed for "${app.title || app.appId}"`
     );
     isUpgradeModalOpen.value = false;
     await refreshApps();
   } catch (err: any) {
-    notify('error', err?.message || `Failed to upgrade ${app.title || app.appId}`);
+    const errMsg = err?.message || `Failed to upgrade ${app.title || app.appId}`;
+    upgradeError.value = errMsg;
+    notify('error', errMsg);
   } finally {
     isUpgradingApp.value = false;
   }
@@ -1442,8 +1463,8 @@ onUnmounted(() => {
         </div>
 
         <!-- Snapshot Checkbox -->
-        <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin-bottom: 20px; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--bg-surface)">
-          <input type="checkbox" v-model="upgradeTakeSnapshot" style="margin-top: 2px" />
+        <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin-bottom: 16px; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--bg-surface)">
+          <input type="checkbox" v-model="upgradeTakeSnapshot" :disabled="isUpgradingApp" style="margin-top: 2px" />
           <div style="font-size: 12.5px">
             <span style="font-weight: 600; color: var(--text-primary)">Create pre-upgrade ZFS snapshot</span>
             <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px">
@@ -1451,6 +1472,52 @@ onUnmounted(() => {
             </div>
           </div>
         </label>
+
+        <!-- Streaming Upgrade Progress -->
+        <div
+          v-if="upgradeProgress"
+          data-testid="upgrade-progress"
+          style="margin-bottom: 16px; padding: 12px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--bg-surface-elevated, var(--bg-surface))"
+        >
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin-bottom: 6px">
+            <span style="font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 82%">
+              {{ upgradeProgress.message || 'Upgrading...' }}
+            </span>
+            <span class="mono" style="font-weight: 600; color: var(--accent-primary)">
+              {{ Math.max(0, Math.min(100, upgradeProgress.percent)) }}%
+            </span>
+          </div>
+          <div style="width: 100%; height: 8px; border-radius: 999px; background: var(--bg-hover, rgba(255,255,255,0.08)); overflow: hidden">
+            <div
+              data-testid="upgrade-progress-bar"
+              :style="{
+                width: `${Math.max(0, Math.min(100, upgradeProgress.percent))}%`,
+                height: '100%',
+                borderRadius: '999px',
+                background: upgradeError ? 'var(--status-danger, #ef4444)' : 'var(--accent-primary, #3b82f6)',
+                transition: 'width 0.2s ease',
+              }"
+            />
+          </div>
+          <div
+            v-if="upgradeProgress.totalBytes > 0 || upgradeProgress.currentImage"
+            style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-muted); margin-top: 6px"
+          >
+            <span class="mono" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 65%">
+              {{ upgradeProgress.currentImage }}
+            </span>
+            <span v-if="upgradeProgress.totalBytes > 0" class="mono">
+              {{ formatBytes(upgradeProgress.currentBytes) }} / {{ formatBytes(upgradeProgress.totalBytes) }}
+            </span>
+          </div>
+        </div>
+
+        <div
+          v-if="upgradeError"
+          style="margin-bottom: 16px; padding: 10px 12px; border-radius: 6px; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); color: var(--status-danger, #fca5a5); font-size: 12px; line-height: 1.4"
+        >
+          {{ upgradeError }}
+        </div>
 
         <!-- Actions -->
         <div style="display: flex; justify-content: flex-end; gap: 8px">

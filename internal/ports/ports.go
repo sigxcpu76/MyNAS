@@ -111,6 +111,7 @@ type DockerAppPort interface {
 	StopApp(ctx context.Context, id string) (*domain.DockerApp, error)
 	RestartApp(ctx context.Context, id string) (*domain.DockerApp, error)
 	UpgradeApp(ctx context.Context, id string, takeSnapshot bool) (*domain.DockerApp, error)
+	UpgradeAppStream(ctx context.Context, id string, takeSnapshot bool, onProgress domain.DockerAppUpgradeProgressCallback) (*domain.DockerApp, error)
 	GetAppLogs(ctx context.Context, id string, tail int, serviceName string) (string, error)
 	CheckHostPort(ctx context.Context, port int, protocol string, excludeAppID string) (domain.HostPortStatus, error)
 	CheckHostPorts(ctx context.Context, ports []int, protocol string, excludeAppID string) ([]domain.HostPortStatus, error)

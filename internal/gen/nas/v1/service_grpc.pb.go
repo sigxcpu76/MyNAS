@@ -98,6 +98,7 @@ const (
 	NasService_StopDockerApp_FullMethodName                  = "/nas.v1.NasService/StopDockerApp"
 	NasService_RestartDockerApp_FullMethodName               = "/nas.v1.NasService/RestartDockerApp"
 	NasService_UpgradeDockerApp_FullMethodName               = "/nas.v1.NasService/UpgradeDockerApp"
+	NasService_StreamUpgradeDockerApp_FullMethodName         = "/nas.v1.NasService/StreamUpgradeDockerApp"
 	NasService_GetDockerAppLogs_FullMethodName               = "/nas.v1.NasService/GetDockerAppLogs"
 	NasService_WatchDockerApps_FullMethodName                = "/nas.v1.NasService/WatchDockerApps"
 	NasService_ListDockerNetworks_FullMethodName             = "/nas.v1.NasService/ListDockerNetworks"
@@ -249,6 +250,7 @@ type NasServiceClient interface {
 	StopDockerApp(ctx context.Context, in *StopDockerAppRequest, opts ...grpc.CallOption) (*DockerApp, error)
 	RestartDockerApp(ctx context.Context, in *RestartDockerAppRequest, opts ...grpc.CallOption) (*DockerApp, error)
 	UpgradeDockerApp(ctx context.Context, in *UpgradeDockerAppRequest, opts ...grpc.CallOption) (*DockerApp, error)
+	StreamUpgradeDockerApp(ctx context.Context, in *UpgradeDockerAppRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[UpgradeDockerAppProgress], error)
 	GetDockerAppLogs(ctx context.Context, in *GetDockerAppLogsRequest, opts ...grpc.CallOption) (*GetDockerAppLogsResponse, error)
 	WatchDockerApps(ctx context.Context, in *WatchDockerAppsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchDockerAppsResponse], error)
 	ListDockerNetworks(ctx context.Context, in *ListDockerNetworksRequest, opts ...grpc.CallOption) (*ListDockerNetworksResponse, error)
@@ -1134,6 +1136,25 @@ func (c *nasServiceClient) UpgradeDockerApp(ctx context.Context, in *UpgradeDock
 	return out, nil
 }
 
+func (c *nasServiceClient) StreamUpgradeDockerApp(ctx context.Context, in *UpgradeDockerAppRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[UpgradeDockerAppProgress], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &NasService_ServiceDesc.Streams[4], NasService_StreamUpgradeDockerApp_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[UpgradeDockerAppRequest, UpgradeDockerAppProgress]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type NasService_StreamUpgradeDockerAppClient = grpc.ServerStreamingClient[UpgradeDockerAppProgress]
+
 func (c *nasServiceClient) GetDockerAppLogs(ctx context.Context, in *GetDockerAppLogsRequest, opts ...grpc.CallOption) (*GetDockerAppLogsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetDockerAppLogsResponse)
@@ -1146,7 +1167,7 @@ func (c *nasServiceClient) GetDockerAppLogs(ctx context.Context, in *GetDockerAp
 
 func (c *nasServiceClient) WatchDockerApps(ctx context.Context, in *WatchDockerAppsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchDockerAppsResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &NasService_ServiceDesc.Streams[4], NasService_WatchDockerApps_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &NasService_ServiceDesc.Streams[5], NasService_WatchDockerApps_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1375,7 +1396,7 @@ func (c *nasServiceClient) GetLxcContainerLogs(ctx context.Context, in *GetLxcCo
 
 func (c *nasServiceClient) WatchLxcContainers(ctx context.Context, in *WatchLxcContainersRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchLxcContainersResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &NasService_ServiceDesc.Streams[5], NasService_WatchLxcContainers_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &NasService_ServiceDesc.Streams[6], NasService_WatchLxcContainers_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1832,6 +1853,7 @@ type NasServiceServer interface {
 	StopDockerApp(context.Context, *StopDockerAppRequest) (*DockerApp, error)
 	RestartDockerApp(context.Context, *RestartDockerAppRequest) (*DockerApp, error)
 	UpgradeDockerApp(context.Context, *UpgradeDockerAppRequest) (*DockerApp, error)
+	StreamUpgradeDockerApp(*UpgradeDockerAppRequest, grpc.ServerStreamingServer[UpgradeDockerAppProgress]) error
 	GetDockerAppLogs(context.Context, *GetDockerAppLogsRequest) (*GetDockerAppLogsResponse, error)
 	WatchDockerApps(*WatchDockerAppsRequest, grpc.ServerStreamingServer[WatchDockerAppsResponse]) error
 	ListDockerNetworks(context.Context, *ListDockerNetworksRequest) (*ListDockerNetworksResponse, error)
@@ -2134,6 +2156,9 @@ func (UnimplementedNasServiceServer) RestartDockerApp(context.Context, *RestartD
 }
 func (UnimplementedNasServiceServer) UpgradeDockerApp(context.Context, *UpgradeDockerAppRequest) (*DockerApp, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpgradeDockerApp not implemented")
+}
+func (UnimplementedNasServiceServer) StreamUpgradeDockerApp(*UpgradeDockerAppRequest, grpc.ServerStreamingServer[UpgradeDockerAppProgress]) error {
+	return status.Error(codes.Unimplemented, "method StreamUpgradeDockerApp not implemented")
 }
 func (UnimplementedNasServiceServer) GetDockerAppLogs(context.Context, *GetDockerAppLogsRequest) (*GetDockerAppLogsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetDockerAppLogs not implemented")
@@ -3708,6 +3733,17 @@ func _NasService_UpgradeDockerApp_Handler(srv interface{}, ctx context.Context, 
 	}
 	return interceptor(ctx, in, info, handler)
 }
+
+func _NasService_StreamUpgradeDockerApp_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(UpgradeDockerAppRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(NasServiceServer).StreamUpgradeDockerApp(m, &grpc.GenericServerStream[UpgradeDockerAppRequest, UpgradeDockerAppProgress]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type NasService_StreamUpgradeDockerAppServer = grpc.ServerStreamingServer[UpgradeDockerAppProgress]
 
 func _NasService_GetDockerAppLogs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetDockerAppLogsRequest)
@@ -5308,6 +5344,11 @@ var NasService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "WatchDockerContainers",
 			Handler:       _NasService_WatchDockerContainers_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "StreamUpgradeDockerApp",
+			Handler:       _NasService_StreamUpgradeDockerApp_Handler,
 			ServerStreams: true,
 		},
 		{

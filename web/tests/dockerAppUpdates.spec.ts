@@ -96,26 +96,50 @@ services:
     expect(mapped.latestImage).toBe('ghcr.io/esphome/esphome:2026.11.0');
   });
 
-  it('calls customMethod upgrade with take_snapshot flag in HttpDockerAppAdapter', async () => {
+  it('calls streamCustomMethod upgradeStream with take_snapshot flag in HttpDockerAppAdapter', async () => {
     const mockClient = {
-      customMethod: vi.fn().mockResolvedValue({
-        name: 'dockerApps/esphome',
-        app_id: 'esphome',
-        state: 'DEPLOYING',
-        status_text: 'Upgrading stack (pulling latest images & restarting)...',
+      streamCustomMethod: vi.fn().mockImplementation(async (_name, _verb, _body, onMsg) => {
+        onMsg({
+          stage: 'pulling',
+          message: 'Pulling ghcr.io/esphome/esphome:2026.11.0...',
+          percent: 50,
+          currentBytes: '5242880',
+          totalBytes: '10485760',
+          currentImage: 'ghcr.io/esphome/esphome:2026.11.0',
+          completedImages: 0,
+          totalImages: 1,
+          done: false,
+        });
+        onMsg({
+          stage: 'completed',
+          message: 'Upgrade completed successfully',
+          percent: 100,
+          done: true,
+          app: {
+            name: 'dockerApps/esphome',
+            app_id: 'esphome',
+            state: 'RUNNING',
+            status_text: 'Running',
+          },
+        });
       }),
     } as unknown as AipClient;
 
+    const events: any[] = [];
     const adapter = new HttpDockerAppAdapter(mockClient);
-    const result = await adapter.upgradeApp('dockerApps/esphome', true);
+    const result = await adapter.upgradeApp('dockerApps/esphome', true, (p) => events.push(p));
 
-    expect(mockClient.customMethod).toHaveBeenCalledWith(
+    expect(mockClient.streamCustomMethod).toHaveBeenCalledWith(
       'dockerApps/esphome',
-      'upgrade',
-      { take_snapshot: true }
+      'upgradeStream',
+      { take_snapshot: true },
+      expect.any(Function)
     );
+    expect(events).toHaveLength(2);
+    expect(events[0].currentBytes).toBe(5242880);
+    expect(events[0].totalBytes).toBe(10485760);
     expect(result.appId).toBe('esphome');
-    expect(result.state).toBe('DEPLOYING');
+    expect(result.state).toBe('RUNNING');
   });
 
   it('renders Update Available badge and opens Upgrade modal in DockerView', async () => {
@@ -151,6 +175,52 @@ services:
     await confirmBtn!.trigger('click');
     await nextTick();
 
-    expect(upgradeSpy).toHaveBeenCalledWith('dockerApps/esphome', true);
+    expect(upgradeSpy).toHaveBeenCalledWith('dockerApps/esphome', true, expect.any(Function));
+  });
+
+  it('renders streaming download progress bar during Docker app upgrade', async () => {
+    vi.spyOn(services.apps, 'listApps').mockResolvedValue([sampleAppWithUpdate]);
+    vi.spyOn(services.apps, 'getDockerConfig').mockResolvedValue(nasState.dockerConfig!);
+
+    let resolveUpgrade!: (app: DockerApp) => void;
+    vi.spyOn(services.apps, 'upgradeApp').mockImplementation(async (_name, _snap, onProgress) => {
+      onProgress?.({
+        stage: 'pulling',
+        message: 'Pulling ghcr.io/esphome/esphome:2026.11.0 (1/1)...',
+        percent: 45,
+        currentBytes: 5 * 1024 * 1024,
+        totalBytes: 10 * 1024 * 1024,
+        currentImage: 'ghcr.io/esphome/esphome:2026.11.0',
+        completedImages: 0,
+        totalImages: 1,
+        done: false,
+      });
+      return new Promise<DockerApp>((resolve) => {
+        resolveUpgrade = resolve;
+      });
+    });
+
+    const wrapper = mount(DockerView);
+    await nextTick();
+    await nextTick();
+
+    await wrapper.find('button[aria-label="Upgrade ESPHome"]').trigger('click');
+    await nextTick();
+
+    const confirmBtn = wrapper.findAll('button').find((b) => b.text().includes('Confirm Upgrade'));
+    await confirmBtn!.trigger('click');
+    await nextTick();
+
+    const progressBox = wrapper.find('[data-testid="upgrade-progress"]');
+    expect(progressBox.exists()).toBe(true);
+    expect(progressBox.text()).toContain('45%');
+    expect(progressBox.text()).toContain('Pulling ghcr.io/esphome/esphome:2026.11.0 (1/1)...');
+    expect(progressBox.text()).toContain('5.0 MB / 10.0 MB');
+    const bar = wrapper.find('[data-testid="upgrade-progress-bar"]');
+    expect(bar.attributes('style')).toContain('width: 45%');
+
+    resolveUpgrade({ ...sampleAppWithUpdate, updateAvailable: false });
+    await nextTick();
+    await nextTick();
   });
 });

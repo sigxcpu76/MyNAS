@@ -244,6 +244,20 @@ message UpgradeDockerAppRequest {
   bool take_snapshot = 2;
 }
 
+message UpgradeDockerAppProgress {
+  string stage = 1;
+  string message = 2;
+  int32 percent = 3;
+  int64 current_bytes = 4;
+  int64 total_bytes = 5;
+  string current_image = 6;
+  int32 completed_images = 7;
+  int32 total_images = 8;
+  bool done = 9;
+  string error = 10;
+  DockerApp app = 11;
+}
+
 message GetDockerAppLogsRequest {
   string name = 1 [
     (google.api.field_behavior) = REQUIRED,

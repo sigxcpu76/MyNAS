@@ -160,6 +160,15 @@ func (s *DockerAppService) UpgradeApp(ctx context.Context, name string, takeSnap
 	return s.port.UpgradeApp(ctx, appID, takeSnapshot)
 }
 
+// UpgradeAppStream performs a synchronous upgrade of the application stack while streaming progress updates.
+func (s *DockerAppService) UpgradeAppStream(ctx context.Context, name string, takeSnapshot bool, onProgress domain.DockerAppUpgradeProgressCallback) (*domain.DockerApp, error) {
+	appID := strings.TrimPrefix(name, "dockerApps/")
+	if appID == "" {
+		return nil, fmt.Errorf("invalid app name %q: empty app ID", name)
+	}
+	return s.port.UpgradeAppStream(ctx, appID, takeSnapshot, onProgress)
+}
+
 // GetAppLogs retrieves aggregated logs for a Docker Compose Application.
 func (s *DockerAppService) GetAppLogs(ctx context.Context, name string, tail int, serviceName string) (string, error) {
 	appID := strings.TrimPrefix(name, "dockerApps/")

@@ -1883,16 +1883,7 @@ func (s *Server) RestartDockerApp(ctx context.Context, req *nasv1.RestartDockerA
 	return protoApp, nil
 }
 
-func (s *Server) UpgradeDockerApp(ctx context.Context, req *nasv1.UpgradeDockerAppRequest) (*nasv1.DockerApp, error) {
-	if err := s.prereq.RequireModule("docker"); err != nil {
-		return nil, ToGRPCError(err)
-	}
-	id, err := ParseSingleResourceID(patternDockerApp, req.GetName())
-	if err != nil {
-		return nil, err
-	}
-	slog.Info("[app] upgrade requested", "app_id", id, "take_snapshot", req.GetTakeSnapshot())
-
+func (s *Server) applyCatalogUpgradeIfAvailable(ctx context.Context, id string) {
 	// If the app is backed by a catalog entry with a newer version/image tag,
 	// update pinned image references and x-nas-catalog-version in compose.yaml before pulling.
 	if currentApp, getErr := s.dockerApp.GetApp(ctx, id); getErr == nil && currentApp != nil && currentApp.ComposeFilePath != "" {
@@ -1909,6 +1900,19 @@ func (s *Server) UpgradeDockerApp(ctx context.Context, req *nasv1.UpgradeDockerA
 			}
 		}
 	}
+}
+
+func (s *Server) UpgradeDockerApp(ctx context.Context, req *nasv1.UpgradeDockerAppRequest) (*nasv1.DockerApp, error) {
+	if err := s.prereq.RequireModule("docker"); err != nil {
+		return nil, ToGRPCError(err)
+	}
+	id, err := ParseSingleResourceID(patternDockerApp, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	slog.Info("[app] upgrade requested", "app_id", id, "take_snapshot", req.GetTakeSnapshot())
+
+	s.applyCatalogUpgradeIfAvailable(ctx, id)
 
 	app, err := s.dockerApp.UpgradeApp(ctx, id, req.GetTakeSnapshot())
 	if err != nil {
@@ -1919,6 +1923,72 @@ func (s *Server) UpgradeDockerApp(ctx context.Context, req *nasv1.UpgradeDockerA
 	protoApp := dockerAppToProto(app)
 	s.enrichDockerAppsWithCatalog(ctx, []*nasv1.DockerApp{protoApp}, []domain.DockerApp{*app})
 	return protoApp, nil
+}
+
+func (s *Server) StreamUpgradeDockerApp(req *nasv1.UpgradeDockerAppRequest, stream nasv1.NasService_StreamUpgradeDockerAppServer) error {
+	if err := s.prereq.RequireModule("docker"); err != nil {
+		return ToGRPCError(err)
+	}
+	id, err := ParseSingleResourceID(patternDockerApp, req.GetName())
+	if err != nil {
+		return err
+	}
+	ctx := stream.Context()
+	slog.Info("[app] streaming upgrade requested", "app_id", id, "take_snapshot", req.GetTakeSnapshot())
+
+	// Send an immediate preparing event so the HTTP stream flushes headers right away
+	// and never stalls while catalog metadata or ZFS snapshots are being prepared.
+	_ = stream.Send(&nasv1.UpgradeDockerAppProgress{
+		Stage:   "preparing",
+		Message: "Checking catalog & preparing upgrade...",
+		Percent: 1,
+	})
+
+	s.applyCatalogUpgradeIfAvailable(ctx, id)
+
+	var sentTerminal bool
+	_, upgradeErr := s.dockerApp.UpgradeAppStream(ctx, id, req.GetTakeSnapshot(), func(p domain.DockerAppUpgradeProgress) {
+		msg := &nasv1.UpgradeDockerAppProgress{
+			Stage:           p.Stage,
+			Message:         p.Message,
+			Percent:         int32(p.Percent),
+			CurrentBytes:    p.CurrentBytes,
+			TotalBytes:      p.TotalBytes,
+			CurrentImage:    p.CurrentImage,
+			CompletedImages: int32(p.CompletedImages),
+			TotalImages:     int32(p.TotalImages),
+			Done:            p.Done,
+			Error:           p.Error,
+		}
+		if p.App != nil {
+			protoApp := dockerAppToProto(p.App)
+			s.enrichDockerAppsWithCatalog(ctx, []*nasv1.DockerApp{protoApp}, []domain.DockerApp{*p.App})
+			msg.App = protoApp
+		}
+		if p.Done {
+			sentTerminal = true
+		}
+		if sendErr := stream.Send(msg); sendErr != nil {
+			slog.Debug("[app] upgrade stream send failed (client may have disconnected)", "app_id", id, "error", sendErr)
+		}
+	})
+
+	if upgradeErr != nil {
+		slog.Error("[app] streaming upgrade failed", "app_id", id, "error", upgradeErr)
+		if !sentTerminal {
+			_ = stream.Send(&nasv1.UpgradeDockerAppProgress{
+				Stage:   "error",
+				Message: upgradeErr.Error(),
+				Percent: 0,
+				Done:    true,
+				Error:   upgradeErr.Error(),
+			})
+		}
+		return nil
+	}
+
+	slog.Info("[app] streaming upgrade completed", "app_id", id)
+	return nil
 }
 
 func parseImageRepoTag(image string) (repo, tag string) {

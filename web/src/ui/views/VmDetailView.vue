@@ -68,23 +68,33 @@ const consoleError = ref('');
 
 async function loadConsoleSession() {
   if (!vm.value) return;
+  const targetVm = cleanVmName.value;
   isLoadingConsole.value = true;
   consoleError.value = '';
   try {
-    const s = await services.kvm.openConsole(cleanVmName.value);
+    const s = await services.kvm.openConsole(targetVm);
+    if (cleanVmName.value !== targetVm) return;
     consoleSession.value = s;
   } catch (err: any) {
+    if (cleanVmName.value !== targetVm) return;
     consoleError.value = err?.message || 'Failed to open QEMU live console';
     notify('error', consoleError.value);
   } finally {
-    isLoadingConsole.value = false;
+    if (cleanVmName.value === targetVm) {
+      isLoadingConsole.value = false;
+    }
   }
 }
 
 watch(
-  () => props.activeSubTab,
-  (tab) => {
-    if (tab === 'console' && !consoleSession.value) {
+  [cleanVmName, () => props.activeSubTab],
+  ([vmName, tab], [prevVmName]) => {
+    if (vmName !== prevVmName) {
+      consoleSession.value = null;
+      consoleError.value = '';
+      isLoadingConsole.value = false;
+    }
+    if (tab === 'console' && (!consoleSession.value || consoleSession.value.vmName !== vmName)) {
       loadConsoleSession();
     }
   },
@@ -1118,6 +1128,7 @@ async function handleDeleteSnapshot(snap: VirtualMachineSnapshot) {
         </div>
         <div class="vnc-body-wrap">
           <VncConsole
+            :key="`${consoleSession.vmName}-${consoleSession.token}`"
             :vm-name="consoleSession.vmName"
             :token="consoleSession.token"
             :vnc-port="consoleSession.vncPort"
