@@ -2979,14 +2979,7 @@ func (a *Adapter) ExecAttach(ctx context.Context, id string, cmd []string) (net.
 			"LANG=C.UTF-8",
 			"LC_CTYPE=C.UTF-8",
 		}
-		attachArgs := []string{
-			"-n", id,
-			"-v", "TERM=xterm-256color",
-			"-v", "COLORTERM=truecolor",
-			"-v", "LANG=C.UTF-8",
-			"-v", "LC_CTYPE=C.UTF-8",
-			"--", shell,
-		}
+		attachArgs := buildLxcAttachArgs(id, shell)
 		attachCmd := exec.CommandContext(ctx, "lxc-attach", attachArgs...)
 		attachCmd.Env = append(os.Environ(), termEnv...)
 		ptmx, err := pty.Start(attachCmd)
@@ -2998,14 +2991,7 @@ func (a *Adapter) ExecAttach(ctx context.Context, id string, cmd []string) (net.
 				if attachCmd.ProcessState != nil && attachCmd.ProcessState.Exited() {
 					_ = ptmx.Close()
 					fallbackNotice = "\x1b[33m[bash not found, falling back to /bin/sh]\x1b[0m\r\n"
-					fbArgs := []string{
-						"-n", id,
-						"-v", "TERM=xterm-256color",
-						"-v", "COLORTERM=truecolor",
-						"-v", "LANG=C.UTF-8",
-						"-v", "LC_CTYPE=C.UTF-8",
-						"--", "/bin/sh",
-					}
+					fbArgs := buildLxcAttachArgs(id, "/bin/sh")
 					attachCmd = exec.CommandContext(ctx, "lxc-attach", fbArgs...)
 					attachCmd.Env = append(os.Environ(), termEnv...)
 					ptmx, err = pty.Start(attachCmd)
@@ -3069,4 +3055,31 @@ func (a *Adapter) ResizeExec(ctx context.Context, execID string, height, width u
 		})
 	}
 	return nil
+}
+
+// lxcLoginShellSupported reports whether the given shell binary supports the -l login flag.
+func lxcLoginShellSupported(shell string) bool {
+	switch filepath.Base(shell) {
+	case "bash", "sh", "zsh", "ash", "dash", "fish", "csh", "tcsh", "ksh":
+		return true
+	default:
+		return false
+	}
+}
+
+// buildLxcAttachArgs builds the argument list for `lxc-attach` to open an interactive login console.
+func buildLxcAttachArgs(id, shell string) []string {
+	args := []string{
+		"-n", id,
+		"-v", "TERM=xterm-256color",
+		"-v", "COLORTERM=truecolor",
+		"-v", "LANG=C.UTF-8",
+		"-v", "LC_CTYPE=C.UTF-8",
+		"-v", "HOME=/root",
+		"--", shell,
+	}
+	if lxcLoginShellSupported(shell) {
+		args = append(args, "-l")
+	}
+	return args
 }
