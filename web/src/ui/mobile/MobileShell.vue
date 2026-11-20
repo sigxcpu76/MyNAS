@@ -23,6 +23,7 @@ import MobileStorageView from './views/MobileStorageView.vue';
 import MobileKvmView from './views/MobileKvmView.vue';
 import MobilePowerSheet from './components/MobilePowerSheet.vue';
 import MobileNavDrawer from './components/MobileNavDrawer.vue';
+import MobileAppConfigEditor from './components/MobileAppConfigEditor.vue';
 import type { LxcContainer } from '../../domain/models';
 
 // Import detail/configuration views for full editing on mobile
@@ -140,6 +141,19 @@ const activeSelectedDocker = computed<string | null>(() => {
     return nasState.selectedResourceId.replace(/^docker:/, '').replace(/^dockerApps\//, '').trim() || null;
   }
   return null;
+});
+
+const activeSelectedDockerApp = computed(() => {
+  if (!activeSelectedDocker.value) return null;
+  const target = activeSelectedDocker.value;
+  return (
+    nasState.dockerApps.find(
+      (a) =>
+        a.appId === target ||
+        a.name === target ||
+        a.name === `dockerApps/${target}`
+    ) || null
+  );
 });
 
 interface DetailSubTabItem {
@@ -338,8 +352,17 @@ const isDegraded = computed(() => {
         </div>
 
         <div class="mobile-detail-wrap">
+          <MobileAppConfigEditor
+            v-if="
+              activeDetailContext.kind === 'docker' &&
+              activeSelectedDockerApp &&
+              (nasState.dockerSubTab === 'configuration' || nasState.dockerSubTab === 'compose')
+            "
+            :key="activeSelectedDockerApp.name"
+            :app="activeSelectedDockerApp"
+          />
           <DockerDetailView
-            v-if="activeDetailContext.kind === 'docker' && activeSelectedDocker"
+            v-else-if="activeDetailContext.kind === 'docker' && activeSelectedDocker"
             :app-name="activeSelectedDocker"
             :active-sub-tab="nasState.dockerSubTab"
             @update:active-sub-tab="nasState.dockerSubTab = $event"

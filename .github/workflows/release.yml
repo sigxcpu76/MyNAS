@@ -215,8 +215,8 @@ jobs:
           retention-days: 1
 
   publish-release:
-    name: Publish GitHub Release
-    needs: [build-binaries, build-iso, build-apk]
+    name: Publish App Release
+    needs: [build-binaries, build-apk]
     runs-on: ubuntu-latest
 
     steps:
@@ -225,9 +225,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download All Artifacts
+      - name: Download APK Artifact
         uses: actions/download-artifact@v4
         with:
+          name: nan-nas-apk
+          path: release-assets
+
+      - name: Download Binary and Package Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: binaries-*
           path: release-assets
           merge-multiple: true
 
@@ -246,19 +253,60 @@ jobs:
         run: |
           cp release-notes.md release-assets/CHANGELOG.md
           cd release-assets
-          find . -maxdepth 1 -type f ! -name "*.sha256" ! -name "CHANGELOG.md" ! -name "checksums.txt" -exec sha256sum {} + > checksums.txt
+          find . -maxdepth 1 -type f ! -name "*.sha256" ! -name "CHANGELOG.md" ! -name "checksums.txt" -printf '%f\n' | sort | xargs sha256sum > checksums.txt
+
+      - name: Upload App Checksums Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-checksums
+          path: release-assets/checksums.txt
+          retention-days: 1
 
       - name: List Release Assets
         run: |
           ls -la release-assets
 
-      - name: Publish Release Assets
+      - name: Publish App Release Assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           name: ${{ inputs.tag || github.ref_name }}
           body_path: release-notes.md
           files: release-assets/*
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-iso:
+    name: Attach Appliance ISO to Release
+    needs: [publish-release, build-iso]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download ISO Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: appliance-iso
+          path: iso-release-assets
+
+      - name: Download App Checksums Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-checksums
+          path: iso-release-assets
+
+      - name: Append ISO Checksum
+        run: |
+          cat iso-release-assets/*.iso.sha256 >> iso-release-assets/checksums.txt
+          ls -la iso-release-assets
+
+      - name: Upload ISO Assets to Existing Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          files: iso-release-assets/*
           draft: false
           prerelease: false
           generate_release_notes: false
