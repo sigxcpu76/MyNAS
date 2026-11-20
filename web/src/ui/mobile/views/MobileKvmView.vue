@@ -11,9 +11,11 @@ import {
   mdiMemory,
   mdiCpu64Bit,
   mdiConsole,
+  mdiCogOutline,
 } from '@mdi/js';
 import MdiIcon from '../../components/MdiIcon.vue';
 import { confirmModal, nasState, notify, refreshAllData } from '../../store';
+import { navigateTo } from '../../router';
 import { askModal } from '../../modal';
 import { services } from '../../../container';
 import { getLxcContainerIcon } from '../../utils/appIcons';
@@ -45,6 +47,18 @@ function isVmRunning(vm: VirtualMachine): boolean {
 
 function isLxcRunning(c: LxcContainer): boolean {
   return c.state === 'RUNNING' || c.state === 'running';
+}
+
+function openVmConfig(vm: VirtualMachine) {
+  const vmId = vm.vmName || vm.name.replace(/^virtualMachines\//, '');
+  navigateTo('kvm', false, `vm:${vmId}`);
+  nasState.vmSubTab = 'configuration';
+}
+
+function openLxcConfig(c: LxcContainer) {
+  const ctId = c.name.replace(/^lxcContainers\//, '');
+  navigateTo('lxc', false, `lxc:${ctId}`);
+  nasState.lxcSubTab = 'configuration';
 }
 
 async function handleStartVm(vm: VirtualMachine) {
@@ -252,6 +266,13 @@ async function handleStopLxc(c: LxcContainer) {
               <span>Console</span>
             </button>
           </template>
+          <button
+            class="btn btn-xs btn-secondary action-btn"
+            @click="openVmConfig(vm)"
+          >
+            <MdiIcon :path="mdiCogOutline" size="14" />
+            <span>Config</span>
+          </button>
         </div>
       </div>
 
@@ -335,6 +356,13 @@ async function handleStopLxc(c: LxcContainer) {
               <span>Terminal</span>
             </button>
           </template>
+          <button
+            class="btn btn-xs btn-secondary action-btn"
+            @click="openLxcConfig(c)"
+          >
+            <MdiIcon :path="mdiCogOutline" size="14" />
+            <span>Config</span>
+          </button>
         </div>
       </div>
 

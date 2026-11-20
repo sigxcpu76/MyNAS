@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import {
+  mdiArrowLeft,
   mdiMonitor,
   mdiDocker,
   mdiDatabase,
@@ -14,7 +15,7 @@ import {
 } from '@mdi/js';
 import MdiIcon from '../components/MdiIcon.vue';
 import NanLogo from '../components/NanLogo.vue';
-import { nasState, refreshAllData } from '../store';
+import { nasState, refreshAllData, selectResource } from '../store';
 import { navigateTo } from '../router';
 import MobileOverview from './views/MobileOverview.vue';
 import MobileAppsView from './views/MobileAppsView.vue';
@@ -23,6 +24,12 @@ import MobileKvmView from './views/MobileKvmView.vue';
 import MobilePowerSheet from './components/MobilePowerSheet.vue';
 import MobileNavDrawer from './components/MobileNavDrawer.vue';
 import type { LxcContainer } from '../../domain/models';
+
+// Import detail/configuration views for full editing on mobile
+import DockerDetailView from '../views/DockerDetailView.vue';
+import VmDetailView from '../views/VmDetailView.vue';
+import LxcDetailView from '../views/LxcDetailView.vue';
+import PoolDetailView from '../views/PoolDetailView.vue';
 
 // Import views for fallback tabs
 import SharesView from '../views/SharesView.vue';
@@ -79,6 +86,172 @@ const isStorage = computed(() => {
 });
 const isKvm = computed(() => activeTab.value === 'kvm' || activeTab.value === 'lxc');
 
+// Active selected resources for full configuration / detail editing on mobile
+const activeSelectedPool = computed<string | null>(() => {
+  if (
+    (activeTab.value === 'storage-pools' || activeTab.value === 'zfs') &&
+    nasState.selectedResourceId &&
+    nasState.selectedResourceId.startsWith('pool:')
+  ) {
+    return nasState.selectedResourceId.replace(/^pool:/, '').trim() || null;
+  }
+  return null;
+});
+
+const activeSelectedVm = computed<string | null>(() => {
+  if (
+    activeTab.value === 'kvm' &&
+    nasState.selectedResourceId &&
+    nasState.selectedResourceId.startsWith('vm:')
+  ) {
+    return nasState.selectedResourceId.replace(/^vm:/, '').replace(/^virtualMachines\//, '').trim() || null;
+  }
+  return null;
+});
+
+const activeSelectedLxc = computed<string | null>(() => {
+  if (
+    activeTab.value === 'lxc' &&
+    nasState.selectedResourceId &&
+    nasState.selectedResourceId.startsWith('lxc:')
+  ) {
+    const clean = nasState.selectedResourceId.replace(/^lxc:/, '').replace(/^lxcContainers\//, '').trim();
+    const found = nasState.lxcContainers.find(
+      (c) =>
+        c.name === clean ||
+        c.name === `lxcContainers/${clean}` ||
+        c.containerName === clean ||
+        c.name.replace(/^lxcContainers\//, '') === clean
+    );
+    if (found) {
+      return found.name.replace(/^lxcContainers\//, '');
+    }
+    return clean || null;
+  }
+  return null;
+});
+
+const activeSelectedDocker = computed<string | null>(() => {
+  if (
+    activeTab.value === 'docker' &&
+    nasState.selectedResourceId &&
+    nasState.selectedResourceId.startsWith('docker:')
+  ) {
+    return nasState.selectedResourceId.replace(/^docker:/, '').replace(/^dockerApps\//, '').trim() || null;
+  }
+  return null;
+});
+
+interface DetailSubTabItem {
+  id: string;
+  label: string;
+}
+
+const activeDetailContext = computed<{
+  kind: 'docker' | 'vm' | 'lxc' | 'pool';
+  title: string;
+  badge: string;
+  tabs: DetailSubTabItem[];
+  currentTab: string;
+  onBack: () => void;
+  onSelectTab: (tabId: string) => void;
+} | null>(() => {
+  if (activeSelectedDocker.value) {
+    const app = nasState.dockerApps.find(
+      (a) =>
+        a.appId === activeSelectedDocker.value ||
+        a.name === activeSelectedDocker.value ||
+        a.name === `dockerApps/${activeSelectedDocker.value}`
+    );
+    const current = nasState.dockerSubTab === 'compose' ? 'configuration' : nasState.dockerSubTab;
+    return {
+      kind: 'docker',
+      title: app?.title || activeSelectedDocker.value,
+      badge: 'Docker App',
+      tabs: [
+        { id: 'configuration', label: 'Configuration' },
+        { id: 'summary', label: 'Summary' },
+        { id: 'containers', label: 'Containers' },
+        { id: 'logs', label: 'Logs' },
+        { id: 'console', label: 'Console' },
+      ],
+      currentTab: current,
+      onBack: () => selectResource('node:docker'),
+      onSelectTab: (id) => {
+        nasState.dockerSubTab = id as any;
+      },
+    };
+  }
+  if (activeSelectedVm.value) {
+    const current = nasState.vmSubTab === 'hardware' ? 'configuration' : nasState.vmSubTab;
+    return {
+      kind: 'vm',
+      title: activeSelectedVm.value,
+      badge: 'KVM VM',
+      tabs: [
+        { id: 'configuration', label: 'Configuration' },
+        { id: 'summary', label: 'Summary' },
+        { id: 'snapshots', label: 'Snapshots' },
+        { id: 'console', label: 'Console' },
+      ],
+      currentTab: current,
+      onBack: () => selectResource('node:vms'),
+      onSelectTab: (id) => {
+        nasState.vmSubTab = id as any;
+      },
+    };
+  }
+  if (activeSelectedLxc.value) {
+    const ct = nasState.lxcContainers.find(
+      (c) =>
+        c.name.replace(/^lxcContainers\//, '') === activeSelectedLxc.value ||
+        c.containerName === activeSelectedLxc.value
+    );
+    const current =
+      nasState.lxcSubTab === 'mounts'
+        ? 'configuration'
+        : nasState.lxcSubTab === 'terminal'
+        ? 'console'
+        : nasState.lxcSubTab;
+    return {
+      kind: 'lxc',
+      title: ct?.containerName || activeSelectedLxc.value,
+      badge: 'LXC',
+      tabs: [
+        { id: 'configuration', label: 'Configuration' },
+        { id: 'summary', label: 'Summary' },
+        { id: 'logs', label: 'Logs' },
+        { id: 'console', label: 'Console' },
+      ],
+      currentTab: current,
+      onBack: () => selectResource('node:lxc'),
+      onSelectTab: (id) => {
+        nasState.lxcSubTab = id as any;
+      },
+    };
+  }
+  if (activeSelectedPool.value) {
+    return {
+      kind: 'pool',
+      title: activeSelectedPool.value,
+      badge: 'ZFS Pool',
+      tabs: [
+        { id: 'config', label: 'Config' },
+        { id: 'summary', label: 'Summary' },
+        { id: 'datasets', label: 'Datasets' },
+        { id: 'volumes', label: 'Volumes' },
+        { id: 'topology', label: 'Topology' },
+      ],
+      currentTab: nasState.poolSubTab,
+      onBack: () => selectResource('node:pools'),
+      onSelectTab: (id) => {
+        nasState.poolSubTab = id as any;
+      },
+    };
+  }
+  return null;
+});
+
 const isFaulted = computed(() => {
   return (nasState.pools || []).some(
     (p) => p.state && ['FAULTED', 'UNAVAIL', 'SUSPENDED'].includes(p.state.toUpperCase())
@@ -133,9 +306,72 @@ const isDegraded = computed(() => {
 
     <!-- Scrollable Main Viewport -->
     <main class="mobile-main-viewport">
+      <!-- Full Resource Detail & Configuration Editor (reused from desktop with mobile shell) -->
+      <template v-if="activeDetailContext">
+        <div class="mobile-detail-header">
+          <div class="mobile-detail-topbar">
+            <button
+              class="mobile-detail-back-btn"
+              type="button"
+              @click="activeDetailContext.onBack"
+            >
+              <MdiIcon :path="mdiArrowLeft" size="18" />
+              <span>Back</span>
+            </button>
+            <div class="mobile-detail-title-wrap">
+              <span class="mobile-detail-title">{{ activeDetailContext.title }}</span>
+              <span class="mobile-detail-badge">{{ activeDetailContext.badge }}</span>
+            </div>
+          </div>
+          <div class="mobile-detail-subtabs">
+            <button
+              v-for="tab in activeDetailContext.tabs"
+              :key="tab.id"
+              type="button"
+              class="mobile-detail-tab"
+              :class="{ active: activeDetailContext.currentTab === tab.id }"
+              @click="activeDetailContext.onSelectTab(tab.id)"
+            >
+              {{ tab.label }}
+            </button>
+          </div>
+        </div>
+
+        <div class="mobile-detail-wrap">
+          <DockerDetailView
+            v-if="activeDetailContext.kind === 'docker' && activeSelectedDocker"
+            :app-name="activeSelectedDocker"
+            :active-sub-tab="nasState.dockerSubTab"
+            @update:active-sub-tab="nasState.dockerSubTab = $event"
+            @back="selectResource('node:docker')"
+          />
+          <VmDetailView
+            v-else-if="activeDetailContext.kind === 'vm' && activeSelectedVm"
+            :vm-name="activeSelectedVm"
+            :active-sub-tab="nasState.vmSubTab"
+            @update:active-sub-tab="nasState.vmSubTab = $event"
+            @back="selectResource('node:vms')"
+          />
+          <LxcDetailView
+            v-else-if="activeDetailContext.kind === 'lxc' && activeSelectedLxc"
+            :container-name="activeSelectedLxc"
+            :active-sub-tab="nasState.lxcSubTab"
+            @update:active-sub-tab="nasState.lxcSubTab = $event"
+            @back="selectResource('node:lxc')"
+          />
+          <PoolDetailView
+            v-else-if="activeDetailContext.kind === 'pool' && activeSelectedPool"
+            :pool-name="activeSelectedPool"
+            :active-sub-tab="nasState.poolSubTab"
+            @update:active-sub-tab="nasState.poolSubTab = $event"
+            @back="selectResource('node:pools')"
+          />
+        </div>
+      </template>
+
       <!-- High-Impact Dedicated Mobile Views -->
       <MobileOverview
-        v-if="isOverview"
+        v-else-if="isOverview"
         @open-terminal="emit('open-terminal')"
         @open-system-details="emit('open-system-details')"
         @open-update="emit('open-update')"
@@ -159,6 +395,7 @@ const isDegraded = computed(() => {
         />
         <IdentityView v-else-if="activeTab === 'identity'" />
         <CronJobsView v-else-if="activeTab === 'cron'" />
+        <DatasetsView v-else-if="activeTab === 'storage-datasets'" />
         <VolumesView v-else-if="activeTab === 'storage-volumes'" />
         <PrerequisitesView v-else-if="activeTab === 'prerequisites'" />
       </div>
@@ -169,7 +406,7 @@ const isDegraded = computed(() => {
       <button
         class="nav-tab-btn"
         :class="{ active: isOverview }"
-        @click="navigateTo('overview')"
+        @click="navigateTo('overview', false, 'node:local')"
       >
         <div class="nav-icon-wrap">
           <MdiIcon :path="mdiMonitor" size="20" />
@@ -180,7 +417,7 @@ const isDegraded = computed(() => {
       <button
         class="nav-tab-btn"
         :class="{ active: isApps }"
-        @click="navigateTo('docker')"
+        @click="navigateTo('docker', false, 'node:docker')"
       >
         <div class="nav-icon-wrap">
           <MdiIcon :path="mdiDocker" size="20" />
@@ -191,7 +428,7 @@ const isDegraded = computed(() => {
       <button
         class="nav-tab-btn"
         :class="{ active: isStorage }"
-        @click="navigateTo('storage-pools')"
+        @click="navigateTo('storage-pools', false, 'node:pools')"
       >
         <div class="nav-icon-wrap">
           <MdiIcon :path="mdiDatabase" size="20" />
@@ -202,7 +439,7 @@ const isDegraded = computed(() => {
       <button
         class="nav-tab-btn"
         :class="{ active: isKvm }"
-        @click="navigateTo('kvm')"
+        @click="navigateTo('kvm', false, 'node:vms')"
       >
         <div class="nav-icon-wrap">
           <MdiIcon :path="mdiLayers" size="20" />
@@ -326,6 +563,133 @@ const isDegraded = computed(() => {
 .mobile-fallback-wrap {
   padding: 12px;
   overscroll-behavior-y: contain;
+}
+
+.mobile-detail-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--bg-surface, #1e293b);
+  border-bottom: 1px solid var(--border-color, #334155);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.mobile-detail-topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.mobile-detail-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--bg-base, #0f172a);
+  border: 1px solid var(--border-color, #334155);
+  color: var(--text-primary, #f8fafc);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  touch-action: manipulation;
+}
+
+.mobile-detail-back-btn:active {
+  transform: scale(0.96);
+}
+
+.mobile-detail-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.mobile-detail-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary, #f8fafc);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobile-detail-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.14);
+  color: var(--accent-primary, #38bdf8);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.mobile-detail-subtabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.mobile-detail-subtabs::-webkit-scrollbar {
+  display: none;
+}
+
+.mobile-detail-tab {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg-base, #0f172a);
+  border: 1px solid var(--border-color, #334155);
+  color: var(--text-secondary, #94a3b8);
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  touch-action: manipulation;
+}
+
+.mobile-detail-tab.active {
+  background: var(--accent-primary, #38bdf8);
+  color: #0f172a;
+  border-color: var(--accent-primary, #38bdf8);
+}
+
+.mobile-detail-wrap {
+  padding: 12px;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.mobile-detail-wrap :deep(.summary-grid),
+.mobile-detail-wrap :deep(.grid-2),
+.mobile-detail-wrap :deep(.form-grid) {
+  grid-template-columns: 1fr !important;
+}
+
+.mobile-detail-wrap :deep(.table-wrap) {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-detail-wrap :deep(.card) {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.mobile-detail-wrap :deep(.card-header) {
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .mobile-bottom-nav {

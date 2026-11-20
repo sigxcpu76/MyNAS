@@ -1218,7 +1218,7 @@ function copyYaml() {
 
           <!-- Sub-Tab: General -->
           <div v-if="serviceSubTab === 'general'">
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 12px">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 14px; margin-bottom: 12px">
               <div>
                 <label class="form-label">Service Key *</label>
                 <input
@@ -1254,7 +1254,7 @@ function copyYaml() {
               </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 12px">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 14px; margin-bottom: 12px">
               <div>
                 <label class="form-label">Container Image *</label>
                 <input
@@ -1651,7 +1651,7 @@ function copyYaml() {
                 </div>
 
                 <!-- Middle Grid: Source, Target, Mode -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr 140px; gap: 10px; align-items: flex-start">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 10px; align-items: flex-start">
                   <!-- Source Column -->
                   <div>
                     <label style="display: block; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px">
@@ -1798,7 +1798,7 @@ function copyYaml() {
 
           <!-- Sub-Tab: Resources & Hardware -->
           <div v-else-if="serviceSubTab === 'resources'">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 14px; margin-bottom: 16px">
               <div>
                 <label class="form-label">Memory Limit</label>
                 <select
@@ -1884,7 +1884,7 @@ function copyYaml() {
               </div>
 
               <div v-if="activeService.gpuEnabled" style="padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.08)">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 8px">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 14px; margin-bottom: 8px">
                   <div>
                     <label class="form-label" style="font-size: 11.5px">GPU Count / Allocation</label>
                     <select v-model="activeService.gpuCount" class="form-input mono" style="font-size: 12px">

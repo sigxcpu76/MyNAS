@@ -13,12 +13,13 @@ import {
   mdiServer,
   mdiTune,
   mdiDocker,
+  mdiCogOutline,
 } from '@mdi/js';
 import MdiIcon from '../../components/MdiIcon.vue';
 import BottomSheet from '../../components/BottomSheet.vue';
 import { ansiToHtml } from '../../utils/ansi';
 import { getDockerAppIcon, getDockerContainerIcon } from '../../utils/appIcons';
-import { nasState, notify, refreshAllData } from '../../store';
+import { nasState, notify, refreshAllData, selectResource } from '../../store';
 import { services } from '../../../container';
 import type { DockerApp } from '../../../domain/models';
 
@@ -66,6 +67,13 @@ function openAppSheet(app: DockerApp) {
   activeDetailTab.value = 'details';
   appLogs.value = '';
   isSheetOpen.value = true;
+}
+
+function openAppConfiguration(app: DockerApp) {
+  isSheetOpen.value = false;
+  const id = app.appId || app.name.replace(/^dockerApps\//, '');
+  selectResource(`docker:${id}`);
+  nasState.dockerSubTab = 'configuration';
 }
 
 function isAppRunning(app: DockerApp): boolean {
@@ -333,6 +341,16 @@ function switchDetailTab(tab: 'details' | 'logs') {
             <span>Restart</span>
           </button>
         </div>
+
+        <!-- Edit App Configuration CTA -->
+        <button
+          class="btn btn-sm btn-secondary config-cta-btn"
+          type="button"
+          @click="openAppConfiguration(selectedApp)"
+        >
+          <MdiIcon :path="mdiCogOutline" size="16" />
+          <span>Edit Configuration (Compose &amp; Env)</span>
+        </button>
 
         <!-- Web Portal Direct Link -->
         <div v-if="getAppPortalUrl(selectedApp)" class="portal-cta-box">
@@ -638,6 +656,15 @@ function switchDetailTab(tab: 'details' | 'logs') {
 .power-controls-row {
   display: flex;
   gap: 8px;
+}
+
+.config-cta-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
 }
 
 .flex-1 {

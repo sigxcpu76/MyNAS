@@ -12,6 +12,8 @@ import {
   mdiPlay,
   mdiMagnify,
   mdiFolderOutline,
+  mdiCogOutline,
+  mdiPencil,
 } from '@mdi/js';
 import MdiIcon from '../../components/MdiIcon.vue';
 import BottomSheet from '../../components/BottomSheet.vue';
@@ -139,6 +141,29 @@ function isSmartHealthy(disk: Disk): boolean {
 function openDatasetSheet(ds: ZfsDataset) {
   selectedDataset.value = ds;
   isDatasetSheetOpen.value = true;
+}
+
+function openPoolConfiguration(
+  poolName: string,
+  subTab: 'config' | 'datasets' | 'volumes' | 'topology' | 'summary' = 'config'
+) {
+  const clean = poolName.replace(/^zfsPools\//, '').trim();
+  if (!clean) return;
+  isPoolSheetOpen.value = false;
+  isDatasetSheetOpen.value = false;
+  navigateTo('storage-pools', false, `pool:${clean}`);
+  nasState.poolSubTab = subTab;
+}
+
+function openDatasetManagement(ds?: ZfsDataset | null) {
+  const targetPool =
+    ds?.datasetPath?.split('/')[0] ||
+    nasState.systemConfig?.mainPool?.replace(/^zfsPools\//, '') ||
+    pools.value[0]?.poolName ||
+    '';
+  if (targetPool) {
+    openPoolConfiguration(targetPool, 'datasets');
+  }
 }
 
 async function handleScrub() {
@@ -310,6 +335,15 @@ async function handleScrub() {
           />
         </div>
         <button
+          v-if="pools.length > 0"
+          class="btn btn-xs btn-secondary"
+          type="button"
+          @click="openDatasetManagement()"
+        >
+          <MdiIcon :path="mdiPencil" size="14" />
+          <span>Manage</span>
+        </button>
+        <button
           class="btn btn-xs btn-ghost btn-icon"
           :disabled="datasetsLoading"
           title="Reload Datasets"
@@ -360,6 +394,26 @@ async function handleScrub() {
       :subtitle="`State: ${selectedPool.state} • Size: ${formatBytes(selectedPool.sizeBytes)}`"
     >
       <div class="sheet-pool-details">
+        <!-- Pool Configuration & Dataset Management -->
+        <div class="sheet-action-row">
+          <button
+            class="btn btn-sm btn-secondary flex-1"
+            type="button"
+            @click="openPoolConfiguration(selectedPool.poolName, 'config')"
+          >
+            <MdiIcon :path="mdiCogOutline" size="15" />
+            <span>Pool Settings</span>
+          </button>
+          <button
+            class="btn btn-sm btn-secondary flex-1"
+            type="button"
+            @click="openPoolConfiguration(selectedPool.poolName, 'datasets')"
+          >
+            <MdiIcon :path="mdiLayersTripleOutline" size="15" />
+            <span>Manage Datasets</span>
+          </button>
+        </div>
+
         <!-- Scrub Action -->
         <div class="action-card-box">
           <div class="action-info">
@@ -464,6 +518,15 @@ async function handleScrub() {
       :subtitle="`Mount: ${selectedDataset.mountpoint || 'none'} • Used: ${formatBytes(selectedDataset.usedBytes)}`"
     >
       <div class="sheet-pool-details">
+        <button
+          class="btn btn-sm btn-secondary sheet-full-btn"
+          type="button"
+          @click="openDatasetManagement(selectedDataset)"
+        >
+          <MdiIcon :path="mdiPencil" size="15" />
+          <span>Edit Dataset &amp; Snapshots</span>
+        </button>
+
         <div class="details-spec-group">
           <div class="spec-item">
             <span class="spec-label">Used Space</span>
@@ -776,6 +839,24 @@ async function handleScrub() {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.sheet-action-row {
+  display: flex;
+  gap: 8px;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+.sheet-full-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 38px;
 }
 
 .action-card-box {
