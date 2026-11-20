@@ -30,9 +30,8 @@ function handleAdd(type: string) {
   emit('add', type);
 }
 
-function getLaneLabel(lane: number): string {
-  if (lane === -1) return 'Top Ribbon';
-  return `Column ${lane + 1}`;
+function getSizeLabel(item: WidgetCatalogItem): string {
+  return `${item.defaultW}×${item.defaultH} grid`;
 }
 </script>
 
@@ -117,7 +116,7 @@ function getLaneLabel(lane: number): string {
 
             <div class="catalog-card-footer">
               <span class="span-tag">
-                Default: {{ getLaneLabel(item.defaultLane) }}
+                Default: {{ getSizeLabel(item) }}
               </span>
 
               <button

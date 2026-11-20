@@ -149,10 +149,12 @@ const cpuUsageChartOptions = computed<echarts.EChartsOption>(() => {
     </div>
 
     <!-- CPU Gauge EChart -->
-    <EChart
-      :options="cpuUsageChartOptions"
-      height="160px"
-    />
+    <div class="cpu-chart-flex">
+      <EChart
+        :options="cpuUsageChartOptions"
+        height="100%"
+      />
+    </div>
 
     <!-- Load Averages & Thermal Details -->
     <div
@@ -197,9 +199,16 @@ const cpuUsageChartOptions = computed<echarts.EChartsOption>(() => {
 
 <style scoped>
 .cpu-widget-card {
-  height: auto;
+  height: 100%;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+}
+
+.cpu-chart-flex {
+  flex: 1 1 0;
+  min-height: 130px;
+  width: 100%;
 }
 
 .cpu-metrics-bar {
@@ -207,6 +216,7 @@ const cpuUsageChartOptions = computed<echarts.EChartsOption>(() => {
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   margin-top: 12px;
+  flex-shrink: 0;
 }
 
 .metric-pill {

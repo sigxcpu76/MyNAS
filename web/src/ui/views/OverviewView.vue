@@ -1,19 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import {
-  mdiArrowDown,
-  mdiArrowLeft,
-  mdiArrowRight,
-  mdiArrowUp,
   mdiCheck,
   mdiClose,
   mdiDrag,
+  mdiMinus,
   mdiPlus,
   mdiRestore,
   mdiTune,
-  mdiViewColumn,
+  mdiViewGridOutline,
 } from '@mdi/js';
-import type { NetworkInterfaceTelemetry } from '../../domain/models';
 import { services } from '../../container';
 import { confirmModal, nasState, refreshTelemetry } from '../store';
 import OverviewSkeleton from '../components/OverviewSkeleton.vue';
@@ -22,16 +18,25 @@ import {
   DEFAULT_DASHBOARD_LAYOUT,
   BALANCED_DASHBOARD_LAYOUT,
   loadDashboardLayout,
-  loadDashboardColumnCount,
-  saveDashboardLayout,
+  normalizeToGridLayout,
   syncPreferencesFromBackend,
   persistPreferencesToBackend,
-  WIDGET_CATALOG,
+  getWidgetCatalogItem,
   type DashboardWidgetConfig,
 } from '../dashboard/dashboardConfig';
+import {
+  GRID_COLS,
+  GRID_GAP,
+  GRID_ROW_HEIGHT,
+  compactLayout,
+  findOpenSlot,
+  moveGridItem,
+  resizeGridItem,
+} from '../dashboard/gridEngine';
 
-// Import Modular Widgets
+// Modular Widgets
 import WidgetKpis from '../dashboard/widgets/WidgetKpis.vue';
+import WidgetGpu from '../dashboard/widgets/WidgetGpu.vue';
 import WidgetPools from '../dashboard/widgets/WidgetPools.vue';
 import WidgetCpu from '../dashboard/widgets/WidgetCpu.vue';
 import WidgetMemory from '../dashboard/widgets/WidgetMemory.vue';
@@ -48,45 +53,12 @@ import WidgetShares from '../dashboard/widgets/WidgetShares.vue';
 import WidgetSensors from '../dashboard/widgets/WidgetSensors.vue';
 
 // ---------------------------------------------------------------------------
-// Telemetry (Reactive Stream)
+// Telemetry
 // ---------------------------------------------------------------------------
 const telemetry = computed(() => nasState.systemTelemetry);
-
-// ---------------------------------------------------------------------------
-// System Network Interface & Traffic History
-// ---------------------------------------------------------------------------
 export type { TrafficPoint } from '../store';
-
 const trafficHistory = computed(() => nasState.networkTrafficHistory);
-
-const systemInterface = computed<NetworkInterfaceTelemetry | null>(() => {
-  const list = telemetry.value?.network || [];
-  if (list.length === 0) return null;
-
-  const def = list.find((n) => n.isDefault);
-  if (def) return def;
-
-  const activePhysical = list.find(
-    (n) =>
-      n.isUp &&
-      n.ipAddresses &&
-      n.ipAddresses.length > 0 &&
-      !n.name.startsWith('docker') &&
-      !n.name.startsWith('br-') &&
-      !n.name.startsWith('vmnet') &&
-      !n.name.startsWith('veth') &&
-      !n.name.startsWith('virbr') &&
-      n.name !== 'lo'
-  );
-  if (activePhysical) return activePhysical;
-
-  const activeWithIp = list.find(
-    (n) => n.isUp && n.ipAddresses && n.ipAddresses.length > 0 && n.name !== 'lo'
-  );
-  if (activeWithIp) return activeWithIp;
-
-  return list.find((n) => n.name !== 'lo') || list[0] || null;
-});
+const gpuHistory = computed(() => nasState.gpuHistory);
 
 let telemetryPollInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -105,50 +77,34 @@ onBeforeUnmount(() => {
     clearInterval(telemetryPollInterval);
     telemetryPollInterval = null;
   }
+  cleanupPointerListeners();
 });
 
 // ---------------------------------------------------------------------------
-// Dashboard Customization & Fluid Multi-Column Waterfall Lanes
+// Grafana-Style Fluid 24-Column Grid State
 // ---------------------------------------------------------------------------
 const isEditMode = ref(false);
 const showAddModal = ref(false);
-const columnCount = ref<number>(loadDashboardColumnCount());
 const dashboardLayout = ref<DashboardWidgetConfig[]>(loadDashboardLayout());
-
-function setColumnCount(count: number) {
-  columnCount.value = count;
-  for (const w of dashboardLayout.value) {
-    if (w.lane >= count) {
-      w.lane = count - 1;
-    }
-  }
-  persistLayout();
-}
+const gridRef = ref<HTMLElement | null>(null);
 
 async function syncBackendPreferences() {
   const remote = await syncPreferencesFromBackend(services);
   if (remote) {
     dashboardLayout.value = remote.layout;
-    columnCount.value = remote.columnCount;
   }
 }
 
 watch(
   () => nasState.userPreferences,
   (prefs) => {
-    if (prefs?.dashboard) {
-      if (
-        typeof prefs.dashboard.columnCount === 'number' &&
-        (prefs.dashboard.columnCount === 2 || prefs.dashboard.columnCount === 3)
-      ) {
-        columnCount.value = prefs.dashboard.columnCount;
-      }
-      if (Array.isArray(prefs.dashboard.layout) && prefs.dashboard.layout.length > 0) {
-        dashboardLayout.value = prefs.dashboard.layout.map((w) => ({
-          id: w.id,
-          type: w.type,
-          lane: w.lane,
-        }));
+    if (prefs?.dashboard && Array.isArray(prefs.dashboard.layout) && prefs.dashboard.layout.length > 0) {
+      const normalized = normalizeToGridLayout(
+        prefs.dashboard.layout,
+        prefs.dashboard.columnCount || 3
+      );
+      if (normalized.length > 0) {
+        dashboardLayout.value = normalized;
       }
     }
   },
@@ -161,6 +117,8 @@ function getWidgetComponent(type: string) {
   switch (type) {
     case 'kpis':
       return WidgetKpis;
+    case 'gpu':
+      return WidgetGpu;
     case 'pools':
       return WidgetPools;
     case 'cpu':
@@ -194,109 +152,55 @@ function getWidgetComponent(type: string) {
   }
 }
 
-function getWidgetCatalogItem(type: string) {
-  return WIDGET_CATALOG.find((c) => c.type === type);
-}
-
 function getWidgetName(type: string): string {
   return getWidgetCatalogItem(type)?.name || type;
 }
 
-// Full-width top ribbon widgets (KPIs)
-const topRibbonWidgets = computed(() =>
-  dashboardLayout.value.filter((w) => w.lane === -1)
-);
-
-// Column Lane widgets (fold any overflow lanes into the last visible lane so no widget disappears)
-function getLaneWidgets(laneIndex: number): DashboardWidgetConfig[] {
-  if (laneIndex === columnCount.value - 1) {
-    return dashboardLayout.value.filter((w) => w.lane >= laneIndex);
-  }
-  return dashboardLayout.value.filter((w) => w.lane === laneIndex);
-}
-
 function persistLayout() {
-  persistPreferencesToBackend(services, dashboardLayout.value, columnCount.value);
+  persistPreferencesToBackend(services, dashboardLayout.value, 3);
 }
 
 function removeWidget(id: string) {
-  const idx = dashboardLayout.value.findIndex((w) => w.id === id);
-  if (idx !== -1) {
-    dashboardLayout.value.splice(idx, 1);
-    persistLayout();
-  }
-}
-
-function shiftWidgetOrder(id: string, direction: -1 | 1) {
-  const widget = dashboardLayout.value.find((w) => w.id === id);
-  if (!widget) return;
-
-  const laneWidgets = getLaneWidgets(widget.lane);
-  const laneIndex = laneWidgets.findIndex((w) => w.id === id);
-  const targetLaneIndex = laneIndex + direction;
-
-  if (targetLaneIndex < 0 || targetLaneIndex >= laneWidgets.length) return;
-
-  const targetWidget = laneWidgets[targetLaneIndex];
-  const globalIdxA = dashboardLayout.value.findIndex((w) => w.id === id);
-  const globalIdxB = dashboardLayout.value.findIndex((w) => w.id === targetWidget.id);
-
-  if (globalIdxA !== -1 && globalIdxB !== -1) {
-    const item = dashboardLayout.value.splice(globalIdxA, 1)[0];
-    dashboardLayout.value.splice(globalIdxB, 0, item);
-    persistLayout();
-  }
-}
-
-function shiftWidgetLane(id: string, direction: -1 | 1) {
-  const widget = dashboardLayout.value.find((w) => w.id === id);
-  if (!widget) return;
-
-  let newLane = widget.lane + direction;
-  if (newLane < 0) newLane = 0;
-  if (newLane >= columnCount.value) newLane = columnCount.value - 1;
-
-  if (newLane !== widget.lane) {
-    widget.lane = newLane;
-    persistLayout();
-  }
-}
-
-function moveToLane(id: string, targetLane: number) {
-  const widget = dashboardLayout.value.find((w) => w.id === id);
-  if (widget) {
-    widget.lane = targetLane;
-    persistLayout();
-  }
+  const next = dashboardLayout.value.filter((w) => w.id !== id);
+  dashboardLayout.value = compactLayout(next, GRID_COLS);
+  persistLayout();
 }
 
 function handleAddWidget(type: string) {
   const cat = getWidgetCatalogItem(type);
-  let targetLane = cat?.defaultLane ?? 0;
-
-  if (type === 'kpis') {
-    targetLane = -1;
-  } else if (targetLane >= columnCount.value) {
-    targetLane = columnCount.value - 1;
-  } else if (targetLane === -1) {
-    // If not kpis but defaultLane is -1, pick lane with fewest widgets
-    let minCount = 9999;
-    for (let c = 0; c < columnCount.value; c++) {
-      const count = getLaneWidgets(c).length;
-      if (count < minCount) {
-        minCount = count;
-        targetLane = c;
-      }
-    }
-  }
+  const w = cat?.defaultW ?? 8;
+  const h = cat?.defaultH ?? 6;
+  const pos = findOpenSlot(dashboardLayout.value, w, h, GRID_COLS);
 
   const newWidget: DashboardWidgetConfig = {
     id: `widget-${type}-${Date.now()}`,
     type,
-    lane: targetLane,
+    x: pos.x,
+    y: pos.y,
+    w,
+    h,
+    lane: cat?.defaultLane ?? 0,
   };
 
-  dashboardLayout.value.push(newWidget);
+  dashboardLayout.value = compactLayout([...dashboardLayout.value, newWidget], GRID_COLS);
+  persistLayout();
+}
+
+function stepWidgetSize(id: string, deltaW: number, deltaH: number) {
+  const target = dashboardLayout.value.find((w) => w.id === id);
+  if (!target) return;
+  const cat = getWidgetCatalogItem(target.type);
+  const minW = cat?.minW ?? 4;
+  const minH = cat?.minH ?? 3;
+  dashboardLayout.value = resizeGridItem(
+    dashboardLayout.value,
+    id,
+    target.w + deltaW,
+    target.h + deltaH,
+    minW,
+    minH,
+    GRID_COLS
+  );
   persistLayout();
 }
 
@@ -325,78 +229,134 @@ async function applyBalancedLayout() {
 }
 
 // ---------------------------------------------------------------------------
-// HTML5 Drag-and-Drop Reordering Between Lanes and Within Lanes
+// Interactive Pointer Drag-to-Move & Drag-to-Resize
 // ---------------------------------------------------------------------------
-const draggedWidgetId = ref<string | null>(null);
-const dragOverLane = ref<number | null>(null);
-const dragOverWidgetId = ref<string | null>(null);
+interface ActiveInteraction {
+  mode: 'drag' | 'resize-se' | 'resize-e' | 'resize-s';
+  widgetId: string;
+  startClientX: number;
+  startClientY: number;
+  originX: number;
+  originY: number;
+  originW: number;
+  originH: number;
+  colStepPx: number;
+  rowStepPx: number;
+}
 
-function onCardDragStart(id: string, event: DragEvent) {
+const interaction = ref<ActiveInteraction | null>(null);
+
+const activePlaceholder = computed(() => {
+  if (!interaction.value) return null;
+  const w = dashboardLayout.value.find((item) => item.id === interaction.value?.widgetId);
+  if (!w) return null;
+  return { x: w.x, y: w.y, w: w.w, h: w.h };
+});
+
+function measureColStep(): number {
+  const el = gridRef.value;
+  if (!el) return 48;
+  const width = el.clientWidth;
+  return (width + GRID_GAP) / GRID_COLS;
+}
+
+function startInteraction(
+  mode: ActiveInteraction['mode'],
+  widget: DashboardWidgetConfig,
+  event: PointerEvent
+) {
   if (!isEditMode.value) return;
-  draggedWidgetId.value = id;
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', id);
-  }
+  if (event.button !== 0) return;
+
+  event.preventDefault();
+  interaction.value = {
+    mode,
+    widgetId: widget.id,
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    originX: widget.x,
+    originY: widget.y,
+    originW: widget.w,
+    originH: widget.h,
+    colStepPx: Math.max(12, measureColStep()),
+    rowStepPx: GRID_ROW_HEIGHT + GRID_GAP,
+  };
+
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('pointercancel', onPointerUp);
 }
 
-function onCardDragOver(lane: number, targetId: string) {
-  if (!isEditMode.value || !draggedWidgetId.value) return;
-  dragOverLane.value = lane;
-  dragOverWidgetId.value = targetId;
-}
+function onPointerMove(event: PointerEvent) {
+  const act = interaction.value;
+  if (!act) return;
 
-function onCardDrop(targetLane: number, targetId: string) {
-  if (!isEditMode.value || !draggedWidgetId.value) return;
-  if (draggedWidgetId.value === targetId) {
-    draggedWidgetId.value = null;
-    dragOverLane.value = null;
-    dragOverWidgetId.value = null;
-    return;
-  }
+  const dx = event.clientX - act.startClientX;
+  const dy = event.clientY - act.startClientY;
+  const deltaCols = Math.round(dx / act.colStepPx);
+  const deltaRows = Math.round(dy / act.rowStepPx);
 
-  const sourceIdx = dashboardLayout.value.findIndex((w) => w.id === draggedWidgetId.value);
-  if (sourceIdx === -1) return;
+  const current = dashboardLayout.value.find((w) => w.id === act.widgetId);
+  if (!current) return;
 
-  const item = dashboardLayout.value.splice(sourceIdx, 1)[0];
-  item.lane = targetLane;
-
-  const targetIdx = dashboardLayout.value.findIndex((w) => w.id === targetId);
-  if (targetIdx !== -1) {
-    dashboardLayout.value.splice(targetIdx, 0, item);
+  if (act.mode === 'drag') {
+    const nextX = Math.max(0, Math.min(GRID_COLS - current.w, act.originX + deltaCols));
+    const nextY = Math.max(0, act.originY + deltaRows);
+    if (nextX !== current.x || nextY !== current.y) {
+      dashboardLayout.value = moveGridItem(
+        dashboardLayout.value,
+        act.widgetId,
+        nextX,
+        nextY,
+        GRID_COLS,
+        true
+      );
+    }
   } else {
-    dashboardLayout.value.push(item);
-  }
+    const cat = getWidgetCatalogItem(current.type);
+    const minW = cat?.minW ?? 4;
+    const minH = cat?.minH ?? 3;
+    const targetW =
+      act.mode === 'resize-s' ? act.originW : act.originW + deltaCols;
+    const targetH =
+      act.mode === 'resize-e' ? act.originH : act.originH + deltaRows;
+    const clampedW = Math.max(minW, Math.min(GRID_COLS - current.x, targetW));
+    const clampedH = Math.max(minH, targetH);
 
+    if (clampedW !== current.w || clampedH !== current.h) {
+      dashboardLayout.value = resizeGridItem(
+        dashboardLayout.value,
+        act.widgetId,
+        clampedW,
+        clampedH,
+        minW,
+        minH,
+        GRID_COLS
+      );
+    }
+  }
+}
+
+function onPointerUp() {
+  if (!interaction.value) return;
+  interaction.value = null;
+  cleanupPointerListeners();
+  // Settle layout cleanly with vertical gravity and persist
+  dashboardLayout.value = compactLayout(dashboardLayout.value, GRID_COLS);
   persistLayout();
-  draggedWidgetId.value = null;
-  dragOverLane.value = null;
-  dragOverWidgetId.value = null;
 }
 
-function onLaneDragOver(lane: number) {
-  if (!isEditMode.value || !draggedWidgetId.value) return;
-  dragOverLane.value = lane;
+function cleanupPointerListeners() {
+  window.removeEventListener('pointermove', onPointerMove);
+  window.removeEventListener('pointerup', onPointerUp);
+  window.removeEventListener('pointercancel', onPointerUp);
 }
 
-function onLaneDrop(targetLane: number) {
-  if (!isEditMode.value || !draggedWidgetId.value) return;
-  const sourceIdx = dashboardLayout.value.findIndex((w) => w.id === draggedWidgetId.value);
-  if (sourceIdx !== -1) {
-    const item = dashboardLayout.value.splice(sourceIdx, 1)[0];
-    item.lane = targetLane;
-    dashboardLayout.value.push(item);
-    persistLayout();
-  }
-  draggedWidgetId.value = null;
-  dragOverLane.value = null;
-  dragOverWidgetId.value = null;
-}
-
-function onDragEnd() {
-  draggedWidgetId.value = null;
-  dragOverLane.value = null;
-  dragOverWidgetId.value = null;
+function getPanelGridStyle(widget: DashboardWidgetConfig) {
+  return {
+    gridColumn: `${widget.x + 1} / span ${widget.w}`,
+    gridRow: `${widget.y + 1} / span ${widget.h}`,
+  };
 }
 </script>
 
@@ -411,40 +371,29 @@ function onDragEnd() {
         </div>
         <div>
           <div class="banner-title">Customize Dashboard</div>
-          <div class="banner-subtitle">Fluid waterfall lanes adapt to natural content height. Drag cards across columns without clipped items or dead space.</div>
+          <div class="banner-subtitle">
+            Fluid 24-column Grafana grid. Drag panel headers to reposition and drag corners or edges to scale any widget.
+          </div>
         </div>
       </div>
       <div class="edit-banner-actions">
-        <!-- Columns Selector -->
-        <div class="column-count-toggle" title="Switch layout column count">
-          <svg viewBox="0 0 24 24" class="btn-svg"><path :d="mdiViewColumn" /></svg>
-          <button
-            type="button"
-            class="col-toggle-btn"
-            :class="{ active: columnCount === 2 }"
-            @click="setColumnCount(2)"
-          >
-            2 Columns
-          </button>
-          <button
-            type="button"
-            class="col-toggle-btn"
-            :class="{ active: columnCount === 3 }"
-            @click="setColumnCount(3)"
-          >
-            3 Columns
-          </button>
-        </div>
-
         <button class="btn btn-sm btn-secondary add-widget-btn" @click="showAddModal = true">
           <svg viewBox="0 0 24 24" class="btn-svg"><path :d="mdiPlus" /></svg>
           Add Widget
         </button>
-        <button class="btn btn-sm btn-secondary balanced-layout-btn" @click="applyBalancedLayout" title="Apply balanced layout across all lanes">
-          <svg viewBox="0 0 24 24" class="btn-svg"><path :d="mdiViewColumn" /></svg>
+        <button
+          class="btn btn-sm btn-secondary balanced-layout-btn"
+          @click="applyBalancedLayout"
+          title="Apply balanced preset layout"
+        >
+          <svg viewBox="0 0 24 24" class="btn-svg"><path :d="mdiViewGridOutline" /></svg>
           Balanced Setup
         </button>
-        <button class="btn btn-sm btn-secondary reset-layout-btn" @click="resetToDefault" title="Reset layout to default">
+        <button
+          class="btn btn-sm btn-secondary reset-layout-btn"
+          @click="resetToDefault"
+          title="Reset layout to default"
+        >
           <svg viewBox="0 0 24 24" class="btn-svg"><path :d="mdiRestore" /></svg>
           Reset Default
         </button>
@@ -462,169 +411,136 @@ function onDragEnd() {
       </button>
     </div>
 
-    <!-- 1. Top Ribbon Section: Full-Width Ribbon (KPIs) -->
-    <div v-if="topRibbonWidgets.length > 0" class="dashboard-top-ribbon">
+    <!-- Fluid Grafana-Style 24-Column Grid Canvas -->
+    <div
+      ref="gridRef"
+      class="grafana-grid"
+      :class="{
+        editing: isEditMode,
+        'is-interacting': Boolean(interaction),
+      }"
+    >
+      <!-- Live Ghost Drop / Resize Placeholder -->
       <div
-        v-for="widget in topRibbonWidgets"
+        v-if="activePlaceholder"
+        class="grid-placeholder"
+        :style="{
+          gridColumn: `${activePlaceholder.x + 1} / span ${activePlaceholder.w}`,
+          gridRow: `${activePlaceholder.y + 1} / span ${activePlaceholder.h}`,
+        }"
+      >
+        <span class="placeholder-dims mono">
+          {{ activePlaceholder.w }} × {{ activePlaceholder.h }}
+        </span>
+      </div>
+
+      <!-- Fluid Scalable Widget Panels -->
+      <div
+        v-for="widget in dashboardLayout"
         :key="widget.id"
-        class="widget-wrapper ribbon-card-wrapper"
+        class="widget-wrapper grid-panel"
         :class="{
           editing: isEditMode,
-          'is-dragging': draggedWidgetId === widget.id,
+          'is-active-interaction': interaction?.widgetId === widget.id,
         }"
-        :draggable="isEditMode"
-        @dragstart="onCardDragStart(widget.id, $event)"
-        @dragend="onDragEnd"
+        :style="getPanelGridStyle(widget)"
+        :data-widget-id="widget.id"
+        :data-widget-type="widget.type"
       >
-        <!-- Top Ribbon Toolbar in Edit Mode -->
-        <div v-if="isEditMode" class="widget-lane-toolbar ribbon-toolbar">
+        <!-- Edit Mode Panel Toolbar (Drag Handle + Quick Scale + Remove) -->
+        <div
+          v-if="isEditMode"
+          class="widget-panel-toolbar"
+          @pointerdown="startInteraction('drag', widget, $event)"
+        >
           <div class="toolbar-left">
-            <span class="drag-grip" title="Drag widget">
+            <span class="drag-grip" title="Drag to move widget">
               <svg viewBox="0 0 24 24" class="tool-svg"><path :d="mdiDrag" /></svg>
             </span>
             <span class="widget-type-name">{{ getWidgetName(widget.type) }}</span>
-            <span class="lane-badge">Top Ribbon</span>
+            <span class="size-badge mono">{{ widget.w }}×{{ widget.h }}</span>
           </div>
-          <div class="toolbar-right">
+
+          <div class="toolbar-right" @pointerdown.stop>
+            <div class="size-step-group" title="Adjust width">
+              <button
+                type="button"
+                class="panel-tool-btn shrink-w-btn"
+                title="Decrease width"
+                @click="stepWidgetSize(widget.id, -2, 0)"
+              >
+                <svg viewBox="0 0 24 24" class="tool-svg"><path :d="mdiMinus" /></svg>
+              </button>
+              <span class="axis-tag mono">W</span>
+              <button
+                type="button"
+                class="panel-tool-btn grow-w-btn"
+                title="Increase width"
+                @click="stepWidgetSize(widget.id, 2, 0)"
+              >
+                <svg viewBox="0 0 24 24" class="tool-svg"><path :d="mdiPlus" /></svg>
+              </button>
+            </div>
+
+            <div class="size-step-group" title="Adjust height">
+              <button
+                type="button"
+                class="panel-tool-btn shrink-h-btn"
+                title="Decrease height"
+                @click="stepWidgetSize(widget.id, 0, -1)"
+              >
+                <svg viewBox="0 0 24 24" class="tool-svg"><path :d="mdiMinus" /></svg>
+              </button>
+              <span class="axis-tag mono">H</span>
+              <button
+                type="button"
+                class="panel-tool-btn grow-h-btn"
+                title="Increase height"
+                @click="stepWidgetSize(widget.id, 0, 1)"
+              >
+                <svg viewBox="0 0 24 24" class="tool-svg"><path :d="mdiPlus" /></svg>
+              </button>
+            </div>
+
             <button
-              class="lane-tool-btn move-down-btn"
-              @click="moveToLane(widget.id, 0)"
-              title="Move down into Column 1"
-            >
-              <svg viewBox="0 0 24 24" class="tool-svg"><path :d="mdiArrowDown" /></svg>
-              <span>Move to Columns</span>
-            </button>
-            <button
-              class="lane-tool-btn remove-btn"
-              @click="removeWidget(widget.id)"
+              type="button"
+              class="panel-tool-btn remove-btn"
               title="Remove widget"
+              @click="removeWidget(widget.id)"
             >
               <svg viewBox="0 0 24 24" class="tool-svg"><path :d="mdiClose" /></svg>
             </button>
           </div>
         </div>
 
-        <!-- Render Component -->
-        <component
-          :is="getWidgetComponent(widget.type)"
-          v-if="getWidgetComponent(widget.type)"
-          :traffic-history="widget.type === 'network' ? trafficHistory : undefined"
-        />
-      </div>
-    </div>
-
-    <!-- 2. Multi-Column Fluid Waterfall Lanes -->
-    <div class="dashboard-lanes" :class="`columns-${columnCount}`">
-      <div
-        v-for="colIdx in columnCount"
-        :key="colIdx - 1"
-        class="dashboard-lane"
-        :class="{
-          'lane-drag-over': dragOverLane === colIdx - 1,
-          'editing': isEditMode
-        }"
-        @dragover.prevent="onLaneDragOver(colIdx - 1)"
-        @drop.prevent="onLaneDrop(colIdx - 1)"
-      >
-        <!-- Column Header in Edit Mode -->
-        <div v-if="isEditMode" class="lane-header-bar">
-          <span class="lane-title">Column {{ colIdx }}</span>
-          <span class="lane-count-tag">{{ getLaneWidgets(colIdx - 1).length }} widgets</span>
-        </div>
-
-        <!-- Empty Lane Placeholder in Edit Mode -->
-        <div
-          v-if="isEditMode && getLaneWidgets(colIdx - 1).length === 0"
-          class="empty-lane-placeholder"
-        >
-          Drop widgets here to add to Column {{ colIdx }}
-        </div>
-
-        <!-- Widgets in this Column -->
-        <div
-          v-for="(widget, itemIdx) in getLaneWidgets(colIdx - 1)"
-          :key="widget.id"
-          class="widget-wrapper lane-widget-card"
-          :class="{
-            editing: isEditMode,
-            'is-dragging': draggedWidgetId === widget.id,
-            'is-drag-over': dragOverWidgetId === widget.id,
-          }"
-          :draggable="isEditMode"
-          @dragstart="onCardDragStart(widget.id, $event)"
-          @dragend="onDragEnd"
-          @dragover.stop.prevent="onCardDragOver(colIdx - 1, widget.id)"
-          @drop.stop="onCardDrop(colIdx - 1, widget.id)"
-        >
-          <!-- Card Toolbar in Edit Mode -->
-          <div v-if="isEditMode" class="widget-lane-toolbar">
-            <div class="toolbar-left">
-              <span class="drag-grip" title="Drag to reorder or move to another column">
-                <svg viewBox="0 0 24 24" class="tool-svg"><path :d="mdiDrag" /></svg>
-              </span>
-              <span class="widget-type-name">{{ getWidgetName(widget.type) }}</span>
-              <span class="lane-badge">Col {{ colIdx }}</span>
-            </div>
-
-            <div class="toolbar-right">
-              <!-- Move Left to previous column -->
-              <button
-                class="lane-tool-btn move-left-btn"
-                :disabled="colIdx - 1 === 0"
-                @click="shiftWidgetLane(widget.id, -1)"
-                title="Move left to previous column"
-              >
-                <svg viewBox="0 0 24 24" class="tool-svg"><path :d="mdiArrowLeft" /></svg>
-              </button>
-
-              <!-- Move Up in current column -->
-              <button
-                class="lane-tool-btn move-up-btn"
-                :disabled="itemIdx === 0"
-                @click="shiftWidgetOrder(widget.id, -1)"
-                title="Move up in column"
-              >
-                <svg viewBox="0 0 24 24" class="tool-svg"><path :d="mdiArrowUp" /></svg>
-              </button>
-
-              <!-- Move Down in current column -->
-              <button
-                class="lane-tool-btn move-down-btn"
-                :disabled="itemIdx === getLaneWidgets(colIdx - 1).length - 1"
-                @click="shiftWidgetOrder(widget.id, 1)"
-                title="Move down in column"
-              >
-                <svg viewBox="0 0 24 24" class="tool-svg"><path :d="mdiArrowDown" /></svg>
-              </button>
-
-              <!-- Move Right to next column -->
-              <button
-                class="lane-tool-btn move-right-btn"
-                :disabled="colIdx - 1 === columnCount - 1"
-                @click="shiftWidgetLane(widget.id, 1)"
-                title="Move right to next column"
-              >
-                <svg viewBox="0 0 24 24" class="tool-svg"><path :d="mdiArrowRight" /></svg>
-              </button>
-
-              <!-- Remove Widget -->
-              <button
-                class="lane-tool-btn remove-btn"
-                @click="removeWidget(widget.id)"
-                title="Remove widget"
-              >
-                <svg viewBox="0 0 24 24" class="tool-svg"><path :d="mdiClose" /></svg>
-              </button>
-            </div>
-          </div>
-
-          <!-- Render Modular Widget Component -->
+        <!-- Scalable Widget Body -->
+        <div class="grid-panel-body">
           <component
             :is="getWidgetComponent(widget.type)"
             v-if="getWidgetComponent(widget.type)"
             :traffic-history="widget.type === 'network' ? trafficHistory : undefined"
+            :gpu-history="widget.type === 'gpu' ? gpuHistory : undefined"
           />
         </div>
+
+        <!-- Grafana-style Resize Handles in Edit Mode -->
+        <template v-if="isEditMode">
+          <div
+            class="resize-handle resize-handle-e"
+            title="Drag right edge to resize width"
+            @pointerdown.stop="startInteraction('resize-e', widget, $event)"
+          ></div>
+          <div
+            class="resize-handle resize-handle-s"
+            title="Drag bottom edge to resize height"
+            @pointerdown.stop="startInteraction('resize-s', widget, $event)"
+          ></div>
+          <div
+            class="resize-handle resize-handle-se"
+            title="Drag corner to resize panel"
+            @pointerdown.stop="startInteraction('resize-se', widget, $event)"
+          ></div>
+        </template>
       </div>
     </div>
 
@@ -642,7 +558,7 @@ function onDragEnd() {
 .overview-dashboard {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   position: relative;
   width: 100%;
 }
@@ -665,7 +581,7 @@ function onDragEnd() {
   background: var(--bg-surface);
   border: 1px solid var(--accent-primary);
   border-radius: 12px;
-  padding: 12px 18px;
+  padding: 12px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -721,220 +637,188 @@ function onDragEnd() {
   fill: currentColor;
 }
 
-/* Column Count Toggle */
-.column-count-toggle {
+/* Fluid 24-Column Grafana Grid */
+.grafana-grid {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  grid-auto-rows: 48px;
+  gap: 12px;
+  width: 100%;
+  position: relative;
+  align-items: stretch;
+}
+
+.grafana-grid.editing {
+  background-image: radial-gradient(rgba(148, 163, 184, 0.22) 1px, transparent 1px);
+  background-size: calc(100% / 24) 60px;
+  padding: 4px;
+  border-radius: 12px;
+  min-height: 480px;
+}
+
+.grafana-grid.is-interacting {
+  user-select: none;
+}
+
+.grid-placeholder {
+  border: 2px dashed var(--accent-primary);
+  background: rgba(122, 162, 247, 0.1);
+  border-radius: 12px;
+  pointer-events: none;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 8px 10px;
+}
+
+.placeholder-dims {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--accent-primary);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* Scalable Grid Panel */
+.grid-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  container-type: inline-size;
+  border-radius: 12px;
+  transition: box-shadow 0.15s ease, outline-color 0.15s ease;
+  z-index: 2;
+}
+
+.grid-panel.editing {
+  outline: 1px dashed var(--border-strong);
+  outline-offset: 2px;
+}
+
+.grid-panel.editing:hover {
+  outline-color: var(--accent-primary);
+}
+
+.grid-panel.is-active-interaction {
+  z-index: 20;
+  outline: 2px solid var(--accent-primary);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+/* Edit Mode Toolbar */
+.widget-panel-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-bottom: none;
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+  cursor: grab;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.widget-panel-toolbar:active {
+  cursor: grabbing;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.drag-grip {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.widget-type-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.size-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  background: var(--accent-bg-subtle);
+  padding: 1px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.size-step-group {
   display: inline-flex;
   align-items: center;
   background: var(--bg-base);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 2px 4px;
-  gap: 4px;
-  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 1px;
+  gap: 2px;
 }
 
-.col-toggle-btn {
+.axis-tag {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding: 0 2px;
+}
+
+.panel-tool-btn {
   background: transparent;
   border: none;
-  border-radius: 6px;
-  padding: 3px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.col-toggle-btn:hover {
-  color: var(--text-primary);
-}
-
-.col-toggle-btn.active {
-  background: var(--bg-surface);
-  color: var(--accent-primary);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-/* 1. Top Ribbon Section (KPIs) */
-.dashboard-top-ribbon {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.ribbon-card-wrapper {
-  width: 100%;
-  height: auto;
-}
-
-/* 2. Fluid Multi-Column Waterfall Lanes */
-.dashboard-lanes {
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
-  width: 100%;
-}
-
-.dashboard-lane {
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  transition: background 0.15s ease;
-}
-
-.dashboard-lane.editing {
-  background: rgba(122, 162, 247, 0.02);
-  border: 1px dashed var(--border-subtle);
-  border-radius: 10px;
-  padding: 8px;
-}
-
-.dashboard-lane.lane-drag-over {
-  outline: 2px dashed var(--accent-primary);
-  background: rgba(122, 162, 247, 0.06);
-}
-
-.lane-header-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 4px 8px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-}
-
-.lane-title {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
   color: var(--text-secondary);
-}
-
-.lane-count-tag {
-  font-size: 10.5px;
-  color: var(--text-muted);
-  font-family: var(--font-mono, monospace);
-}
-
-.empty-lane-placeholder {
-  padding: 32px 16px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--text-muted);
-  border: 1px dashed var(--border-subtle);
-  border-radius: 8px;
-}
-
-/* Cards inside Lanes */
-.lane-widget-card {
-  width: 100%;
-  height: auto;
-  display: flex;
-  flex-direction: column;
-  transition: transform 0.15s ease, opacity 0.15s ease;
-}
-
-.widget-wrapper.editing {
-  border: 1px dashed var(--accent-primary);
-  border-radius: 10px;
-  padding: 6px;
-  background: rgba(122, 162, 247, 0.02);
-}
-
-.widget-wrapper.is-dragging {
-  opacity: 0.35;
-  transform: scale(0.98);
-}
-
-.widget-wrapper.is-drag-over {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 4px;
-}
-
-/* Card Toolbars in Edit Mode */
-.widget-lane-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 4px 8px;
-  margin-bottom: 6px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.toolbar-left,
-.toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.drag-grip {
-  cursor: grab;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  padding: 2px;
-}
-
-.drag-grip:active {
-  cursor: grabbing;
-}
-
-.widget-type-name {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.lane-badge {
-  font-size: 10px;
-  font-family: var(--font-mono, monospace);
-  font-weight: 600;
-  background: var(--bg-tertiary);
-  color: var(--accent-primary);
-  border: 1px solid var(--border-subtle);
+  width: 20px;
+  height: 20px;
   border-radius: 4px;
-  padding: 1px 5px;
-}
-
-.lane-tool-btn {
-  background: transparent;
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 3px 5px;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  transition: all 0.15s ease;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
 }
 
-.lane-tool-btn:disabled {
-  opacity: 0.25;
-  cursor: not-allowed;
-}
-
-.lane-tool-btn:not(:disabled):hover {
+.panel-tool-btn:hover {
+  background: var(--bg-surface);
   color: var(--text-primary);
-  border-color: var(--border-strong);
-  background: var(--bg-surface-elevated, rgba(255, 255, 255, 0.04));
 }
 
-.lane-tool-btn.remove-btn:hover {
-  color: var(--danger, #f7768e);
-  border-color: var(--danger, #f7768e);
+.panel-tool-btn.remove-btn {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-base);
+  width: 22px;
+  height: 22px;
+}
+
+.panel-tool-btn.remove-btn:hover {
+  background: rgba(239, 68, 68, 0.16);
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .tool-svg {
@@ -943,38 +827,96 @@ function onDragEnd() {
   fill: currentColor;
 }
 
-/* Responsive Breakpoints */
-@media (max-width: 1024px) {
-  .dashboard-lanes.columns-3 {
-    flex-wrap: wrap;
-  }
-  .dashboard-lanes.columns-3 .dashboard-lane {
-    flex: 1 1 calc(50% - 16px);
-    min-width: 280px;
-  }
-  .dashboard-lanes.columns-3 .dashboard-lane:nth-child(3) {
-    flex: 1 1 100%;
-  }
+/* Scalable Widget Body */
+.grid-panel-body {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-@media (max-width: 768px) {
-  .dashboard-lanes {
+.grid-panel.editing .grid-panel-body :deep(> .card) {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+/* Make every widget card scale smoothly to fill its Grafana grid cell */
+.grid-panel-body :deep(> .card) {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Resize Handles (Grafana style) */
+.resize-handle {
+  position: absolute;
+  z-index: 15;
+}
+
+.resize-handle-e {
+  top: 32px;
+  right: -4px;
+  bottom: 14px;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.resize-handle-s {
+  left: 14px;
+  right: 14px;
+  bottom: -4px;
+  height: 8px;
+  cursor: ns-resize;
+}
+
+.resize-handle-se {
+  right: 2px;
+  bottom: 2px;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+}
+
+.resize-handle-se::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 9px;
+  height: 9px;
+  border-right: 2.5px solid var(--accent-primary);
+  border-bottom: 2.5px solid var(--accent-primary);
+  border-bottom-right-radius: 2px;
+  opacity: 0.75;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.resize-handle-se:hover::after {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+/* Responsive fallback for tablets/narrow viewports */
+@media (max-width: 900px) {
+  .grafana-grid {
+    display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
   }
 
-  .dashboard-lane {
-    width: 100%;
+  .grid-panel {
+    min-height: 260px;
   }
 
-  .dashboard-edit-banner {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .edit-banner-actions {
-    width: 100%;
-    justify-content: flex-start;
+  .grid-panel[data-widget-type='kpis'] {
+    min-height: auto;
   }
 }
 </style>

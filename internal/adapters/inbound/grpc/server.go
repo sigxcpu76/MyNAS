@@ -207,6 +207,10 @@ func toProtoUserPreferences(p domain.UserPreferences) *nasv1.UserPreferences {
 			Id:   w.ID,
 			Type: w.Type,
 			Lane: w.Lane,
+			X:    w.X,
+			Y:    w.Y,
+			W:    w.W,
+			H:    w.H,
 		}
 	}
 	for k, v := range p.Custom {
@@ -228,6 +232,10 @@ func fromProtoUserPreferences(p *nasv1.UserPreferences) domain.UserPreferences {
 					ID:   w.Id,
 					Type: w.Type,
 					Lane: w.Lane,
+					X:    w.X,
+					Y:    w.Y,
+					W:    w.W,
+					H:    w.H,
 				})
 			}
 		}
@@ -3513,19 +3521,34 @@ func toProtoSensorsTelemetry(s domain.HardwareSensorsTelemetry) *nasv1.HardwareS
 		}
 	}
 	for _, g := range s.Gpus {
-		res.Gpus = append(res.Gpus, &nasv1.GpuTelemetry{
-			Index:              g.Index,
-			Name:               g.Name,
-			DriverVersion:      g.DriverVersion,
-			TemperatureCelsius: g.TemperatureCelsius,
-			UtilizationPercent: g.UtilizationPercent,
-			MemoryUsedBytes:    g.MemoryUsedBytes,
-			MemoryTotalBytes:   g.MemoryTotalBytes,
-			PowerWatts:         g.PowerWatts,
-			PowerCapWatts:      g.PowerCapWatts,
-			FanSpeedPercent:    g.FanSpeedPercent,
-			Vendor:             g.Vendor,
-		})
+		pg := &nasv1.GpuTelemetry{
+			Index:                     g.Index,
+			Name:                      g.Name,
+			DriverVersion:             g.DriverVersion,
+			TemperatureCelsius:        g.TemperatureCelsius,
+			UtilizationPercent:        g.UtilizationPercent,
+			MemoryUsedBytes:           g.MemoryUsedBytes,
+			MemoryTotalBytes:          g.MemoryTotalBytes,
+			PowerWatts:                g.PowerWatts,
+			PowerCapWatts:             g.PowerCapWatts,
+			FanSpeedPercent:           g.FanSpeedPercent,
+			Vendor:                    g.Vendor,
+			MemoryUtilizationPercent:  g.MemoryUtilizationPercent,
+			EncoderUtilizationPercent: g.EncoderUtilizationPercent,
+			DecoderUtilizationPercent: g.DecoderUtilizationPercent,
+			ClockGraphicsMhz:          g.ClockGraphicsMhz,
+			ClockMemoryMhz:            g.ClockMemoryMhz,
+			PciBusId:                  g.PciBusId,
+		}
+		for _, proc := range g.Processes {
+			pg.Processes = append(pg.Processes, &nasv1.GpuProcessTelemetry{
+				Pid:             proc.Pid,
+				Name:            proc.Name,
+				ProcessType:     proc.ProcessType,
+				MemoryUsedBytes: proc.MemoryUsedBytes,
+			})
+		}
+		res.Gpus = append(res.Gpus, pg)
 	}
 	for _, item := range s.Temperatures {
 		res.Temperatures = append(res.Temperatures, &nasv1.HardwareSensorItem{

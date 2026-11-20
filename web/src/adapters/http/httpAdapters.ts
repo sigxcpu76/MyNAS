@@ -148,11 +148,20 @@ export function mapUserPreferences(raw: any): UserPreferences {
   return {
     dashboard: {
       columnCount: Number(dash.columnCount ?? dash.column_count ?? 3) || 3,
-      layout: rawLayout.map((w: any) => ({
-        id: String(w?.id ?? ''),
-        type: String(w?.type ?? ''),
-        lane: Number(w?.lane ?? 0),
-      })),
+      layout: rawLayout.map((w: any) => {
+        const item: any = {
+          id: String(w?.id ?? ''),
+          type: String(w?.type ?? ''),
+          lane: Number(w?.lane ?? 0),
+        };
+        if (typeof w?.w === 'number' && w.w > 0 && typeof w?.h === 'number' && w.h > 0) {
+          item.x = Number(w?.x ?? 0);
+          item.y = Number(w?.y ?? 0);
+          item.w = Number(w.w);
+          item.h = Number(w.h);
+        }
+        return item;
+      }),
     },
     custom: raw?.custom && typeof raw.custom === 'object' ? raw.custom : {},
   };
@@ -311,6 +320,18 @@ export function mapSystemTelemetry(raw: any): SystemTelemetry {
         powerCapWatts: Number(g.powerCapWatts ?? g.power_cap_watts ?? 0),
         fanSpeedPercent: Number(g.fanSpeedPercent ?? g.fan_speed_percent ?? 0),
         vendor: g.vendor ?? 'NVIDIA',
+        memoryUtilizationPercent: Number(g.memoryUtilizationPercent ?? g.memory_utilization_percent ?? 0),
+        encoderUtilizationPercent: Number(g.encoderUtilizationPercent ?? g.encoder_utilization_percent ?? 0),
+        decoderUtilizationPercent: Number(g.decoderUtilizationPercent ?? g.decoder_utilization_percent ?? 0),
+        clockGraphicsMhz: Number(g.clockGraphicsMhz ?? g.clock_graphics_mhz ?? 0),
+        clockMemoryMhz: Number(g.clockMemoryMhz ?? g.clock_memory_mhz ?? 0),
+        pciBusId: g.pciBusId ?? g.pci_bus_id ?? '',
+        processes: Array.isArray(g.processes) ? g.processes.map((p: any) => ({
+          pid: Number(p.pid ?? 0),
+          name: p.name ?? '',
+          processType: p.processType ?? p.process_type ?? 'C',
+          memoryUsedBytes: normalizeInt64(p.memoryUsedBytes ?? p.memory_used_bytes),
+        })) : [],
       })) : [],
       temperatures: Array.isArray(raw.sensors.temperatures) ? raw.sensors.temperatures.map((t: any) => ({
         chip: t.chip ?? '',

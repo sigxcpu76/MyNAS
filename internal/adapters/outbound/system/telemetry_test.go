@@ -248,3 +248,35 @@ direct_write_bytes              4    81920
 		t.Errorf("unexpected zpool iostats: %+v", stat)
 	}
 }
+
+func TestParseNvidiaGpuCSVAndProcesses(t *testing.T) {
+	gpuCSV := `0, NVIDIA GeForce RTX 4060 Ti, 560.35.03, 42, 67, 45, 8192, 16384, 98.5, 165.0, 52, 2430, 9001, 00000000:01:00.0, GPU-aaaa-1111
+1, NVIDIA RTX A4000, 560.35.03, 38, 12, [N/A], 1024, 16384, 24.1, 140.0, [N/A], 705, 5000, 00000000:02:00.0, GPU-bbbb-2222
+`
+	gpus, uuidMap := parseNvidiaGpuCSV(gpuCSV)
+	if len(gpus) != 2 {
+		t.Fatalf("expected 2 GPUs, got %d", len(gpus))
+	}
+	if gpus[0].Name != "NVIDIA GeForce RTX 4060 Ti" || gpus[0].PowerCapWatts != 165.0 || gpus[0].ClockGraphicsMhz != 2430 || gpus[0].ClockMemoryMhz != 9001 || gpus[0].PciBusId != "00000000:01:00.0" {
+		t.Errorf("unexpected GPU 0: %+v", gpus[0])
+	}
+	if gpus[1].FanSpeedPercent != 0 || gpus[1].MemoryUtilizationPercent != 0 {
+		t.Errorf("expected [N/A] fields to parse as 0, got %+v", gpus[1])
+	}
+
+	procCSV := `GPU-aaaa-1111, 4123, /usr/bin/ollama, 7168
+GPU-bbbb-2222, 9912, /usr/lib/jellyfin-ffmpeg/ffmpeg, 512
+`
+	procMap := parseNvidiaProcessesCSV(procCSV, "C")
+	for uuid, procs := range procMap {
+		if idx, ok := uuidMap[uuid]; ok {
+			gpus[idx].Processes = append(gpus[idx].Processes, procs...)
+		}
+	}
+	if len(gpus[0].Processes) != 1 || gpus[0].Processes[0].Pid != 4123 || gpus[0].Processes[0].MemoryUsedBytes != 7168*1024*1024 {
+		t.Errorf("unexpected GPU 0 processes: %+v", gpus[0].Processes)
+	}
+	if len(gpus[1].Processes) != 1 || gpus[1].Processes[0].Name != "/usr/lib/jellyfin-ffmpeg/ffmpeg" {
+		t.Errorf("unexpected GPU 1 processes: %+v", gpus[1].Processes)
+	}
+}

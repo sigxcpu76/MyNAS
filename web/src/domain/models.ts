@@ -142,6 +142,13 @@ export interface NetworkInterfaceTelemetry {
   isBridge?: boolean;
 }
 
+export interface GpuProcessTelemetry {
+  pid: number;
+  name: string;
+  processType: string;
+  memoryUsedBytes: number;
+}
+
 export interface GpuTelemetry {
   index: number;
   name: string;
@@ -154,6 +161,13 @@ export interface GpuTelemetry {
   powerCapWatts?: number;
   fanSpeedPercent?: number;
   vendor: string;
+  memoryUtilizationPercent?: number;
+  encoderUtilizationPercent?: number;
+  decoderUtilizationPercent?: number;
+  clockGraphicsMhz?: number;
+  clockMemoryMhz?: number;
+  pciBusId?: string;
+  processes?: GpuProcessTelemetry[];
 }
 
 export interface PowerMeterTelemetry {
@@ -883,6 +897,10 @@ export interface DashboardWidgetPreference {
   id: string;
   type: string;
   lane: number;
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
 }
 
 export interface DashboardPreferences {

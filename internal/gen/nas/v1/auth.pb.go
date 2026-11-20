@@ -183,6 +183,10 @@ type DashboardWidgetPreference struct {
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
 	Lane          int32                  `protobuf:"varint,3,opt,name=lane,proto3" json:"lane,omitempty"`
+	X             int32                  `protobuf:"varint,4,opt,name=x,proto3" json:"x,omitempty"`
+	Y             int32                  `protobuf:"varint,5,opt,name=y,proto3" json:"y,omitempty"`
+	W             int32                  `protobuf:"varint,6,opt,name=w,proto3" json:"w,omitempty"`
+	H             int32                  `protobuf:"varint,7,opt,name=h,proto3" json:"h,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -234,6 +238,34 @@ func (x *DashboardWidgetPreference) GetType() string {
 func (x *DashboardWidgetPreference) GetLane() int32 {
 	if x != nil {
 		return x.Lane
+	}
+	return 0
+}
+
+func (x *DashboardWidgetPreference) GetX() int32 {
+	if x != nil {
+		return x.X
+	}
+	return 0
+}
+
+func (x *DashboardWidgetPreference) GetY() int32 {
+	if x != nil {
+		return x.Y
+	}
+	return 0
+}
+
+func (x *DashboardWidgetPreference) GetW() int32 {
+	if x != nil {
+		return x.W
+	}
+	return 0
+}
+
+func (x *DashboardWidgetPreference) GetH() int32 {
+	if x != nil {
+		return x.H
 	}
 	return 0
 }
@@ -437,11 +469,15 @@ const file_nas_v1_auth_proto_rawDesc = "" +
 	"\n" +
 	"expires_in\x18\x03 \x01(\x03R\texpiresIn\x12 \n" +
 	"\x04user\x18\x04 \x01(\v2\f.nas.v1.UserR\x04user\"\x17\n" +
-	"\x15GetCurrentUserRequest\"S\n" +
+	"\x15GetCurrentUserRequest\"\x8b\x01\n" +
 	"\x19DashboardWidgetPreference\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x12\n" +
-	"\x04lane\x18\x03 \x01(\x05R\x04lane\"t\n" +
+	"\x04lane\x18\x03 \x01(\x05R\x04lane\x12\f\n" +
+	"\x01x\x18\x04 \x01(\x05R\x01x\x12\f\n" +
+	"\x01y\x18\x05 \x01(\x05R\x01y\x12\f\n" +
+	"\x01w\x18\x06 \x01(\x05R\x01w\x12\f\n" +
+	"\x01h\x18\a \x01(\x05R\x01h\"t\n" +
 	"\x14DashboardPreferences\x12!\n" +
 	"\fcolumn_count\x18\x01 \x01(\x05R\vcolumnCount\x129\n" +
 	"\x06layout\x18\x02 \x03(\v2!.nas.v1.DashboardWidgetPreferenceR\x06layout\"\xc5\x01\n" +

@@ -11,6 +11,7 @@ import WidgetShares from '../src/ui/dashboard/widgets/WidgetShares.vue';
 import WidgetWorkloads from '../src/ui/dashboard/widgets/WidgetWorkloads.vue';
 import WidgetDiskIo from '../src/ui/dashboard/widgets/WidgetDiskIo.vue';
 import WidgetZpoolIo from '../src/ui/dashboard/widgets/WidgetZpoolIo.vue';
+import WidgetGpu from '../src/ui/dashboard/widgets/WidgetGpu.vue';
 import SystemDetailsTopBarButton from '../src/ui/components/SystemDetailsTopBarButton.vue';
 import SystemDetailsModal from '../src/ui/components/SystemDetailsModal.vue';
 import { nasState } from '../src/ui/store';
@@ -287,7 +288,7 @@ describe('Overview Dashboard & Telemetry', () => {
     expect(formatUptime(90060)).toBe('1d 1h 1m');
   });
 
-  describe('Dashboard Customization, Fluid Waterfall Lanes, and Reordering', () => {
+  describe('Dashboard Customization, Fluid Grafana Grid, and Scalable Panels', () => {
     it('enters and exits edit mode when clicking customize dashboard', async () => {
       const wrapper = mount(OverviewView);
       expect(wrapper.find('.dashboard-edit-banner').exists()).toBe(false);
@@ -297,9 +298,10 @@ describe('Overview Dashboard & Telemetry', () => {
       expect(editBtn.exists()).toBe(true);
       await editBtn.trigger('click');
 
-      // Edit banner should be visible
+      // Edit banner, panel toolbars, and resize handles should be visible
       expect(wrapper.find('.dashboard-edit-banner').exists()).toBe(true);
-      expect(wrapper.find('.widget-lane-toolbar').exists()).toBe(true);
+      expect(wrapper.find('.widget-panel-toolbar').exists()).toBe(true);
+      expect(wrapper.find('.resize-handle-se').exists()).toBe(true);
 
       // Click Done Editing
       const doneBtn = wrapper.find('.done-edit-btn');
@@ -307,61 +309,47 @@ describe('Overview Dashboard & Telemetry', () => {
       await doneBtn.trigger('click');
 
       expect(wrapper.find('.dashboard-edit-banner').exists()).toBe(false);
-      expect(wrapper.find('.widget-lane-toolbar').exists()).toBe(false);
+      expect(wrapper.find('.widget-panel-toolbar').exists()).toBe(false);
+      expect(wrapper.find('.resize-handle-se').exists()).toBe(false);
     });
 
-    it('renders top ribbon for KPIs and fluid waterfall columns for cards', () => {
+    it('renders fluid 24-column Grafana grid with positioned scalable panels', () => {
       const wrapper = mount(OverviewView);
-      expect(wrapper.find('.dashboard-top-ribbon').exists()).toBe(true);
-      expect(wrapper.find('.dashboard-lanes').exists()).toBe(true);
+      expect(wrapper.find('.grafana-grid').exists()).toBe(true);
 
-      const lanes = wrapper.findAll('.dashboard-lane');
-      expect(lanes.length).toBe(3);
+      const panels = wrapper.findAll('.grid-panel');
+      expect(panels.length).toBe(7);
+
+      // KPIs spans full 24 columns at top
+      const kpiPanel = wrapper.find('[data-widget-type="kpis"]');
+      expect(kpiPanel.exists()).toBe(true);
+      expect(kpiPanel.attributes('style')).toContain('span 24');
+
+      // GPU nvtop panel is included in default layout
+      expect(wrapper.find('[data-widget-type="gpu"]').exists()).toBe(true);
     });
 
-    it('allows shifting a widget to another column using move left/right buttons', async () => {
-      const wrapper = mount(OverviewView);
-      await wrapper.find('.edit-dashboard-btn').trigger('click');
-
-      const lanes = wrapper.findAll('.dashboard-lane');
-      const lane0Widgets = lanes[0].findAll('.lane-widget-card');
-      expect(lane0Widgets.length).toBeGreaterThanOrEqual(1);
-
-      // Move widget from Column 1 to Column 2 (move-right-btn)
-      const moveRightBtn = lane0Widgets[0].find('.move-right-btn');
-      expect(moveRightBtn.exists()).toBe(true);
-      await moveRightBtn.trigger('click');
-
-      // Check that layout persisted to localStorage with new lane
-      expect(store.get('nas_dashboard_layout_v4')).toContain('"lane":1');
-    });
-
-    it('allows reordering a widget within its column using move up/down buttons', async () => {
+    it('allows scaling a widget width and height in edit mode and persists to v5 storage', async () => {
       const wrapper = mount(OverviewView);
       await wrapper.find('.edit-dashboard-btn').trigger('click');
 
-      // Add a second widget to Column 1 (Disks)
-      await wrapper.find('.add-widget-btn').trigger('click');
-      const catalogCards = wrapper.findAll('.catalog-card');
-      const disksCard = catalogCards.find((c) => c.text().includes('Physical Disks'));
-      await disksCard!.find('button.btn').trigger('click');
-      await wrapper.find('.modal-footer button').trigger('click');
+      const poolsPanel = wrapper.find('[data-widget-type="pools"]');
+      expect(poolsPanel.exists()).toBe(true);
+      expect(poolsPanel.find('.size-badge').text()).toBe('8×7');
 
-      // Column 1 now has 3 widgets
-      const lanes = wrapper.findAll('.dashboard-lane');
-      const lane0Widgets = lanes[0].findAll('.lane-widget-card');
-      expect(lane0Widgets.length).toBe(3);
+      await poolsPanel.find('.grow-w-btn').trigger('click');
+      expect(poolsPanel.find('.size-badge').text()).toBe('10×7');
 
-      const firstLabel = lane0Widgets[0].find('.widget-type-name').text();
-      const secondLabel = lane0Widgets[1].find('.widget-type-name').text();
+      await poolsPanel.find('.grow-h-btn').trigger('click');
+      expect(poolsPanel.find('.size-badge').text()).toBe('10×8');
 
-      // Move the second widget up
-      const moveUpBtn = lane0Widgets[1].find('.move-up-btn');
-      await moveUpBtn.trigger('click');
+      await poolsPanel.find('.shrink-w-btn').trigger('click');
+      expect(poolsPanel.find('.size-badge').text()).toBe('8×8');
 
-      const updatedWidgets = wrapper.findAll('.dashboard-lane')[0].findAll('.lane-widget-card');
-      expect(updatedWidgets[0].find('.widget-type-name').text()).toBe(secondLabel);
-      expect(updatedWidgets[1].find('.widget-type-name').text()).toBe(firstLabel);
+      const saved = JSON.parse(store.get('nas_dashboard_layout_v5') || '[]');
+      const savedPools = saved.find((w: any) => w.type === 'pools');
+      expect(savedPools.w).toBe(8);
+      expect(savedPools.h).toBe(8);
     });
 
     it('allows removing a widget from the dashboard', async () => {
@@ -369,14 +357,14 @@ describe('Overview Dashboard & Telemetry', () => {
       await wrapper.find('.edit-dashboard-btn').trigger('click');
 
       const initialCount = wrapper.findAll('.widget-wrapper').length;
-      expect(initialCount).toBe(6);
+      expect(initialCount).toBe(7);
 
-      // Remove the first lane widget
+      // Remove a panel
       const removeBtn = wrapper.find('.remove-btn');
       await removeBtn.trigger('click');
 
       expect(wrapper.findAll('.widget-wrapper').length).toBe(initialCount - 1);
-      expect(store.get('nas_dashboard_layout_v4')).toBeDefined();
+      expect(store.get('nas_dashboard_layout_v5')).toBeDefined();
     });
 
     it('allows adding a new widget from the widget catalog modal', async () => {
@@ -415,29 +403,14 @@ describe('Overview Dashboard & Telemetry', () => {
 
       // Remove a widget
       await wrapper.find('.remove-btn').trigger('click');
-      expect(wrapper.findAll('.widget-wrapper').length).toBe(5);
+      expect(wrapper.findAll('.widget-wrapper').length).toBe(6);
 
       // Click Reset Default and confirm modal
       const clickPromise = wrapper.find('.reset-layout-btn').trigger('click');
       closeActiveModal(true);
       await clickPromise;
       await wrapper.vm.$nextTick();
-      expect(wrapper.findAll('.widget-wrapper').length).toBe(6);
-    });
-
-    it('allows switching between 2 Columns and 3 Columns in edit mode', async () => {
-      const wrapper = mount(OverviewView);
-      await wrapper.find('.edit-dashboard-btn').trigger('click');
-
-      const toggleButtons = wrapper.findAll('.col-toggle-btn');
-      expect(toggleButtons.length).toBe(2);
-
-      // Click 2 Columns
-      const twoColBtn = toggleButtons.find((b) => b.text().includes('2 Columns'));
-      expect(twoColBtn).toBeDefined();
-      await twoColBtn!.trigger('click');
-
-      expect(wrapper.find('.columns-2').exists()).toBe(true);
+      expect(wrapper.findAll('.widget-wrapper').length).toBe(7);
     });
 
     it('applies balanced layout setup when clicking balanced layout button', async () => {
@@ -453,29 +426,124 @@ describe('Overview Dashboard & Telemetry', () => {
       await wrapper.vm.$nextTick();
 
       const widgets = wrapper.findAll('.widget-wrapper');
-      expect(widgets.length).toBe(9);
+      expect(widgets.length).toBe(10);
 
-      expect(store.get('nas_dashboard_layout_v4')).toContain('widget-pools');
-      expect(store.get('nas_dashboard_layout_v4')).toContain('widget-disks');
-      expect(store.get('nas_dashboard_layout_v4')).toContain('widget-sensors');
+      expect(store.get('nas_dashboard_layout_v5')).toContain('widget-pools');
+      expect(store.get('nas_dashboard_layout_v5')).toContain('widget-disks');
+      expect(store.get('nas_dashboard_layout_v5')).toContain('widget-sensors');
+      expect(store.get('nas_dashboard_layout_v5')).toContain('widget-gpu');
     });
 
-    it('migrates legacy saved layout (v3/v2/v1) and distributes widgets into lanes', () => {
+    it('migrates legacy saved layout (v4/v3/v2/v1) into 24-column Grafana grid', () => {
       const legacyLayout = [
-        { id: 'widget-kpis', type: 'kpis', colSpan: 12 },
-        { id: 'widget-pools', type: 'pools', colSpan: 6 },
-        { id: 'widget-sensors', type: 'sensors', colSpan: 6 },
+        { id: 'widget-kpis', type: 'kpis', lane: -1 },
+        { id: 'widget-pools', type: 'pools', lane: 0 },
+        { id: 'widget-sensors', type: 'sensors', lane: 1 },
       ];
-      store.set('nas_dashboard_layout_v3', JSON.stringify(legacyLayout));
+      store.set('nas_dashboard_layout_v4', JSON.stringify(legacyLayout));
 
       const wrapper = mount(OverviewView);
-      const widgets = wrapper.findAll('.widget-wrapper');
+      const widgets = wrapper.findAll('.grid-panel');
       expect(widgets.length).toBe(3);
 
-      // KPIs in top ribbon
-      expect(wrapper.find('.dashboard-top-ribbon').text()).toContain('Storage');
-      // Pools in Column 1
-      expect(wrapper.findAll('.dashboard-lane')[0].text()).toContain('tank');
+      // KPIs spans full 24 columns
+      const kpiPanel = wrapper.find('[data-widget-type="kpis"]');
+      expect(kpiPanel.attributes('style')).toContain('span 24');
+      expect(kpiPanel.text()).toContain('Storage');
+
+      // Pools migrated into grid panel
+      const poolsPanel = wrapper.find('[data-widget-type="pools"]');
+      expect(poolsPanel.text()).toContain('tank');
+    });
+  });
+
+  describe('WidgetGpu (nvtop-style GPU Monitor)', () => {
+    it('renders nvtop utilization bars, clocks, power cap, multi-GPU tabs, and active processes', async () => {
+      nasState.systemTelemetry = {
+        ...nasState.systemTelemetry!,
+        sensors: {
+          lmSensorsInstalled: true,
+          powerMeter: null,
+          temperatures: [],
+          fans: [],
+          gpus: [
+            {
+              index: 0,
+              name: 'NVIDIA GeForce RTX 4060 Ti',
+              driverVersion: '560.35.03',
+              temperatureCelsius: 48,
+              utilizationPercent: 72,
+              memoryUsedBytes: 8589934592,
+              memoryTotalBytes: 17179869184,
+              powerWatts: 112.4,
+              powerCapWatts: 165,
+              fanSpeedPercent: 55,
+              vendor: 'NVIDIA',
+              clockGraphicsMhz: 2430,
+              clockMemoryMhz: 9001,
+              pciBusId: '0000:01:00.0',
+              processes: [
+                {
+                  pid: 4123,
+                  name: '/usr/bin/ollama',
+                  processType: 'C',
+                  memoryUsedBytes: 7516192768,
+                },
+              ],
+            },
+            {
+              index: 1,
+              name: 'AMD Radeon RX 6600',
+              driverVersion: '',
+              temperatureCelsius: 39,
+              utilizationPercent: 18,
+              memoryUsedBytes: 1073741824,
+              memoryTotalBytes: 8589934592,
+              powerWatts: 34.0,
+              powerCapWatts: 132,
+              fanSpeedPercent: 30,
+              vendor: 'AMD',
+              pciBusId: '0000:05:00.0',
+              processes: [],
+            },
+          ],
+        },
+      };
+
+      const wrapper = mount(WidgetGpu);
+      expect(wrapper.text()).toContain('GPU Monitor');
+      expect(wrapper.text()).toContain('nvtop');
+      expect(wrapper.text()).toContain('NVIDIA GeForce RTX 4060 Ti');
+      expect(wrapper.text()).toContain('72%');
+      expect(wrapper.text()).toContain('112.4W/165W');
+      expect(wrapper.text()).toContain('2430MHz');
+      expect(wrapper.text()).toContain('4123');
+      expect(wrapper.text()).toContain('ollama');
+
+      // Switch to GPU 1 tab
+      const tabs = wrapper.findAll('.gpu-tab-btn');
+      expect(tabs).toHaveLength(2);
+      await tabs[1].trigger('click');
+      expect(wrapper.text()).toContain('AMD Radeon RX 6600');
+      expect(wrapper.text()).toContain('18%');
+      expect(wrapper.text()).toContain('No active GPU compute/graphics processes');
+    });
+
+    it('renders clean empty state with PCI GPU fallback when no live GPU telemetry exists', () => {
+      nasState.systemTelemetry = {
+        ...nasState.systemTelemetry!,
+        sensors: {
+          lmSensorsInstalled: false,
+          powerMeter: null,
+          temperatures: [],
+          fans: [],
+          gpus: [],
+        },
+      };
+
+      const wrapper = mount(WidgetGpu);
+      expect(wrapper.text()).toContain('No Live GPU Telemetry Detected');
+      expect(wrapper.text()).toContain('RTX A5000');
     });
   });
 

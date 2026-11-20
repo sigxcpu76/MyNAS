@@ -2,11 +2,15 @@ package domain
 
 import "gopkg.in/yaml.v3"
 
-// DashboardWidgetPreference represents the placement of a single widget on the dashboard.
+// DashboardWidgetPreference represents the placement and size of a single widget on the dashboard.
 type DashboardWidgetPreference struct {
 	ID   string `json:"id" yaml:"id"`
 	Type string `json:"type" yaml:"type"`
 	Lane int32  `json:"lane" yaml:"lane"`
+	X    int32  `json:"x,omitempty" yaml:"x,omitempty"`
+	Y    int32  `json:"y,omitempty" yaml:"y,omitempty"`
+	W    int32  `json:"w,omitempty" yaml:"w,omitempty"`
+	H    int32  `json:"h,omitempty" yaml:"h,omitempty"`
 }
 
 // DashboardPreferences holds layout and column configuration for the dashboard.

@@ -116,10 +116,12 @@ const ramChartOptions = computed<echarts.EChartsOption>(() => {
     </div>
 
     <!-- Centered RAM Breakdown Donut -->
-    <EChart
-      :options="ramChartOptions"
-      height="155px"
-    />
+    <div class="ram-chart-flex">
+      <EChart
+        :options="ramChartOptions"
+        height="100%"
+      />
+    </div>
 
     <!-- Clean 2x2 Memory Breakdown Grid -->
     <div class="ram-summary-footer">
@@ -165,9 +167,16 @@ const ramChartOptions = computed<echarts.EChartsOption>(() => {
 
 <style scoped>
 .memory-widget-card {
-  height: auto;
+  height: 100%;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+}
+
+.ram-chart-flex {
+  flex: 1 1 0;
+  min-height: 130px;
+  width: 100%;
 }
 
 .ram-summary-footer {
@@ -177,6 +186,7 @@ const ramChartOptions = computed<echarts.EChartsOption>(() => {
   margin-top: 8px;
   padding-top: 10px;
   border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0;
 }
 
 .ram-summary-item {

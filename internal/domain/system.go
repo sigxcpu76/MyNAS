@@ -76,18 +76,32 @@ type NetworkInterfaceTelemetry struct {
 	IsBridge           bool     `json:"isBridge"`
 }
 
+type GpuProcessTelemetry struct {
+	Pid             int32  `json:"pid"`
+	Name            string `json:"name"`
+	ProcessType     string `json:"processType"`
+	MemoryUsedBytes int64  `json:"memoryUsedBytes"`
+}
+
 type GpuTelemetry struct {
-	Index              int32   `json:"index"`
-	Name               string  `json:"name"`
-	DriverVersion      string  `json:"driverVersion"`
-	TemperatureCelsius float64 `json:"temperatureCelsius"`
-	UtilizationPercent float64 `json:"utilizationPercent"`
-	MemoryUsedBytes    int64   `json:"memoryUsedBytes"`
-	MemoryTotalBytes   int64   `json:"memoryTotalBytes"`
-	PowerWatts         float64 `json:"powerWatts"`
-	PowerCapWatts      float64 `json:"powerCapWatts"`
-	FanSpeedPercent    int32   `json:"fanSpeedPercent"`
-	Vendor             string  `json:"vendor"`
+	Index                     int32                 `json:"index"`
+	Name                      string                `json:"name"`
+	DriverVersion             string                `json:"driverVersion"`
+	TemperatureCelsius        float64               `json:"temperatureCelsius"`
+	UtilizationPercent        float64               `json:"utilizationPercent"`
+	MemoryUsedBytes           int64                 `json:"memoryUsedBytes"`
+	MemoryTotalBytes          int64                 `json:"memoryTotalBytes"`
+	PowerWatts                float64               `json:"powerWatts"`
+	PowerCapWatts             float64               `json:"powerCapWatts"`
+	FanSpeedPercent           int32                 `json:"fanSpeedPercent"`
+	Vendor                    string                `json:"vendor"`
+	MemoryUtilizationPercent  float64               `json:"memoryUtilizationPercent,omitempty"`
+	EncoderUtilizationPercent float64               `json:"encoderUtilizationPercent,omitempty"`
+	DecoderUtilizationPercent float64               `json:"decoderUtilizationPercent,omitempty"`
+	ClockGraphicsMhz          int32                 `json:"clockGraphicsMhz,omitempty"`
+	ClockMemoryMhz            int32                 `json:"clockMemoryMhz,omitempty"`
+	PciBusId                  string                `json:"pciBusId,omitempty"`
+	Processes                 []GpuProcessTelemetry `json:"processes,omitempty"`
 }
 
 type PowerMeterTelemetry struct {

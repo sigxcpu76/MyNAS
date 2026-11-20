@@ -1071,50 +1071,232 @@ func (c *TelemetryCollector) collectGpus(ctx context.Context) []domain.GpuTeleme
 	tctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
+	// 1. NVIDIA GPUs via nvidia-smi
 	cmd := exec.CommandContext(tctx, "nvidia-smi",
-		"--query-gpu=index,name,driver_version,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw,fan.speed",
+		"--query-gpu=index,name,driver_version,temperature.gpu,utilization.gpu,utilization.memory,memory.used,memory.total,power.draw,power.limit,fan.speed,clocks.current.graphics,clocks.current.memory,pci.bus_id,uuid",
 		"--format=csv,noheader,nounits")
 	if out, err := cmd.Output(); err == nil {
-		scanner := bufio.NewScanner(strings.NewReader(string(out)))
-		for scanner.Scan() {
-			line := strings.TrimSpace(scanner.Text())
-			if line == "" {
-				continue
-			}
-			parts := strings.Split(line, ",")
-			if len(parts) >= 7 {
-				idx, _ := strconv.Atoi(strings.TrimSpace(parts[0]))
-				name := strings.TrimSpace(parts[1])
-				driverVer := strings.TrimSpace(parts[2])
-				temp, _ := strconv.ParseFloat(strings.TrimSpace(parts[3]), 64)
-				util, _ := strconv.ParseFloat(strings.TrimSpace(parts[4]), 64)
-				memUsedMiB, _ := strconv.ParseFloat(strings.TrimSpace(parts[5]), 64)
-				memTotalMiB, _ := strconv.ParseFloat(strings.TrimSpace(parts[6]), 64)
-				var power float64
-				if len(parts) >= 8 {
-					power, _ = strconv.ParseFloat(strings.TrimSpace(parts[7]), 64)
+		gpus, uuidToIdx := parseNvidiaGpuCSV(string(out))
+		if len(gpus) > 0 {
+			// Query active compute processes per GPU UUID
+			pcmd := exec.CommandContext(tctx, "nvidia-smi",
+				"--query-compute-apps=gpu_uuid,pid,process_name,used_memory",
+				"--format=csv,noheader,nounits")
+			if pout, perr := pcmd.Output(); perr == nil {
+				procMap := parseNvidiaProcessesCSV(string(pout), "C")
+				for uuid, procs := range procMap {
+					if idx, ok := uuidToIdx[uuid]; ok && idx >= 0 && idx < len(gpus) {
+						gpus[idx].Processes = append(gpus[idx].Processes, procs...)
+					}
 				}
-				var fan int
-				if len(parts) >= 9 {
-					fan, _ = strconv.Atoi(strings.TrimSpace(parts[8]))
-				}
-
-				results = append(results, domain.GpuTelemetry{
-					Index:              int32(idx),
-					Name:               name,
-					DriverVersion:      driverVer,
-					TemperatureCelsius: temp,
-					UtilizationPercent: util,
-					MemoryUsedBytes:    int64(memUsedMiB * 1024 * 1024),
-					MemoryTotalBytes:   int64(memTotalMiB * 1024 * 1024),
-					PowerWatts:         power,
-					FanSpeedPercent:    int32(fan),
-					Vendor:             "NVIDIA",
-				})
 			}
+			results = append(results, gpus...)
 		}
 	}
 
+	// 2. AMD GPUs via /sys/class/drm/card*/device (amdgpu driver)
+	amdGpus := collectAmdSysfsGpus(int32(len(results)))
+	if len(amdGpus) > 0 {
+		results = append(results, amdGpus...)
+	}
+
+	return results
+}
+
+func parseNvidiaFloat(s string) float64 {
+	s = strings.TrimSpace(s)
+	if s == "" || strings.EqualFold(s, "N/A") || strings.EqualFold(s, "[N/A]") || strings.EqualFold(s, "[Not Supported]") {
+		return 0
+	}
+	v, _ := strconv.ParseFloat(s, 64)
+	return v
+}
+
+func parseNvidiaInt(s string) int32 {
+	return int32(parseNvidiaFloat(s))
+}
+
+func parseNvidiaGpuCSV(raw string) ([]domain.GpuTelemetry, map[string]int) {
+	var results []domain.GpuTelemetry
+	uuidToSliceIdx := make(map[string]int)
+
+	scanner := bufio.NewScanner(strings.NewReader(raw))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, ",")
+		if len(parts) < 8 {
+			continue
+		}
+		idx := parseNvidiaInt(parts[0])
+		name := strings.TrimSpace(parts[1])
+		driverVer := strings.TrimSpace(parts[2])
+		temp := parseNvidiaFloat(parts[3])
+		util := parseNvidiaFloat(parts[4])
+		memUtil := parseNvidiaFloat(parts[5])
+		memUsedMiB := parseNvidiaFloat(parts[6])
+		memTotalMiB := parseNvidiaFloat(parts[7])
+
+		var power, powerCap float64
+		var fan, clkGfx, clkMem int32
+		var pciBus, uuid string
+		if len(parts) >= 9 {
+			power = parseNvidiaFloat(parts[8])
+		}
+		if len(parts) >= 10 {
+			powerCap = parseNvidiaFloat(parts[9])
+		}
+		if len(parts) >= 11 {
+			fan = parseNvidiaInt(parts[10])
+		}
+		if len(parts) >= 12 {
+			clkGfx = parseNvidiaInt(parts[11])
+		}
+		if len(parts) >= 13 {
+			clkMem = parseNvidiaInt(parts[12])
+		}
+		if len(parts) >= 14 {
+			pciBus = strings.TrimSpace(parts[13])
+		}
+		if len(parts) >= 15 {
+			uuid = strings.TrimSpace(parts[14])
+		}
+
+		g := domain.GpuTelemetry{
+			Index:                    idx,
+			Name:                     name,
+			DriverVersion:            driverVer,
+			TemperatureCelsius:       temp,
+			UtilizationPercent:       util,
+			MemoryUtilizationPercent: memUtil,
+			MemoryUsedBytes:          int64(memUsedMiB * 1024 * 1024),
+			MemoryTotalBytes:         int64(memTotalMiB * 1024 * 1024),
+			PowerWatts:               power,
+			PowerCapWatts:            powerCap,
+			FanSpeedPercent:          fan,
+			ClockGraphicsMhz:         clkGfx,
+			ClockMemoryMhz:           clkMem,
+			PciBusId:                 pciBus,
+			Vendor:                   "NVIDIA",
+		}
+		if uuid != "" {
+			uuidToSliceIdx[uuid] = len(results)
+		}
+		results = append(results, g)
+	}
+	return results, uuidToSliceIdx
+}
+
+func parseNvidiaProcessesCSV(raw string, procType string) map[string][]domain.GpuProcessTelemetry {
+	out := make(map[string][]domain.GpuProcessTelemetry)
+	scanner := bufio.NewScanner(strings.NewReader(raw))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, ",")
+		if len(parts) < 4 {
+			continue
+		}
+		uuid := strings.TrimSpace(parts[0])
+		pid := parseNvidiaInt(parts[1])
+		procName := strings.TrimSpace(parts[2])
+		memMiB := parseNvidiaFloat(parts[3])
+		if pid <= 0 {
+			continue
+		}
+		out[uuid] = append(out[uuid], domain.GpuProcessTelemetry{
+			Pid:             pid,
+			Name:            procName,
+			ProcessType:     procType,
+			MemoryUsedBytes: int64(memMiB * 1024 * 1024),
+		})
+	}
+	return out
+}
+
+func collectAmdSysfsGpus(startIdx int32) []domain.GpuTelemetry {
+	cards, err := filepath.Glob("/sys/class/drm/card[0-9]*/device")
+	if err != nil || len(cards) == 0 {
+		return nil
+	}
+	sort.Strings(cards)
+
+	var results []domain.GpuTelemetry
+	nextIdx := startIdx
+	for _, devPath := range cards {
+		vendorBytes, err := os.ReadFile(filepath.Join(devPath, "vendor"))
+		if err != nil || !strings.EqualFold(strings.TrimSpace(string(vendorBytes)), "0x1002") {
+			continue
+		}
+		busyBytes, err := os.ReadFile(filepath.Join(devPath, "gpu_busy_percent"))
+		if err != nil {
+			continue
+		}
+		util := parseNvidiaFloat(string(busyBytes))
+
+		var memUsed, memTotal int64
+		if b, err := os.ReadFile(filepath.Join(devPath, "mem_info_vram_used")); err == nil {
+			memUsed, _ = strconv.ParseInt(strings.TrimSpace(string(b)), 10, 64)
+		}
+		if b, err := os.ReadFile(filepath.Join(devPath, "mem_info_vram_total")); err == nil {
+			memTotal, _ = strconv.ParseInt(strings.TrimSpace(string(b)), 10, 64)
+		}
+
+		name := "AMD Radeon GPU"
+		pciBus := ""
+		if uevent, err := os.ReadFile(filepath.Join(devPath, "uevent")); err == nil {
+			for _, l := range strings.Split(string(uevent), "\n") {
+				if strings.HasPrefix(l, "PCI_SLOT_NAME=") {
+					pciBus = strings.TrimSpace(strings.TrimPrefix(l, "PCI_SLOT_NAME="))
+				}
+			}
+		}
+
+		var temp, power, powerCap float64
+		var fan int32
+		if hwmons, err := filepath.Glob(filepath.Join(devPath, "hwmon", "hwmon*")); err == nil && len(hwmons) > 0 {
+			hw := hwmons[0]
+			if b, err := os.ReadFile(filepath.Join(hw, "temp1_input")); err == nil {
+				if v, err := strconv.ParseFloat(strings.TrimSpace(string(b)), 64); err == nil {
+					temp = v / 1000.0
+				}
+			}
+			if b, err := os.ReadFile(filepath.Join(hw, "power1_average")); err == nil {
+				if v, err := strconv.ParseFloat(strings.TrimSpace(string(b)), 64); err == nil {
+					power = v / 1_000_000.0
+				}
+			}
+			if b, err := os.ReadFile(filepath.Join(hw, "power1_cap")); err == nil {
+				if v, err := strconv.ParseFloat(strings.TrimSpace(string(b)), 64); err == nil {
+					powerCap = v / 1_000_000.0
+				}
+			}
+			if b, err := os.ReadFile(filepath.Join(hw, "pwm1")); err == nil {
+				if v, err := strconv.ParseFloat(strings.TrimSpace(string(b)), 64); err == nil {
+					fan = int32((v / 255.0) * 100.0)
+				}
+			}
+		}
+
+		results = append(results, domain.GpuTelemetry{
+			Index:              nextIdx,
+			Name:               name,
+			TemperatureCelsius: temp,
+			UtilizationPercent: util,
+			MemoryUsedBytes:    memUsed,
+			MemoryTotalBytes:   memTotal,
+			PowerWatts:         power,
+			PowerCapWatts:      powerCap,
+			FanSpeedPercent:    fan,
+			PciBusId:           pciBus,
+			Vendor:             "AMD",
+		})
+		nextIdx++
+	}
 	return results
 }
 

@@ -248,11 +248,13 @@ const networkTrafficChartOptions = computed<echarts.EChartsOption>(() => {
             <span class="pulse-dot"></span> Live
           </span>
         </div>
-        <EChart
-          :options="networkTrafficChartOptions"
-          :not-merge="false"
-          height="165px"
-        />
+        <div class="chart-flex-host">
+          <EChart
+            :options="networkTrafficChartOptions"
+            :not-merge="false"
+            height="100%"
+          />
+        </div>
       </div>
     </div>
   </div>
@@ -260,9 +262,15 @@ const networkTrafficChartOptions = computed<echarts.EChartsOption>(() => {
 
 <style scoped>
 .system-network-card {
-  height: auto;
+  height: 100%;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+}
+
+.system-network-card > div:last-child {
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 .system-iface-header {
@@ -332,6 +340,14 @@ const networkTrafficChartOptions = computed<echarts.EChartsOption>(() => {
   padding: 10px 14px 6px 14px;
   display: flex;
   flex-direction: column;
+  flex: 1 1 0;
+  min-height: 150px;
+}
+
+.chart-flex-host {
+  flex: 1 1 0;
+  min-height: 115px;
+  width: 100%;
 }
 
 .traffic-chart-header {

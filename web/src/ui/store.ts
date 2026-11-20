@@ -121,6 +121,20 @@ export interface IoRatePoint {
   byKey: Record<string, { readRate: number; writeRate: number; readIops: number; writeIops: number }>;
 }
 
+export interface GpuHistorySample {
+  util: number;
+  memPct: number;
+  temp: number;
+  power: number;
+  enc: number;
+  dec: number;
+}
+
+export interface GpuHistoryPoint {
+  time: string;
+  byGpu: Record<number, GpuHistorySample>;
+}
+
 let nextToastId = 1;
 
 interface LocalCachePayload {
@@ -261,6 +275,7 @@ export const nasState = reactive({
   networkTrafficHistory: [] as TrafficPoint[],
   diskIoHistory: [] as IoRatePoint[],
   zpoolIoHistory: [] as IoRatePoint[],
+  gpuHistory: [] as GpuHistoryPoint[],
 
   systemUpdate: null as SystemUpdateInfo | null,
   isCheckingUpdate: false,
@@ -886,6 +901,36 @@ export function recordZpoolIoSample(telem?: SystemTelemetry | null): void {
   }
 }
 
+export function recordGpuSample(telem?: SystemTelemetry | null): void {
+  const current = telem || nasState.systemTelemetry;
+  const gpus = current?.sensors?.gpus;
+  if (!gpus || gpus.length === 0) return;
+
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const byGpu: Record<number, GpuHistorySample> = {};
+
+  for (const g of gpus) {
+    const memPct =
+      g.memoryTotalBytes > 0
+        ? Math.min(100, Math.max(0, (g.memoryUsedBytes / g.memoryTotalBytes) * 100))
+        : g.memoryUtilizationPercent || 0;
+    byGpu[g.index] = {
+      util: Math.min(100, Math.max(0, g.utilizationPercent || 0)),
+      memPct: parseFloat(memPct.toFixed(1)),
+      temp: g.temperatureCelsius || 0,
+      power: g.powerWatts || 0,
+      enc: g.encoderUtilizationPercent || 0,
+      dec: g.decoderUtilizationPercent || 0,
+    };
+  }
+
+  nasState.gpuHistory.push({ time: timeStr, byGpu });
+  if (nasState.gpuHistory.length > MAX_TRAFFIC_HISTORY_POINTS) {
+    nasState.gpuHistory.shift();
+  }
+}
+
 export async function refreshTelemetry(): Promise<void> {
   try {
     const telem = await services.system.getTelemetry();
@@ -894,6 +939,7 @@ export async function refreshTelemetry(): Promise<void> {
       recordNetworkTrafficSample(telem);
       recordDiskIoSample(telem);
       recordZpoolIoSample(telem);
+      recordGpuSample(telem);
     }
   } catch {
     // ignore
@@ -981,6 +1027,7 @@ export function handleWatchResourceChange(msg: {
         recordNetworkTrafficSample(mapped);
         recordDiskIoSample(mapped);
         recordZpoolIoSample(mapped);
+        recordGpuSample(mapped);
         break;
       }
     }
@@ -1085,6 +1132,7 @@ export function handleWatchResourceChange(msg: {
         recordNetworkTrafficSample(mapped);
         recordDiskIoSample(mapped);
         recordZpoolIoSample(mapped);
+        recordGpuSample(mapped);
       }
       break;
     }

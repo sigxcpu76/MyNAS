@@ -109,6 +109,13 @@ message NetworkInterfaceTelemetry {
   bool is_bridge = 11;
 }
 
+message GpuProcessTelemetry {
+  int32 pid = 1;
+  string name = 2;
+  string process_type = 3;
+  int64 memory_used_bytes = 4;
+}
+
 message GpuTelemetry {
   int32 index = 1;
   string name = 2;
@@ -121,6 +128,13 @@ message GpuTelemetry {
   double power_cap_watts = 9;
   int32 fan_speed_percent = 10;
   string vendor = 11;
+  double memory_utilization_percent = 12;
+  double encoder_utilization_percent = 13;
+  double decoder_utilization_percent = 14;
+  int32 clock_graphics_mhz = 15;
+  int32 clock_memory_mhz = 16;
+  string pci_bus_id = 17;
+  repeated GpuProcessTelemetry processes = 18;
 }
 
 message PowerMeterTelemetry {

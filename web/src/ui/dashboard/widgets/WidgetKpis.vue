@@ -166,17 +166,21 @@ function getTempClass(temp: number): string {
 <style scoped>
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
   width: 100%;
+  height: 100%;
+  align-items: stretch;
 }
 
 .kpi-card {
   padding: 12px 16px;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 5px;
-  height: auto;
+  height: 100%;
+  min-width: 0;
 }
 
 .kpi-progress-track {

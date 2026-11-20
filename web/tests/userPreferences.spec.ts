@@ -70,7 +70,7 @@ describe('User Preferences & Dashboard Layout Sync', () => {
       }),
     };
 
-    const layout = [{ id: 'widget-kpis', type: 'kpis', lane: -1 }];
+    const layout = [{ id: 'widget-kpis', type: 'kpis', lane: -1, x: 0, y: 0, w: 24, h: 3 }];
     await persistPreferencesToBackend({ auth: mockAuth }, layout, 2);
 
     // Verify localStorage updated
@@ -81,7 +81,7 @@ describe('User Preferences & Dashboard Layout Sync', () => {
     expect(mockAuth.updateUserPreferences).toHaveBeenCalledWith({
       dashboard: {
         columnCount: 2,
-        layout: [{ id: 'widget-kpis', type: 'kpis', lane: -1 }],
+        layout: [{ id: 'widget-kpis', type: 'kpis', lane: -1, x: 0, y: 0, w: 24, h: 3 }],
       },
     });
   });

@@ -207,7 +207,7 @@ const diskIoChartOptions = computed<echarts.EChartsOption>(() => {
       Reading /proc/diskstats telemetry...
     </div>
 
-    <div v-else style="display: flex; flex-direction: column; gap: 12px">
+    <div v-else class="io-card-body">
       <div class="io-summary-header">
         <div class="io-summary-top">
           <strong class="mono" style="font-size: 14px; color: var(--accent-primary)">
@@ -243,11 +243,13 @@ const diskIoChartOptions = computed<echarts.EChartsOption>(() => {
             <span class="pulse-dot"></span> /proc/diskstats
           </span>
         </div>
-        <EChart
-          :options="diskIoChartOptions"
-          :not-merge="false"
-          height="160px"
-        />
+        <div class="chart-flex-host">
+          <EChart
+            :options="diskIoChartOptions"
+            :not-merge="false"
+            height="100%"
+          />
+        </div>
       </div>
 
       <div class="io-list-section">
@@ -300,9 +302,24 @@ const diskIoChartOptions = computed<echarts.EChartsOption>(() => {
 
 <style scoped>
 .disk-io-card {
-  height: auto;
+  height: 100%;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+}
+
+.io-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.chart-flex-host {
+  flex: 1 1 0;
+  min-height: 115px;
+  width: 100%;
 }
 
 .disk-select {
@@ -371,6 +388,8 @@ const diskIoChartOptions = computed<echarts.EChartsOption>(() => {
   padding: 10px 14px 6px 14px;
   display: flex;
   flex-direction: column;
+  flex: 1 1 0;
+  min-height: 150px;
 }
 
 .traffic-chart-header {

@@ -33,6 +33,10 @@ message DashboardWidgetPreference {
   string id = 1;
   string type = 2;
   int32 lane = 3;
+  int32 x = 4;
+  int32 y = 5;
+  int32 w = 6;
+  int32 h = 7;
 }
 
 message DashboardPreferences {
