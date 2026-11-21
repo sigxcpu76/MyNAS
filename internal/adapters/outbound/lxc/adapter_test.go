@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -511,4 +512,115 @@ lxc.mount.entry = /dev/dri dev/dri none bind,optional,create=dir 0 0
 		t.Fatalf("expected 2 mount points preserved, got %d", len(updated.MountPoints))
 	}
 }
+
+func TestUpdateContainerPreservesCustomConfig(t *testing.T) {
+	ctx := context.Background()
+	tempRoot := t.TempDir()
+	t.Setenv("NAN_POOL_MOUNT_ROOT", tempRoot)
+
+	ctID := "ct-custom-cfg"
+	ctDir := filepath.Join(tempRoot, "containers", ctID)
+	rootfsDir := filepath.Join(ctDir, "rootfs")
+	if err := os.MkdirAll(rootfsDir, 0755); err != nil {
+		t.Fatalf("failed to create rootfsDir: %v", err)
+	}
+
+	configContent := `# NaN LXC Container Configuration
+lxc.uts.name = QuasarDB
+# nan.cpu_cores = 4
+lxc.arch = amd64
+lxc.rootfs.path = dir:` + rootfsDir + `
+
+lxc.include = /usr/share/lxc/config/common.conf
+lxc.include = /etc/lxc/custom.conf
+
+# Network Configuration (DHCP on bridge)
+lxc.net.0.type = veth
+lxc.net.0.flags = up
+lxc.net.0.link = br0
+lxc.net.0.hwaddr = 00:16:3e:06:94:dc
+lxc.net.0.ipv4.address = 10.0.0.50/24
+
+# Resource Limits
+lxc.cgroup2.memory.max = 2048M
+lxc.cgroup2.cpu.weight = 400
+lxc.start.auto = 1
+
+# Mount Entries
+lxc.mount.entry = /dev/net/tun dev/net/tun none bind,create=file 0 0
+lxc.mount.entry = /mnt/fast/chcache chcache none bind,create=dir 0 0
+
+# GPU Passthrough (DRM & NVIDIA)
+lxc.cgroup2.devices.allow = c 226:* rwm
+lxc.mount.entry = /dev/dri dev/dri none bind,optional,create=dir 0 0
+
+# Tailscale TUN device allowance
+lxc.cgroup2.devices.allow = c 10:200 rwm
+lxc.cap.drop = mac_admin
+lxc.environment = FOO=bar
+`
+	adapter := lxc.NewAdapter()
+	adapter.SetMainPool("fast")
+
+	if _, err := adapter.CreateContainer(ctx, domain.LxcContainer{
+		ID:           ctID,
+		Distribution: "alpine",
+		Release:      "3.21",
+		RootfsPath:   rootfsDir,
+	}); err != nil {
+		t.Fatalf("CreateContainer failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(ctDir, "config"), []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	// Update MemoryLimitMiB and disable GpuEnabled; custom directives must remain intact.
+	_, err := adapter.UpdateContainer(ctx, domain.LxcContainer{
+		ID:             ctID,
+		MemoryLimitMiB: 4096,
+		GpuEnabled:     false,
+		MountPoints: []domain.LxcMountPoint{
+			{HostPath: "/dev/net/tun", ContainerPath: "/dev/net/tun"},
+			{HostPath: "/mnt/fast/chcache", ContainerPath: "/chcache"},
+		},
+	}, []string{"memory_limit_mib", "gpu_enabled", "mount_points"})
+	if err != nil {
+		t.Fatalf("UpdateContainer failed: %v", err)
+	}
+
+	updatedBytes, err := os.ReadFile(filepath.Join(ctDir, "config"))
+	if err != nil {
+		t.Fatalf("failed to read updated config: %v", err)
+	}
+	updatedCfg := string(updatedBytes)
+
+	mustContain := []string{
+		"lxc.net.0.hwaddr = 00:16:3e:06:94:dc",
+		"lxc.cgroup2.memory.max = 4096M",
+		"lxc.include = /etc/lxc/custom.conf",
+		"lxc.net.0.ipv4.address = 10.0.0.50/24",
+		"# Tailscale TUN device allowance",
+		"lxc.cgroup2.devices.allow = c 10:200 rwm",
+		"lxc.cap.drop = mac_admin",
+		"lxc.environment = FOO=bar",
+		"lxc.mount.entry = /dev/net/tun dev/net/tun none bind",
+		"lxc.mount.entry = /mnt/fast/chcache chcache none bind,create=dir 0 0",
+	}
+	for _, want := range mustContain {
+		if !strings.Contains(updatedCfg, want) {
+			t.Errorf("updated config missing %q\nfull config:\n%s", want, updatedCfg)
+		}
+	}
+
+	mustNotContain := []string{
+		"c 226:* rwm",
+		"/dev/dri",
+	}
+	for _, unwanted := range mustNotContain {
+		if strings.Contains(updatedCfg, unwanted) {
+			t.Errorf("updated config should not contain disabled GPU line %q\nfull config:\n%s", unwanted, updatedCfg)
+		}
+	}
+}
+
 

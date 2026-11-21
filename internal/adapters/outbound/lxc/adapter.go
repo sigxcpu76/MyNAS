@@ -1661,15 +1661,12 @@ func (a *Adapter) configureContainerDHCP(rootfsPath string) {
 	}
 }
 
-func getNvidiaGpuPassthroughEntries() []string {
-	var lines []string
-	lines = append(lines, "# GPU Passthrough (DRM & NVIDIA)")
-	lines = append(lines, "lxc.cgroup2.devices.allow = c 226:* rwm")
-
-	majors := make(map[string]bool)
-	majors["195"] = true // nvidia core, modeset, ctl
-	majors["234"] = true // nvidia-caps
-	majors["235"] = true // nvidia-caps-imex-channels
+func nvidiaDeviceMajors() map[string]bool {
+	majors := map[string]bool{
+		"195": true, // nvidia core, modeset, ctl
+		"234": true, // nvidia-caps
+		"235": true, // nvidia-caps-imex-channels
+	}
 
 	if data, err := os.ReadFile("/proc/devices"); err == nil {
 		for _, line := range strings.Split(string(data), "\n") {
@@ -1679,6 +1676,16 @@ func getNvidiaGpuPassthroughEntries() []string {
 			}
 		}
 	}
+
+	return majors
+}
+
+func getNvidiaGpuPassthroughEntries() []string {
+	var lines []string
+	lines = append(lines, "# GPU Passthrough (DRM & NVIDIA)")
+	lines = append(lines, "lxc.cgroup2.devices.allow = c 226:* rwm")
+
+	majors := nvidiaDeviceMajors()
 
 	var majorList []string
 	for m := range majors {
@@ -1800,27 +1807,148 @@ func shiftRootfsOwnership(rootfsPath string, toUnprivileged bool) {
 	})
 }
 
+type preservedLxcConfig struct {
+	mac         string
+	idmaps      []string
+	customLines []string
+}
+
+func isManagedLxcComment(line string) bool {
+	managedExact := []string{
+		"# NaN LXC Container Configuration",
+		"# Aegis LXC Container Configuration",
+		"# Resource Limits",
+		"# Mount Entries",
+		"# GPU Passthrough (DRM & NVIDIA)",
+		"# Custom Configuration",
+	}
+	for _, m := range managedExact {
+		if line == m {
+			return true
+		}
+	}
+	managedPrefixes := []string{
+		"# nan.description =",
+		"# aegis.description =",
+		"# nan.cpu_cores =",
+		"# Network Configuration",
+	}
+	for _, p := range managedPrefixes {
+		if strings.HasPrefix(line, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func isManagedGpuDeviceAllow(v string, gpuMajors map[string]bool) bool {
+	fields := strings.Fields(v)
+	if len(fields) < 3 || fields[0] != "c" {
+		return false
+	}
+	major, minor, ok := strings.Cut(fields[1], ":")
+	if !ok || minor != "*" {
+		return false
+	}
+	return major == "226" || gpuMajors[major]
+}
+
+func isManagedLxcDirective(k, v string, gpuMajors map[string]bool) bool {
+	switch k {
+	case "lxc.uts.name",
+		"lxc.arch",
+		"lxc.rootfs.path",
+		"lxc.apparmor.profile",
+		"lxc.autodev",
+		"lxc.pty.max",
+		"lxc.tty.max",
+		"lxc.mount.auto",
+		"lxc.net.0.type",
+		"lxc.net.0.flags",
+		"lxc.net.0.link",
+		"lxc.cgroup2.memory.max",
+		"lxc.cgroup.memory.limit_in_bytes",
+		"lxc.cgroup2.cpu.weight",
+		"lxc.cgroup2.cpu.max",
+		"lxc.start.auto":
+		return true
+	case "lxc.include":
+		return v == "/usr/share/lxc/config/common.conf" ||
+			v == "/usr/share/lxc/config/nesting.conf" ||
+			v == "/usr/share/lxc/config/userns.conf"
+	case "lxc.mount.entry":
+		if strings.HasPrefix(v, "/dev/dri") || strings.HasPrefix(v, "/dev/nvidia") {
+			return true
+		}
+		_, _, _, ok := parseLxcMountEntry(v)
+		return ok
+	case "lxc.cgroup2.devices.allow", "lxc.cgroup.devices.allow":
+		return isManagedGpuDeviceAllow(v, gpuMajors)
+	default:
+		return false
+	}
+}
+
+// parsePreservedLxcConfig extracts MAC, idmap, and any unmanaged/custom lines
+// from an existing LXC config so updates never drop user-added directives.
+func parsePreservedLxcConfig(data []byte) preservedLxcConfig {
+	var out preservedLxcConfig
+	gpuMajors := nvidiaDeviceMajors()
+
+	for _, rawLine := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "#") {
+			if !isManagedLxcComment(line) {
+				out.customLines = append(out.customLines, line)
+			}
+			continue
+		}
+		if !strings.Contains(line, "=") {
+			out.customLines = append(out.customLines, line)
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		k := strings.TrimSpace(parts[0])
+		v := strings.TrimSpace(parts[1])
+
+		switch k {
+		case "lxc.net.0.hwaddr":
+			out.mac = v
+		case "lxc.idmap", "lxc.id_map":
+			out.idmaps = append(out.idmaps, line)
+		default:
+			if !isManagedLxcDirective(k, v, gpuMajors) {
+				out.customLines = append(out.customLines, line)
+			}
+		}
+	}
+
+	return out
+}
+
 func (a *Adapter) writeLxcConfig(c domain.LxcContainer) {
 	bridge := c.NetworkBridge
 	if bridge == "" {
 		bridge = "br0"
 	}
 
-	// Preserve existing MAC and custom idmap lines if config exists
-	mac := ""
-	var existingIdmaps []string
+	// Preserve existing MAC, custom idmap lines, and any unmanaged directives if config exists
+	var existingData []byte
 	configPath := fmt.Sprintf("/var/lib/lxc/%s/config", c.ID)
 	if data, err := os.ReadFile(configPath); err == nil {
-		for _, line := range strings.Split(string(data), "\n") {
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "lxc.net.0.hwaddr") && strings.Contains(line, "=") {
-				parts := strings.SplitN(line, "=", 2)
-				mac = strings.TrimSpace(parts[1])
-			} else if (strings.HasPrefix(line, "lxc.idmap") || strings.HasPrefix(line, "lxc.id_map")) && strings.Contains(line, "=") {
-				existingIdmaps = append(existingIdmaps, line)
-			}
+		existingData = data
+	} else if c.RootfsPath != "" {
+		poolConfigPath := filepath.Join(filepath.Dir(c.RootfsPath), "config")
+		if data, err := os.ReadFile(poolConfigPath); err == nil {
+			existingData = data
 		}
 	}
+	preserved := parsePreservedLxcConfig(existingData)
+	mac := preserved.mac
+	existingIdmaps := preserved.idmaps
 	if mac == "" {
 		mac = generateRandomMAC()
 	}
@@ -1927,6 +2055,15 @@ func (a *Adapter) writeLxcConfig(c domain.LxcContainer) {
 	if c.GpuEnabled {
 		for _, entry := range getNvidiaGpuPassthroughEntries() {
 			sb.WriteString(entry + "\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	// Custom / unmanaged directives preserved from existing config
+	if len(preserved.customLines) > 0 {
+		sb.WriteString("# Custom Configuration\n")
+		for _, line := range preserved.customLines {
+			sb.WriteString(line + "\n")
 		}
 		sb.WriteString("\n")
 	}
