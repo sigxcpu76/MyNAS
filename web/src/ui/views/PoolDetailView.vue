@@ -35,6 +35,7 @@ import {
   gibToBytes,
   type ZfsDataset,
   type ZfsPool,
+  type ZfsVdev,
   type ZfsVolume,
   type Disk,
   isDotDataset,
@@ -717,47 +718,93 @@ async function handleApplyPoolConfig() {
 // -----------------------------------------------------------------------------
 // Disks belonging to this pool
 // -----------------------------------------------------------------------------
+function matchesAliasList(aliases: string[] | undefined, key: string): boolean {
+  if (!aliases || aliases.length === 0) return false;
+  const suffix = `/${key}`;
+  return aliases.some((a) => a === key || a.endsWith(suffix));
+}
+
+function diskMatchesVdevKey(d: Disk, key: string): boolean {
+  if (!key) return false;
+  if (d.devicePath === key || d.diskId === key || d.name === key) return true;
+  if (matchesAliasList(d.aliases, key)) return true;
+  if (d.partitions) {
+    for (const part of d.partitions) {
+      if (part.devicePath === key || part.name === key || matchesAliasList(part.aliases, key)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function findDiskForVdev(v: ZfsVdev): Disk | undefined {
+  const keys = [v.path, v.name].filter((k): k is string => Boolean(k));
+  return nasState.disks.find((d) => keys.some((k) => diskMatchesVdevKey(d, k)));
+}
+
+function unwrapRootVdevs(vdevs: ZfsVdev[] | undefined, poolName: string): ZfsVdev[] {
+  if (!vdevs || vdevs.length === 0) return [];
+  const out: ZfsVdev[] = [];
+  for (const v of vdevs) {
+    if ((v.layout?.toLowerCase() === 'root' || v.name === poolName) && v.children && v.children.length > 0) {
+      out.push(...unwrapRootVdevs(v.children, poolName));
+    } else {
+      out.push(v);
+    }
+  }
+  return out;
+}
+
+function formatVdevRole(v: ZfsVdev, fallbackLayout: string): string {
+  const vType = v.type || 'data';
+  const vLayout = v.layout || fallbackLayout;
+  return vType === 'data' ? vLayout : `${vType}${vLayout && vLayout !== 'stripe' ? ' (' + vLayout + ')' : ''}`;
+}
+
+function collectLeafVdevs(vdevs: ZfsVdev[], fallbackLayout: string): Array<{ vdev: ZfsVdev; role: string }> {
+  const leaves: Array<{ vdev: ZfsVdev; role: string }> = [];
+  const walk = (nodes: ZfsVdev[], inheritedRole?: string) => {
+    for (const node of nodes) {
+      const role = inheritedRole || formatVdevRole(node, fallbackLayout);
+      if (node.children && node.children.length > 0) {
+        walk(node.children, role);
+      } else {
+        leaves.push({ vdev: node, role });
+      }
+    }
+  };
+  walk(vdevs);
+  return leaves;
+}
+
 const poolDisks = computed(() => {
   if (!pool.value) return [];
   const devPaths = new Set<string>();
   if (pool.value.devices) {
     for (const d of pool.value.devices) devPaths.add(d);
   }
-  if (pool.value.vdevs) {
-    for (const v of pool.value.vdevs) {
-      if (v.path) devPaths.add(v.path);
-      if (v.children) {
-        for (const c of v.children) {
-          if (c.path) devPaths.add(c.path);
-          if (c.name) devPaths.add(c.name);
-        }
-      }
-    }
+  const topVdevs = unwrapRootVdevs(pool.value.vdevs, pool.value.poolName);
+  for (const { vdev } of collectLeafVdevs(topVdevs, pool.value.vdevLayout || 'stripe')) {
+    if (vdev.path) devPaths.add(vdev.path);
+    if (vdev.name) devPaths.add(vdev.name);
   }
 
   return nasState.disks.filter((d) => {
     if (d.owningZfsPool === cleanName.value) return true;
-    if (devPaths.has(d.devicePath)) return true;
-    if (devPaths.has(d.name)) return true;
+    for (const key of devPaths) {
+      if (diskMatchesVdevKey(d, key)) return true;
+    }
     return false;
   });
 });
 
 function getDiskRole(d: Disk): string {
   if (pool.value?.vdevs) {
-    for (const v of pool.value.vdevs) {
-      const vType = v.type || 'data';
-      const vLayout = v.layout || pool.value.vdevLayout || 'mirror';
-      const roleLabel = vType === 'data' ? vLayout : `${vType}${vLayout && vLayout !== 'stripe' ? ' (' + vLayout + ')' : ''}`;
-      if (v.path === d.devicePath || v.name === d.devicePath || v.name === d.diskId) {
-        return roleLabel;
-      }
-      if (v.children) {
-        for (const c of v.children) {
-          if (c.path === d.devicePath || c.name === d.devicePath || c.name === d.diskId) {
-            return roleLabel;
-          }
-        }
+    const topVdevs = unwrapRootVdevs(pool.value.vdevs, pool.value.poolName);
+    for (const { vdev, role } of collectLeafVdevs(topVdevs, pool.value.vdevLayout || 'mirror')) {
+      if ((vdev.path && diskMatchesVdevKey(d, vdev.path)) || (vdev.name && diskMatchesVdevKey(d, vdev.name))) {
+        return role;
       }
     }
   }
@@ -766,16 +813,10 @@ function getDiskRole(d: Disk): string {
 
 function getDiskState(d: Disk): string {
   if (pool.value?.vdevs) {
-    for (const v of pool.value.vdevs) {
-      if (v.path === d.devicePath || v.name === d.devicePath || v.name === d.diskId) {
-        if (v.state) return v.state;
-      }
-      if (v.children) {
-        for (const c of v.children) {
-          if (c.path === d.devicePath || c.name === d.devicePath || c.name === d.diskId) {
-            if (c.state) return c.state;
-          }
-        }
+    const topVdevs = unwrapRootVdevs(pool.value.vdevs, pool.value.poolName);
+    for (const { vdev } of collectLeafVdevs(topVdevs, pool.value.vdevLayout || 'mirror')) {
+      if ((vdev.path && diskMatchesVdevKey(d, vdev.path)) || (vdev.name && diskMatchesVdevKey(d, vdev.name))) {
+        if (vdev.state) return vdev.state;
       }
     }
   }
@@ -822,77 +863,52 @@ const poolTopologyRows = computed<TopologyRow[]>(() => {
   const p = pool.value;
   if (!p) return rows;
 
-  if (p.vdevs && p.vdevs.length > 0) {
-    p.vdevs.forEach((v, idx) => {
-      const vType = v.type || 'data';
-      const vLayout = v.layout || p.vdevLayout || 'stripe';
-      const roleLabel = vType === 'data' ? vLayout : `${vType}${vLayout && vLayout !== 'stripe' ? ' (' + vLayout + ')' : ''}`;
+  const topVdevs = unwrapRootVdevs(p.vdevs, p.poolName);
+  if (topVdevs.length > 0) {
+    const pushNode = (node: ZfsVdev, keyPrefix: string, inheritedRole?: string) => {
+      const roleLabel = inheritedRole || formatVdevRole(node, p.vdevLayout || 'stripe');
+      const r = String(node.readErrors ?? '0');
+      const w = String(node.writeErrors ?? '0');
+      const c = String(node.checksumErrors ?? '0');
 
-      if (v.children && v.children.length > 0) {
-        const vr = String(v.readErrors ?? '0');
-        const vw = String(v.writeErrors ?? '0');
-        const vc = String(v.checksumErrors ?? '0');
+      if (node.children && node.children.length > 0) {
         rows.push({
-          key: `vdev-${idx}-${v.name}`,
-          label: v.name || `${vType}-${idx}`,
+          key: `vdev-${keyPrefix}-${node.name}`,
+          label: node.name || `${node.type || 'data'}-${keyPrefix}`,
           isGroup: true,
           role: roleLabel.toUpperCase(),
-          model: `${v.children.length} member drive(s)`,
+          model: `${node.children.length} member drive(s)`,
           sizeBytes: 0,
           transport: '-',
-          state: v.state || p.state || 'ONLINE',
-          readErrors: vr,
-          writeErrors: vw,
-          checksumErrors: vc,
-          hasErrors: isNonZeroErr(vr) || isNonZeroErr(vw) || isNonZeroErr(vc),
+          state: node.state || p.state || 'ONLINE',
+          readErrors: r,
+          writeErrors: w,
+          checksumErrors: c,
+          hasErrors: isNonZeroErr(r) || isNonZeroErr(w) || isNonZeroErr(c),
         });
-        v.children.forEach((c, cIdx) => {
-          const devKey = c.path || c.name || `dev-${idx}-${cIdx}`;
-          const disk = nasState.disks.find(
-            (d) => d.devicePath === devKey || d.diskId === devKey || d.name === devKey || (c.name && d.diskId === c.name)
-          );
-          const cr = String(c.readErrors ?? '0');
-          const cw = String(c.writeErrors ?? '0');
-          const cc = String(c.checksumErrors ?? '0');
-          rows.push({
-            key: `child-${idx}-${cIdx}-${devKey}`,
-            label: devKey,
-            isGroup: false,
-            role: roleLabel,
-            model: disk ? disk.model || disk.vendor || '-' : 'Missing / Detached Disk',
-            sizeBytes: disk?.sizeBytes || 0,
-            transport: disk?.transport || '-',
-            state: c.state || (disk ? getDiskState(disk) : 'UNAVAIL'),
-            readErrors: cr,
-            writeErrors: cw,
-            checksumErrors: cc,
-            hasErrors: isNonZeroErr(cr) || isNonZeroErr(cw) || isNonZeroErr(cc),
-          });
-        });
-      } else {
-        const devKey = v.path || v.name || `vdev-${idx}`;
-        const disk = nasState.disks.find(
-          (d) => d.devicePath === devKey || d.diskId === devKey || d.name === devKey
-        );
-        const vr = String(v.readErrors ?? '0');
-        const vw = String(v.writeErrors ?? '0');
-        const vc = String(v.checksumErrors ?? '0');
-        rows.push({
-          key: `leaf-${idx}-${devKey}`,
-          label: devKey,
-          isGroup: false,
-          role: roleLabel,
-          model: disk ? disk.model || disk.vendor || '-' : 'Missing / Detached Disk',
-          sizeBytes: disk?.sizeBytes || 0,
-          transport: disk?.transport || '-',
-          state: v.state || (disk ? getDiskState(disk) : p.state || 'ONLINE'),
-          readErrors: vr,
-          writeErrors: vw,
-          checksumErrors: vc,
-          hasErrors: isNonZeroErr(vr) || isNonZeroErr(vw) || isNonZeroErr(vc),
-        });
+        node.children.forEach((child, cIdx) => pushNode(child, `${keyPrefix}-${cIdx}`, roleLabel));
+        return;
       }
-    });
+
+      const devKey = node.path || node.name || `vdev-${keyPrefix}`;
+      const disk = findDiskForVdev(node);
+      rows.push({
+        key: `leaf-${keyPrefix}-${devKey}`,
+        label: devKey,
+        isGroup: false,
+        role: roleLabel,
+        model: disk ? disk.model || disk.vendor || '-' : 'Missing / Detached Disk',
+        sizeBytes: disk?.sizeBytes || 0,
+        transport: disk?.transport || '-',
+        state: node.state || (disk ? getDiskState(disk) : p.state || 'UNAVAIL'),
+        readErrors: r,
+        writeErrors: w,
+        checksumErrors: c,
+        hasErrors: isNonZeroErr(r) || isNonZeroErr(w) || isNonZeroErr(c),
+      });
+    };
+
+    topVdevs.forEach((v, idx) => pushNode(v, String(idx)));
     return rows;
   }
 

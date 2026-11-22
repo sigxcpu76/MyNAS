@@ -98,6 +98,11 @@ type zfsListJSON struct {
 func buildVdevTree(vdevs map[string]zpoolVdevJSON) []domain.ZfsVdev {
 	var res []domain.ZfsVdev
 	for name, v := range vdevs {
+		// zpool status -j wraps each pool's vdevs in a root node; unwrap it so callers see top-level vdevs directly.
+		if strings.EqualFold(v.VdevType, "root") {
+			res = append(res, buildVdevTree(v.Vdevs)...)
+			continue
+		}
 		vType := v.Class
 		if vType == "" || vType == "normal" {
 			vType = "data"
@@ -341,8 +346,8 @@ func (a *Adapter) listHostPools(ctx context.Context) ([]domain.ZfsPool, error) {
 		return nil, err
 	}
 
-	// Also inspect zpool status -j for vdev topology and health details
-	statusCmd := exec.CommandContext(ctx, "zpool", "status", "-j")
+	// Also inspect zpool status -P -j for vdev topology, full device paths, and health details
+	statusCmd := exec.CommandContext(ctx, "zpool", "status", "-P", "-j")
 	statusOut, _ := statusCmd.Output()
 	var statusData zpoolStatusJSON
 	_ = json.Unmarshal(statusOut, &statusData)

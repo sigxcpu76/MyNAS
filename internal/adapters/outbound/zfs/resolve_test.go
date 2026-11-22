@@ -136,3 +136,47 @@ func TestFormatScanStatsAndPoolHealth(t *testing.T) {
 		t.Fatalf("unexpected degraded health string: %q", got)
 	}
 }
+
+func TestBuildVdevTreeUnwrapsRoot(t *testing.T) {
+	raw := map[string]zpoolVdevJSON{
+		"sas-pool": {
+			Name:     "sas-pool",
+			VdevType: "root",
+			Class:    "normal",
+			State:    "ONLINE",
+			Vdevs: map[string]zpoolVdevJSON{
+				"mirror-0": {
+					Name:     "mirror-0",
+					VdevType: "mirror",
+					Class:    "normal",
+					State:    "ONLINE",
+					Vdevs: map[string]zpoolVdevJSON{
+						"/dev/disk/by-partuuid/9a7eb80d": {
+							Name:     "/dev/disk/by-partuuid/9a7eb80d",
+							VdevType: "disk",
+							Path:     "/dev/disk/by-partuuid/9a7eb80d",
+							State:    "ONLINE",
+						},
+						"/dev/disk/by-partuuid/24d62de2": {
+							Name:     "/dev/disk/by-partuuid/24d62de2",
+							VdevType: "disk",
+							Path:     "/dev/disk/by-partuuid/24d62de2",
+							State:    "ONLINE",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	got := buildVdevTree(raw)
+	if len(got) != 1 || got[0].Name != "mirror-0" {
+		t.Fatalf("expected unwrapped mirror-0 top-level vdev, got %+v", got)
+	}
+	if len(got[0].Children) != 2 {
+		t.Fatalf("expected 2 leaf children under mirror-0, got %d", len(got[0].Children))
+	}
+	if got[0].Children[0].Path != "/dev/disk/by-partuuid/24d62de2" {
+		t.Fatalf("unexpected sorted child path: %q", got[0].Children[0].Path)
+	}
+}
